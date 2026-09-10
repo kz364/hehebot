@@ -12,3 +12,6 @@ One future authoritative VPS Gateway; Mac is an intermittent client/node. No VM 
 
 ## Progress
 Installation and capability verification in progress. See docs/REMOTE.md for future deployment guidance.
+
+### User-authorized clean replacement
+The user subsequently authorized completely wiping the old installation. Removal targets: `~/.openclaw`, `~/Library/LaunchAgents/ai.openclaw.gateway.plist`, `~/.local/bin/openclaw`, and the exact old source checkout `~/Dropbox (Personal)/Vibes/openclaw`. No historical agent state will be migrated. New runtime remains separate at `~/.local/share/openclaw`.

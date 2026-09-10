@@ -1,0 +1,28 @@
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "loopback",
+    "port": 18789,
+    "auth": {
+      "mode": "token",
+      "token": "${OPENCLAW_GATEWAY_TOKEN}",
+      "allowTailscale": false
+    },
+    "tailscale": {
+      "mode": "serve"
+    },
+    "nodes": {
+      "browser": {
+        "mode": "manual"
+      }
+    }
+  },
+  "browser": {
+    "enabled": true,
+    "headless": true,
+    "defaultProfile": "openclaw"
+  },
+  "update": {
+    "channel": "stable"
+  }
+}
