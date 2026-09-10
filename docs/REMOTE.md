@@ -19,7 +19,7 @@ The Gateway remains available while the Mac sleeps. Mac tools require the node t
 1. **Choose a Linux VM and user.** Prefer supported Ubuntu LTS and a normal non-root service account, with SSH keys and local SSD storage. Keep a provider recovery console available. Copy this configuration repository to that account. No Docker or source checkout is required.
 2. **Join the tailnet.** Install Tailscale using its [Linux instructions](https://tailscale.com/download/linux), run `sudo tailscale up`, and authenticate into the same tailnet as the Mac. Enable MagicDNS and HTTPS in the Tailscale admin console. Verify SSH over the tailnet before removing public SSH access. Restrict tailnet grants to your devices/account.
 3. **Install the stable runtime.** Run `bash scripts/bootstrap-vm.sh`. It uses the official prefix installer, keeping the runtime in `~/.local/share/openclaw`; put `~/.local/share/openclaw/bin` on the service user's PATH. Confirm `openclaw --version`. Install a supported Chrome/Chromium browser for the VM architecture and verify its sandbox works as this user. See [installation](https://docs.openclaw.ai/install) and [Linux browser troubleshooting](https://docs.openclaw.ai/tools/browser-linux-troubleshooting).
-4. **Install private configuration and credentials.** Use `config/remote-gateway.json` and its includes as the starting configuration; fill the real workspace path and chosen model. Generate a fresh Gateway token, put it and provider credentials in `~/.config/openclaw/gateway.env` as configured by the bootstrap, and use owner-only permissions. Complete provider login on the VPS. Do not copy the Mac's whole home, existing Chrome profile, or Codex credentials automatically. Use the model's supported account/OAuth path when appropriate.
+4. **Install private configuration and credentials.** Use `config/remote-gateway.json` as the starting configuration; set a workspace override if desired and choose the model. Generate a fresh Gateway token, put it and provider credentials in `~/.config/openclaw/gateway.env` as configured by the bootstrap, and use owner-only permissions. Complete provider login on the VPS. Do not copy the Mac's whole home, existing Chrome profile, or Codex credentials automatically. Use the model's supported account/OAuth path when appropriate.
 5. **Enable the official service.** Follow the service commands below. Keep `gateway.mode: "local"` on the VPS (it hosts the Gateway), `gateway.bind: "loopback"`, `gateway.tailscale.mode: "serve"`, and token authentication. Use `gateway.auth.allowTailscale: false` when requiring the shared token on every access path. Set the exact HTTPS UI origin in `gateway.controlUi.allowedOrigins` if required by the deployed version. Let OpenClaw own its Serve route.
 6. **Connect the Mac and approve it.** Set the Mac app to Remote / Direct with `wss://<vps-magicdns-name>/` and the private Gateway credential; use SSH transport as fallback. Use the app's native worker/node; a separate headless node service is normally unnecessary. On the VPS inspect `openclaw devices list` and approve only its matching request with `openclaw devices approve <requestId>`. Also inspect `openclaw nodes pending` and approve the intended capability surface using `openclaw nodes approve <requestId>`; device pairing alone may leave capabilities empty. Confirm `openclaw nodes status`. See [pairing](https://docs.openclaw.ai/start/pairing) and [node capabilities](https://docs.openclaw.ai/platforms/linux).
 7. **Verify both browser modes and persistence.** Test the Control UI, model response, remote managed browser, and explicit Mac-node browser/computer actions using the benign local test page. Keep the remote browser selected for routine autonomous work; select the Mac node deliberately for local signed-in work. Reboot the VPS, confirm service health, disconnect/reconnect the Mac, and verify the same remote session continues. Do not call deployment finished until these tests pass.
@@ -39,14 +39,14 @@ systemctl --user cat openclaw-gateway.service
 
 Use the upstream generated unit at `~/.config/systemd/user/openclaw-gateway.service`; it carries the correct runtime path and restart behavior. Do not maintain a parallel system service. Check that lingering is enabled with `loginctl show-user "$USER" -p Linger`. If a headless login lacks the user runtime environment, set `XDG_RUNTIME_DIR=/run/user/$(id -u)` before retrying. The [Gateway runbook](https://docs.openclaw.ai/gateway) documents this lifecycle.
 
-If using an environment file, install a drop-in at `~/.config/systemd/user/openclaw-gateway.service.d/10-secrets.conf`:
+The bootstrap links `~/.openclaw/.env` to `~/.config/openclaw/gateway.env` so CLI commands also resolve the token. It creates the following drop-in at `~/.config/systemd/user/openclaw-gateway.service.d/10-secrets.conf`:
 
 ```ini
 [Service]
 EnvironmentFile=%h/.config/openclaw/gateway.env
 ```
 
-Create that file with mode `0600` and parent directory `0700`, then run `systemctl --user daemon-reload` and `openclaw gateway restart`. It is a systemd environment file, not a shell script: use `NAME=value` assignments, no `export` or command substitutions. Do not put secret values in the unit, Git, command-line arguments, screenshots, or logs. A login shell's exported variables are not automatically available to systemd. Configured file SecretRefs are an alternative that avoids this environment-file dependency. Review `systemctl --user cat` locally because generated units may include sensitive environment values.
+Keep the environment file at mode `0600` and its parent directory `0700`, then run `systemctl --user daemon-reload` and `openclaw gateway restart`. It is a systemd environment file, not a shell script: use `NAME=value` assignments, no `export` or command substitutions. Do not put secret values in the unit, Git, command-line arguments, screenshots, or logs. A login shell's exported variables are not automatically available to systemd. Configured file SecretRefs are an alternative that avoids this environment-file dependency. Review `systemctl --user cat` locally because generated units may include sensitive environment values.
 
 Tailscale Serve keeps the public VM interface free of Gateway listeners. Never open Gateway port 18789, browser/CDP ports, or desktop-control ports in the cloud firewall. Allow necessary outbound traffic and only the ingress required for your selected Tailscale/SSH topology. Do not enable Funnel. Verify actual listening addresses with `ss -lntp` and inspect `tailscale serve status`; managed Serve uses an additional ephemeral loopback listener in current releases. If Serve needs local daemon permission, grant it to the selected service user through the supported Tailscale operator configuration rather than running OpenClaw as root. See [Tailscale topology and requirements](https://docs.openclaw.ai/gateway/tailscale).
 
@@ -73,7 +73,8 @@ Current [database layout](https://docs.openclaw.ai/reference/database-schemas/la
 
 ```bash
 openclaw backup create --dry-run --json
-openclaw backup create --output "$HOME/Backups/openclaw" --verify
+mkdir -p "$HOME/Backups"
+openclaw backup create --output "$HOME/Backups/openclaw-backup.tar.gz" --verify
 openclaw backup verify /path/to/archive.tar.gz
 openclaw backup restore /path/to/archive.tar.gz --target "$HOME/openclaw-restored"
 ```
@@ -85,7 +86,8 @@ Restore targets must be empty/new. Inspect the verified `manifest.json` source-t
 ## Updates and migration from this Mac
 
 ```bash
-openclaw backup create --output "$HOME/Backups/openclaw" --verify
+mkdir -p "$HOME/Backups"
+openclaw backup create --output "$HOME/Backups/openclaw-backup.tar.gz" --verify
 openclaw update --channel stable
 openclaw health
 openclaw doctor
