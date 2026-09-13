@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# Amp's base image supplies Node and npm; this repository has no exact version pin.
+echo "Checking the orb's Node toolchain"
+node --input-type=module -e '
+  import { readFileSync } from "node:fs";
+  const minimum = JSON.parse(readFileSync("package.json", "utf8")).engines.node;
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  if (major < 22 || (major === 22 && minor < 13)) {
+    throw new Error(`Node ${minimum} is required; found ${process.version}`);
+  }
+  console.log(`Node ${process.version}`);
+'
+npm --version
+
+# The measured warm install takes about three seconds. Use npm's cache rather
+# than a custom fingerprint that could silently preserve incomplete dependencies.
+echo "Installing locked dependencies (using the restored npm cache when available)"
+time npm ci --prefer-offline --no-audit --no-fund
+
+# Generate ignored binding types, without login or cloud operations.
+export WRANGLER_SEND_METRICS=false
+echo "Generating local Worker types"
+time npm run types

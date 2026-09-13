@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+# Dependencies and types come from setup's snapshot. No credentials, database
+# daemons, or tunnels need reconnecting, and resume must not reinstall packages.
+if [[ ! -x node_modules/.bin/wrangler || ! -f worker-configuration.d.ts ]]; then
+  echo "Orb prerequisites are missing; run .agents/setup to repair them." >&2
+  exit 1
+fi
