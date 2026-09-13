@@ -1,0 +1,17 @@
+# Disabled bot import format
+
+Run `node scripts/prepare-bot-import.mjs --now 2026-09-10T09:00:00Z` to prepare the private adapted source. The explicit timestamp makes next-execution previews reproducible; it is not a scheduling request. Original source bytes remain unchanged. Outputs are ignored `.local/imports/prepared-bots.json` and `.local/imports/private-profile-reference.json`, both mode 0600. Never commit either output.
+
+The prepared bundle has `schema_version:1`, `kind:bot-import-draft`, a manifest, `commands`, `preview`, `capability_requirements`, and `shared_instructions`. Commands are five `persona.put` followed by seven `routine.put` records accepted by the existing command schema. Every routine is disabled, every expected revision is zero, and all tool/action policy UUID arrays are empty. Logical capability IDs are requests for mapping, not grants. Existing Chief of Staff, Inbox Triage and Travel IDs match seeded personas; other IDs derive deterministically from a fixed namespace and slug. Adoption must bind reviewed current revisions and use stable idempotency keys; this preparer never overwrites live objects.
+
+Shared policy is projected into every persona's instructions so adoption cannot accidentally discard it. Exact private identity/profile records never enter commands or memory. Historical contact/calendar mapping lines are retained separately for private verification; the remaining imported text is explicitly marked as a disabled proposal subordinate to current authorization and tool policy. No source instruction is executed during parsing.
+
+The manifest records source/catalog/command SHA-256 hashes, explicit preparation time, 5/7/12 counts, seven private historical profiles, 50 monitoring occurrences plus daily digest and restore (52 total), two removed duplicate backup kicks, required one-shot flight restore alarms, and unresolved Jakarta-header versus proposed Singapore-monitoring timezone. School event time remains Jakarta. Each routine preview includes the next three UTC instants under its proposed Singapore cron. All enabling remains separate from adoption.
+
+The private reference artifact preserves the exact appendix and unverified mappings with `verified:false` and private travel-review scope. It is not an import command or prompt/memory attachment. Ownership and current source verification are required before selecting any fields for a travel task.
+
+Validation uses synthetic profile records only in tracked tests: `node --test tests/bot-import.test.mjs`. Four tests cover schema-valid disabled commands, no profile leakage, seeded/stable IDs, exact structure rejection, source preservation and mode 0600. Console output contains counts and hashes only.
+
+## Portal adoption
+
+Open **Review bot setup**, select the private prepared JSON, review all instructions and replacement revisions, and acknowledge the Singapore monitoring timezone. The browser verifies the source command hash, substitutes current expected revisions, hashes the exact revised command array, and submits one `setup.adopt` command. A hash-derived idempotency key preserves the same receipt on uncertain retries. Any stale revision or unauthorized grant rolls back the whole batch. The dialog shows the file's saved preview date explicitly; regenerate the bundle with a current `--now` to refresh dates. Adoption does not attach the private profile reference or enable execution.

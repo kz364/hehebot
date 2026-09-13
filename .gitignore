@@ -4,3 +4,9 @@
 !.env.example
 *.log
 .DS_Store
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+worker-configuration.d.ts
+dist/

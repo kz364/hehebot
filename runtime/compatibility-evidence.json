@@ -1,0 +1,109 @@
+{
+  "inspectedAt": "2026-09-10T08:02:42.921Z",
+  "package": {
+    "name": "openclaw",
+    "version": "2026.9.3",
+    "schemas": {
+      "state": 16,
+      "agent": 19
+    }
+  },
+  "node": "v24.19.0",
+  "versionMatches": true,
+  "schemaFieldsMatch": true,
+  "evidence": {
+    "ChatAbortParamsSchema": {
+      "file": "dist/sessions-Bkydhb06.mjs",
+      "sha256": "ac496762ee113ae5e4a5fd7d50d66d449478693d464d3efd614d593e5111313c",
+      "fields": [
+        "sessionKey",
+        "agentId",
+        "runId",
+        "preserveSideRuns"
+      ]
+    },
+    "AgentParamsSchema": {
+      "file": "dist/src-CxpZ9eYs.mjs",
+      "sha256": "670e10863a1968509c6608204d5f6dbd673a2bee1219fbf031d1b1243a399550",
+      "fields": [
+        "message",
+        "agentId",
+        "provider",
+        "model",
+        "to",
+        "replyTo",
+        "sessionId",
+        "sessionKey",
+        "expectedExistingSessionId",
+        "thinking",
+        "deliver",
+        "attachments",
+        "channel",
+        "replyChannel",
+        "accountId",
+        "replyAccountId",
+        "threadId",
+        "groupId",
+        "groupChannel",
+        "groupSpace",
+        "timeout",
+        "bestEffortDeliver",
+        "lane",
+        "cwd",
+        "cleanupBundleMcpOnRunEnd",
+        "modelRun",
+        "promptMode",
+        "extraSystemPrompt",
+        "bootstrapContextMode",
+        "bootstrapContextRunKind",
+        "acpTurnSource",
+        "internalRuntimeHandoffId",
+        "internalExecutionIdentityRetry",
+        "internalExecutionIdentityRecoveryAttempt",
+        "execApprovalFollowupExpectedSessionId",
+        "internalEvents",
+        "inputProvenance",
+        "suppressPromptPersistence",
+        "sessionEffects",
+        "sourceReplyDeliveryMode",
+        "disableMessageTool",
+        "swarmCollector",
+        "swarmOutputSchema",
+        "forceRestartSafeTools",
+        "forceCodeModeTools",
+        "voiceWakeTrigger",
+        "idempotencyKey",
+        "label"
+      ]
+    },
+    "AgentWaitParamsSchema": {
+      "file": "dist/src-CxpZ9eYs.mjs",
+      "sha256": "978cbf8b6223c5f95aca0ea625009b2cb16c6047d8b436a5f15a768f25574e60",
+      "fields": [
+        "runId",
+        "timeoutMs"
+      ]
+    },
+    "TasksCancelParamsSchema": {
+      "file": "dist/src-CxpZ9eYs.mjs",
+      "sha256": "efb26571782fec6bb41ed2b94366febe9403571bf88d67424ae6cbce87022078",
+      "fields": [
+        "taskId",
+        "reason"
+      ]
+    }
+  },
+  "capabilities": {
+    "version": "2026.9.3",
+    "rpcSchemasInspected": true,
+    "liveSubmissionVerified": false,
+    "durableCorrelationVerified": false,
+    "completeActivityVerified": false,
+    "descendantCancellationVerified": false,
+    "contextIsolationVerified": false,
+    "oauthRestartVerified": false,
+    "productionInference": false,
+    "productionSleep": false
+  },
+  "conclusion": "STATIC_SCHEMA_CHECK_PASSED_LIVE_GATES_BLOCKED"
+}

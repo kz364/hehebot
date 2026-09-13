@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "personas": [
+    {"slug":"chief-of-staff","name":"Chief of Staff","capabilities":["task.status.read","task.delegate","portal.digest.write"]},
+    {"slug":"inbox-triage","name":"Inbox Triage","capabilities":["gmail.read","gmail.labels.modify","calendar.events.write"]},
+    {"slug":"whatsapp","name":"Whatsapp","capabilities":["whatsapp.family-chat.read","calendar.events.write"]},
+    {"slug":"messages","name":"Messages","capabilities":["mac.messages.read","calendar.events.write"]},
+    {"slug":"travel","name":"Travel","capabilities":["itinerary.read","browser.travel-form.fill","private-profile.scoped.read"]}
+  ],
+  "routines": [
+    {"slug":"francesca-email-calendar","name":"Francesca email → calendar","owner":"inbox-triage","cron":"2 1,7,9,11,13,15,17,19,21,23 * * *","timezone":"Asia/Singapore","capabilities":["gmail.family.read","calendar.events.write"]},
+    {"slug":"jis-school-email-calendar","name":"JIS school email → calendar","owner":"inbox-triage","cron":"4 1,7,9,11,13,15,17,19,21,23 * * *","timezone":"Asia/Singapore","capabilities":["gmail.school.read","calendar.school-events.write"]},
+    {"slug":"francesca-whatsapp-calendar-sync","name":"Francesca WhatsApp → calendar","owner":"whatsapp","cron":"5 1,7,9,11,13,15,17,19,21,23 * * *","timezone":"Asia/Singapore","capabilities":["whatsapp.family-chat.read","calendar.events.write"]},
+    {"slug":"messages-appointments-calendar","name":"SMS/iMessage appointments → calendar","owner":"messages","cron":"6 1,7,9,11,13,15,17,19,21,23 * * *","timezone":"Asia/Singapore","capabilities":["mac.messages.read","calendar.events.write"]},
+    {"slug":"flight-email-hold-2h-triage","name":"Flight email hold triage","owner":"inbox-triage","cron":"8 1,7,9,11,13,15,17,19,21,23 * * *","timezone":"Asia/Singapore","capabilities":["gmail.flight.read","gmail.labels.modify","calendar.events.write","flight.restore-alarm.write"]},
+    {"slug":"flight-email-restore-4am","name":"Flight email restore reconciliation","owner":"inbox-triage","cron":"0 4 * * *","timezone":"Asia/Singapore","capabilities":["gmail.flight.read","gmail.labels.modify","flight.restore-queue.read"]},
+    {"slug":"bot-eod-digest","name":"End-of-day digest","owner":"chief-of-staff","cron":"0 21 * * *","timezone":"Asia/Singapore","capabilities":["task.status.read","portal.digest.write"]}
+  ]
+}

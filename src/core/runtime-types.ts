@@ -1,0 +1,23 @@
+import type {FlightRegistration,FlightReceipt,FlightReconciliation} from './flight-integration';
+import type { Identity, HeartbeatOperation } from './lifecycle';
+import type {NativeChildReceipt} from './native-tasks';
+import type { EffectIntent } from './effects';
+type Base={identity:Identity};type Attempt={run_id:string;attempt:number};
+export type RuntimePayloads={
+ status:Record<string,never>;
+ 'flight-register':FlightRegistration;
+ 'flight-confirm':FlightReceipt;
+ 'flight-reconcile':FlightReconciliation;
+ 'native-child':Base & {child:NativeChildReceipt};
+ 'resource-acquire':Base & Attempt & {resources:string[]};
+ 'resource-release':Base & Attempt & {resources:string[]};
+ boot:{boot_id:string};ready:Base;claim:Base;
+ heartbeat:Base & {operations:HeartbeatOperation[]};
+ submitted:Base & Attempt & {native_ref:string};
+ complete:Base & Attempt & {result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>}};
+ 'prepare-sleep':Base;
+ 'commit-sleep':Base & {stop_token:string;queue_sequence:number;checkpoint:Record<string,unknown>};
+ 'effect-intent':Base & {effect:EffectIntent};
+ 'effect-result':Base & Attempt & {effect_id:string;status:'dispatched'|'confirmed'|'failed'|'outcome_unknown';receipt:Record<string,unknown>|null};
+};
+export type RuntimeCommand={ [K in keyof RuntimePayloads]:{type:K;payload:RuntimePayloads[K]} }[keyof RuntimePayloads];

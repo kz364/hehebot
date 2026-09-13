@@ -1,0 +1,79 @@
+{
+  "vectors": [
+    {
+      "id": "stop-race-before-commit",
+      "initial": "DRAINING",
+      "events": [
+        "new_command",
+        "commit_old_stop_token"
+      ],
+      "expected": [
+        "queued",
+        "DENIED",
+        "READY"
+      ]
+    },
+    {
+      "id": "stop-race-after-commit",
+      "initial": "STOP_COMMITTED",
+      "events": [
+        "new_command",
+        "provider_stopped"
+      ],
+      "expected": [
+        "wake_after_stop",
+        "START_REQUESTED"
+      ]
+    },
+    {
+      "id": "quiet-inference",
+      "initial": "READY",
+      "operations": [
+        "inference"
+      ],
+      "idle_seconds": 600,
+      "expected": "DENIED"
+    },
+    {
+      "id": "unknown-send",
+      "events": [
+        "effect_intent",
+        "remote_success",
+        "crash_before_receipt",
+        "redelivery"
+      ],
+      "expected": [
+        "OUTCOME_UNKNOWN",
+        "no_resend"
+      ]
+    },
+    {
+      "id": "no-op",
+      "initial": "STOPPED",
+      "events": [
+        "context_update"
+      ],
+      "expected": {
+        "wake_calls": 0,
+        "model_calls": 0,
+        "events_added": 1
+      }
+    },
+    {
+      "id": "dst-gap",
+      "cron": "30 2 * * *",
+      "timezone": "America/New_York",
+      "local_date": "2026-03-08",
+      "expected_utc": []
+    },
+    {
+      "id": "dst-fold",
+      "cron": "30 1 * * *",
+      "timezone": "America/New_York",
+      "local_date": "2026-11-01",
+      "expected_utc": [
+        "2026-11-01T05:30:00.000Z"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+export type Scope = { kind: 'global' | 'persona' | 'routine' | 'skill'; id: string | null };
+export type BasePut = { id: string; expected_revision: number };
+export type PersonaPut = BasePut & { name: string; instructions: string; tool_policy_ids: string[]; archived: boolean };
+export type RoomPut = BasePut & { name: string; member_ids: string[]; default_responder_id: string };
+export type RoutinePut = BasePut & {
+  persona_id: string; name: string; instructions: string; schedule: { cron: string; timezone: string } | null;
+  trigger_source_id: string | null; enabled: boolean;
+  policy: { misfire: 'coalesce' | 'skip' | 'replay'; overlap: 'queue_one' | 'skip'; max_replay: number; max_lateness_seconds: number };
+  action_policy_ids: string[];
+};
+export type MemoryPut = BasePut & { scope: Scope; text: string; source_event_id: string; expires_at: string | null; sensitivity: 'ordinary' | 'sensitive' };
+export type RoomPublish = { room_id: string; kind: 'context_update' | 'action_request' | 'message'; recipient_ids: string[]; text: string; references: { kind: string; id: string; revision: number }[]; cause_id: string };
+export type PayloadMap = {
+ 'run.followup':{run_id:string;text:string};
+ 'setup.adopt':{commands:Array<{schema_version:1;type:'persona.put';payload:PersonaPut}|{schema_version:1;type:'routine.put';payload:RoutinePut}>;monitoring_timezone:'Asia/Singapore'|'Asia/Jakarta';reviewed_hash:string};
+ 'message.send': { conversation_id: string; text: string };
+ 'persona.put': PersonaPut; 'room.put': RoomPut; 'routine.put': RoutinePut; 'memory.put': MemoryPut;
+ 'memory.delete': BasePut & { purge_transcripts: boolean };
+ 'room.publish': RoomPublish; 'run.cancel': { run_id: string; reason: string };
+ 'run.retry': { run_id: string; expected_attempt: number };
+ 'approval.resolve': { approval_id: string; decision: 'approve' | 'deny'; expected_revision: number };
+};
+export type Command = { [K in keyof PayloadMap]: { schema_version: 1; type: K; payload: PayloadMap[K] } }[keyof PayloadMap];
+export type ObjectKind = 'persona' | 'room' | 'routine' | 'memory' | 'skill' | 'trigger' | 'approval' | 'policy';
+export type StoredObject<T = Record<string, unknown>> = { id: string; kind: ObjectKind; revision: number; body: T; deleted_at: string | null; created_at: string; updated_at: string };
+export type Receipt = { id: string; status: 'accepted' | 'applied' | 'rejected'; accepted_at: string; resource_id: string | null; error: { code: string; message: string; retryable: boolean } | null };
+export type RunStatus = 'queued' | 'claimed' | 'running' | 'finishing' | 'completed' | 'waiting' | 'failed' | 'cancelling' | 'cancelled' | 'recovery_required';
+export type Run = { role:'coordinator'|'background';parent_run_id:string|null;title:string|null;id: string; command_id: string | null; occurrence_id: string | null; persona_id: string; routine_id: string | null; context_json: string; status: RunStatus; current_attempt: number; error_code: string | null; checkpoint_json: string | null; created_at: string; updated_at: string };
+export type Operation = { id: string; kind: 'inference' | 'tool' | 'child' | 'transfer' | 'node' | 'flush' | 'delivery'; status: 'active' | 'cancelling' | 'settled' | 'unknown'; started_at: string; deadline_at: string; last_progress_at: string };
+export type ContextSnapshot = {task_summaries?:Array<{id:string;title:string|null;status:string;updated_at:string}>; schema_version: 1; persona: StoredObject<PersonaPut>; routine: StoredObject<RoutinePut> | null; memories: StoredObject<MemoryPut>[]; scope_key: string; instruction: string; room_id: string | null; context_events: TimelineEvent[]; authorization_policy_ids: string[] };
+export type TimelineEvent = { sequence: number; id: string; conversation_id: string | null; type: string; actor_id: string; cause_id: string | null; payload: Record<string, unknown>; created_at: string };
+export type Options = { delegations?:Record<string,string[]>;executionEnabled: boolean; actionPolicyIds: string[]; toolPolicyIds: string[]; now: () => Date; uuid: () => string };

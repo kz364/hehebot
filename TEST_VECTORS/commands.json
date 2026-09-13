@@ -1,0 +1,172 @@
+{
+  "valid": [
+    {
+      "schema_version": 1,
+      "type": "message.send",
+      "payload": {
+        "conversation_id": "11111111-1111-4111-8111-111111111111",
+        "text": "Summarize my unread mail; do not send anything."
+      }
+    },
+    {
+      "schema_version": 1,
+      "type": "routine.put",
+      "payload": {
+        "id": "22222222-2222-4222-8222-222222222222",
+        "expected_revision": 0,
+        "persona_id": "11111111-1111-4111-8111-111111111111",
+        "name": "Morning briefing",
+        "instructions": "Summarize unread mail; do not send anything.",
+        "schedule": {
+          "cron": "0 8 * * 1-5",
+          "timezone": "Asia/Jakarta"
+        },
+        "trigger_source_id": null,
+        "enabled": true,
+        "policy": {
+          "misfire": "coalesce",
+          "overlap": "queue_one",
+          "max_replay": 1,
+          "max_lateness_seconds": 86400
+        },
+        "action_policy_ids": []
+      }
+    },
+    {
+      "schema_version": 1,
+      "type": "room.publish",
+      "payload": {
+        "room_id": "11111111-1111-4111-8111-111111111111",
+        "kind": "context_update",
+        "recipient_ids": [
+          "22222222-2222-4222-8222-222222222222"
+        ],
+        "text": "Preference revision changed.",
+        "references": [],
+        "cause_id": "22222222-2222-4222-8222-222222222222"
+      }
+    },
+    {
+      "schema_version": 1,
+      "type": "persona.put",
+      "payload": {
+        "id": "11111111-1111-4111-8111-111111111111",
+        "expected_revision": 0,
+        "name": "Travel",
+        "instructions": "Plan travel within owner authorization.",
+        "tool_policy_ids": [],
+        "archived": false
+      }
+    },
+    {
+      "schema_version": 1,
+      "type": "room.put",
+      "payload": {
+        "id": "22222222-2222-4222-8222-222222222222",
+        "expected_revision": 0,
+        "name": "Planning",
+        "member_ids": [
+          "11111111-1111-4111-8111-111111111111"
+        ],
+        "default_responder_id": "11111111-1111-4111-8111-111111111111"
+      }
+    },
+    {
+      "schema_version": 1,
+      "type": "memory.put",
+      "payload": {
+        "id": "22222222-2222-4222-8222-222222222222",
+        "expected_revision": 0,
+        "scope": {
+          "kind": "global",
+          "id": null
+        },
+        "text": "Prefer concise answers.",
+        "source_event_id": "11111111-1111-4111-8111-111111111111",
+        "expires_at": null,
+        "sensitivity": "ordinary"
+      }
+    },
+    {
+      "schema_version": 1,
+      "type": "memory.delete",
+      "payload": {
+        "id": "22222222-2222-4222-8222-222222222222",
+        "expected_revision": 1,
+        "purge_transcripts": false
+      }
+    },
+    {
+      "schema_version": 1,
+      "type": "run.cancel",
+      "payload": {
+        "run_id": "11111111-1111-4111-8111-111111111111",
+        "reason": "Owner requested cancellation."
+      }
+    },
+    {
+      "schema_version": 1,
+      "type": "run.retry",
+      "payload": {
+        "run_id": "11111111-1111-4111-8111-111111111111",
+        "expected_attempt": 1
+      }
+    },
+    {
+      "schema_version": 1,
+      "type": "approval.resolve",
+      "payload": {
+        "approval_id": "11111111-1111-4111-8111-111111111111",
+        "decision": "deny",
+        "expected_revision": 1
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "command": {
+        "schema_version": 1,
+        "type": "message.send",
+        "payload": {
+          "conversation_id": "11111111-1111-4111-8111-111111111111",
+          "text": ""
+        }
+      },
+      "expected_error": "INVALID_INPUT"
+    },
+    {
+      "command": {
+        "schema_version": 2,
+        "type": "message.send",
+        "payload": {
+          "conversation_id": "11111111-1111-4111-8111-111111111111",
+          "text": "Hi"
+        }
+      },
+      "expected_error": "INVALID_INPUT"
+    },
+    {
+      "command": {
+        "schema_version": 1,
+        "type": "message.send",
+        "payload": {
+          "conversation_id": "bad",
+          "text": "Hi"
+        }
+      },
+      "expected_error": "INVALID_INPUT"
+    },
+    {
+      "command": {
+        "schema_version": 1,
+        "type": "message.send",
+        "payload": {
+          "conversation_id": "11111111-1111-4111-8111-111111111111",
+          "text": "Hi",
+          "admin": true
+        }
+      },
+      "expected_error": "INVALID_INPUT"
+    }
+  ]
+}

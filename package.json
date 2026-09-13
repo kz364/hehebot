@@ -1,0 +1,39 @@
+{
+  "name": "claw-personal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "generate:contracts": "node scripts/generate-contracts.mjs",
+    "types": "WRANGLER_LOG_PATH=.local/wrangler-logs wrangler types --strict-vars=false",
+    "typecheck": "tsc --noEmit",
+    "dev": "WRANGLER_LOG_PATH=.local/wrangler-logs wrangler dev --local --env local --ip 127.0.0.1",
+    "build": "npm run generate:contracts && npm run typecheck && WRANGLER_LOG_PATH=.local/wrangler-logs WRANGLER_SEND_METRICS=false wrangler deploy --env= --dry-run --outdir .local/build",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/core.test.ts tests/schedule.test.ts tests/auth.test.ts",
+    "test:contracts": "vitest run tests/contracts.test.ts",
+    "test:lifecycle": "vitest run tests/lifecycle.test.ts",
+    "test:adapter": "vitest run tests/providers.test.ts",
+    "test:runtime": "node --test tests/runtime*.mjs",
+    "test:e2e": "node scripts/test-local.mjs"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "cron-parser": "^5.10.0",
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260910.1",
+    "@types/node": "^22.20.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0",
+    "wrangler": "^4.130.0"
+  },
+  "overrides": {
+    "sharp": "^0.35.4"
+  }
+}

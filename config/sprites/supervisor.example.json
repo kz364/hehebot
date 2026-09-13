@@ -1,0 +1,8 @@
+{
+  "portalOrigin": "https://REPLACE_WITH_PROTECTED_PORTAL_HOST",
+  "runtimeTokenFile": "/persist/secrets/RUNTIME_TOKEN",
+  "wakeTokenFile": "/persist/secrets/SPRITE_WAKE_TOKEN",
+  "accessClientIdFile": "/persist/secrets/CF_ACCESS_CLIENT_ID",
+  "accessClientSecretFile": "/persist/secrets/CF_ACCESS_CLIENT_SECRET",
+  "port": 8080
+}

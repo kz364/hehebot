@@ -1,0 +1,90 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "claw-personal-portal",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-10",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CONTROL",
+        "class_name": "PersonalControl"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "PersonalControl"
+      ]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  },
+  "vars": {
+    "INSTALLATION_ID": "personal",
+    "AUTH_MODE": "access",
+    "ACCESS_ISSUER": "",
+    "ACCESS_AUD": "",
+    "OWNER_SUB": "",
+    "EXECUTION_ENABLED": "false",
+    "PROVIDER_CONFIG": "{}",
+    "ACTION_POLICY_IDS": "[]",
+    "TOOL_POLICY_IDS": "[]",
+    "TRIGGER_CONFIG": "{}",
+    "NATIVE_VERIFIED": "false",
+    "FLIGHT_RESTORE_VERIFIED": "false",
+    "FLIGHT_RESTORE_POLICY_ID": "",
+    "NATIVE_DELEGATIONS": "{}"
+  },
+  "env": {
+    "local": {
+      "name": "claw-personal-local",
+      "workers_dev": false,
+      "vars": {
+        "INSTALLATION_ID": "local-only",
+        "AUTH_MODE": "local",
+        "ACCESS_ISSUER": "",
+        "ACCESS_AUD": "",
+        "OWNER_SUB": "local-owner",
+        "EXECUTION_ENABLED": "false",
+        "PROVIDER_CONFIG": "{}",
+        "ACTION_POLICY_IDS": "[]",
+        "TOOL_POLICY_IDS": "[]",
+        "TRIGGER_CONFIG": "{}",
+        "NATIVE_VERIFIED": "false",
+        "FLIGHT_RESTORE_VERIFIED": "false",
+        "FLIGHT_RESTORE_POLICY_ID": "",
+        "NATIVE_DELEGATIONS": "{}"
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "CONTROL",
+            "class_name": "PersonalControl"
+          }
+        ]
+      }
+    }
+  },
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.sql"
+      ],
+      "fallthrough": true
+    }
+  ]
+}

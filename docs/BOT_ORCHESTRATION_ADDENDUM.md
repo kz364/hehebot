@@ -1,0 +1,50 @@
+# Bot orchestration clarification — 2026-09-10
+
+Status: normative user clarification to SPEC.md. Takes precedence over its single-model-run default and any interpretation that one visible bot equals one serial native session. The implementation thread owns integration into SPEC.md, contracts, implementation and setup guides.
+
+## Native-first implementation constraint
+
+Latest owner clarification: do not change native OpenClaw behavior when native personas, sessions, background tasks, routing or concurrency already satisfy this requirement. First demonstrate the native flow in the pinned version. Prefer native configuration and existing APIs; add only missing portal routing, durable metadata, provider activity integration and resource arbitration. Do not patch OpenClaw core or build a parallel orchestrator. The coordinator/task distinctions below are behavioral roles and context boundaries, not a mandate for new process types or custom agent loops. The two-lane concurrency proposal is a capacity/acceptance default; a native scheduling mechanism that passes the same non-interruption and responsiveness tests is preferred. Record any native limitation before adding an adapter workaround.
+
+## User-visible contract
+
+Every bot is a conversational coordinator for its own work. The owner can message Travel while Travel is working on a form, ask it for status, or start a separate task without interrupting the form task. The owner never has to create or choose threads. This applies to every persona, not only Chief of Staff. Chief of Staff additionally coordinates across personas.
+
+Separate three identities: persona (instructions/responsibility), conversation (visible inbox/timeline), execution (isolated task session/run). Each persona has a lightweight interactive coordinator context and zero or more task contexts. Use native OpenClaw sessions/tasks wherever supported, not an independent general-purpose agent framework. A long task belongs in a task session; it must not occupy the persona's conversational session for its duration.
+
+## Routing and concurrency
+
+1. Persist every inbound message immediately. Default to the persona coordinator; never automatically append it to the active background task's model input and never cancel that task merely because a new message arrived.
+2. Classify owner intent as status, new independent task, task-specific follow-up, or explicit cancel/pause. Use run references and conversational context; if multiple tasks fit an ambiguous modification, ask one focused question without disturbing either task.
+3. Status reads the durable task ledger first. The coordinator may summarize it, but must not claim progress from elapsed time. Task results publish attributed events to the bot timeline without commandeering the coordinator session.
+4. Queue task follow-ups for the named task's safe message boundary/checkpoint. Only an explicit cancellation affects that target. Global stop requires explicit owner intent; switching bots or sending another message is not stop.
+5. Initial concurrency target: two active model turns installation-wide, with one slot reserved for interactive coordinator work and at most one background model turn. Multiple task workflows/tool waits may coexist subject to resource limits. All personas share the interactive lane fairly; no per-persona VM or unbounded fan-out. Background work cannot consume the reserved interactive slot.
+6. Do not serialize entire model turns behind a global OAuth mutex. Serialize credential refresh/write ownership through the documented managed-auth mechanism; independently test whether the selected harness supports overlapping turns. If it does not, report this as a compatibility gap, implement ledger-only status/queueing meanwhile, and do not claim the non-blocking conversation requirement complete. Never duplicate credential caches to bypass a runtime limitation.
+7. Suggested acceptance target: with one silent background inference active and no other interactive turn, durable message receipt p95 <=1 second and coordinator dispatch p95 <=2 seconds; with a deterministic fake model, status reply <=5 seconds. Real provider response latency is measured separately. Under interactive saturation, show queued state and reason, without canceling background work.
+8. Waiting parents yield model slots before child dispatch. Persist continuations; outer workflow and live operation leases remain accounted for. Fair scheduling must prevent background starvation when the interactive lane is continuously busy.
+
+## Shared services and resource locks
+
+One Sprite hosts the runtime; connector credentials/accounts belong to the installation, not to a bot. Grant each persona/routine an explicit scoped capability. Logical responsibility stays with the appropriate bot, but no bot needs a separate WhatsApp login or private VM.
+
+Serialize mutable browser-profile/tab interaction with resource locks; use separate tabs/profiles only when the actual account/tool permits it. Narrow locks to browser interactions, not a whole task's inference lifetime. Read-only connector APIs may overlap where supported. Calendar/Gmail writes use cross-bot entity deduplication, version checks, effect receipts and bounded account/resource locks. Human login intervention must not race automated browser input. Model concurrency does not authorize concurrent mutation of the same page or event.
+
+Hold Sprites activity tasks/leases while any coordinator turn, task inference, tool, child, node call, transfer or flush is active. Coordinator idle does not imply runtime idle. Release compute for durably parked waits only when no live work depends on the process. Cold wake reconstructs coordinators and pending workflows from durable state; in-memory execution stacks are not assumed to survive.
+
+## Memory and UI
+
+Coordinator context contains persona instructions plus authorized summaries/task references, not all private task transcripts. Task sessions pin scope/revisions and never inherit incompatible routine histories. Bot timelines present collapsible task cards and labeled replies, with target-specific follow-up/cancel controls and an ordinary always-available composer. No thread picker is required. Data-only inter-bot updates remain zero-inference/zero-wake events until a real turn consumes them.
+
+## Acceptance additions
+
+- O01: Start Travel task A with silent inference; send Travel a status question. A continues with the same native run and unchanged input; coordinator responds through its separate session.
+- O02: While A waits on a browser/tool, send independent task B. B is durably represented separately, and dispatches when its resource lane is available; A is not cancelled or reset.
+- O03: Two tasks active, ambiguous “change the time” asks clarification without mutating either. Explicit follow-up targets exactly one task.
+- O04: Cancel B leaves A and the coordinator active; closing a task card or switching bots cancels nothing.
+- O05: Two bots contend for the same WhatsApp tab or calendar event. Locks/dedupe prevent crossed page input and duplicate writes, while unrelated chat still responds.
+- O06: Background slot occupied, interactive slot remains usable; parent/child dispatch never deadlocks; saturation is visible and bounded.
+- O07: Crash/cold wake retains accepted messages, task mapping and results without duplicate effects; updates route to the same logical tasks.
+- O08: A coordinator reply finishes while a background tool is active. Sprite remains awake until all activity blockers settle.
+- O09: Auth-refresh race under two turns results in one managed refresh owner and no token overwrite, secret leakage or paid fallback.
+
+These tests supplement S01–S32. Update compute defaults, claim capacity/lane schemas, native routing, UI, activity counts, rollout gates and Definition of Done accordingly. The supplied Grok export makes a new exporter unnecessary for initial onboarding: implement preview/normalized import from the adapted markdown first.

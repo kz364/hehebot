@@ -1,0 +1,51 @@
+import { mkdir, open, readFile, rename } from 'node:fs/promises';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+
+/** Single executor process only. A separate provider fence and OS ownership lock are required.
+ * Serialized, fsynced intent journal. No native DB access. Directory must be private persistent disk.
+ */
+export class FileJournal {
+  #tail = Promise.resolve();
+  constructor(directory) { this.directory = directory; }
+  path(id) {
+    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) throw new Error('INVALID_ATTEMPT');
+    return join(this.directory, `${id}.json`);
+  }
+  async get(id) {
+    try { return JSON.parse(await readFile(this.path(id), 'utf8')); }
+    catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  }
+  serial(fn) {
+    const result = this.#tail.then(fn);
+    this.#tail = result.catch(() => {});
+    return result;
+  }
+  async write(id, row) {
+    await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    const target = this.path(id);
+    const temporary = `${target}.${randomUUID()}.tmp`;
+    const fd = await open(temporary, 'wx', 0o600);
+    try { await fd.writeFile(JSON.stringify(row)); await fd.sync(); }
+    finally { await fd.close(); }
+    await rename(temporary, target);
+    const directory = await open(this.directory, 'r');
+    try { await directory.sync(); } finally { await directory.close(); }
+    return row;
+  }
+  putIfAbsent(id, row) {
+    return this.serial(async () => {
+      const existing = await this.get(id);
+      if (existing) return existing;
+      await this.write(id, row);
+      return null;
+    });
+  }
+  update(id, patch) {
+    return this.serial(async () => {
+      const current = await this.get(id);
+      if (!current) throw new Error('UNKNOWN_ATTEMPT');
+      return this.write(id, { ...current, ...patch });
+    });
+  }
+}

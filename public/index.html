@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>Personal — your assistants</title><meta name="description" content="Your bots, routines and shared memory in one private workspace."><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
+<body>
+<div class="app">
+ <aside class="sidebar" aria-label="Conversations">
+  <a class="brand" href="/" aria-label="Personal home"><span class="brand-mark">P</span><span>Personal</span></a>
+  <div class="section-label">YOUR BOTS <button id="add-bot" class="icon-button" aria-label="Add bot">+</button></div>
+  <nav id="bots" aria-label="Bots"></nav>
+  <div class="section-label rooms-label">ROOMS <button id="add-room" class="icon-button" aria-label="Add room">+</button></div>
+  <nav id="rooms" aria-label="Rooms"></nav>
+  <div class="sidebar-footer"><span id="connection-dot" class="dot"></span><span id="connection">Connecting</span><button id="refresh" class="text-button">Refresh</button></div>
+ </aside>
+ <main>
+  <header class="conversation-header"><div><p class="eyebrow" id="conversation-type">ASSISTANT</p><h1 id="conversation-name">Your workspace</h1></div><div class="header-actions"><button id="edit-bot" class="quiet">Instructions</button><button id="show-details" class="quiet">Routines & memory</button></div></header>
+  <div id="runtime-banner" class="banner" role="status" hidden></div>
+  <div id="error" class="error" role="alert" hidden></div>
+  <div id="timeline" class="timeline" role="log" aria-label="Conversation" aria-live="polite"><div class="empty"><h2>Loading your workspace…</h2></div></div>
+  <form id="composer" class="composer"><label class="sr-only" for="message">Message your bot</label><textarea id="message" rows="3" placeholder="Ask a question, or describe a routine you’d like to create…" required maxlength="32768"></textarea><div class="composer-footer"><span id="draft-status">Only sent after you press Send</span><button id="send" class="primary" type="submit">Send <span aria-hidden="true">↗</span></button></div></form>
+ </main>
+ <aside id="details" class="details" aria-label="Routines and memory">
+  <div class="details-heading"><h2>Workspace</h2><button id="close-details" class="icon-button" aria-label="Close details">×</button></div>
+  <section><div class="panel-heading"><h3>Routines</h3><button id="add-routine" class="small-button">+ New</button></div><div id="routines"></div></section>
+  <section><div class="panel-heading"><h3>Memory</h3><button id="add-memory" class="small-button">+ Remember</button></div><div id="memories"></div></section>
+  <section><h3>Setup</h3><p class="muted">Review your prepared bots and routines before adopting them.</p><button id="import-setup" class="quiet">Review setup file</button></section>
+  <section class="runtime-panel"><h3>Runtime</h3><dl><div><dt>State</dt><dd id="runtime-state">Unknown</dd></div><div><dt>Provider</dt><dd id="runtime-provider">Unconfigured</dd></div><div><dt>Queued</dt><dd id="runtime-queued">0</dd></div><div><dt>Waiting</dt><dd id="runtime-waiting">0</dd></div></dl><p class="muted">The portal and schedule remain available while your assistant sleeps.</p></section>
+ </aside>
+</div>
+<dialog id="editor" aria-labelledby="editor-title"><form id="editor-form"><div class="dialog-heading"><h2 id="editor-title">Edit</h2><button type="button" id="close-editor" class="icon-button" aria-label="Close editor">×</button></div><div id="editor-fields"></div><p id="editor-error" class="error" role="alert" hidden></p><div class="dialog-footer"><button type="button" id="cancel-editor" class="quiet">Cancel</button><button type="submit" class="primary">Save</button></div></form></dialog>
+</body></html>

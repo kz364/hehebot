@@ -1,6 +1,10 @@
-# OpenClaw remote-first setup
+# OpenClaw setup
 
-## Contract
+## Current shared-Sprite setup
+
+The selected target is one Fly Sprite, Cloudflare portal/API/scheduler and an optional paired Mac. Start with [AUTH_SETUP.md](docs/AUTH_SETUP.md), [NATIVE_AUTH_SETUP.md](docs/NATIVE_AUTH_SETUP.md), [BOT_SETUP.md](docs/BOT_SETUP.md) and [IMPORT_FORMAT.md](docs/IMPORT_FORMAT.md). The local portal now reviews/adopts five bots and seven disabled routines. No native/connector login transfers from the historical Grok setup. Live execution remains disabled pending the native O01–O09 and provider activity gates. The inventory below is historical local evidence, not proof of a deployed Sprite.
+
+## Earlier remote-first contract
 One future authoritative VPS Gateway; Mac is an intermittent client/node. No VM provisioning, cloud connection, Docker, core fork, or agent synchronization.
 
 ## 2026-09-10 inventory and changes
