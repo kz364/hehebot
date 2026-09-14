@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
+import { CodexEventRouter } from '../runtime/codex-events.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -18,7 +19,7 @@ const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const marker = `CODEX_NATIVE_${randomUUID()}`;
 const payload = `left-${randomUUID()}-RIGHT`;
-let home, workspace, fixture, transport;
+let home, workspace, fixture, transport, router;
 let requests = 0;
 let toolContinuations = 0;
 let heldRequests = 0;
@@ -186,6 +187,8 @@ try {
   assert.equal((await waitTurn(heldTurn)).status, 'interrupted');
   await waitFor(() => heldClosed === 1, 'held HTTP request closure');
 
+  const routerFailures = [];
+  router = new CodexEventRouter({ transport, adapter: recovery, onRecovery: value => routerFailures.push(value.code) });
   const backgroundThread = (await transport.request('thread/start', { cwd: workspace, modelProvider: 'fixture' })).thread.id;
   const backgroundTurn = (await transport.request('turn/start', { threadId: backgroundThread, input: [{ type: 'text', text: 'BACKGROUND_EXECUTION_PROOF' }] })).turn.id;
   assert.equal((await waitTurn(backgroundTurn)).status, 'completed');
@@ -198,19 +201,24 @@ try {
   assert.equal(commandAtRoot.status, 'inProgress');
   assert.equal(notifications.some(n => n.method === 'item/completed' && n.params?.turnId === backgroundTurn && n.params.item?.id === commandAtRoot.id), false);
   await new FileJournal(journalPath).putIfAbsent('background-proof', { threadId: backgroundThread, nativeRunId: backgroundTurn, status: 'running', rootSettled: false });
-  await recovery.observe('background-proof', notifications.find(n => n.method === 'item/started' && n.params?.item?.id === commandAtRoot.id));
+  await router.bind('background-proof');
+  assert.equal((await recovery.requireRun('background-proof')).rootSettled, true);
   const stillOpen = await recovery.reconcile('background-proof');
   assert.equal(stillOpen.rootSettled, true); assert.equal(stillOpen.commands[commandAtRoot.id], 'inProgress');
   const gate = await open(commandGate, constants.O_WRONLY | constants.O_NONBLOCK);
   try { await gate.writeFile('BACKGROUND_COMMAND_EXIT'); } finally { await gate.close(); }
   await waitFor(() => notifications.some(n => n.method === 'item/completed' && n.params?.turnId === backgroundTurn && n.params.item.id === commandAtRoot.id && n.params.item.status === 'completed'), 'late background command exit');
-  const settledCommand = await recovery.observe('background-proof', notifications.find(n => n.method === 'item/completed' && n.params?.item?.id === commandAtRoot.id));
+  await router.flush();
+  const settledCommand = await recovery.requireRun('background-proof');
   assert.equal(settledCommand.commands[commandAtRoot.id], 'completed');
   const lateHistory = await transport.request('thread/read', { threadId: backgroundThread, includeTurns: true });
   const commandAfterExit = lateHistory.thread.turns.find(x => x.id === backgroundTurn).items.find(x => x.id === commandAtRoot.id);
   assert.equal(commandAfterExit.status, 'completed'); assert.equal(commandAfterExit.exitCode, 0);
   assert.match(commandAfterExit.aggregatedOutput, /BACKGROUND_COMMAND_EXIT/);
   report.backgroundCommandOutlivesRoot = true;
+  assert.deepEqual(routerFailures, []); assert.equal(router.pending.length, 0);
+  report.liveEventRouting = true;
+  router.close();
 
   // A new native process must recover disk-backed history, not a live server cache.
   // Stop only after the fixture's held request and command have definitively exited.
@@ -244,6 +252,8 @@ try {
 } finally {
   report.requests = requests; report.toolContinuations = toolContinuations; report.heldRequests = heldRequests; report.heldClosed = heldClosed;
   for (const res of held.values()) res.destroy();
+  router?.close();
+  if (router) await router.tail;
   transport?.close();
   if (transport) {
     await waitFor(() => transport.child.exitCode !== null || transport.child.signalCode !== null, 'native process stop', 5000)

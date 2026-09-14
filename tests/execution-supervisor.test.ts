@@ -11,12 +11,14 @@ import { ExecutionSupervisor } from '../runtime/execution-supervisor.mjs';
 let f: ReturnType<typeof fixture>, life: LifecycleCore, directory: string, supervisor: any;
 let calls: string[], cancellations: string[], releases: number, nativeCalls: number;
 let hook: ((type: string) => Promise<void>) | undefined;
+let eventBind: (id: string) => Promise<void>;
 beforeEach(async () => {
   f = fixture(true); life = new LifecycleCore(f.store, f.core, { idleMode: true });
   f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
   const identity = life.registerBoot(randomUUID()); life.ready(identity);
   directory = await mkdtemp(join(tmpdir(), 'claw-supervisor-'));
   calls = []; cancellations = []; releases = 0; nativeCalls = 0; hook = undefined;
+  eventBind = async () => {};
   const control = { request: async (type: string, p: any) => {
     calls.push(type);
     await hook?.(type);
@@ -36,6 +38,7 @@ beforeEach(async () => {
       cancel: async (id: string) => { cancellations.push(id); },
     },
     operations: async () => [], now: () => f.core.options.now().getTime(),
+    events: { bind: (id: string) => eventBind(id) },
     activity: { ensure: async () => {}, releaseAfterDrain: async () => { releases++; } },
   });
 });
@@ -138,4 +141,28 @@ it('production compatibility gate runs before heartbeat and claim', async () => 
   supervisor.native.admissionReadiness = () => ({ allowed: false });
   await expect(supervisor.start()).rejects.toMatchObject({ code: 'COMPATIBILITY_GATE_BLOCKED' });
   expect(calls).toEqual([]);
+});
+
+it('binds acknowledged native events before reporting submission to the control plane', async () => {
+  const id = enqueue(); let bound: string | undefined;
+  eventBind = async attemptId => {
+    bound = attemptId;
+    expect(nativeCalls).toBe(1); expect(calls).not.toContain('submitted');
+    expect(f.store.run(id).status).toBe('claimed');
+  };
+  const row = await supervisor.start();
+  expect(bound).toBe(row.attemptId); expect(row.phase).toBe('running');
+});
+
+it.each(['journal failure', 'expired lease'])('event binding %s parks admitted work without replay or release', async failure => {
+  const id = enqueue();
+  eventBind = async () => {
+    if (failure === 'journal failure') throw new Error('private diagnostic');
+    f.setNow('2026-09-10T00:01:30.000Z');
+  };
+  const row = await supervisor.start();
+  expect(row.phase).toBe('submission_unknown'); expect(supervisor.phase).toBe('recovery');
+  expect(f.store.run(id).status).toBe('claimed'); expect(calls).not.toContain('submitted');
+  await expect(supervisor.dispatch()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  expect(nativeCalls).toBe(1); expect(releases).toBe(0);
 });

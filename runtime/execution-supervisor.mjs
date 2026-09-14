@@ -8,8 +8,10 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
  */
 export class ExecutionSupervisor {
   constructor({ control, native, journal, identity, installationId, personas, activity,
-    operations, now = Date.now, intervalMs = 20000, onRecovery = () => {} }) {
+    operations, events = /** @type {{bind: (attemptId: string) => Promise<void>} | null} */ (null),
+    now = Date.now, intervalMs = 20000, onRecovery = () => {} }) {
     if (!activity?.ensure || !activity?.releaseAfterDrain || typeof operations !== 'function' ||
+        (events && typeof events.bind !== 'function') ||
         !Number.isInteger(intervalMs) || intervalMs < 1 || intervalMs > 30000) fail('INVALID_SUPERVISOR_CONFIGURATION');
     Object.assign(this, { control, native, journal, identity, activity, operations, now, intervalMs, onRecovery });
     this.phase = 'stopped';
@@ -21,7 +23,18 @@ export class ExecutionSupervisor {
     // Revalidate immediately before native admission, including after a slow claim.
     const guardedNative = {
       admissionReadiness: () => native.admissionReadiness(),
-      submit: input => { this.assertLease(); return native.submit(input); },
+      submit: async input => {
+        this.assertLease();
+        const submitted = await native.submit(input);
+        if (submitted?.nativeRunId && submitted.status === 'running' && !submitted.recoveryRequired) {
+          this.assertLease();
+          // The router subscribes before dispatch and uses only persisted native IDs.
+          // Any buffered events must be accounted for before acknowledging admission.
+          await events?.bind(input.attemptId);
+          this.assertLease();
+        }
+        return submitted;
+      },
     };
     this.bridge = new ExecutionBridge({ control, native: guardedNative, journal, identity, installationId, personas });
   }
