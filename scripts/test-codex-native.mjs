@@ -24,6 +24,7 @@ let requests = 0;
 let toolContinuations = 0;
 let heldRequests = 0;
 let heldClosed = 0;
+let spawnedChildId;
 const bodies = [];
 const notifications = [];
 const nativeErrors = [];
@@ -105,19 +106,32 @@ try {
 
   fixture = createServer(async (req, res) => {
     try {
-    if (req.method !== 'POST' || req.url !== '/v1/responses' || requests >= 8) { res.writeHead(requests >= 8 ? 429 : 404); res.end(); return; }
+    if (req.method !== 'POST' || req.url !== '/v1/responses' || requests >= 12) { res.writeHead(requests >= 12 ? 429 : 404); res.end(); return; }
     requests++;
     const body = await readBody(req);
     bodies.push(body);
     const input = Array.isArray(body.input) ? body.input : [];
     const raw = JSON.stringify(input);
-    if (raw.includes('HOLD_NATIVE_TURN')) {
+    if (raw.includes('HOLD_NATIVE_TURN') || input.some(item => item?.role === 'user' && JSON.stringify(item.content).includes('HOLD_NATIVE_CHILD'))) {
       heldRequests++;
       res.once('close', () => { if (!res.writableEnded) heldClosed++; });
       held.set(heldRequests, res);
       return;
     }
     const output = input.find(item => item?.type === 'function_call_output');
+    if (raw.includes('SPAWN_CHILD_PROOF')) {
+      if (output) {
+        spawnedChildId = JSON.parse(String(output.output)).agent_id;
+        assert.equal(typeof spawnedChildId, 'string');
+        sendEvents(res, message('PARENT_FINISHED_CHILD_RUNNING')); return;
+      }
+      const spawnTool = body.tools.find(tool => tool.name === 'spawn_agent' || tool.tools?.some(nested => nested.name === 'spawn_agent'));
+      assert.ok(spawnTool, 'Native spawn_agent must be advertised');
+      sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID().replaceAll('-', '')}`,
+        ...(spawnTool.type === 'namespace' ? { namespace: spawnTool.name } : {}),
+        name: 'spawn_agent', arguments: JSON.stringify({ message: 'HOLD_NATIVE_CHILD', agent_type: 'default' }) }]);
+      return;
+    }
     if (raw.includes('BACKGROUND_EXECUTION_PROOF')) {
       if (output) { sendEvents(res, message('ROOT_FINISHED_BEFORE_COMMAND')); return; }
       sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID().replaceAll('-', '')}`,
@@ -220,6 +234,25 @@ try {
   report.liveEventRouting = true;
   router.close();
 
+  const parentThread = (await transport.request('thread/start', { cwd: workspace, modelProvider: 'fixture' })).thread.id;
+  const parentTurn = (await transport.request('turn/start', { threadId: parentThread, input: [{ type: 'text', text: 'SPAWN_CHILD_PROOF' }] })).turn.id;
+  assert.equal((await waitTurn(parentTurn)).status, 'completed');
+  await waitFor(() => heldRequests === 2, 'child model request');
+  const spawned = notifications.find(n => n.method === 'item/completed' && n.params?.threadId === parentThread && n.params?.turnId === parentTurn && n.params.item?.type === 'collabAgentToolCall' && n.params.item.tool === 'spawnAgent')?.params.item;
+  assert.equal(spawned.status, 'completed'); assert.equal(spawned.senderThreadId, parentThread);
+  assert.equal(spawned.receiverThreadIds.length, 1);
+  const childThread = spawned.receiverThreadIds[0];
+  assert.equal(childThread, spawnedChildId);
+  const childStarted = notifications.find(n => n.method === 'turn/started' && n.params?.threadId === childThread);
+  report.childTurnStartObserved = Boolean(childStarted);
+  assert.ok(childStarted, 'Child turn identity must be observed before interruption');
+  assert.equal(heldClosed, 1);
+  assert.equal(notifications.some(n => n.method === 'turn/completed' && n.params?.threadId === childThread && n.params.turn.id === childStarted.params.turn.id), false);
+  await transport.request('turn/interrupt', { threadId: childThread, turnId: childStarted.params.turn.id });
+  assert.equal((await waitTurn(childStarted.params.turn.id)).status, 'interrupted');
+  await waitFor(() => heldClosed === 2, 'child provider request closure');
+  report.childOutlivesParent = true;
+
   // A new native process must recover disk-backed history, not a live server cache.
   // Stop only after the fixture's held request and command have definitively exited.
   transport.close();
@@ -240,13 +273,14 @@ try {
   assert.equal(restartedAdapter.sleepReadiness().allowed, false);
   report.nativeProcessRestartReadback = true;
 
-  assert.equal(requests, 6);
+  assert.equal(requests, 9);
   assert.equal(toolContinuations, 1);
   assert.deepEqual(fixtureErrors, []);
   assert.ok(bodies.every(body => body.model === 'fixture-model' && body.stream === true));
   report.status = 'passed';
 } catch (error) {
   report.error = error?.stack ?? String(error);
+  if (fixtureErrors.length) report.fixtureErrors = fixtureErrors;
   if (nativeErrors.length) report.nativeErrors = nativeErrors.join('').slice(-8000);
   process.exitCode = 1;
 } finally {
