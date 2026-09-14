@@ -4,10 +4,11 @@ import type { RoomPublish, TimelineEvent } from './types';
 
 // Inputs/results retain 90 days; metadata audit and derived room updates retain 30.
 const longLived = "'message.user','room.message','room.action_request','trigger.event','task.followup_queued','run.result'";
+export const timelineExpirySql = `strftime('%Y-%m-%dT%H:%M:%fZ',created_at,CASE WHEN type IN (${longLived}) THEN '+90 days' ELSE '+30 days' END)`;
 export class TimelineRetention {
  constructor(private store: Store, private now: () => string) {}
  nextDue(): string | null {
-  return this.store.db.all<{ due: string | null }>(`SELECT MIN(strftime('%Y-%m-%dT%H:%M:%fZ',created_at,CASE WHEN type IN (${longLived}) THEN '+90 days' ELSE '+30 days' END)) AS due FROM events`)[0].due;
+  return this.store.db.all<{ due: string | null }>(`SELECT MIN(${timelineExpirySql}) AS due FROM events`)[0].due;
  }
  prune(): number {
   return this.store.db.transaction(() => {

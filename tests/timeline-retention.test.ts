@@ -93,3 +93,28 @@ it('preserves legacy spent budgets, original receipts, and unresolved work/locks
     expect(publish('Fourth forbidden action')).toMatchObject({ status: 'rejected', error: { code: 'DEADLINE_EXCEEDED' } });
   } finally { f.close(); }
 });
+
+it('excludes overdue backlog from snapshots and recipient input before physical pruning finishes', () => {
+  const f = fixture(), retention = new TimelineRetention(f.store, () => f.core.now());
+  try {
+    const room = randomUUID();
+    f.accept({ schema_version: 1, type: 'room.put', payload: { id: room, expected_revision: 0,
+      name: 'Backlog room', member_ids: [bot, otherBot], default_responder_id: bot } });
+    f.store.event(randomUUID(), room, 'message.user', 'owner', null, { text: 'Retained message 19' }, f.core.now());
+    const publish = (text: string) => f.accept({ schema_version: 1, type: 'room.publish', payload: {
+      room_id: room, kind: 'context_update', recipient_ids: [bot], text, references: [], cause_id: randomUUID(),
+    } });
+    for (let i = 0; i < 101; i++) expect(publish(`Expired update ${i}`).status).toBe('applied');
+    const expiredThrough = f.store.sequence();
+    f.setNow('2026-10-10T00:00:00.000Z'); publish('Current update 71');
+    expect(retention.prune()).toBe(100);
+    expect(f.db.all("SELECT id FROM events WHERE type='room.context_update'")).toHaveLength(3); // Two overdue rows still physically present.
+    const context = f.core.context(bot, 'Read', null, room);
+    expect(context.context_events.map(e => e.payload.text)).toEqual(['Current update 71']);
+    expect(context.context_history_gap).toEqual({ requested_after: 0, expired_through: expiredThrough });
+    expect(f.core.context(otherBot, 'Read', null, room).context_history_gap).toBeUndefined();
+    expect(() => f.core.state(expiredThrough - 1)).toThrowError(expect.objectContaining({ code: 'HISTORY_GAP' }));
+    expect(f.core.state().timeline!.map(e => e.payload.text)).toEqual(['Retained message 19', 'Current update 71']);
+    expect(f.core.state(expiredThrough).events.map(e => e.payload.text)).toEqual(['Current update 71']);
+  } finally { f.close(); }
+});

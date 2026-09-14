@@ -23,9 +23,10 @@ and backups may still contain copies.
 Schema v5 adds alarm-driven timeline retention: messages, action requests,
 trigger inputs, follow-up notices and results retain 90 days; metadata audit and
 derived room updates retain 30 days. Each reconciliation prunes at most 100 rows
-and rearms a backlog. Cleanup may lag the nominal cutoff; read paths can still
-return overdue rows awaiting their batch. Dates originate at event creation,
-not the last read. This is timeline-only, not full payload/storage retention.
+and rearms a backlog. Physical cleanup may lag the cutoff, but snapshots, timeline
+pages and newly captured recipient context exclude overdue rows immediately.
+History floors include overdue rows still awaiting removal. Dates originate at
+event creation, not the last read. This is not full payload/storage retention.
 
 Compact event provenance and room-publication digests survive timeline expiry.
 Legacy publication identities are backfilled transactionally before deletion,

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { TestDatabase, bot, routine } from './helpers';
+import { TestDatabase, bot, otherBot, routine } from './helpers';
 import { PersonalControl } from '../src/worker/control-object';
 import { Store } from '../src/core/store';
 
@@ -147,4 +147,21 @@ it('expired command text leaves linked webhook replay and its original receipt u
   expect(db.all('SELECT * FROM runs')).toEqual(runs); expect(db.all('SELECT * FROM webhook_receipts')).toEqual(receipts);
   expect(db.all('SELECT * FROM controller_operations')).toEqual([]);
   expect(deleteAlarm).toHaveBeenCalled();
+});
+
+it('timeline reads hide overdue backlog immediately and keep the history floor scoped to its conversation', async () => {
+  const store = new Store(db);
+  for (let i = 0; i < 201; i++) store.event(randomUUID(), bot, 'persona.updated', 'owner', null, { text: `Expired ${i}` }, new Date().toISOString());
+  const expiredThrough = store.sequence();
+  store.event(randomUUID(), otherBot, 'message.user', 'owner', null, { text: 'Other retained 43' }, new Date().toISOString());
+  vi.setSystemTime(new Date('2026-10-10T00:00:00.000Z'));
+  store.event(randomUUID(), bot, 'message.user', 'owner', null, { text: 'Current retained 71' }, new Date().toISOString());
+  const result = await control.getTimeline('owner', bot);
+  expect(result).toMatchObject({ ok: true, value: { history_gap: true, pruned_through: expiredThrough } });
+  if (!result.ok) throw new Error('fixture read failed');
+  expect(result.value.events.map(e => e.payload.text)).toEqual(['Current retained 71']);
+  expect(db.all("SELECT id FROM events WHERE type='persona.updated'")).toHaveLength(101);
+  const other = await control.getTimeline('owner', otherBot);
+  expect(other).toMatchObject({ ok: true, value: { history_gap: false, pruned_through: 0 } });
+  expect(db.all('SELECT * FROM runs')).toEqual([]); expect(db.all('SELECT * FROM controller_operations')).toEqual([]);
 });

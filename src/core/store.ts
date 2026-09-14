@@ -1,4 +1,5 @@
 import { ControlError } from './errors';
+import { timelineExpirySql } from './timeline-retention';
 import type { ObjectKind, StoredObject, TimelineEvent, Run } from './types';
 export type SqlValue = string | number | null;
 export interface Database {
@@ -30,25 +31,30 @@ export class Store {
   this.db.exec('INSERT INTO events(id,conversation_id,type,actor_id,cause_id,payload_json,created_at) VALUES(?,?,?,?,?,?,?)',id,conversation,type,actor,cause,JSON.stringify(payload),now);
   return this.db.all<{sequence:number}>('SELECT sequence FROM events WHERE id=?',id)[0].sequence;
  }
- events(after=0,limit=100,conversation?:string):TimelineEvent[] {
+ events(after:number,limit:number,now:string):TimelineEvent[] {
   type Row={sequence:number;id:string;conversation_id:string|null;type:string;actor_id:string;cause_id:string|null;payload_json:string;created_at:string};
-  const rows=conversation ? this.db.all<Row>('SELECT * FROM events WHERE sequence>? AND conversation_id=? ORDER BY sequence LIMIT ?',after,conversation,limit):this.db.all<Row>('SELECT * FROM events WHERE sequence>? ORDER BY sequence LIMIT ?',after,limit);
+  const rows=this.db.all<Row>(`SELECT * FROM events WHERE sequence>? AND ${timelineExpirySql}>? ORDER BY sequence LIMIT ?`,after,now,limit);
   return rows.map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
  }
- contextEvents(conversation:string,recipient:string,after:number,limit=100):TimelineEvent[] {
+ contextPage(conversation:string,recipient:string,after:number,now:string,limit=100):{events:TimelineEvent[];expiredThrough:number} {
   type Row=Omit<TimelineEvent,'payload'>&{payload_json:string};
-  return this.db.all<Row>("SELECT * FROM events WHERE conversation_id=? AND sequence>? AND type='room.context_update' AND EXISTS (SELECT 1 FROM json_each(events.payload_json,'$.recipient_ids') WHERE value=?) ORDER BY sequence LIMIT ?",conversation,after,recipient,limit).map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
+  const retired=this.db.all<{seq:number}>('SELECT pruned_through AS seq FROM context_retention WHERE conversation_id=? AND consumer_id=?',conversation,recipient)[0]?.seq??0;
+  const pending=this.db.all<{seq:number}>(`SELECT COALESCE(MAX(sequence),0) AS seq FROM events WHERE conversation_id=? AND type='room.context_update' AND ${timelineExpirySql}<=? AND EXISTS (SELECT 1 FROM json_each(events.payload_json,'$.recipient_ids') WHERE value=?)`,conversation,now,recipient)[0].seq;
+  const events=this.db.all<Row>(`SELECT * FROM events WHERE conversation_id=? AND sequence>? AND type='room.context_update' AND ${timelineExpirySql}>? AND EXISTS (SELECT 1 FROM json_each(events.payload_json,'$.recipient_ids') WHERE value=?) ORDER BY sequence LIMIT ?`,conversation,after,now,recipient,limit).map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
+  return {events,expiredThrough:Math.max(retired,pending)};
  }
- conversationEvents(conversation:string,before=Number.MAX_SAFE_INTEGER,limit=100):TimelineEvent[] {
+ conversationEvents(conversation:string,now:string,before=Number.MAX_SAFE_INTEGER,limit=100):TimelineEvent[] {
   type Row={sequence:number;id:string;conversation_id:string|null;type:string;actor_id:string;cause_id:string|null;payload_json:string;created_at:string};
-  return this.db.all<Row>('SELECT * FROM events WHERE conversation_id=? AND sequence<? ORDER BY sequence DESC LIMIT ?',conversation,before,limit).reverse().map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
+  return this.db.all<Row>(`SELECT * FROM events WHERE conversation_id=? AND sequence<? AND ${timelineExpirySql}>? ORDER BY sequence DESC LIMIT ?`,conversation,before,now,limit).reverse().map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
  }
- latestEvents(limit=100):TimelineEvent[] {
+ latestEvents(now:string,limit=100):TimelineEvent[] {
   type Row=Omit<TimelineEvent,'payload'>&{payload_json:string};
-  return this.db.all<Row>('SELECT * FROM events ORDER BY sequence DESC LIMIT ?',limit).reverse().map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
+  return this.db.all<Row>(`SELECT * FROM events WHERE ${timelineExpirySql}>? ORDER BY sequence DESC LIMIT ?`,now,limit).reverse().map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
  }
- prunedThrough(conversation?:string):number {
-  return (conversation?this.db.all<{seq:number}>('SELECT COALESCE(MAX(sequence),0) AS seq FROM event_tombstones WHERE conversation_id=?',conversation):this.db.all<{seq:number}>('SELECT COALESCE(MAX(sequence),0) AS seq FROM event_tombstones'))[0].seq;
+ retentionFloor(now:string,conversation?:string):number {
+  const retired=this.db.all<{seq:number}>('SELECT COALESCE(MAX(sequence),0) AS seq FROM event_tombstones WHERE (? IS NULL OR conversation_id=?)',conversation??null,conversation??null)[0].seq;
+  const pending=this.db.all<{seq:number}>(`SELECT COALESCE(MAX(sequence),0) AS seq FROM events WHERE ${timelineExpirySql}<=? AND (? IS NULL OR conversation_id=?)`,now,conversation??null,conversation??null)[0].seq;
+  return Math.max(retired,pending);
  }
  sequence():number { return this.db.all<{seq:number}>("SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='events'),0) AS seq")[0].seq; }
  run(id:string):Run { const run=this.db.all<Run>('SELECT * FROM runs WHERE id=?',id)[0]; if(!run) throw new ControlError('NOT_FOUND','Run unavailable.',404);return run; }

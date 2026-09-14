@@ -85,7 +85,7 @@ it('real SQLite claim → native adapter/journal → completion publishes exactl
   await executor.complete(settled(row)); await executor.complete(settled(row));
   expect(nativeCalls).toBe(1);
   expect(f.store.run(id).status).toBe('completed');
-  expect(f.store.conversationEvents(bot, undefined, 100).filter(e => e.type === 'run.result').map(e => e.payload.text)).toEqual(['Durably returned to the portal']);
+  expect(f.store.conversationEvents(bot, f.core.now(), undefined, 100).filter(e => e.type === 'run.result').map(e => e.payload.text)).toEqual(['Durably returned to the portal']);
 });
 
 it('clears the prior native attempt before publishing custody of another claimed run', async () => {
