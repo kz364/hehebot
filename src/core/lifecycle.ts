@@ -79,7 +79,14 @@ export class LifecycleCore {
   });
  }
  submitted(identity:Identity,runId:string,attempt:number,nativeRef:string):void {
-  this.store.db.transaction(()=>{this.authorizeAttempt(identity,runId,attempt);const run=this.store.run(runId);requireThat(run.current_attempt===attempt&&run.status==='claimed','REVISION_CONFLICT','Run is not awaiting submission.');this.store.db.exec("UPDATE attempts SET native_run_ref=?,status='running' WHERE run_id=? AND attempt=?",nativeRef,runId,attempt);this.store.db.exec("UPDATE runs SET status='running',updated_at=? WHERE id=?",this.core.now(),runId);this.touch();});
+  this.store.db.transaction(()=>{
+   this.authorizeAttempt(identity,runId,attempt);const run=this.store.run(runId);
+   requireThat(run.current_attempt===attempt&&run.status==='claimed','REVISION_CONFLICT','Run is not awaiting submission.');
+   const row=this.store.db.all<{native_run_ref:string|null}>('SELECT native_run_ref FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
+   requireThat(row.native_run_ref===null||row.native_run_ref===nativeRef,'REVISION_CONFLICT','Native submission identity already belongs to a different receipt.');
+   this.store.db.exec("UPDATE attempts SET native_run_ref=?,status='running' WHERE run_id=? AND attempt=?",nativeRef,runId,attempt);
+   this.store.db.exec("UPDATE runs SET status='running',updated_at=? WHERE id=?",this.core.now(),runId);this.touch();
+  });
  }
  complete(identity:Identity,runId:string,attempt:number,result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>}):void {
   this.store.db.transaction(()=>{

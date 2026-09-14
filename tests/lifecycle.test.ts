@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LifecycleCore, type Identity, type HeartbeatOperation } from '../src/core/lifecycle';
+import { NativeTaskLedger } from '../src/core/native-tasks';
 import { FakeProvider, type RuntimeRef } from '../src/providers';
 import { fixture, bot } from './helpers';
 let f: ReturnType<typeof fixture>, life: LifecycleCore, identity: Identity;
@@ -47,6 +48,23 @@ describe('executor leases and attempts', () => {
     f.db.exec("UPDATE lifecycle SET phase='BOOTING'");
     f.setNow('2026-09-10T00:02:01.000Z');
     expect(() => life.registerBoot(identity.boot_id)).toThrowError(expect.objectContaining({ code: 'STALE_EPOCH' }));
+  });
+  it('submission cannot replace an already registered native child identity', () => {
+    const parent = claimed();
+    life.submitted(identity, parent.run.id, 1, 'native-root-19');
+    const child = new NativeTaskLedger(f.store, f.core, life).register(identity, {
+      parent_run_id: parent.run.id, parent_attempt: 1, persona_id: bot,
+      native_run_ref: 'native-child-43', native_session_key: 'child-thread-71', title: 'Synthetic child',
+    });
+    const before = f.db.all('SELECT * FROM attempts WHERE run_id=?', child.id);
+    expect(() => life.submitted(identity, child.id, 1, 'native-child-103'))
+      .toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
+    expect(f.db.all('SELECT * FROM attempts WHERE run_id=?', child.id)).toEqual(before);
+    expect(f.store.run(child.id).status).toBe('claimed');
+    life.submitted(identity, child.id, 1, 'native-child-43');
+    expect(f.db.all('SELECT status,native_run_ref FROM attempts WHERE run_id=?', child.id))
+      .toEqual([{ status: 'running', native_run_ref: 'native-child-43' }]);
+    expect(f.store.run(child.id).status).toBe('running');
   });
   it('rejects wrong attempt and prevents settled operation resurrection', () => {
     const claim = claimed(), op = operation(claim.run.id);
