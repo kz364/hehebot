@@ -25,6 +25,26 @@ beforeEach(()=>{f=fixture(true);f.core.options.actionPolicyIds=[action];boundary
 afterEach(()=>f.close());
 
 describe('model-facing agent command boundary',()=>{
+ it('loads only admitted skill revisions after later edits and disablement without waking work',()=>{
+  const first=proposal();if(first.type!=='skill.propose')throw new Error('fixture');
+  const skillId=first.payload.skill_id;
+  expect(f.accept(first).status).toBe('applied');
+  expect(f.accept({schema_version:1,type:'skill.review',payload:{proposal_id:first.payload.proposal_id,expected_proposal_revision:1,decision:'approve'}}).status).toBe('applied');
+  expect(f.accept({schema_version:1,type:'skill.enable',payload:{skill_id:skillId,expected_skill_revision:1,persona_id:bot,enabled:true}}).status).toBe('applied');
+  admit([]);
+  const edit={...first,payload:{...first.payload,proposal_id:randomUUID(),expected_skill_revision:1,body:{...skillBody,steps:['A different procedure.']}}};
+  expect(f.accept(edit).status).toBe('applied');
+  expect(f.accept({schema_version:1,type:'skill.review',payload:{proposal_id:edit.payload.proposal_id,expected_proposal_revision:2,decision:'approve'}}).status).toBe('applied');
+  expect(f.accept({schema_version:1,type:'skill.enable',payload:{skill_id:skillId,expected_skill_revision:2,persona_id:bot,enabled:false}}).status).toBe('applied');
+  const before=f.db.all('SELECT desired_state,queue_sequence FROM lifecycle');
+  const query={identity,run_id:runId,attempt:1,skill_id:skillId};
+  const loaded=boundary.skill(query).skill;expect(loaded.revision).toBe(1);expect(loaded.body).toEqual(skillBody);
+  expect(()=>boundary.skill({...query,skill_id:randomUUID()})).toThrowError(expect.objectContaining({code:'NOT_FOUND'}));
+  expect(()=>boundary.skill({...query,attempt:2})).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+  expect(f.db.all('SELECT desired_state,queue_sequence FROM lifecycle')).toEqual(before);
+  admit([]);expect(()=>boundary.skill({...query,run_id:runId})).toThrowError(expect.objectContaining({code:'NOT_FOUND'}));
+ });
+
  it('can adopt the capability through public persona validation and a real lifecycle claim',()=>{
   f.core.options.toolPolicyIds=[SKILL_PROPOSE_POLICY];
   const persona=f.store.get<{name:string;instructions:string;tool_policy_ids:string[];archived:boolean}>(bot,'persona');

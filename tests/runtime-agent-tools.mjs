@@ -90,6 +90,20 @@ test('routine read tool routes only a bounded query with host-owned identity', a
   assert.equal((await handle(message)).error.code, -32602); assert.equal(requests.length, 1);
 });
 
+test('skill read binds host identity and rejects mismatched or malformed returned revisions', async () => {
+  const requests = [];
+  let result = { skill: { id: uuid(3), revision: 7, body: skill.body } };
+  const { handle } = fixture({ request: async (...args) => { requests.push(args); return result; } });
+  const message = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'clawbot_read_skill', arguments: { skill_id: uuid(3) } } };
+  assert.deepEqual(JSON.parse((await handle(message)).result.content[0].text), result);
+  assert.deepEqual(requests, [['agent-skill', { skill_id: uuid(3), identity: config.identity, run_id: config.runId, attempt: config.attempt }]]);
+  for (const value of [{ id: uuid(4), revision: 7 }, { id: uuid(3), revision: 0 }, { id: uuid(3), revision: 1.5 }]) {
+    result = { skill: value }; assert.equal((await handle(message)).error.code, -32000);
+  }
+  message.params.arguments.run_id = uuid(77);
+  assert.equal((await handle(message)).error.code, -32602); assert.equal(requests.length, 4);
+});
+
 test('allowedTools is a host allowlist and cannot name owner-only commands', async () => {
   const one = createAgentToolsHandler({ controlClient: { request: async () => ({}) }, config: { ...config, allowedTools: [AGENT_TOOL_NAMES[1]] }, contracts });
   assert.deepEqual((await one({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).result.tools.map(x => x.name), [AGENT_TOOL_NAMES[1]]);

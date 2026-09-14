@@ -1,4 +1,4 @@
-const TYPES = Object.freeze(['agent-command', 'agent-routines', 'flight-register', 'flight-confirm', 'flight-reconcile', 'native-child', 'resource-acquire', 'resource-release', 'status', 'boot', 'ready', 'claim', 'heartbeat', 'submitted', 'complete', 'prepare-sleep', 'commit-sleep', 'effect-intent', 'effect-result']);
+const TYPES = Object.freeze(['agent-command', 'agent-routines', 'agent-skill', 'flight-register', 'flight-confirm', 'flight-reconcile', 'native-child', 'resource-acquire', 'resource-release', 'status', 'boot', 'ready', 'claim', 'heartbeat', 'submitted', 'complete', 'prepare-sleep', 'commit-sleep', 'effect-intent', 'effect-result']);
 export const RUNTIME_ENDPOINT_TYPES = TYPES;
 export class ControlClientError extends Error {
   constructor(code, outcomeUnknown = false, status) {

@@ -8,7 +8,7 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { ControlClient } from './control-client.mjs';
 
-export const AGENT_TOOL_NAMES = Object.freeze(['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_run_routine', 'clawbot_delete_routine', 'clawbot_list_routines']);
+export const AGENT_TOOL_NAMES = Object.freeze(['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_run_routine', 'clawbot_delete_routine', 'clawbot_list_routines', 'clawbot_read_skill']);
 const COMMAND_TYPES = Object.freeze({ clawbot_propose_skill: 'skill.propose', clawbot_save_routine: 'routine.put', clawbot_run_routine: 'routine.run', clawbot_delete_routine: 'routine.delete' });
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_OUTSTANDING = 16;
@@ -56,6 +56,9 @@ export function buildToolDefinitions(contracts) {
     { name: AGENT_TOOL_NAMES[4], description: 'List current routines for this admitted bot, or inspect one by ID. Follow next_cursor with after for more results. Does not run work.', inputSchema: {
       type: 'object', additionalProperties: false, properties: { id: resolveRefs(contracts.$defs.uuid, contracts), after: resolveRefs(contracts.$defs.uuid, contracts) },
     } },
+    { name: AGENT_TOOL_NAMES[5], description: 'Load an enabled skill from the admitted task catalog. Returns the pinned reviewed procedure; does not grant tools or permissions.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: { skill_id: resolveRefs(contracts.$defs.uuid, contracts) }, required: ['skill_id'],
+    } },
   ]);
 }
 
@@ -90,6 +93,11 @@ export function createAgentToolsHandler({ controlClient, config, contracts }) {
     const payload = clone(args.payload);
     if (type === 'skill.propose') payload.provenance = { kind: 'model', source_ref: config.runId };
     try {
+      if (name === 'clawbot_read_skill') {
+        const result = await controlClient.request('agent-skill', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
+        if (result?.skill?.id !== args.skill_id || !Number.isSafeInteger(result.skill.revision) || result.skill.revision < 1) throw new Error('INVALID_SKILL_RESULT');
+        return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify(result) }] } };
+      }
       if (name === 'clawbot_list_routines') {
         const result = await controlClient.request('agent-routines', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
         if (!Array.isArray(result?.routines) || !(result.next_cursor === null || typeof result.next_cursor === 'string')) throw new Error('INVALID_QUERY_RESULT');

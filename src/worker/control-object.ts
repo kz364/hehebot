@@ -127,6 +127,7 @@ export class PersonalControl extends DurableObject<Env> {
    }
    case 'agent-command':result=new AgentCommandBoundary(this.core,this.lifecycle).accept(command.payload);break;
    case 'agent-routines':result=new AgentCommandBoundary(this.core,this.lifecycle).routines(command.payload);break;
+   case 'agent-skill':result=new AgentCommandBoundary(this.core,this.lifecycle).skill(command.payload);break;
   }
   await this.arm();return result;
  });}

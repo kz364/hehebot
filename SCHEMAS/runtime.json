@@ -4,6 +4,20 @@
     {
       "type":"object", "additionalProperties":false,
       "properties": {
+        "type":{"const":"agent-skill"},
+        "payload": {
+          "type":"object", "additionalProperties":false,
+          "properties": {
+            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
+            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
+            "skill_id":{"type":"string","format":"uuid"}
+          },"required":["identity","run_id","attempt","skill_id"]
+        }
+      },"required":["type","payload"]
+    },
+    {
+      "type":"object", "additionalProperties":false,
+      "properties": {
         "type":{"const":"agent-routines"},
         "payload": {
           "type":"object", "additionalProperties":false,

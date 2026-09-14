@@ -13,6 +13,7 @@ export type AgentCommand=Extract<Command,{type:'skill.propose'|'routine.put'|'ro
 export type AgentScope={identity:Identity;run_id:string;attempt:number};
 export type AgentCommandRequest=AgentScope & {idempotency_key:string;command:AgentCommand};
 export type AgentRoutineQuery=AgentScope & {id?:string;after?:string};
+export type AgentSkillQuery=AgentScope & {skill_id:string};
 
 /** The only bridge from model output to owner command storage. */
 export class AgentCommandBoundary {
@@ -24,6 +25,12 @@ export class AgentCommandBoundary {
   const snapshot=JSON.parse(run.context_json) as ContextSnapshot;
   requireThat(snapshot.persona.id===run.persona_id,'FORBIDDEN','The admitted persona does not match this run.',403);
   return {run,snapshot};
+ }
+ skill(request:AgentSkillQuery){
+  const {snapshot}=this.admitted(request);
+  const skill=snapshot.skills.find(item=>item.id===request.skill_id);
+  requireThat(skill,'NOT_FOUND','This skill is not enabled in the admitted task snapshot.',404);
+  return {skill};
  }
  routines(request:AgentRoutineQuery){
   const {run,snapshot}=this.admitted(request);

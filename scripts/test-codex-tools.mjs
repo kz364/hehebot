@@ -17,7 +17,7 @@ const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 const SKILL_POLICY = '46b2cbdd-d227-4f54-bffa-33148aad0134';
 const ROUTINE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 const policies = [SKILL_POLICY, ROUTINE_POLICY];
-const allowedTools = ['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_list_routines', 'clawbot_run_routine', 'clawbot_delete_routine'];
+const allowedTools = ['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_list_routines', 'clawbot_run_routine', 'clawbot_delete_routine', 'clawbot_read_skill'];
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 const report = { label: 'codex-agent-tools-native-acceptance', status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
 const check = (name, fn) => { fn(); report.assertions.push(name); };
@@ -91,6 +91,11 @@ try {
   const ownerCommand = async (type, payload) => { const r = await ownerFetch('/v1/commands', { method: 'POST', headers: { 'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID() }, body: JSON.stringify({ schema_version: 1, type, payload }) }); return { status: r.status, value: await r.json() }; };
   const adopted = await ownerCommand('persona.put', { ...persona.body, id: persona.id, expected_revision: persona.revision, tool_policy_ids: policies });
   check('owner explicitly adopted persona tool policy', () => { assert.equal(adopted.status, 202); assert.equal(adopted.value.status, 'applied'); });
+  const reviewedId = randomUUID(), reviewedProposal = randomUUID();
+  const reviewedBody = { name: 'Reviewed fixture procedure', description: 'A pinned procedure.', when_to_use: 'During this fixture.', inputs_access: [], steps: ['Compare exactly 19 against 43.'], decision_rules: [], validation: ['Preserve the original numbers.'], output: 'Comparison.', failure_handling: ['Stop.'], approval_boundaries: ['No external effects.'], contains_private_facts: false };
+  assert.equal((await ownerCommand('skill.propose', { proposal_id: reviewedProposal, skill_id: reviewedId, expected_skill_revision: 0, body: reviewedBody, provenance: { kind: 'owner', source_ref: 'fixture' }, executable_files_changed: false })).value.status, 'applied');
+  assert.equal((await ownerCommand('skill.review', { proposal_id: reviewedProposal, expected_proposal_revision: 1, decision: 'approve' })).value.status, 'applied');
+  assert.equal((await ownerCommand('skill.enable', { skill_id: reviewedId, expected_skill_revision: 1, persona_id: persona.id, enabled: true })).value.status, 'applied');
   const queued = await ownerCommand('message.send', { conversation_id: persona.id, text: 'Stage the synthetic skill proposal using the admitted tool.' });
   assert.equal(queued.value.status, 'applied');
   const control = new ControlClient({ origin: origin + '/', token, fetchImpl: trustedFetch });
@@ -98,6 +103,7 @@ try {
   const identity = await control.request('boot', { boot_id: randomUUID() }); await control.request('ready', { identity });
   const claim = await control.request('claim', { identity }); const runId = claim.run.id, attempt = claim.run.current_attempt;
   check('real SQLite run claimed with fenced identity', () => { assert.equal(runId, queued.value.resource_id); assert.equal(attempt, 1); assert.equal(claim.run.persona_id, persona.id); });
+  assert.equal((await ownerCommand('skill.enable', { skill_id: reviewedId, expected_skill_revision: 1, persona_id: persona.id, enabled: false })).value.status, 'applied');
 
   const tokenPath = join(directory, 'runtime.token'), grantPath = join(directory, 'agent-tools.json'), home = join(directory, 'codex-home'), workspace = join(directory, 'workspace');
   await Promise.all([mkdir(home, { mode: 0o700 }), mkdir(workspace, { mode: 0o700 })]);
@@ -110,7 +116,8 @@ try {
   const argumentsByStage = [toolArgs, { idempotency_key: randomUUID(), payload: routine },
     { id: routineId },
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
-    { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } }];
+    { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
+    { skill_id: reviewedId }];
   let manualRunId;
   fixture = createServer(async (req, res) => { try {
     if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
@@ -125,7 +132,7 @@ try {
       const content = Array.isArray(output) ? JSON.parse(output.at(-1).text) : output;
       const receipt = content.content ? JSON.parse(content.content.find(x => x.type === 'text').text) : content;
       const stage = report.modelCalls - 2;
-      if (stage !== 2) assert.equal(receipt.status, 'applied');
+      if (stage !== 2 && stage !== 5) assert.equal(receipt.status, 'applied');
       const current = await (await ownerFetch('/v1/state')).json();
       if (stage === 0) assert.equal(receipt.resource_id, proposalId);
       else if (stage === 1) check('native routine save persisted paused Jakarta configuration', () => {
@@ -148,8 +155,12 @@ try {
         assert.equal(current.runs.find(x => x.id === manualRunId).status, 'cancelled');
         assert.equal(current.runs.find(x => x.id === runId).status, 'claimed');
       });
+      else if (stage === 5) check('native skill load returns admitted procedure despite later disablement', () => {
+        assert.equal(receipt.skill.id, reviewedId); assert.equal(receipt.skill.revision, 1);
+        assert.deepEqual(receipt.skill.body, reviewedBody);
+      });
       else assert.fail('Unexpected continuation');
-      if (stage === 4) { sendEvents(res, message('MCP_PROPOSAL_STAGED_AND_ROUTINE_LIFECYCLE_VERIFIED')); return; }
+      if (stage === 5) { sendEvents(res, message('MCP_PROPOSAL_STAGED_AND_ROUTINE_LIFECYCLE_VERIFIED')); return; }
     }
     const next = report.modelCalls - 1;
     const advertised = (body.tools ?? []).find(x => x?.name?.includes(allowedTools[next])) ?? (body.tools ?? []).find(x => x?.name === 'mcp__clawbot');
@@ -178,7 +189,7 @@ try {
   state = await (await ownerFetch('/v1/state')).json(); const proposal = state.skill_proposals.find(x => x.id === proposalId);
   check('actual control state has pending model/run provenance', () => { assert.equal(proposal.status, 'pending'); assert.equal(proposal.skill_id, skillId); assert.deepEqual(proposal.provenance, { kind: 'model', source_ref: runId }); assert.equal(proposal.executable_files_changed, false); });
   check('proposal did not auto-create or approve a skill', () => { assert.equal(state.objects.some(x => x.kind === 'skill' && x.id === skillId), false); assert.equal(state.skill_proposals.filter(x => x.id === proposalId).length, 1); });
-  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, 6); assert.deepEqual(fixtureErrors, []); });
+  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, 7); assert.deepEqual(fixtureErrors, []); });
   report.status = 'passed'; report.runId = runId; report.attempt = attempt; report.proposalId = proposalId; report.nativeReceiptObserved = true;
 } catch (error) {
   report.error = error?.stack ?? String(error); if (fixtureErrors.length) report.fixtureErrors = fixtureErrors;

@@ -46,6 +46,34 @@ function settled(row: any) {
     result: { status: 'completed', text: 'Durably returned to the portal' } };
 }
 
+it('sends skill descriptors while retaining the full admitted snapshot in custody', async () => {
+  const id = enqueue(), skill = { id: randomUUID(), revision: 7, body: {
+    name: 'Review', description: 'Review a draft', when_to_use: 'Before publishing', steps: ['PRIVATE PROCEDURE SENTINEL'],
+  } };
+  let input: any;
+  const executor = new ExecutionBridge({
+    control: { request: async (type: string, payload: any) => {
+      if (type === 'submitted') return life.submitted(payload.identity, payload.run_id, payload.attempt, payload.native_ref);
+      if (type !== 'claim') throw new Error('Unexpected control call');
+      const result = life.claim(identity)!;
+      const context = JSON.parse(result.run.context_json); context.skills = [skill];
+      result.run.context_json = JSON.stringify(context);
+      f.db.exec('UPDATE runs SET context_json=? WHERE id=?', result.run.context_json, id);
+      return result;
+    } },
+    native: { admissionReadiness: () => ({ allowed: true }), submit: async (value: any) => {
+      input = value; return { nativeRunId: 'descriptor-test', status: 'running' };
+    } },
+    journal: new FileJournal(join(directory, 'descriptor')), identity, installationId: 'synthetic-installation',
+    personas: { [bot]: { agentId: 'chief-of-staff', model: 'gpt-5.4' } },
+  });
+  const row = await executor.claimNext();
+  expect(JSON.parse(input.message).skills).toEqual([{ id: skill.id, revision: 7, name: 'Review',
+    description: 'Review a draft', when_to_use: 'Before publishing', load_with: 'clawbot_read_skill' }]);
+  expect(input.message).not.toContain('PRIVATE PROCEDURE SENTINEL');
+  expect(JSON.parse(row.claim.run.context_json).skills).toEqual([skill]);
+});
+
 it('real SQLite claim → native adapter/journal → completion publishes exactly one attributed reply', async () => {
   const id = enqueue(), executor = bridge();
   const row = await executor.claimNext();
