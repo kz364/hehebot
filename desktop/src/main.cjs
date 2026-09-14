@@ -94,6 +94,7 @@ function installMenu() {
     submenu: [
       { label: 'About Hehebot Portal', role: 'about' },
       { type: 'separator' },
+      { label: 'Open Portal in Default Browser', click: () => void shell.openExternal(portalOrigin) },
       { label: 'Switch Portal to Origin on Clipboard…', click: () => void changeOriginFromClipboard() },
       { label: 'Configure Login Origins from Clipboard…', click: () => void configureAuthOriginsFromClipboard() },
       { type: 'separator' },

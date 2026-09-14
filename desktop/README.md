@@ -15,6 +15,8 @@ npm start -- --portal-origin=https://portal.example
 
 On first run, copy the complete portal origin to the clipboard and confirm it in the native setup dialog. The command-line argument remains available for automated setup. Configuration is saved under Electron's per-user `userData` directory as owner-only `portal-config.json` where supported. To switch later, use **Hehebot Portal → Switch Portal to Origin on Clipboard…**.
 
+For file import or private data export, choose **Hehebot Portal → Open Portal in Default Browser**. This explicit menu action opens only the configured portal origin; it does not copy the current login URL, session cookies or credentials. Sign in separately in that browser if required, then use the portal's Workspace controls. The shell continues to deny file selection and downloads. Protect downloaded plaintext exports in a private folder; opening the browser does not verify a backup or restore.
+
 Cloudflare Access/OIDC login origins must be explicitly owner-configured: put one complete HTTPS origin per clipboard line and choose **Hehebot Portal → Configure Login Origins from Clipboard…**. Do not include paths or credentials. Trusted login redirects remain inside the portal's isolated persistent Chromium session so login cookies can be set; trusted pages still receive no native API. This local list is never learned from portal content. Each canonical portal origin uses a distinct session partition, so cookies do not cross portals. Portal HTTP is accepted exclusively for `localhost`, `127.0.0.1`, and `[::1]` tests; auth origins are always HTTPS.
 
 ## Security boundary
@@ -39,5 +41,7 @@ Outputs go to ignored `desktop/dist/`. `identity: null` is deliberate: this repo
 ## Verification and provenance
 
 `npm test` includes mocked Electron event tests for redirect/login/external-navigation behavior, plus hostile configuration/origins, isolated partitions, private config, renderer sandbox/Node/IPC denial, file and permission denial, and absence of local process/polling code. Linux Electron launch checks do not establish macOS acceptance. Run package launch/login/origin-switch/revocation/external-link checks on actual macOS before release.
+
+On a Linux development host with Xvfb, xdotool and ImageMagick, `node scripts/test-desktop-menu.mjs` from the repository root launches the actual shell against a disposable loopback page and captures the native menu for inspection. The test uses private temporary configuration, preserves the app's sandbox configuration, launches no external browser and cleans up its processes. The inspected menu includes **Open Portal in Default Browser**. Callback tests separately verify its exact-origin target and continued download denial. If the Electron executable is missing after installation on Node26, the executed fallback is `npx --yes --package=node@22.22.0 node desktop/node_modules/electron/install.js` from the root; no installed dependency source is modified.
 
 All source in `desktop/` is newly and independently written for this repository. No OpenMausBot, Gawk, Rakazo, enterprise, copied Apache source, logos, or other third-party application assets are included. Packaged third-party npm dependencies retain their own licenses; inspect `node_modules/**/LICENSE*` and the packaged dependency inventory as part of each release review.
