@@ -94,6 +94,40 @@ export class CodexAdapter {
   async #observeOne(attemptId, notification) {
     const row = await this.requireRun(attemptId);
     const params = notification?.params;
+    if (['turn/started', 'turn/completed'].includes(notification?.method) && params?.threadId !== row.threadId) {
+      if (!Object.values(row.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(params?.threadId))) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      const id = params?.turn?.id, status = params?.turn?.status;
+      if (typeof id !== 'string' || !id || id.length > 256 ||
+          !(notification.method === 'turn/started' ? ['inProgress'] : ['completed', 'failed', 'interrupted']).includes(status)) fail('CODEX_PROTOCOL_ERROR');
+      const childTurns = { ...row.childTurns }, key = JSON.stringify([params.threadId, id]);
+      const prior = Object.hasOwn(childTurns, key) ? childTurns[key] : undefined;
+      if (prior && prior !== 'inProgress' && prior !== status) fail('SETTLEMENT_CONFLICT');
+      if (!prior && Object.keys(childTurns).length >= 4096) fail('CHILD_TURN_TRACKING_LIMIT');
+      Object.defineProperty(childTurns, key, { value: status, enumerable: true, writable: true, configurable: true });
+      // This settles only an observed child turn, never its tools or descendants.
+      return this.journal.update(attemptId, { childTurns });
+    }
+    if (['item/started', 'item/completed'].includes(notification?.method) &&
+        params?.item?.type === 'collabAgentToolCall' && params.item.tool === 'spawnAgent') {
+      if (params.threadId !== row.threadId || params.turnId !== row.nativeRunId ||
+          params.item.senderThreadId !== row.threadId) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      const { id, status, receiverThreadIds } = params.item;
+      if (typeof id !== 'string' || !id || id.length > 256 ||
+          !(notification.method === 'item/started' ? ['inProgress'] : ['completed', 'failed']).includes(status) ||
+          !Array.isArray(receiverThreadIds) || receiverThreadIds.length > 100 ||
+          !receiverThreadIds.every(child => typeof child === 'string' && child.length > 0 && child.length <= 256 && child !== row.threadId) ||
+          new Set(receiverThreadIds).size !== receiverThreadIds.length) fail('CODEX_PROTOCOL_ERROR');
+      const spawns = { ...row.spawns };
+      const prior = Object.hasOwn(spawns, id) ? spawns[id] : undefined;
+      const receivers = [...receiverThreadIds].sort();
+      if (prior && (prior.receiverThreadIds.some(child => !receivers.includes(child)) ||
+          prior.status !== 'inProgress' && (prior.status !== status || JSON.stringify(prior.receiverThreadIds) !== JSON.stringify(receivers)))) fail('SETTLEMENT_CONFLICT');
+      if (!prior && Object.keys(spawns).length >= 4096) fail('SPAWN_TRACKING_LIMIT');
+      // A completed spawn invocation acknowledges children, not their settlement
+      // or authorization. Keep receivers even when the parent root completes.
+      Object.defineProperty(spawns, id, { value: { status, receiverThreadIds: receivers }, enumerable: true, writable: true, configurable: true });
+      return this.journal.update(attemptId, { spawns });
+    }
     const field = params?.item?.type === 'commandExecution' ? 'commands' : params?.item?.type === 'mcpToolCall' ? 'mcpCalls' : null;
     if (['item/started', 'item/completed'].includes(notification?.method) && field) {
       if (params.threadId !== row.threadId || params.turnId !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');

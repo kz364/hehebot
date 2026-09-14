@@ -84,6 +84,82 @@ test('a second logical attempt cannot take an existing native identity', async t
   assert.deepEqual(f.recoveries, ['NATIVE_IDENTITY_CONFLICT']);
 });
 
+const spawn = (status, receiverThreadIds, extra = {}) => ({ method: status === 'inProgress' ? 'item/started' : 'item/completed', params: {
+  threadId: 'parent', turnId: 'turn', item: { id: 'spawn-19', type: 'collabAgentToolCall', tool: 'spawnAgent',
+    senderThreadId: 'parent', status, receiverThreadIds, prompt: 'PRIVATE_TASK', agentsStates: { private: 'PRIVATE_RESULT' }, ...extra },
+} });
+
+test('spawn receipts retain exact receivers after parent completion without settling children', async t => {
+  const f = await fixture(t);
+  f.transport.emit('notification', spawn('inProgress', []));
+  f.transport.emit('notification', spawn('completed', ['child-43', 'child-19']));
+  f.transport.emit('notification', root('parent', 'turn'));
+  await f.router.flush();
+  assert.doesNotMatch(JSON.stringify(f.router.pending), /PRIVATE_|agentsStates|prompt/);
+  await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
+  const row = await f.journal.get('a');
+  assert.deepEqual(row.spawns, { 'spawn-19': { status: 'completed', receiverThreadIds: ['child-19', 'child-43'] } });
+  assert.equal(row.rootSettled, true); assert.equal(row.effectsSettled, undefined);
+  assert.equal(f.adapter.sleepReadiness().allowed, false); assert.deepEqual(f.recoveries, []);
+  f.transport.emit('notification', spawn('completed', ['child-19', 'child-43'])); await f.router.flush();
+  assert.deepEqual(await f.journal.get('a'), row);
+  f.transport.emit('notification', spawn('completed', ['child-99'])); await f.router.flush();
+  assert.deepEqual(f.recoveries, ['NATIVE_EVENT_RECONCILIATION_FAILED']);
+  assert.deepEqual(await f.journal.get('a'), row);
+});
+
+test('spawn sender, duplicate receivers and self-spawn are rejected before buffering', async t => {
+  for (const event of [spawn('completed', ['child'], { senderThreadId: 'other' }),
+    spawn('completed', ['child', 'child']), spawn('completed', ['parent'])]) {
+    const f = await fixture(t); f.transport.emit('notification', event);
+    assert.deepEqual(f.recoveries, ['NATIVE_EVENT_INVALID']); assert.equal(f.router.pending.length, 0);
+  }
+});
+
+test('a failed spawn cannot erase an already observed receiver', async t => {
+  const f = await fixture(t); await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
+  f.transport.emit('notification', spawn('inProgress', ['child-43'])); await f.router.flush();
+  f.transport.emit('notification', spawn('failed', [])); await f.router.flush();
+  assert.deepEqual(f.recoveries, ['NATIVE_EVENT_RECONCILIATION_FAILED']);
+  assert.deepEqual((await f.journal.get('a')).spawns['spawn-19'], { status: 'inProgress', receiverThreadIds: ['child-43'] });
+});
+
+test('child turns arriving before spawn attribution are retained and settle independently', async t => {
+  const f = await fixture(t);
+  const started = { method: 'turn/started', params: { threadId: 'child-43', turn: { id: 'child-turn', status: 'inProgress', items: ['PRIVATE_INPUT'] } } };
+  f.transport.emit('notification', started);
+  f.transport.emit('notification', root('stranger', 'child-turn'));
+  f.transport.emit('notification', spawn('completed', ['child-43']));
+  f.transport.emit('notification', root('parent', 'turn'));
+  await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
+  const key = JSON.stringify(['child-43', 'child-turn']);
+  assert.deepEqual((await f.journal.get('a')).childTurns, { [key]: 'inProgress' });
+  assert.equal((await f.journal.get('a')).rootSettled, true);
+  assert.equal(f.router.pending.length, 1);
+  f.transport.emit('notification', root('child-43', 'child-turn')); await f.router.flush();
+  const settled = await f.journal.get('a');
+  assert.deepEqual(settled.childTurns, { [key]: 'completed' });
+  assert.equal(settled.effectsSettled, undefined); assert.doesNotMatch(JSON.stringify(settled), /PRIVATE_INPUT/);
+  assert.deepEqual(f.recoveries, []); assert.equal(f.adapter.sleepReadiness().allowed, false);
+  f.transport.emit('notification', started); await f.router.flush();
+  assert.deepEqual(f.recoveries, ['NATIVE_EVENT_RECONCILIATION_FAILED']);
+  assert.deepEqual((await f.journal.get('a')).childTurns, { [key]: 'completed' });
+});
+
+test('router restart restores only durable child attribution and rejects adoption by another root', async t => {
+  const f = await fixture(t); await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
+  f.transport.emit('notification', spawn('completed', ['child-43'])); await f.router.flush();
+  f.router.close();
+  const restarted = new CodexEventRouter({ transport: f.transport, adapter: f.adapter, onRecovery: value => f.recoveries.push(value.code) });
+  t.after(() => restarted.close());
+  await restarted.bind('a');
+  f.transport.emit('notification', root('child-43', 'child-turn')); await restarted.flush();
+  assert.deepEqual((await f.journal.get('a')).childTurns, { '["child-43","child-turn"]': 'completed' });
+  await f.admit('b', 'child-43', 'other-turn');
+  await assert.rejects(restarted.bind('b'), { code: 'NATIVE_IDENTITY_CONFLICT' });
+  assert.equal((await f.journal.get('b')).rootSettled, false);
+});
+
 test('binding limits allow repeats but missing acknowledgements never consume early events', async t => {
   const f = await fixture(t, { maxBindings: 1 });
   await f.admit('lost', 'thread-lost', null);

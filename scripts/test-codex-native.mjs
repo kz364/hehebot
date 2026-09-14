@@ -271,7 +271,6 @@ try {
   report.backgroundCommandOutlivesRoot = true;
   assert.deepEqual(routerFailures, []); assert.equal(router.pending.length, 0);
   report.liveEventRouting = true;
-  router.close();
 
   const parentThread = (await transport.request('thread/start', { cwd: workspace, modelProvider: 'fixture' })).thread.id;
   const parentTurn = (await transport.request('turn/start', { threadId: parentThread, input: [{ type: 'text', text: 'SPAWN_CHILD_PROOF' }] })).turn.id;
@@ -282,14 +281,29 @@ try {
   assert.equal(spawned.receiverThreadIds.length, 1);
   const childThread = spawned.receiverThreadIds[0];
   assert.equal(childThread, spawnedChildId);
+  await new FileJournal(journalPath).putIfAbsent('parent-proof', { threadId: parentThread, nativeRunId: parentTurn, status: 'running', rootSettled: false });
+  await router.bind('parent-proof');
+  const parentRow = await recovery.requireRun('parent-proof');
+  assert.equal(parentRow.rootSettled, true);
+  assert.deepEqual(parentRow.spawns[spawned.id], { status: 'completed', receiverThreadIds: [childThread] });
+  assert.equal(parentRow.effectsSettled, undefined);
+  assert.deepEqual(routerFailures, []); assert.equal(router.pending.length, 0);
+  report.nativeSpawnReceiptRouting = true;
   const childStarted = notifications.find(n => n.method === 'turn/started' && n.params?.threadId === childThread);
   report.childTurnStartObserved = Boolean(childStarted);
   assert.ok(childStarted, 'Child turn identity must be observed before interruption');
+  const childKey = JSON.stringify([childThread, childStarted.params.turn.id]);
+  assert.equal(parentRow.childTurns[childKey], 'inProgress');
   assert.equal(heldClosed, 1);
   assert.equal(notifications.some(n => n.method === 'turn/completed' && n.params?.threadId === childThread && n.params.turn.id === childStarted.params.turn.id), false);
   await transport.request('turn/interrupt', { threadId: childThread, turnId: childStarted.params.turn.id });
   assert.equal((await waitTurn(childStarted.params.turn.id)).status, 'interrupted');
   await waitFor(() => heldClosed === 2, 'child provider request closure');
+  await router.flush();
+  assert.equal((await recovery.requireRun('parent-proof')).childTurns[childKey], 'interrupted');
+  assert.deepEqual(routerFailures, []); assert.equal(router.pending.length, 0);
+  report.nativeChildTurnRouting = true;
+  router.close();
   report.childOutlivesParent = true;
 
   const dynamicTools = [{
@@ -346,6 +360,12 @@ try {
   report.status = 'passed';
 } catch (error) {
   report.error = error?.stack ?? String(error);
+  report.requestShapes = bodies.map(body => ({
+    prompts: ['HOLD_NATIVE_TURN', 'HOLD_NATIVE_CHILD', 'DYNAMIC_CHILD_TOOL_PROOF', 'DYNAMIC_PARENT_PROOF', 'DYNAMIC_ROOT_PROOF', 'SPAWN_CHILD_PROOF', 'BACKGROUND_EXECUTION_PROOF']
+      .filter(marker => JSON.stringify(body.input).includes(marker)),
+    calls: body.input.filter(item => item.type === 'function_call').map(item => item.name),
+    outputs: body.input.filter(item => item.type === 'function_call_output').length,
+  }));
   if (fixtureErrors.length) report.fixtureErrors = fixtureErrors;
   if (nativeErrors.length) report.nativeErrors = nativeErrors.join('').slice(-8000);
   process.exitCode = 1;
