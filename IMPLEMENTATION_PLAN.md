@@ -1,5 +1,7 @@
 # Implementation plan — local work in progress
 
+Current decision: direct Codex app-server 0.154.0 is selected; older runtime-comparison/OpenClaw-foundation tasks below are historical decision context, not an instruction to reopen that choice. Use [the agent handoff](docs/HANDOFF.md) for ordered next work and [current implementation status](docs/IMPLEMENTATION.md) for partial completion evidence. Unchecked broad milestones can include implemented subfeatures; do not rebuild them without inspecting their owning code and tests.
+
 Read [SPEC.md](SPEC.md) as the normative contract. Public examples are in [TEST_VECTORS/commands.json](TEST_VECTORS/commands.json); lifecycle expectations in [TEST_VECTORS/lifecycle.json](TEST_VECTORS/lifecycle.json). See docs/IMPLEMENTATION.md for current implementation evidence. No infrastructure is deployed; native production gates remain open.
 
 | Milestone | Deliverables | Dependencies | Exit evidence |

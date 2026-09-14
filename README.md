@@ -14,6 +14,14 @@ For repeatable direct-Codex verification in a Linux orb, run `bash scripts/verif
 
 For historical OpenClaw/browser/desktop verification, run `bash .agents/setup`, `bash scripts/setup-local.sh`, `bash scripts/setup-desktop.sh`, then `node scripts/verify-local.mjs --desktop`. Omit desktop setup and the flag for headless checks. [Setup and verification](docs/ORB_TESTING.md) records the limits; [browser/desktop and dedicated messaging](docs/AUTOMATION_SETUP.md) records the reference integrations. The portal is the owner messaging channel; WhatsApp is not required for primary chat.
 
+## Picking up development with an agent
+
+Start with [the agent handoff](docs/HANDOFF.md): it records the current baseline, code ownership, verified behavior, upstream gaps, ordered next work and private-state boundaries. [AGENTS.md](AGENTS.md) supplies repository-wide engineering rules. A fresh checkout can run the credential-free suite above; it does not inherit the original developer's accounts or deployment permissions.
+
+Suggested first prompt:
+
+> Read AGENTS.md, README.md, docs/HANDOFF.md, docs/IMPLEMENTATION.md and docs/PROJECT_INTENT.md. Run bash scripts/verify-codex.sh, then continue the first unresolved handoff item that this environment can support. Preserve exact task identity, unknown-outcome handling and disabled production gates. Treat specifications as targets, historical OpenClaw evidence as reference, and report executed checks separately from unverified claims.
+
 ## Documentation map
 
 - [Full specification](SPEC.md) and [project intent / decision history](docs/PROJECT_INTENT.md).

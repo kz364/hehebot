@@ -1,6 +1,6 @@
-# Clawbot working context
+# Hehebot working context
 
-Read `README.md`, `docs/IMPLEMENTATION.md`, and `docs/PROJECT_INTENT.md` first. `SPEC.md` describes targets, not completed functionality. Later native-first requirements in `docs/BOT_ORCHESTRATION_ADDENDUM.md` and `docs/NATIVE_ORCHESTRATION.md` supersede the early single-active-run design. Research and deliberate Grok differences: `docs/GROK_PARITY.md`. Reproducible orb tests and Amp model routing: `docs/ORB_TESTING.md`.
+Read `README.md`, `docs/HANDOFF.md`, `docs/IMPLEMENTATION.md`, and `docs/PROJECT_INTENT.md` first. `SPEC.md` describes targets, not completed functionality. Later native-first requirements in `docs/BOT_ORCHESTRATION_ADDENDUM.md` and `docs/NATIVE_ORCHESTRATION.md` supersede the early single-active-run design. Research and deliberate Grok differences: `docs/GROK_PARITY.md`. Reproducible direct-Codex acceptance: `bash scripts/verify-codex.sh`. Historical OpenClaw/orb tests and Amp model routing: `docs/ORB_TESTING.md`.
 
 Owner selected **direct Codex app-server as the initial harness** on 2026-09-13, superseding the OpenClaw-foundation decision gate. Preserve our external control plane and sleeping runtime; keep the harness boundary replaceable. Existing OpenClaw code/evidence remains a reference, not proof of direct-Codex compatibility. Build scaffolding around supported upstream interfaces, not runtime forks: never import hashed bundle internals at runtime, edit native databases, or patch installed dependencies to make a test pass. If a required capability cannot be supplied through supported boundaries, document the gap and seek an upstream solution before proposing a core patch. Pin tested versions and re-run behavioral adapter contracts before upgrading.
 

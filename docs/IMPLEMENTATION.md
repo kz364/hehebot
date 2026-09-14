@@ -1,5 +1,13 @@
 # Local implementation status
 
+## Current publication checkpoint, 2026-09-14
+
+Read [the agent handoff](HANDOFF.md) for current code ownership and ordered continuation work. The latest publication rerun passed `bash scripts/verify-codex.sh`: 4 setup, 343 core, 99 runtime and 20 HTTP checks; actual native lifecycle, MCP, dynamic-control and supervisor fixtures; typecheck/build dry run. Desktop unit tests passed 15/15. Older counts below are historical.
+
+Direct Codex now has automatic root/command/MCP/spawn/direct-child event routing, durable exact child cancellation, scoped root dynamic tool callbacks and actual supervisor-driven execution of a scripted routine. Root-only completion still rejects settlement; production flags remain false. Native child dynamic-tool inheritance is unavailable, recursive child/effect settlement remains unproved, and the production service/activity assembly is unfinished. Controlled settled-work restart readback is not active-work crash recovery.
+
+Owner login/account discovery and read-only Cloudflare/Sprites credential checks succeeded in the original development orb. No authenticated inference or cloud deployment has been verified there yet; a fresh clone does not inherit those credentials. These local setup observations supersede older statements that no account was connected, but do not close the engineering or live acceptance gates.
+
 ## Direct Codex implementation, 2026-09-13
 
 The owner selected Codex app-server and authorized implementation. The following supersedes earlier OpenClaw runtime-choice language, not the historical evidence below. **The assistant is not operational and the full specification is not implemented.**

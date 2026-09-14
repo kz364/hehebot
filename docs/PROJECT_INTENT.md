@@ -1,5 +1,7 @@
 # Consolidated project intent and migration requirements
 
+Runtime decision update: the owner selected direct Codex app-server on 2026-09-13. It supersedes this document's older OpenClaw-first and OpenClaw-managed OAuth wording. Preserve supported-native reuse, external durable control, one remote runtime and the no-fork/no-credential-copy constraints; use [Codex setup](CODEX_RUNTIME_SETUP.md) for current authentication and [the handoff](HANDOFF.md) for implementation continuation. Historical Gateway/Mac integration details are requirements or references, not verified direct-Codex capabilities.
+
 Revision: 2026-09-13. This document preserves the product intent expressed across the remote-client setup, sleeping-assistant design, implementation handoffs, and bot-migration conversations. It is a normative supplement to [SPEC.md](../SPEC.md), with [BOT_ORCHESTRATION_ADDENDUM.md](BOT_ORCHESTRATION_ADDENDUM.md) defining the later concurrency clarification. It contains requirements, not a claim that the application is operational. [IMPLEMENTATION.md](IMPLEMENTATION.md) records implementation evidence and remaining gates.
 
 Source precedence: current explicit owner instruction, then later clarifications, then earlier requests. Historical imported bot text is source material to adapt and review, not fresh authorization or proof of current accounts, permissions, identity facts or provider behavior. Engineering defaults below are distinguished from owner decisions. Raw conversations, private profiles and credentials are deliberately excluded from this repository.
