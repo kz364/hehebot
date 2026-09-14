@@ -68,7 +68,8 @@ export class CodexEventRouter {
   }
 
   bindChildren(attemptId, row) {
-    for (const spawn of Object.values(row.spawns ?? {})) for (const threadId of spawn.receiverThreadIds) {
+    const spawns = [row, ...Object.values(row.childObligations ?? {})].flatMap(owner => Object.values(owner.spawns ?? {}));
+    for (const spawn of spawns) for (const threadId of spawn.receiverThreadIds) {
       const prior = this.childOwners.get(threadId);
       if (prior && prior !== attemptId || [...this.bindings.keys()].some(key => JSON.parse(key)[0] === threadId)) fail('NATIVE_IDENTITY_CONFLICT');
       if (!prior && this.childOwners.size >= this.maxBindings) fail('NATIVE_BINDING_LIMIT');

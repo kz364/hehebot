@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto';
 export const PINNED_CODEX = '0.154.0';
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = code => { throw Object.assign(new Error(code), { code }); };
+const observationOwners = row => [row, ...Object.values(row.childObligations ?? {})];
+const hasReceiver = (row, threadId) => observationOwners(row).some(owner => Object.values(owner.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(threadId)));
 
 /** Supported app-server calls only. One durable native thread per admitted attempt.
  * Production admission awaits real authentication and whole-operation settlement tests.
@@ -103,7 +105,7 @@ export class CodexAdapter {
     const row = await this.requireRun(attemptId);
     const { threadId, turnId } = target;
     const turnKey = JSON.stringify([threadId, turnId]);
-    if (!Object.values(row.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(threadId)) ||
+    if (!hasReceiver(row, threadId) ||
         !Object.hasOwn(row.childTurns ?? {}, turnKey)) fail('SETTLEMENT_IDENTITY_MISMATCH');
     const key = `cancel-child-${hash([attemptId, threadId, turnId])}`;
     const prior = await this.journal.get(key);
@@ -131,7 +133,7 @@ export class CodexAdapter {
     const save = patch => this.journal.update(attemptId, childItem
       ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, ...patch } } } : patch);
     if (['turn/started', 'turn/completed'].includes(notification?.method) && params?.threadId !== row.threadId) {
-      if (!Object.values(row.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(params?.threadId))) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      if (!hasReceiver(row, params?.threadId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const id = params?.turn?.id, status = params?.turn?.status;
       if (typeof id !== 'string' || !id || id.length > 256 ||
           !(notification.method === 'turn/started' ? ['inProgress'] : ['completed', 'failed', 'interrupted']).includes(status)) fail('CODEX_PROTOCOL_ERROR');
@@ -145,15 +147,20 @@ export class CodexAdapter {
     }
     if (['item/started', 'item/completed'].includes(notification?.method) &&
         params?.item?.type === 'collabAgentToolCall' && params.item.tool === 'spawnAgent') {
-      if (params.threadId !== row.threadId || params.turnId !== row.nativeRunId ||
-          params.item.senderThreadId !== row.threadId) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      if ((!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) ||
+          params.item.senderThreadId !== params.threadId) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const { id, status, receiverThreadIds } = params.item;
       if (typeof id !== 'string' || !id || id.length > 256 ||
           !(notification.method === 'item/started' ? ['inProgress'] : ['completed', 'failed']).includes(status) ||
           !Array.isArray(receiverThreadIds) || receiverThreadIds.length > 100 ||
-          !receiverThreadIds.every(child => typeof child === 'string' && child.length > 0 && child.length <= 256 && child !== row.threadId) ||
+          !receiverThreadIds.every(child => typeof child === 'string' && child.length > 0 && child.length <= 256 && child !== row.threadId && child !== params.threadId) ||
           new Set(receiverThreadIds).size !== receiverThreadIds.length) fail('CODEX_PROTOCOL_ERROR');
-      const spawns = { ...row.spawns };
+      // A newly spawned thread has one native origin. Reject ancestry cycles and
+      // adoption through a second spawn, including different turns of one sender.
+      for (const candidate of observationOwners(row)) for (const [otherId, spawn] of Object.entries(candidate.spawns ?? {})) {
+        if ((candidate !== owner || otherId !== id) && spawn.receiverThreadIds.some(child => receiverThreadIds.includes(child))) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      }
+      const spawns = { ...owner.spawns };
       const prior = Object.hasOwn(spawns, id) ? spawns[id] : undefined;
       const receivers = [...receiverThreadIds].sort();
       if (prior && (prior.receiverThreadIds.some(child => !receivers.includes(child)) ||
@@ -162,7 +169,7 @@ export class CodexAdapter {
       // A completed spawn invocation acknowledges children, not their settlement
       // or authorization. Keep receivers even when the parent root completes.
       Object.defineProperty(spawns, id, { value: { status, receiverThreadIds: receivers }, enumerable: true, writable: true, configurable: true });
-      return this.journal.update(attemptId, { spawns });
+      return save({ spawns });
     }
     const field = params?.item?.type === 'commandExecution' ? 'commands' : params?.item?.type === 'mcpToolCall' ? 'mcpCalls' : null;
     if (['item/started', 'item/completed'].includes(notification?.method) && field) {

@@ -21,8 +21,10 @@ import { ExecutionSupervisor } from '../runtime/execution-supervisor.mjs';
 const root = resolve(import.meta.dirname, '..');
 const supervisorMode = process.argv.includes('--supervisor');
 const dynamicMode = supervisorMode || process.argv.includes('--dynamic');
-const childMode = process.argv.includes('--child');
-assert.ok(process.argv.slice(2).every(arg => ['--dynamic', '--supervisor', '--child'].includes(arg)) && !(childMode && dynamicMode), 'Use --child alone, --dynamic or --supervisor');
+const grandchildMode = process.argv.includes('--grandchild');
+const childMode = grandchildMode || process.argv.includes('--child');
+const expectedModelCalls = grandchildMode ? 13 : childMode ? 11 : 7;
+assert.ok(process.argv.slice(2).every(arg => ['--dynamic', '--supervisor', '--child', '--grandchild'].includes(arg)) && !(childMode && dynamicMode), 'Use --child, --grandchild, --dynamic or --supervisor');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 const SKILL_POLICY = '46b2cbdd-d227-4f54-bffa-33148aad0134';
 const ROUTINE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
@@ -139,10 +141,10 @@ try {
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
     { skill_id: reviewedId }];
-  let manualRunId, nativeBound = false, toolRequests = 0, childThreadId;
+  let manualRunId, nativeBound = false, toolRequests = 0, childThreadId, intermediateThreadId;
   fixture = createServer(async (req, res) => { try {
     if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
-    if (report.modelCalls >= (childMode ? 11 : 7)) { res.writeHead(400); res.end(); return; }
+    if (report.modelCalls >= expectedModelCalls) { res.writeHead(400); res.end(); return; }
     report.modelCalls++; const body = await jsonBody(req);
     if (childMode) {
       if (body.input.some(item => item?.role === 'user' && JSON.stringify(item.content).includes('UNRELATED_GRANT_PROOF'))) {
@@ -169,20 +171,25 @@ try {
       }
       const isChild = body.input.some(item => item?.role === 'user' && JSON.stringify(item.content).includes('SHARED_TASK_CHILD'));
       if (!isChild) {
+        const isIntermediate = grandchildMode && body.input.some(item => item?.role === 'user' && JSON.stringify(item.content).includes('SHARED_TASK_DELEGATE'));
+        if (isIntermediate) await waitFor(() => nativeBound && notifications.some(n => n.method === 'turn/completed' && n.params?.threadId === threadId && n.params.turn.id === turnId), 'root completion before nested spawn');
         const output = findType(body.input, 'function_call_output');
         if (output) {
-          childThreadId = JSON.parse(String(output.output)).agent_id;
-          assert.equal(typeof childThreadId, 'string');
+          const receiver = JSON.parse(String(output.output)).agent_id;
+          assert.equal(typeof receiver, 'string');
+          if (grandchildMode && !isIntermediate) intermediateThreadId = receiver;
+          else childThreadId = receiver;
           sendEvents(res, message('SHARED_PARENT_DONE')); return;
         }
         const spawnTool = body.tools.find(tool => tool.name === 'spawn_agent' || tool.tools?.some(nested => nested.name === 'spawn_agent'));
         assert.ok(spawnTool, 'Native spawn_agent advertised');
         sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID().replaceAll('-', '')}`,
           ...(spawnTool.type === 'namespace' ? { namespace: spawnTool.name } : {}), name: 'spawn_agent',
-          arguments: JSON.stringify({ message: 'SHARED_TASK_CHILD', agent_type: 'default' }) }]);
+          arguments: JSON.stringify({ message: grandchildMode && !isIntermediate ? 'SHARED_TASK_DELEGATE' : 'SHARED_TASK_CHILD', agent_type: 'default' }) }]);
         return;
       }
       await waitFor(() => nativeBound && notifications.some(n => n.method === 'turn/completed' && n.params?.threadId === threadId && n.params.turn.id === turnId), 'root terminal before child tools');
+      if (grandchildMode) await waitFor(() => intermediateThreadId && notifications.some(n => n.method === 'turn/completed' && n.params?.threadId === intermediateThreadId), 'intermediate terminal before grandchild tools');
       await router.flush();
       assert.equal((await eventJournal.get(adapterAttempt)).rootSettled, true);
     }
@@ -242,7 +249,7 @@ try {
       arguments: JSON.stringify(argumentsByStage[next]) }]);
   } catch (error) { fixtureErrors.push(error.stack ?? String(error)); if (!res.headersSent) sendEvents(res, message('FIXTURE_ASSERTION_FAILED')); else res.end(); } });
   await new Promise((ok, fail) => fixture.once('error', fail).listen(fixturePort, '127.0.0.1', ok));
-  await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${fixturePort}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
+  await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n[features]\ncode_mode = false\n${grandchildMode ? 'multi_agent_v2 = false\n[agents]\nmax_depth = 2\n' : ''}[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${fixturePort}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
   // Explicitly authorize only these disposable scoped tools. This is the
   // supported per-tool policy, not an annotation-based or global approval bypass.
   const mcpServers = { hehebot: { command: process.execPath, args: [join(root, 'runtime/agent-tools.mjs')], startup_timeout_sec: 10,
@@ -334,8 +341,17 @@ try {
     assert.equal(adapter.sleepReadiness().allowed, false); assert.deepEqual(routerFailures, []);
   });
   if (childMode) check('native child inherits task MCP grant and remains accounted after parent completion', () => {
-    assert.deepEqual(Object.values(nativeCalls.spawns).flatMap(spawn => spawn.receiverThreadIds), [childThreadId]);
-    assert.deepEqual(nativeCalls.childTurns, { [JSON.stringify([childThreadId, completed.params.turn.id])]: 'completed' });
+    assert.deepEqual(Object.values(nativeCalls.spawns).flatMap(spawn => spawn.receiverThreadIds), [grandchildMode ? intermediateThreadId : childThreadId]);
+    const expectedTurns = { [JSON.stringify([childThreadId, completed.params.turn.id])]: 'completed' };
+    if (grandchildMode) {
+      const intermediate = notifications.find(n => n.method === 'turn/completed' && n.params?.threadId === intermediateThreadId);
+      const key = JSON.stringify([intermediateThreadId, intermediate.params.turn.id]);
+      expectedTurns[key] = 'completed';
+      assert.deepEqual(Object.values(nativeCalls.childObligations[key].spawns).flatMap(spawn => spawn.receiverThreadIds), [childThreadId]);
+      assert.equal(nativeCalls.childObligations[key].mcpCalls, undefined);
+      report.nativeGrandchildToolRouting = true;
+    }
+    assert.deepEqual(nativeCalls.childTurns, expectedTurns);
     assert.equal(nativeCalls.mcpCalls, undefined); assert.equal(router.pending.length, 0);
     assert.equal(dynamicCalls.length, 0);
   });
@@ -353,7 +369,7 @@ try {
   }
   check('actual control state has pending model/run provenance', () => { assert.equal(proposal.status, 'pending'); assert.equal(proposal.skill_id, skillId); assert.deepEqual(proposal.provenance, { kind: 'model', source_ref: runId }); assert.equal(proposal.executable_files_changed, false); });
   check('proposal did not auto-create or approve a skill', () => { assert.equal(state.objects.some(x => x.kind === 'skill' && x.id === skillId), false); assert.equal(state.skill_proposals.filter(x => x.id === proposalId).length, 1); });
-  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, childMode ? 11 : 7); assert.equal(toolRequests, 7); assert.deepEqual(fixtureErrors, []); });
+  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, expectedModelCalls); assert.equal(toolRequests, 7); assert.deepEqual(fixtureErrors, []); });
   report.status = 'passed'; report.runId = runId; report.attempt = attempt; report.proposalId = proposalId; report.nativeReceiptObserved = true;
 } catch (error) {
   report.error = error?.stack ?? String(error); if (fixtureErrors.length) report.fixtureErrors = fixtureErrors;

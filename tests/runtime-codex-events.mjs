@@ -205,6 +205,43 @@ test('child tools require observed exact turns and survive root and child comple
   assert.deepEqual(await f.journal.get('a'), row);
 });
 
+test('nested spawn attribution recovers early descendants and rejects cycles and duplicate origins', async t => {
+  const f = await fixture(t); await f.admit('a', 'parent', 'turn');
+  const nested = receiver => ({ method: 'item/completed', params: { threadId: 'child', turnId: 'turn',
+    item: { id: 'spawn-19', type: 'collabAgentToolCall', tool: 'spawnAgent', senderThreadId: 'child', status: 'completed', receiverThreadIds: [receiver] } } });
+  f.transport.emit('notification', command('grandchild', 'turn', 'late-command'));
+  f.transport.emit('notification', { method: 'turn/started', params: { threadId: 'grandchild', turn: { id: 'turn', status: 'inProgress' } } });
+  f.transport.emit('notification', nested('grandchild'));
+  f.transport.emit('notification', root('child', 'turn'));
+  f.transport.emit('notification', spawn('completed', ['child']));
+  f.transport.emit('notification', root('parent', 'turn'));
+  await f.router.bind('a');
+  const row = await f.journal.get('a');
+  assert.deepEqual(row.childTurns, { '["child","turn"]': 'completed', '["grandchild","turn"]': 'inProgress' });
+  assert.deepEqual(row.childObligations['["grandchild","turn"]'].commands, { 'late-command': 'inProgress' });
+  assert.deepEqual(row.childObligations['["child","turn"]'].spawns, { 'spawn-19': { status: 'completed', receiverThreadIds: ['grandchild'] } });
+  assert.equal(f.router.pending.length, 0); assert.deepEqual(f.recoveries, []);
+  f.router.close();
+  const restarted = new CodexEventRouter({ transport: f.transport, adapter: f.adapter, onRecovery: value => f.recoveries.push(value.code) });
+  t.after(() => restarted.close()); await restarted.bind('a');
+  const interrupts = [];
+  f.adapter.rpc = async (method, params) => { interrupts.push({ method, params }); return {}; };
+  const target = { threadId: 'grandchild', turnId: 'turn' };
+  await f.adapter.cancelChild('a', target); await f.adapter.cancelChild('a', target);
+  assert.deepEqual(interrupts, [{ method: 'turn/interrupt', params: target }]);
+  assert.equal((await f.journal.get('a')).childTurns['["grandchild","turn"]'], 'inProgress');
+  f.transport.emit('notification', root('grandchild', 'turn'));
+  f.transport.emit('notification', command('grandchild', 'turn', 'late-command', 'completed')); await restarted.flush();
+  assert.equal((await f.journal.get('a')).childObligations['["grandchild","turn"]'].commands['late-command'], 'completed');
+  assert.equal(f.adapter.sleepReadiness().allowed, false);
+  for (const event of [nested('parent'), nested('child'), { ...nested('grandchild'), params: {
+    ...nested('grandchild').params, item: { ...nested('grandchild').params.item, id: 'second-origin' },
+  } }]) await assert.rejects(f.adapter.observe('a', event));
+  const noAdoption = new CodexEventRouter({ transport: new EventEmitter(), adapter: f.adapter, onRecovery: () => {} });
+  t.after(() => noAdoption.close()); await noAdoption.bind('a'); await f.admit('b', 'grandchild', 'turn');
+  await assert.rejects(noAdoption.bind('b'), { code: 'NATIVE_IDENTITY_CONFLICT' });
+});
+
 test('binding limits allow repeats but missing acknowledgements never consume early events', async t => {
   const f = await fixture(t, { maxBindings: 1 });
   await f.admit('lost', 'thread-lost', null);
