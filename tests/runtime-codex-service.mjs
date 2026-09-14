@@ -1,0 +1,139 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createCodexService } from '../runtime/codex-service.mjs';
+
+async function fixture(t) {
+  const directory = await mkdtemp(join(tmpdir(), 'hehe-service-unit-'));
+  const tokenFile = join(directory, 'token'); await writeFile(tokenFile, 'synthetic', { mode: 0o600 });
+  const calls = []; let now = Date.now(), failHold = false;
+  const transport = new EventEmitter();
+  transport.child = { exitCode: null, signalCode: null, kill: () => { transport.child.signalCode = 'SIGKILL'; } };
+  transport.initialize = async () => calls.push('initialize');
+  transport.close = () => { transport.child.exitCode = 0; transport.emit('disconnect'); };
+  transport.request = async (method, params) => {
+    calls.push({ method, params });
+    if (method === 'thread/start') return { thread: { id: 'native-thread' } };
+    if (method === 'turn/start') {
+      transport.emit('notification', { method: 'turn/started', params: { threadId: 'native-thread', turn: { id: 'native-turn', status: 'inProgress' } } });
+      return { turn: { id: 'native-turn' } };
+    }
+    throw Error('unexpected native RPC');
+  };
+  const config = { disposableTest: true, stateDirectory: directory, runtimeTokenFile: tokenFile,
+    portalOrigin: 'https://fixture.invalid/', binary: '/synthetic/codex', installationId: 'fixture',
+    personas: { bot: { agentId: 'assistant', model: 'fixture-model', allowedTools: ['hehebot_list_routines'] } } };
+  const dependencies = {
+    tasks: { hold: async value => { calls.push('hold'); if (failHold) throw Error('private'); return { name: value.id, expiresAt: value.expiresAt }; },
+      release: async () => assert.fail('must not release unverified activity') },
+    now: () => now, operations: async () => [], checkVersion: async () => {},
+    launch: () => { calls.push('launch'); return transport; },
+    control: { request: async (type, payload) => {
+      calls.push(type);
+      if (type === 'status') return { epoch: 1, phase: 'BOOTING', execution_enabled: true };
+      if (type === 'boot') return { epoch: 1, boot_id: payload.boot_id };
+      if (type === 'ready' || type === 'submitted') return {};
+      if (type === 'heartbeat') return { lease_until: new Date(now + 60000).toISOString(), cancellations: [] };
+      if (type === 'claim') return { submission_key: 'run:1', run: { id: 'run', current_attempt: 1, persona_id: 'bot', context_json: '{"instruction":"fixture"}' } };
+      throw Error('unexpected control RPC');
+    } },
+  };
+  const service = createCodexService(config, dependencies);
+  t.after(async () => { await service.stop(); await rm(directory, { recursive: true, force: true }); });
+  return { config, dependencies, service, calls, transport, directory, advance: ms => { now += ms; }, failHold: () => { failHold = true; } };
+}
+
+test('default production gate rejects before disk, provider, control or native activity', async t => {
+  const f = await fixture(t);
+  const service = createCodexService({ ...f.config, disposableTest: false }, f.dependencies);
+  await assert.rejects(service.start(), { code: 'NATIVE_COMPATIBILITY_GATE_BLOCKED' });
+  assert.deepEqual(f.calls, []); assert.deepEqual(await readdir(f.directory), ['token']);
+});
+
+test('assembly claims before creating a private root grant, binds events before submitted, and retains recovery', async t => {
+  const f = await fixture(t), row = await f.service.start();
+  assert.equal(row.phase, 'running');
+  assert.ok(f.calls.indexOf('hold') < f.calls.indexOf('launch'));
+  assert.ok(f.calls.indexOf('claim') < f.calls.findIndex(call => call.method === 'thread/start'));
+  const launch = f.calls.find(call => call.method === 'thread/start');
+  const grantPath = launch.params.config.mcp_servers.hehebot.env.HEHEBOT_AGENT_TOOLS_CONFIG;
+  const grant = JSON.parse(await readFile(grantPath, 'utf8'));
+  assert.equal(grant.runId, 'run'); assert.equal(grant.attempt, 1);
+  assert.deepEqual(grant.allowedTools, ['hehebot_list_routines']);
+  assert.equal(launch.params.approvalPolicy, 'untrusted');
+  const native = await f.service.observe(); assert.equal(native.threadId, 'native-thread');
+  f.transport.emit('notification', { method: 'turn/completed', params: { threadId: native.threadId, turn: { id: native.nativeRunId, status: 'completed' } } });
+  assert.equal((await f.service.observe()).rootSettled, true);
+  await assert.rejects(f.service.supervisor.complete({ attemptId: row.attemptId, nativeRunId: native.nativeRunId, rootSettled: true }), { code: 'NATIVE_SETTLEMENT_INCOMPLETE' });
+  await assert.rejects(f.service.supervisor.drain({ state: 'fixture' }), { code: 'SLEEP_DENIED' });
+  await f.service.stop();
+  assert.equal((await f.service.journal.get('service')).phase, 'recovery');
+  assert.equal(f.calls.includes('complete'), false);
+  const count = f.calls.length;
+  const restored = createCodexService(f.config, f.dependencies);
+  await assert.rejects(restored.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  assert.equal(f.calls.length, count);
+});
+
+test('expired lease or disconnected native fences dispatch without release or replay', async t => {
+  const f = await fixture(t); await f.service.start();
+  const count = f.calls.length; f.advance(60001);
+  await assert.rejects(f.service.maintain(), { code: 'EXECUTOR_FENCED' });
+  assert.equal(f.service.phase, 'recovery'); assert.equal(f.calls.length, count);
+  await assert.rejects(f.service.supervisor.dispatch(), { code: 'EXECUTOR_FENCED' });
+});
+
+test('uncertain provider hold blocks native launch and preserves boot intent', async t => {
+  const f = await fixture(t); f.failHold();
+  await assert.rejects(f.service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  assert.equal(f.calls.includes('launch'), false);
+  assert.equal((await f.service.journal.get('service')).phase, 'recovery');
+});
+
+test('shutdown during native preparation cannot later launch or acknowledge readiness', async t => {
+  const f = await fixture(t);
+  let entered, release;
+  const preparing = new Promise(ok => { entered = ok; });
+  f.dependencies.prepareNative = () => { entered(); return new Promise(ok => { release = ok; }); };
+  const service = createCodexService(f.config, f.dependencies);
+  const started = service.start();
+  const rejected = assert.rejects(started, { code: 'SERVICE_RECOVERY_REQUIRED' });
+  await preparing; await service.stop(); release(); await rejected;
+  assert.equal(f.calls.includes('launch'), false); assert.equal(f.calls.includes('ready'), false);
+});
+
+test('native disconnect fences a running service without claiming replacement work', async t => {
+  const f = await fixture(t); await f.service.start();
+  const count = f.calls.length;
+  f.transport.emit('disconnect', { code: 'synthetic EOF' });
+  assert.equal(f.service.phase, 'recovery');
+  await assert.rejects(f.service.maintain(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  await assert.rejects(f.service.start(), { code: 'SERVICE_ALREADY_STARTED' });
+  assert.equal(f.calls.length, count);
+});
+
+test('assembly synchronizes exact child mapping before delivering a selected cancellation', async t => {
+  const f = await fixture(t), original = f.dependencies.control.request;
+  let cancellation = false, registrations = 0;
+  f.dependencies.control.request = async (type, payload) => {
+    if (type === 'native-child') {
+      registrations++;
+      assert.equal(payload.child.native_session_key, 'child-thread');
+      return { id: 'worker-child', parent_run_id: 'run', persona_id: 'bot', current_attempt: 1, role: 'background' };
+    }
+    const result = await original(type, payload);
+    return type === 'heartbeat' && cancellation ? { ...result, cancellations: ['worker-child'] } : result;
+  };
+  await f.service.start();
+  f.transport.emit('notification', { method: 'item/completed', params: { threadId: 'native-thread', turnId: 'native-turn',
+    item: { id: 'spawn', type: 'collabAgentToolCall', tool: 'spawnAgent', status: 'completed', senderThreadId: 'native-thread', receiverThreadIds: ['child-thread'] } } });
+  f.transport.emit('notification', { method: 'turn/started', params: { threadId: 'child-thread', turn: { id: 'child-turn', status: 'inProgress' } } });
+  await f.service.maintain(); cancellation = true;
+  await f.service.maintain(); await f.service.maintain();
+  assert.equal(registrations, 1);
+  assert.deepEqual(f.calls.filter(call => call.method === 'turn/interrupt'), [{ method: 'turn/interrupt', params: { threadId: 'child-thread', turnId: 'child-turn' } }]);
+  assert.equal((await f.service.observe()).childTurns['["child-thread","child-turn"]'], 'inProgress');
+});

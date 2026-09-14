@@ -1,13 +1,15 @@
 import { mkdir, open, readFile, rename } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
+
+const queues = new Map();
 
 /** Single executor process only. A separate provider fence and OS ownership lock are required.
  * Serialized, fsynced intent journal. No native DB access. Directory must be private persistent disk.
+ * Use one canonical directory path, not symlink aliases, across reconstructed instances.
  */
 export class FileJournal {
-  #tail = Promise.resolve();
-  constructor(directory) { this.directory = directory; }
+  constructor(directory) { this.directory = resolve(directory); }
   path(id) {
     if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) throw new Error('INVALID_ATTEMPT');
     return join(this.directory, `${id}.json`);
@@ -17,8 +19,11 @@ export class FileJournal {
     catch (error) { if (error.code === 'ENOENT') return null; throw error; }
   }
   serial(fn) {
-    const result = this.#tail.then(fn);
-    this.#tail = result.catch(() => {});
+    const result = (queues.get(this.directory) ?? Promise.resolve()).then(fn);
+    const tail = result.catch(() => {}).finally(() => {
+      if (queues.get(this.directory) === tail) queues.delete(this.directory);
+    });
+    queues.set(this.directory, tail);
     return result;
   }
   async write(id, row) {

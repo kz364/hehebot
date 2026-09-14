@@ -198,7 +198,7 @@ try {
   });
   await new Promise((resolveListen, reject) => fixture.once('error', reject).listen(0, '127.0.0.1', resolveListen));
   const port = fixture.address().port;
-  await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
+  await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\nthread_unload_delay_secs = 2\n\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
 
   transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 10_000, onToolCall: async params => {
     assert.equal(params.tool, 'hehebot_identity_probe'); assert.equal(params.namespace, null);
@@ -258,6 +258,10 @@ try {
   };
   assert.equal(commandAtRoot.status, 'inProgress');
   assert.equal(notifications.some(n => n.method === 'item/completed' && n.params?.turnId === backgroundTurn && n.params.item?.id === commandAtRoot.id), false);
+  const liveTerminals = await transport.request('thread/backgroundTerminals/list', { threadId: backgroundThread });
+  assert.equal(liveTerminals.nextCursor, null);
+  assert.equal(liveTerminals.data.length, 1);
+  assert.equal(liveTerminals.data[0].itemId, commandAtRoot.id);
   await new FileJournal(journalPath).putIfAbsent('background-proof', { threadId: backgroundThread, nativeRunId: backgroundTurn, status: 'running', rootSettled: false });
   await router.bind('background-proof');
   assert.equal((await recovery.requireRun('background-proof')).rootSettled, true);
@@ -349,6 +353,20 @@ try {
   }
   const childDynamicHistory = await transport.request('thread/read', { threadId: dynamicChildId, includeTurns: true });
   assert.ok(childDynamicHistory.thread.turns.flatMap(saved => saved.items).some(item => item.type === 'agentMessage' && item.text === (report.dynamicChildToolsAvailable ? 'CHILD_DYNAMIC_OK' : 'CHILD_DYNAMIC_UNAVAILABLE')));
+
+  // A supported per-thread unload is stronger than idle/root completion, but
+  // does not settle descendants, external effects or unknown detached work.
+  const emptyTerminals = await transport.request('thread/backgroundTerminals/list', { threadId: backgroundThread });
+  assert.deepEqual(emptyTerminals, { data: [], nextCursor: null });
+  const beforeUnload = notifications.length;
+  assert.equal((await transport.request('thread/unsubscribe', { threadId: backgroundThread })).status, 'unsubscribed');
+  await waitFor(() => notifications.slice(beforeUnload).some(n => n.method === 'thread/closed' && n.params?.threadId === backgroundThread), 'exact thread closed');
+  await waitFor(() => notifications.slice(beforeUnload).some(n => n.method === 'thread/status/changed' && n.params?.threadId === backgroundThread && n.params.status?.type === 'notLoaded'), 'exact thread not loaded');
+  const loaded = await transport.request('thread/loaded/list', {});
+  assert.equal(loaded.nextCursor, null); assert.equal(loaded.data.includes(backgroundThread), false);
+  assert.equal(loaded.data.includes(dynamicThread), true);
+  report.nativeBackgroundTerminalReadback = true;
+  report.nativeThreadUnloadObserved = true;
 
   // A new native process must recover disk-backed history, not a live server cache.
   // Stop only after the fixture's held request and command have definitively exited.

@@ -21,6 +21,7 @@ node scripts/test-codex-tools.mjs --grandchild
 node scripts/test-codex-tools.mjs --dynamic
 node scripts/test-codex-tools.mjs --supervisor
 node scripts/test-codex-tools.mjs --supervisor-child
+bash scripts/test-codex-service.sh
 npm run build
 
 printf '%s\n' '{"status":"passed","scope":"credential-free Codex and control contracts","assistantOperational":false,"productionAdmission":false,"modelJudgmentVerified":false}'
