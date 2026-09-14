@@ -11,12 +11,15 @@ const hasReceiver = (row, threadId) => observationOwners(row).some(owner => Obje
  */
 export class CodexAdapter {
   #observations = Promise.resolve();
-  constructor({ rpc, journal, cwd, testMode = false, dynamicTools = [], mcpServers = {} }) {
+  #permissionsProfile;
+  constructor({ rpc, journal, cwd, testMode = false, dynamicTools = [], mcpServers = {}, permissionsProfile = undefined }) {
     if (typeof rpc !== 'function' || !journal?.putIfAbsent || !cwd?.startsWith('/') || !Array.isArray(dynamicTools) || dynamicTools.length > 64 ||
-        !mcpServers || typeof mcpServers !== 'object' || Array.isArray(mcpServers) || Object.keys(mcpServers).length > 64) fail('INVALID_CONFIGURATION');
+        !mcpServers || typeof mcpServers !== 'object' || Array.isArray(mcpServers) || Object.keys(mcpServers).length > 64 ||
+        permissionsProfile !== undefined && (typeof permissionsProfile !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(permissionsProfile))) fail('INVALID_CONFIGURATION');
     Object.assign(this, { rpc, journal, cwd, testMode });
     this.dynamicTools = structuredClone(dynamicTools);
     this.mcpServers = structuredClone(mcpServers);
+    this.#permissionsProfile = permissionsProfile;
   }
   admissionReadiness() {
     return { allowed: this.testMode === true, productionVerified: false };
@@ -33,8 +36,10 @@ export class CodexAdapter {
         typeof input.model !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(input.model)) fail('INVALID_SUBMISSION');
     if (!this.admissionReadiness().allowed) fail('COMPATIBILITY_GATE_BLOCKED');
     const values = keys.map(key => input[key]);
-    const fingerprint = hash(Object.keys(this.mcpServers).length ? [values, this.dynamicTools, this.mcpServers]
-      : this.dynamicTools.length ? [values, this.dynamicTools] : values);
+    const legacyFingerprintInput = Object.keys(this.mcpServers).length ? [values, this.dynamicTools, this.mcpServers]
+      : this.dynamicTools.length ? [values, this.dynamicTools] : values;
+    const fingerprint = hash(this.#permissionsProfile === undefined ? legacyFingerprintInput
+      : [legacyFingerprintInput, { permissionsProfile: this.#permissionsProfile }]);
     const prior = await this.journal.putIfAbsent(input.attemptId, {
       attemptId: input.attemptId, fingerprint, status: 'thread_unknown', threadId: null,
       nativeRunId: null, rootSettled: false, cancelAcknowledged: false,
@@ -45,7 +50,8 @@ export class CodexAdapter {
     }
     try {
       const started = await this.rpc('thread/start', {
-        cwd: this.cwd, model: input.model, approvalPolicy: 'untrusted', sandbox: 'read-only', ephemeral: false,
+        cwd: this.cwd, model: input.model, approvalPolicy: 'untrusted', ephemeral: false,
+        ...(this.#permissionsProfile === undefined ? { sandbox: 'read-only' } : { permissions: this.#permissionsProfile }),
         ...(this.dynamicTools.length ? { dynamicTools: this.dynamicTools } : {}),
         ...(Object.keys(this.mcpServers).length ? { config: { mcp_servers: this.mcpServers } } : {}),
       });

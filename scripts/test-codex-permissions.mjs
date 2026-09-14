@@ -9,6 +9,8 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { CodexTransport } from '../runtime/codex-transport.mjs';
+import { CodexAdapter } from '../runtime/codex-adapter.mjs';
+import { FileJournal } from '../runtime/file-journal.mjs';
 
 const binary = resolve(import.meta.dirname, '../.local/codex-runtime/node_modules/.bin/codex');
 const directory = await mkdtemp(join(tmpdir(), 'hehe-permissions-'));
@@ -182,22 +184,63 @@ try {
     assert.equal(config.config.permissions.isolated.filesystem[':root'], 'read');
   });
   for (const mode of ['BASE', 'CUSTOM']) {
-    const { thread } = await transport.request('thread/start', { cwd, model: 'fixture-model', approvalPolicy: 'untrusted',
-      ...(mode === 'BASE' ? { sandbox: 'read-only' } : { permissions: 'isolated' }) });
-    roots.set(mode, thread.id);
-    const { turn } = await transport.request('turn/start', { threadId: thread.id, input: [{ type: 'text', text: `PERMISSIONS_${mode}_ROOT` }] });
-    await wait(() => events.some(n => n.method === 'turn/completed' && n.params.threadId === thread.id && n.params.turn.id === turn.id), `${mode} root terminal`);
+    const journalPath = join(directory, `journal-${mode}`), journal = new FileJournal(journalPath);
+    const input = { attemptId: `permissions-${mode}`, installationId: 'fixture-installation', personaId: 'fixture-persona',
+      scope: 'conversation', scopeId: `scope-${mode}`, message: `PERMISSIONS_${mode}_ROOT`, model: 'fixture-model' };
+    const permissionsProfile = mode === 'CUSTOM' ? 'isolated' : undefined;
+    const nativeMethods = [];
+    const adapter = new CodexAdapter({ cwd, journal, testMode: true, permissionsProfile, rpc: async (method, params) => {
+      nativeMethods.push(method);
+      const persisted = await new FileJournal(journalPath).get(input.attemptId);
+      if (method === 'thread/start') {
+        check(`${mode} adapter persists intent and sends exclusive host profile or default sandbox`, () => {
+          assert.equal(persisted.status, 'thread_unknown');
+          assert.equal(persisted.threadId, null);
+          assert.equal(params.approvalPolicy, 'untrusted');
+          if (mode === 'CUSTOM') { assert.equal(params.permissions, 'isolated'); assert.equal(Object.hasOwn(params, 'sandbox'), false); }
+          else { assert.equal(params.sandbox, 'read-only'); assert.equal(Object.hasOwn(params, 'permissions'), false); }
+        });
+      } else if (method === 'turn/start') {
+        check(`${mode} adapter persists exact thread before starting inference`, () => {
+          assert.equal(persisted.threadId, params.threadId);
+          assert.equal(persisted.status, 'submission_unknown');
+          assert.equal(params.clientUserMessageId, input.attemptId);
+        });
+      }
+      const reply = await transport.request(method, params);
+      if (method === 'thread/start') roots.set(mode, reply.thread.id);
+      return reply;
+    } });
+    const receipt = await adapter.submit(input);
+    assert.equal(receipt.status, 'running');
+    const threadId = receipt.threadId, turnId = receipt.nativeRunId;
+    const reopened = new FileJournal(journalPath);
+    const persisted = await reopened.get(input.attemptId);
+    check(`${mode} real journal reopens exact native receipt`, () => {
+      assert.equal(persisted.threadId, threadId); assert.equal(persisted.nativeRunId, turnId);
+      assert.match(persisted.fingerprint, /^[a-f0-9]{64}$/);
+    });
+    const noReplay = { cwd, journal: reopened, testMode: true, rpc: () => assert.fail('duplicate or conflicting profile must not replay') };
+    assert.equal((await new CodexAdapter({ ...noReplay, permissionsProfile }).submit(input)).nativeRunId, turnId);
+    await assert.rejects(new CodexAdapter({ ...noReplay, permissionsProfile: mode === 'CUSTOM' ? undefined : 'isolated' }).submit(input), { code: 'IDEMPOTENCY_CONFLICT' });
+    check(`${mode} duplicate and changed profile preserve exact receipt without replay or sleep`, () => {
+      assert.deepEqual(nativeMethods, ['thread/start', 'turn/start']);
+      assert.equal(adapter.sleepReadiness().allowed, false);
+      assert.equal(adapter.admissionReadiness().productionVerified, false);
+    });
+    await wait(() => events.some(n => n.method === 'turn/completed' && n.params.threadId === threadId && n.params.turn.id === turnId), `${mode} root terminal`);
     await wait(() => [0, 1, 2].every(i => report.observations[`${mode}_CHILD:${i}`]), `${mode} child read results`);
     let childId;
     for (const id of new Set(events.filter(n => n.method === 'turn/started').map(n => n.params.threadId))) {
-      if (id === thread.id) continue;
+      if (id === threadId) continue;
       const readback = await transport.request('thread/read', { threadId: id, includeTurns: false });
-      if (readback.thread.source?.subAgent?.thread_spawn?.parent_thread_id === thread.id) childId = id;
+      if (readback.thread.source?.subAgent?.thread_spawn?.parent_thread_id === threadId) childId = id;
     }
-    check(`${mode} child readback has exact asymmetric parent identity`, () => { assert.ok(childId); assert.notEqual(childId, thread.id); });
+    check(`${mode} child readback has exact asymmetric parent identity`, () => { assert.ok(childId); assert.notEqual(childId, threadId); });
     await wait(() => events.some(n => n.method === 'turn/completed' && n.params.threadId === childId), `${mode} child terminal`);
-    report[`${mode.toLowerCase()}Identities`] = { root: thread.id, child: childId };
+    report[`${mode.toLowerCase()}Identities`] = { root: threadId, turn: turnId, child: childId, attemptId: input.attemptId };
   }
+  report.adapterSubmissionProved = true;
   report.binarySha256After = await hash();
   report.nativeSha256After = await nativeHash();
   check('native executable remains pristine', () => assert.equal(report.binarySha256Before, report.binarySha256After));

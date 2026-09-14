@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -70,6 +71,72 @@ test('task MCP configuration is host-owned, snapshotted and bound to durable sub
   await assert.rejects(other.submit(input), { code: 'IDEMPOTENCY_CONFLICT' });
   await assert.rejects(adapter.submit({ ...input, mcpServers }), { code: 'INVALID_SUBMISSION' });
   await assert.rejects(adapter.submit({ ...input, config: { mcp_servers: mcpServers } }), { code: 'INVALID_SUBMISSION' });
+});
+
+test('named permissions are bounded constructor-only host selection, not model authority', async t => {
+  const f = await fixture(t);
+  const options = { cwd: f.cwd, journal: f.journal, rpc: f.adapter.rpc, testMode: true };
+  for (const permissionsProfile of ['', ' ', ' padded', 'a\nb', '../root', '/root', 'a.b', 'é', 'a'.repeat(129), null, false, 1, [], {}]) {
+    assert.throws(() => new CodexAdapter({ ...options, permissionsProfile }), { code: 'INVALID_CONFIGURATION' });
+  }
+  const profile = 'A_9-' + 'z'.repeat(124);
+  const configured = { ...options, permissionsProfile: profile };
+  const adapter = new CodexAdapter(configured);
+  configured.permissionsProfile = 'other';
+  for (const field of ['permissionsProfile', 'permissions', 'sandbox', 'config']) {
+    await assert.rejects(adapter.submit({ ...input, [field]: 'model-selected' }), { code: 'INVALID_SUBMISSION' });
+  }
+  assert.equal(await f.journal.get(input.attemptId), null);
+  assert.equal(f.calls.length, 0);
+  await adapter.submit(input);
+  assert.equal(f.calls[0].params.permissions, profile);
+  assert.equal(Object.hasOwn(f.calls[0].params, 'sandbox'), false);
+  assert.equal(f.calls[0].params.approvalPolicy, 'untrusted');
+  assert.equal(adapter.sleepReadiness().allowed, false);
+  const production = new CodexAdapter({ ...options, testMode: false, permissionsProfile: profile });
+  await assert.rejects(production.submit({ ...input, attemptId: 'blocked' }), { code: 'COMPATIBILITY_GATE_BLOCKED' });
+  assert.equal(f.calls.length, 2);
+});
+
+test('named profile fingerprint survives reopen and rejects changes or removal without native replay', async t => {
+  const f = await fixture(t);
+  const dynamicTools = [{ name: 'read_fixture', inputSchema: { type: 'object' } }];
+  const mcpServers = { task: { command: '/host/mcp' } };
+  const options = { cwd: f.cwd, journal: f.journal, rpc: f.adapter.rpc, testMode: true, dynamicTools, mcpServers, permissionsProfile: 'task_A' };
+  const adapter = new CodexAdapter(options);
+  const receipt = await adapter.submit(input);
+  assert.equal(receipt.status, 'running');
+  assert.deepEqual(f.calls[0].params.dynamicTools, dynamicTools);
+  assert.deepEqual(f.calls[0].params.config, { mcp_servers: mcpServers });
+  const reopened = { ...options, journal: new FileJournal(f.cwd), rpc: () => assert.fail('must not replay') };
+  assert.equal((await new CodexAdapter(reopened).submit(input)).nativeRunId, receipt.nativeRunId);
+  for (const permissionsProfile of ['task_B', undefined]) {
+    await assert.rejects(new CodexAdapter({ ...reopened, permissionsProfile }).submit(input), { code: 'IDEMPOTENCY_CONFLICT' });
+  }
+  await f.journal.update(input.attemptId, { status: 'recovery_required', nativeRunId: null });
+  assert.equal((await new CodexAdapter(reopened).submit(input)).recoveryRequired, true);
+  await assert.rejects(new CodexAdapter({ ...reopened, permissionsProfile: 'task_B' }).submit(input), { code: 'IDEMPOTENCY_CONFLICT' });
+  assert.equal(f.calls.length, 2);
+});
+
+test('absent profile preserves all legacy fingerprints, sandbox defaults and reopened receipts', async t => {
+  const dynamicTools = [{ name: 'read_fixture', inputSchema: { type: 'object' } }];
+  const mcpServers = { task: { command: '/host/mcp' } };
+  // Independent pre-change record format, including every prior optional-config branch.
+  const values = ['attempt1', 'installation1', 'assistant', 'conversation', 'room1', 'Read the task context', 'gpt-5.4'];
+  for (const [options, legacy] of [[{}, values], [{ dynamicTools }, [values, dynamicTools]],
+    [{ mcpServers }, [values, [], mcpServers]], [{ dynamicTools, mcpServers }, [values, dynamicTools, mcpServers]]]) {
+    const f = await fixture(t);
+    const adapter = new CodexAdapter({ cwd: f.cwd, journal: f.journal, rpc: f.adapter.rpc, testMode: true, ...options });
+    const receipt = await adapter.submit(input);
+    assert.equal(receipt.fingerprint, createHash('sha256').update(JSON.stringify(legacy)).digest('hex'));
+    assert.equal(f.calls[0].params.sandbox, 'read-only');
+    assert.equal(Object.hasOwn(f.calls[0].params, 'permissions'), false);
+    const reopened = { cwd: f.cwd, journal: new FileJournal(f.cwd), rpc: () => assert.fail('legacy receipt must not replay'), testMode: true, ...options };
+    assert.equal((await new CodexAdapter(reopened).submit(input)).nativeRunId, receipt.nativeRunId);
+    await assert.rejects(new CodexAdapter({ ...reopened, permissionsProfile: 'task_A' }).submit(input), { code: 'IDEMPOTENCY_CONFLICT' });
+    assert.equal(f.calls.length, 2);
+  }
 });
 
 test('lost turn acknowledgement survives journal reopen without repeating inference', async t => {

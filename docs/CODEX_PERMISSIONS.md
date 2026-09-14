@@ -6,7 +6,7 @@ gap; exit1 means a fixture/protocol/assertion failure. No production gate change
 
 ## Observed on pristine Codex 0.154.0
 
-The final orb run passed with **20 scripted loopback model requests, 17 named
+The adapter-backed orb run passed with **20 scripted loopback model requests, 25 named
 assertions, 12 exact initial command approvals, and two explicit suffix-command
 declines**. Both roots and their actual native children attempted real
 `exec_command` reads of three distinct synthetic canaries:
@@ -30,6 +30,38 @@ all four turns complete before shutdown. Crucially, the process-wide default
 profile is **baseline**, not isolated. Thus the custom child's denial is not an
 accidental consequence of a default isolated profile. The custom root's supported
 profile selection propagates to the child in this bounded V1 spawn case.
+
+## Host-selected adapter boundary
+
+Both native roots now start through `CodexAdapter.submit` and real private
+`FileJournal` files, not direct fixture calls to thread/turn start. The fixture
+checks durable intent before thread/start, exact persisted thread before
+turn/start, and native thread/turn receipts after reopening the journal. Reopened
+duplicate submissions return the original receipt without RPC; adding/removing
+the profile rejects with `IDEMPOTENCY_CONFLICT`. Sleep and production verification
+remain false. This exercises submission persistence, not a complete observation
+journal, crash recovery admission, or task settlement.
+
+The adapter accepts optional constructor-only `permissionsProfile`, restricted
+to 1–128 ASCII letters, digits, underscores or hyphens. It stores the name in a
+private field and rejects malformed configuration; submission cannot select a
+profile, sandbox or config. A profile sends native `permissions` instead of
+`sandbox: "read-only"`; it does not change `approvalPolicy: "untrusted"`.
+The host must configure the named profile and explicitly initialize transport
+with experimental API capability. No service default activates this feature.
+
+The selected profile name participates in the durable fingerprint. Its absence
+preserves the prior fingerprint exactly for empty, dynamic-tool-only, MCP-only,
+and combined configuration. Unit tests verify those four old hash formats,
+reopened receipts, profile changes/removal, uncertain receipts, validation bounds,
+model-field rejection, constructor snapshotting, and unchanged gates.
+`node --test tests/runtime-codex-adapter.mjs` passes14 tests. The integrated
+`scripts/verify-codex.sh` also runs this native probe, the broader runtime suite
+and typecheck; report its current totals rather than the older extraction count.
+
+The fingerprint binds the **name**, not mutable TOML profile contents. Stable,
+host-controlled profile definitions remain a deployment/recovery prerequisite;
+this unit does not detect changing a definition while reusing its name.
 
 ## Exact supported configuration
 
@@ -77,8 +109,9 @@ not exclusions; this tag has no exact-full-argv rule.
 
 The initial no-approval diagnostic correctly exited2: `untrusted` prompts for
 unmatched commands including `cat` ([decision logic](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/core/src/exec_policy.rs#L809-L819)).
-The follow-up fixture uses exact per-request synthetic approvals within the
-owner's credential-free testing request; it does not change production authority.
+Exact synthetic per-request approvals fall within the owner's broader
+credential-free implementation/testing authority, not a new direct owner message
+or a production trust expansion.
 
 The final fixture keeps `approvalPolicy: "untrusted"`, sends only exact `cat`
 commands with `/bin/bash`, `login:false`, and `sandbox_permissions:"use_default"`,
@@ -111,7 +144,7 @@ it. None occurred in the passing run.
 All directories are private0700, files0600, and HOME/CODEX_HOME are disposable.
 Only PATH/LANG and these homes are inherited. Model responses are scripted over
 loopback; no credentials, accounts, external model requests, Worker admission,
-Sprite actions, source-module edits, or production trust changes are involved.
+Sprite actions, native patches, or production trust changes are involved.
 RPC waits, response bodies and request counts are bounded. Native turns finish,
 the native process stops, HTTP connections close and private files are removed.
 Printed evidence omits canary contents and arbitrary native transcripts.
