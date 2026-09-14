@@ -92,3 +92,24 @@ it('idle reads do not manufacture work or a perpetual polling alarm', async () =
   expect(setAlarm).not.toHaveBeenCalled();
   expect(deleteAlarm).toHaveBeenCalledOnce();
 });
+
+it.each(['alarm', 'missed-alarm-read'])('memory expiry through %s purges while runtime sleeps without creating work', async mode => {
+  const id = randomUUID(), source = randomUUID(), store = new Store(db);
+  store.event(source, bot, 'message.user', 'owner', null, { text: 'Synthetic expiry source' }, new Date().toISOString());
+  expect(await control.accept('owner', randomUUID(), 'expiry', { schema_version: 1, type: 'memory.put', payload: {
+    id, expected_revision: 0, scope: { kind: 'persona', id: bot }, text: 'Expiry canary', source_event_id: source,
+    expires_at: '2026-09-10T08:01:00+08:00', sensitivity: 'ordinary',
+  } })).toMatchObject({ ok: true, value: { status: 'applied' } });
+  expect(setAlarm).toHaveBeenLastCalledWith(Date.parse('2026-09-10T00:01:00.000Z'));
+  setAlarm.mockClear(); deleteAlarm.mockClear();
+  vi.setSystemTime(new Date('2026-09-10T00:01:00.000Z'));
+  if (mode === 'alarm') await control.alarm();
+  else expect(await control.getState('owner')).toMatchObject({ ok: true });
+  expect(db.all('SELECT body_json,deleted_at FROM objects WHERE id=?', id)).toEqual([{ body_json: '{}', deleted_at: '2026-09-10T00:01:00.000Z' }]);
+  expect(db.all('SELECT id FROM runs')).toEqual([]);
+  expect(db.all('SELECT id FROM controller_operations')).toEqual([]);
+  expect(db.all('SELECT phase,desired_state FROM lifecycle')).toEqual([{ phase: 'STOPPED', desired_state: 'STOP' }]);
+  expect(setAlarm).not.toHaveBeenCalled(); expect(deleteAlarm).toHaveBeenCalledOnce();
+  await control.alarm();
+  expect(db.all("SELECT actor_id FROM events WHERE type='memory.deleted'")).toEqual([{ actor_id: 'system:expiry' }]);
+});

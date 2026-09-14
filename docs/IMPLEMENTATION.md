@@ -12,6 +12,14 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 - Numeric cron/timezone/DST/misfire behavior, reviewed disabled bot import, flight deadline ledger, provider adapters, and Sprite activity-hold components.
 - Static portal and remote-only Electron desktop shell.
 
+Owner-authored memory expiry now arms a Worker alarm even while the runtime is
+asleep. Each reconciliation purges at most 100 due canonical memories, including
+their revisions and `memory.put` payloads, and rearms remaining work. Expiry
+invalidates active captured contexts without settling uncertain tasks, releasing
+locks, requesting inference or waking the runtime. This is not full retention or
+"forget everywhere": source events, terminal task snapshots, native transcripts
+and backups may still contain copies.
+
 Disposable service assembly now composes supervisor, bridge, native transport/router,
 per-root inherited MCP grants, child controls and conservative operation accounting.
 Its native child fixture exercises public owner cancellation through real Worker

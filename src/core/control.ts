@@ -136,14 +136,14 @@ export class ControlCore {
     const p=command.payload;
     if(p.scope.kind!=='global')this.store.get(p.scope.id!,p.scope.kind);
     requireThat(this.store.db.all('SELECT id FROM events WHERE id=?',p.source_event_id).length,'INVALID_INPUT','Memory must reference an existing source event.',422);
-    if(p.expires_at)requireThat(p.expires_at>now,'INVALID_INPUT','Memory expiry must be in the future.',422);
+    if(p.expires_at)requireThat(Date.parse(p.expires_at)>Date.parse(now),'INVALID_INPUT','Memory expiry must be in the future.',422);
     const revision=this.store.put(p.id,'memory',p,p.expected_revision,owner,now,p.source_event_id);
     this.store.event(this.options.uuid(),null,'memory.updated',owner,commandId,{id:p.id,revision,scope:p.scope},now);return p.id;
    }
    case 'memory.delete': {
     const p=command.payload;const memory=this.store.get<MemoryPut>(p.id,'memory');
     requireThat(memory.revision===p.expected_revision,'REVISION_CONFLICT','Reload memory before deleting.');
-    this.purgeMemory(p.id,owner,commandId,p.purge_transcripts,now);return p.id;
+    this.purgeMemories([p.id],owner,commandId,p.purge_transcripts,now);return p.id;
    }
    case 'room.publish': return this.publishRoom(owner,commandId,command.payload);
    case 'run.cancel': {
@@ -181,14 +181,26 @@ export class ControlCore {
    }
   }
  }
- private purgeMemory(id:string,owner:string,commandId:string|null,purgeTranscripts:boolean,now:string):void {
+ private purgeMemories(ids:string[],owner:string,commandId:string|null,purgeTranscripts:boolean,now:string):void {
   // Purge current and prior canonical text immediately; retain only tombstone identity.
-  this.store.db.exec("UPDATE objects SET body_json='{}',deleted_at=?,updated_at=?,revision=revision+1 WHERE id=?",now,now,id);
-  this.store.db.exec("UPDATE object_revisions SET body_json='{}' WHERE object_id=?",id);
-  this.store.db.exec("UPDATE commands SET payload_json='{}' WHERE type='memory.put' AND json_extract(payload_json,'$.id')=?",id);
+  const selected=new Set(ids),keys=JSON.stringify(ids);
+  this.store.db.exec("UPDATE objects SET body_json='{}',deleted_at=?,updated_at=?,revision=revision+1 WHERE id IN (SELECT value FROM json_each(?))",now,now,keys);
+  this.store.db.exec("UPDATE object_revisions SET body_json='{}' WHERE object_id IN (SELECT value FROM json_each(?))",keys);
+  this.store.db.exec("UPDATE commands SET payload_json='{}' WHERE type='memory.put' AND json_extract(payload_json,'$.id') IN (SELECT value FROM json_each(?))",keys);
   const runs=this.store.db.all<Run>("SELECT * FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')");
-  for(const run of runs){const context=JSON.parse(run.context_json) as ContextSnapshot;if(context.memories?.some(x=>x.id===id))this.store.db.exec("UPDATE runs SET status=?,error_code='CONTEXT_INVALIDATED',context_json=?,updated_at=? WHERE id=?",['claimed','running','finishing','cancelling'].includes(run.status)?'cancelling':'cancelled',JSON.stringify({...context,memories:context.memories.filter(x=>x.id!==id)}),now,run.id);}
-  this.store.event(this.options.uuid(),null,'memory.deleted',owner,commandId,{id,transcript_cleanup_requested:purgeTranscripts,transcript_cleanup_status:purgeTranscripts?'requires_runtime_verification':'not_requested'},now);
+  for(const run of runs){const context=JSON.parse(run.context_json) as ContextSnapshot;if(context.memories?.some(x=>selected.has(x.id)))this.store.db.exec("UPDATE runs SET status=?,error_code='CONTEXT_INVALIDATED',context_json=?,updated_at=? WHERE id=?",run.status==='recovery_required'?'recovery_required':['claimed','running','finishing','cancelling'].includes(run.status)?'cancelling':'cancelled',JSON.stringify({...context,memories:context.memories.filter(x=>!selected.has(x.id))}),now,run.id);}
+  for(const id of ids)this.store.event(this.options.uuid(),null,'memory.deleted',owner,commandId,{id,transcript_cleanup_requested:purgeTranscripts,transcript_cleanup_status:purgeTranscripts?'requires_runtime_verification':'not_requested'},now);
+ }
+ nextMemoryExpiry():string|null {
+  return this.store.db.all<{expires_at:string}>("SELECT json_extract(body_json,'$.expires_at') AS expires_at FROM objects WHERE kind='memory' AND deleted_at IS NULL AND json_extract(body_json,'$.expires_at') IS NOT NULL ORDER BY julianday(json_extract(body_json,'$.expires_at')),id LIMIT 1")[0]?.expires_at??null;
+ }
+ expireMemories():number {
+  return this.store.db.transaction(()=>{
+   const now=this.now();
+   const due=this.store.db.all<{id:string}>("SELECT id FROM objects WHERE kind='memory' AND deleted_at IS NULL AND julianday(json_extract(body_json,'$.expires_at'))<=julianday(?) ORDER BY julianday(json_extract(body_json,'$.expires_at')),id LIMIT 100",now);
+   if(due.length)this.purgeMemories(due.map(memory=>memory.id),'system:expiry',null,false,now);
+   return due.length;
+  });
  }
  flushFollowups(runId:string):void {
   const run=this.store.run(runId);
@@ -203,7 +215,7 @@ export class ControlCore {
   const persona=this.activePersona(personaId);
   const routine=routineId?this.store.get<RoutinePut>(routineId,'routine'):null;
   const now=this.now();
-  const memories=this.store.list<MemoryPut>('memory').filter(m=>(!m.body.expires_at||m.body.expires_at>now)&&(m.body.scope.kind==='global'||m.body.scope.kind==='persona'&&m.body.scope.id===personaId||m.body.scope.kind==='routine'&&m.body.scope.id===routineId));
+  const memories=this.store.list<MemoryPut>('memory').filter(m=>(!m.body.expires_at||Date.parse(m.body.expires_at)>Date.parse(now))&&(m.body.scope.kind==='global'||m.body.scope.kind==='persona'&&m.body.scope.id===personaId||m.body.scope.kind==='routine'&&m.body.scope.id===routineId));
   let contextEvents:ContextSnapshot['context_events']=[];
   if(roomId){const room=this.store.get<RoomPut>(roomId,'room');requireThat(room.body.member_ids.includes(personaId),'FORBIDDEN','Bot is not in this room.',403);const cursor=this.store.db.all<{consumed_sequence:number}>('SELECT consumed_sequence FROM consumer_cursors WHERE consumer_id=? AND conversation_id=?',personaId,roomId)[0]?.consumed_sequence??0;contextEvents=this.store.events(cursor,100,roomId).filter(e=>e.type==='room.context_update'&&(e.payload.recipient_ids as string[]).includes(personaId));}
   return {schema_version:1,persona,routine,memories,skills:new SkillCatalog(this.store,()=>this.now(),this.options.uuid).enabled(personaId),scope_key:`${personaId}/${routineId?`routine/${routineId}`:roomId?`room/${roomId}`:'personal'}`,instruction,room_id:roomId,context_events:contextEvents,task_summaries:this.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>("SELECT id,title,status,updated_at FROM runs WHERE role='background' AND persona_id=? ORDER BY updated_at DESC LIMIT 30",personaId),authorization_policy_ids:routine?.body.action_policy_ids??[]};
