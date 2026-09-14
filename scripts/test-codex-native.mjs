@@ -98,7 +98,7 @@ const report = { status: 'failed', codex: '0.154.0', requests: 0, toolContinuati
 try {
   const version = await promisify(execFile)(binary, ['--version'], { timeout: 10000 });
   assert.equal(version.stdout.trim(), 'codex-cli 0.154.0');
-  home = await mkdtemp(join(tmpdir(), 'clawbot-codex-native-'));
+  home = await mkdtemp(join(tmpdir(), 'hehebot-codex-native-'));
   await chmod(home, 0o700);
   workspace = join(home, 'workspace');
   await mkdir(workspace, { mode: 0o700 });
@@ -127,13 +127,13 @@ try {
       // still answering. This availability probe orders completion explicitly;
       // it does not assume one provider request per native turn.
       await waitFor(() => notifications.some(n => n.method === 'turn/completed' && n.params?.threadId === dynamicParentThread), 'dynamic parent completion before child response');
-      const probeTool = body.tools.find(tool => tool.name === 'clawbot_identity_probe' || tool.tools?.some(nested => nested.name === 'clawbot_identity_probe'));
+      const probeTool = body.tools.find(tool => tool.name === 'hehebot_identity_probe' || tool.tools?.some(nested => nested.name === 'hehebot_identity_probe'));
       report.dynamicChildToolsAvailable = Boolean(probeTool);
       if (!report.dynamicChildToolsAvailable) { sendEvents(res, message('CHILD_DYNAMIC_UNAVAILABLE')); return; }
       if (output) { assert.match(String(output.output), /DYNAMIC_IDENTITY_19_43/); sendEvents(res, message('CHILD_DYNAMIC_OK')); return; }
       sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID().replaceAll('-', '')}`,
         ...(probeTool.type === 'namespace' ? { namespace: probeTool.name } : {}),
-        name: 'clawbot_identity_probe', arguments: JSON.stringify({ left: 19, right: 43 }) }]);
+        name: 'hehebot_identity_probe', arguments: JSON.stringify({ left: 19, right: 43 }) }]);
       return;
     }
     if (raw.includes('DYNAMIC_PARENT_PROOF')) {
@@ -153,9 +153,9 @@ try {
         assert.match(String(output.output), /DYNAMIC_IDENTITY_19_43/);
         sendEvents(res, message('DYNAMIC_ROOT_OK')); return;
       }
-      assert.ok(body.tools.some(tool => tool.name === 'clawbot_identity_probe'));
+      assert.ok(body.tools.some(tool => tool.name === 'hehebot_identity_probe'));
       sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID().replaceAll('-', '')}`,
-        name: 'clawbot_identity_probe', arguments: JSON.stringify({ left: 19, right: 43 }) }]);
+        name: 'hehebot_identity_probe', arguments: JSON.stringify({ left: 19, right: 43 }) }]);
       return;
     }
     if (raw.includes('SPAWN_CHILD_PROOF')) {
@@ -201,7 +201,7 @@ try {
   await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
 
   transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 10_000, onToolCall: async params => {
-    assert.equal(params.tool, 'clawbot_identity_probe'); assert.equal(params.namespace, null);
+    assert.equal(params.tool, 'hehebot_identity_probe'); assert.equal(params.namespace, null);
     assert.deepEqual(params.arguments, { left: 19, right: 43 });
     dynamicCalls.push(structuredClone(params));
     return { success: true, contentItems: [{ type: 'inputText', text: 'DYNAMIC_IDENTITY_19_43' }] };
@@ -323,7 +323,7 @@ try {
   report.childOutlivesParent = true;
 
   const dynamicTools = [{
-    type: 'function', name: 'clawbot_identity_probe', description: 'Synthetic identity-only acceptance tool; no effects.',
+    type: 'function', name: 'hehebot_identity_probe', description: 'Synthetic identity-only acceptance tool; no effects.',
     inputSchema: { type: 'object', properties: { left: { type: 'integer' }, right: { type: 'integer' } }, required: ['left', 'right'], additionalProperties: false },
   }];
   const dynamicThread = (await transport.request('thread/start', { cwd: workspace, modelProvider: 'fixture', dynamicTools })).thread.id;

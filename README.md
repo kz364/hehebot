@@ -1,52 +1,31 @@
 # Hehebot — portable sleeping assistant
 
-The sleeping-assistant implementation now lives in `src/`, `public/`, and `runtime/`. It provides a local Cloudflare Worker portal, SQLite Durable Object command store and scheduler, fenced lifecycle controller, and provider adapters. **Execution is disabled; nothing has been deployed.**
+Hehebot is a personal-assistant control plane with a dedicated portal, durable Cloudflare Worker/SQLite state, scheduled work, scoped memory, task metadata, effect receipts, lifecycle fencing, and a replaceable execution boundary. One customer-owned cloud runtime hosts all personas; the runtime may sleep while the control plane continues accepting messages and schedules.
 
-Repository: [kz364/hehebot](https://github.com/kz364/hehebot). Existing `clawbot` package, application and storage identifiers are retained for compatibility; renaming the repository does not migrate installed state.
+The only supported execution harness is **Codex app-server 0.154.0**. Fly Sprites is the selected initial runtime provider. The optional Electron desktop shell displays the remote portal and does not run an agent locally.
 
-The selected initial harness is **Codex app-server 0.154.0**, behind our external orchestration boundary. [Direct Codex setup](docs/CODEX_RUNTIME_SETUP.md) installs and probes the pinned runtime without credentials or inference. [The optional desktop shell](desktop/README.md) displays the remote portal without running an agent on the client. Existing OpenClaw adapters and acceptance scripts remain reference evidence, not direct-Codex verification.
+**Current status:** local implementation and scripted integration fixtures only. Production execution gates remain false. Credentials were verified locally, but no cloud deployment or authenticated model inference has been completed. A root Codex turn completing is not proof that tools, children, effects, output delivery, or persistence have settled.
 
-Selected runtime: **Fly Sprites**. The portal includes a reviewed batch import for five bots and seven disabled routines, plus task-specific follow-up/cancel controls. See [bot setup](docs/BOT_SETUP.md) and [native orchestration gates](docs/NATIVE_ORCHESTRATION.md). Follow [docs/AUTH_SETUP.md](docs/AUTH_SETUP.md) for accounts, trial activation, credentials and owner sign-in.
+## Start here
 
-Start with [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) for local commands, tested scope, and remaining native-runtime gates. [SPEC.md](SPEC.md) describes the target behavior; it is broader than the current implementation.
+- [Implementation status](docs/IMPLEMENTATION.md)
+- [Agent handoff](docs/HANDOFF.md)
+- [Product specification](SPEC.md), [UX requirements](PRODUCT_UX_SPEC.md), and [project intent](docs/PROJECT_INTENT.md)
+- [Codex runtime setup](docs/CODEX_RUNTIME_SETUP.md)
+- [Account and deployment checklist](docs/AUTH_SETUP.md)
+- [Bot setup](docs/BOT_SETUP.md), [routine instructions](docs/BOT_ROUTINE_INSTRUCTIONS.md), and [orchestration acceptance](docs/BOT_ORCHESTRATION_ADDENDUM.md)
 
-For repeatable direct-Codex verification in a Linux orb, run `bash scripts/verify-codex.sh`. It installs dependencies, generates Worker types, verifies the pinned Codex runtime, and runs setup, core, runtime, HTTP, native, MCP, dynamic-tool and supervisor fixtures plus a build dry run. Native fixtures use scripted loopback model responses; they do not establish authenticated model judgment or production readiness.
+## Local verification
 
-For historical OpenClaw/browser/desktop verification, run `bash .agents/setup`, `bash scripts/setup-local.sh`, `bash scripts/setup-desktop.sh`, then `node scripts/verify-local.mjs --desktop`. Omit desktop setup and the flag for headless checks. [Setup and verification](docs/ORB_TESTING.md) records the limits; [browser/desktop and dedicated messaging](docs/AUTOMATION_SETUP.md) records the reference integrations. The portal is the owner messaging channel; WhatsApp is not required for primary chat.
+```sh
+bash .agents/setup
+bash scripts/verify-codex.sh
+npm ci --prefix desktop
+npm test --prefix desktop
+```
 
-## Picking up development with an agent
+The verification script installs/probes the pinned Codex runtime, runs credential-free control/runtime/HTTP fixtures, and performs a build dry run. Scripted loopback responses do not establish authenticated inference, model judgment, production settlement, live provider behavior, connector permissions, Mac hardware behavior, or production readiness. Do not rely on historical exact test totals; report the output of the current checkout.
 
-Start with [the agent handoff](docs/HANDOFF.md): it records the current baseline, code ownership, verified behavior, upstream gaps, ordered next work and private-state boundaries. [AGENTS.md](AGENTS.md) supplies repository-wide engineering rules. A fresh checkout can run the credential-free suite above; it does not inherit the original developer's accounts or deployment permissions.
+For local portal development, run `npm ci`, `npm run types`, and `npm run dev`. Local authentication bypass is loopback-only and must never be exposed publicly.
 
-Suggested first prompt:
-
-> Read AGENTS.md, README.md, docs/HANDOFF.md, docs/IMPLEMENTATION.md and docs/PROJECT_INTENT.md. Run bash scripts/verify-codex.sh, then continue the first unresolved handoff item that this environment can support. Preserve exact task identity, unknown-outcome handling and disabled production gates. Treat specifications as targets, historical OpenClaw evidence as reference, and report executed checks separately from unverified claims.
-
-## Documentation map
-
-- [Full specification](SPEC.md) and [project intent / decision history](docs/PROJECT_INTENT.md).
-- [Bot experience additions](PRODUCT_UX_SPEC.md): portal/task/routine requirements; direct-Codex implementation is in progress, not feature-complete.
-- [Implementation plan](IMPLEMENTATION_PLAN.md) and [implemented versus pending](docs/IMPLEMENTATION.md).
-- [Bot instructions and routines](docs/BOT_ROUTINE_INSTRUCTIONS.md), [bot setup](docs/BOT_SETUP.md), and [intent-aware orchestration and interruption](docs/BOT_ORCHESTRATION_ADDENDUM.md).
-- [Grok behavior audit and parity gaps](docs/GROK_PARITY.md), [multi-orb verification and Amp model testing](docs/ORB_TESTING.md), and [coding-agent context](AGENTS.md).
-- [Authentication checklist](docs/AUTH_SETUP.md), [native/Mac authentication](docs/NATIVE_AUTH_SETUP.md), and [setup record](SETUP.md).
-- [Publication and verification snapshot](docs/PUBLICATION.md).
-
-The repository includes all project source, tests, contracts and documentation. Credentials, private identity profiles, raw personal exports, local databases/browser state and generated dependency/build caches are excluded.
-
-## Earlier remote-Gateway setup
-
-One authoritative VPS Gateway owns sessions, memory, automations, credentials and a persistent browser. The Mac companion provides optional browser, files, shell and desktop capabilities over a paired private connection. **No VM has been provisioned or contacted.**
-
-- [SETUP.md](SETUP.md): actual changes, verification, remaining actions, undo.
-- [docs/REMOTE.md](docs/REMOTE.md): eight-step deployment, network, state inventory, backup, recovery and updates.
-- [docs/LOCAL.md](docs/LOCAL.md): Mac setup, permissions, two browser modes, test procedure.
-- `config/`: tracked, secret-free machine templates; `agent/`: portable user/agent material.
-- `scripts/`: thin upstream command wrappers; no orchestration or OpenClaw fork.
-- `tests/`: local form and upload fixture. `.local/`: ignored private test state/evidence.
-
-Installed CLI: `~/.local/share/openclaw/bin/openclaw`, linked from `~/.local/bin/openclaw`.
-Mac app: `~/Applications/OpenClaw.app`.
-Active Mac config: `~/.openclaw/openclaw.json` (remote mode, future endpoint pending).
-
-Do not run `openclaw onboard --install-daemon` on the Mac: this topology reserves the persistent Gateway for the VPS. Follow `docs/REMOTE.md` when the VM exists.
+Private credentials, OAuth state, personal profiles/exports, local databases, browser state, logs, dependencies, and build caches are excluded from Git. Each installation authorizes its own model and connector accounts; no paid API fallback or credential sharing is implicit.

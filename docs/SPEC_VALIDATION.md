@@ -1,6 +1,6 @@
 # Specification validation — 2026-09-10
 
-Scope: documentation and contract artifacts only. No deployed service, model call, cloud resource, native Gateway execution, or production integration was tested in this specification pass.
+Scope: documentation and contract artifacts only. No deployed service, model call, cloud resource, native runtime execution, or production integration was tested in this specification pass.
 
 Passed:
 

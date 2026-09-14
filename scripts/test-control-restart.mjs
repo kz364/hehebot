@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Real local HTTP and disk-backed Durable Object restart acceptance. Execution
-// stays disabled. No native Gateway, model, provider, or connector is invoked.
+// stays disabled. No native runtime, model, provider, or connector is invoked.
 import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { appendFileSync } from 'node:fs';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 
 const cwd = fileURLToPath(new URL('..', import.meta.url));
-const directory = await mkdtemp(join(tmpdir(), 'claw-control-restart-'));
+const directory = await mkdtemp(join(tmpdir(), 'hehe-control-restart-'));
 let current, requests = 0, restarts = 0, stage = 'start';
 async function start() {
   const child = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--env', 'local', '--ip', '127.0.0.1', '--port', '0', '--persist-to', directory], {

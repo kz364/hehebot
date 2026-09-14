@@ -1,11 +1,11 @@
 # Bot experience additions and runtime decision gate
 
 Status: normative UX detail incorporated into SPEC v0.5, not implemented functionality.
-Owner requested this specification after reviewing Hermes Bot Mode and Hermes Bot Kit. [SPEC section 21](SPEC.md#21-consolidated-product-and-apache-reuse-contract) is now the consolidated entry point for existing contracts, all UX01–UX15 requirements, Apache reuse and sleeping-container acceptance R01–R08. Keep the detailed UX requirements here rather than maintaining duplicate copies. Implementation remains paused pending the client/runtime decision and the owner's continuation; this document does not authorize deployment, account connections, copying credentials, or activating routines.
+[SPEC section 21](SPEC.md#21-consolidated-product-and-apache-reuse-contract) is the consolidated entry point for S/O, UX01–UX15, Apache reuse, and sleeping-container acceptance R01–R08. Codex app-server 0.154.0 is selected; this document does not authorize deployment, account connections, copying credentials, or activating routines.
 
 ## 1. Scope and precedence
 
-Extend the existing Clawbot portal and control plane with a small, coherent bot experience. Preserve the safety, authorization, scoped-memory, resource-lock, receipt, and cold-start requirements in [SPEC.md](SPEC.md) and [project intent](docs/PROJECT_INTENT.md). The additions below describe product behavior independently of the chosen agent runtime. They do not silently replace the current OpenClaw requirement: that choice is explicitly under review.
+Extend the Hehebot portal and control plane with a small, coherent bot experience. Preserve the safety, authorization, scoped-memory, resource-lock, receipt, and cold-start requirements in [SPEC.md](SPEC.md) and [project intent](docs/PROJECT_INTENT.md). Codex app-server 0.154.0 is the sole harness.
 
 The default product consists of conversations, tasks, routines, and an optional computer view. It must not require understanding native sessions, backend processes, peer gateways, or model-harness internals. One installation has one authoritative execution host; bots do not require individual VMs. A local device is an optional peripheral, not an additional authority.
 
@@ -82,7 +82,7 @@ These sources were inspected, not benchmarked as a deployed alternative. Source 
 - Provide a contextual computer panel with explicit device selection, connection state, thumbnail/view/fullscreen, and a clear distinction between viewing and controlling.
 - Keep one viewer connection when toggling fullscreen where supported. Viewing old history must not wake compute. Live-task auto-connect may follow authoritative activity only under an explicit viewing preference.
 - Showing a screen must not grant control or bypass task/device resource locks. Manual control requires exclusive ownership and confirmed agent pause/settlement; otherwise show view-only or block handoff.
-- Use authenticated, origin-restricted transport. Never expose raw Gateway/CDP/VNC endpoints, place secrets in browser storage/URLs, or copy personal browser profiles.
+- Use authenticated, origin-restricted transport. Never expose raw runtime/CDP/VNC endpoints, place secrets in browser storage/URLs, or copy personal browser profiles.
 - Prefer the selected runtime's supported browser/computer boundary. VNC/H.264 is optional viewing infrastructure, not a replacement agent harness or proof of tool settlement.
 - Warm resume requires reconnect and ownership checks. Cold wake invalidates live tab/frame references; restore from durable task state and re-observe the page. Do not claim arbitrary unsaved forms survive.
 - A computer timeout is an unknown outcome until reconciled. Never blindly repeat submission, typing, payment, or another mutation.
@@ -143,7 +143,7 @@ These sources were inspected, not benchmarked as a deployed alternative. Source 
 - The coordinator remains available during long work and chooses answer/status, new task, exact-task steer, deferred follow-up, or cancellation according to intent. Deterministic UI/status operations bypass inference. A coordinator may use a different supported model/harness from an executor; model choice is distinct from tool-loop/harness choice.
 - Adapters declare and behaviorally test submission, observation/reconnect, tool/child activity, steering, cancellation settlement, auth, scoped context, skills and browser/computer tools. Unsupported capabilities are explicit: do not emulate steering as cancellation/restart without disclosure, or turn an unsupported task into silent fallback to another provider.
 - Swapping an idle executor preserves application state. Active tasks stay pinned to their originating adapter/version until settled or explicitly recovered; native sessions need not be transferable. Retain unknown effect receipts and resource locks across changes. Capability loss blocks affected tasks/routines and explains the remedy.
-- Browser and computer tooling is separable from the harness. Headless browser automation requires no desktop app; pixel-based GUI work requires a display session plus capture/input driver and optional viewer. Neither implies the Codex desktop application, Hermes Desktop, nor OpenClaw is mandatory. Prove supported tool integration, approval enforcement and settlement for the chosen combination.
+- Browser and computer tooling is separable from the harness. Headless browser automation requires no desktop app; pixel-based GUI work requires a display session plus capture/input driver and optional viewer. The Codex desktop application is not mandatory. Prove supported tool integration, approval enforcement and settlement.
 - Provider independence means supported choices, not that every model works in every harness. Auth eligibility, quotas and refresh remain provider-specific. Amp's bounded synthetic smoke tool is not a reusable executor proxy or proof of subscription-only billing; never copy Amp OAuth caches to make another VM work.
 - Acceptance: run the same admitted task/skill/routine fixtures through candidate adapters with equal policy and tools, preserve application IDs after an idle switch, reject missing capabilities before execution, and retain uncertainty across restart. Compare coordinator responsiveness and measured total inference, not only executor token counts.
 
@@ -162,27 +162,15 @@ Delivery order after runtime decision: (1) complete one real chat/task/result/re
 
 UI acceptance requires rendered desktop/mobile states and keyboard/accessible controls, including loading, offline, stale, needs-you, and recovery states. Native acceptance must distinguish scripted-provider proof, real-model proof, provider-specific sleep semantics, and actual device hardware. Production gates remain false until the relevant native and deployment contracts pass.
 
-## 4. Runtime foundation decision before implementation
+## 4. Runtime foundation
 
-OpenClaw is currently selected, but the owner has reopened whether it should be the foundation. No migration is authorized by this document. Evaluate three concrete candidates, not a generic multi-runtime framework:
-
-| Candidate | What it can save | What remains ours / must be proven |
-| --- | --- | --- |
-| OpenClaw as native runtime behind our portal | Managed auth, sessions, native tasks, browser, node/device ecosystem | Avoid overlapping task ownership; prove supported admission/event/cancel/settlement integration and cold-start recovery |
-| Codex app-server directly behind our control plane | Remove an intermediate Gateway/task translation layer; native Codex thread/tool loop | Build or integrate scoped browser/device/connectors, auth lifecycle, background orchestration, event mapping, and upgrades; not simply remove OpenClaw |
-| Minimal Hermes, optionally native Codex | Bot-oriented UX, routines, shared profiles and gateway-owned groups | Verify release/runtime feature compatibility, missing native-Codex tools, overhead, portal/headless access, sleep integration and peripheral-node topology |
-
-Do not write a new model/tool loop. The application owns durable accepted work and external effect policy; the chosen native runtime owns execution internals. Specify which component owns dispatch and cancellation before adding another scheduler. Prefer supported APIs/hooks, no native database edits or hashed bundle imports.
-
-Decision evidence: one representative workflow per candidate covering an available coordinator during a long task, exact steer/cancel, durable reply, crash with an uncertain action, browser/device recovery, model auth continuity, and reproducible setup. Compare remaining implementation and maintenance burden, not sunk cost or feature count. Account/runtime authorization must stay isolated; evaluation is not permission to copy this installation's credentials.
-
-Current evidence is asymmetric: OpenClaw has executed synthetic integration and two real OAuth/Codex turns in an orb; Hermes was inspected, not run; direct Codex as the full Clawbot executor has not been implemented or compared. None has proved the complete production workload here. Reassess on a tested pinned release, not assumed future upstream improvement.
+Codex app-server 0.154.0 is the sole harness. Do not write a new model/tool loop. The application owns durable accepted work and external-effect policy; Codex owns execution internals. Specify dispatch and cancellation ownership, use supported APIs, and never edit runtime databases or import hashed internals. Prove an available coordinator during long work, exact steer/cancel, durable reply, crash uncertainty, browser/device recovery, auth continuity, and reproducible setup.
 
 Non-goals: cloning proprietary internals or commercial usage restrictions, compulsory Desktop clients, a new model/tool loop, unrelated pet/kanban products, and unrestricted self-modification. Team administration, mobile/native distribution, specialized integrations and managed payments need explicit parity rows and feasibility evidence before claiming the entire advertised product replaced; they are not established by a personal portal or generic tool adapter.
 
 ## 5. Research traceability and parity accounting
 
-Inspected 2026-09-13. These are advertised behaviors and source observations, not live acceptance of Grok or Hermes. [The earlier audit](docs/GROK_PARITY.md) remains useful for implementation gaps; this expanded scope supersedes its treatment of teaching/template capability as optional omissions and its description of the 20-enabled-routine cap as settled parity policy. Older execution/test statements must be checked against the latest recorded evidence, not interpreted as current test failures.
+These are advertised behaviors and source observations, not live acceptance of Grok or Hermes. Track implementation gaps directly against UX01–UX15; the 20-enabled-routine cap remains a capacity gap, not settled parity policy.
 
 | Evidence | Requirements / outstanding decision |
 | --- | --- |

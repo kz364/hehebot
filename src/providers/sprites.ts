@@ -96,7 +96,7 @@ export class SpritesProvider implements RuntimeProvider {
     // Starting an already-running warm Service is not an application wake event.
     // Explicit authenticated HTTP notification wakes its event loop without idle polling.
     try{
-      const wake=await this.fetcher(new URL('/wake',target),{method:'POST',headers:{Authorization:`Bearer ${this.token}`,'X-Claw-Wake-Token':this.wakeTarget!.token,'Content-Type':'application/json'},body:JSON.stringify(command),redirect:'error',signal:AbortSignal.timeout(15000)});
+      const wake=await this.fetcher(new URL('/wake',target),{method:'POST',headers:{Authorization:`Bearer ${this.token}`,'X-Hehe-Wake-Token':this.wakeTarget!.token,'Content-Type':'application/json'},body:JSON.stringify(command),redirect:'error',signal:AbortSignal.timeout(15000)});
       if(wake.status!==202)throw new Error('not accepted');
       const stream=wake.body?.getReader();if(!stream)throw new Error('missing response');
       let size=0,text='';const decode=new TextDecoder();

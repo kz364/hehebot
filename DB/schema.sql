@@ -1,4 +1,4 @@
--- Proposed application schema v1; no native OpenClaw tables are modified.
+-- Proposed application schema v1; no native harness tables are modified.
 -- Validate JSON bodies with SCHEMAS/contracts.json and enforce ownership/references
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;

@@ -5,7 +5,7 @@
     "id": "REPLACE_WITH_SPRITE_NAME",
     "scope": "REPLACE_WITH_ORG_SLUG"
   },
-  "service": "claw-supervisor",
+  "service": "hehe-supervisor",
   "lifecycleVerified": false,
   "wakeUrl": "https://REPLACE_WITH_SPRITE_NAME-REPLACE_WITH_ORG_URL_ID.sprites.app"
 }

@@ -9,7 +9,7 @@ import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 const input = { attemptId: 'attempt1', installationId: 'installation1', personaId: 'assistant',
   scope: 'conversation', scopeId: 'room1', message: 'Read the task context', model: 'gpt-5.4' };
 async function fixture(t, rpc) {
-  const cwd = await mkdtemp(join(tmpdir(), 'claw-codex-'));
+  const cwd = await mkdtemp(join(tmpdir(), 'hehe-codex-'));
   t.after(() => rm(cwd, { recursive: true, force: true }));
   const journal = new FileJournal(cwd);
   const calls = [];

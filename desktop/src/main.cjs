@@ -21,7 +21,7 @@ function secureWindow(origin, loginOrigins) {
     height: 800,
     minWidth: 720,
     minHeight: 520,
-    title: 'Clawbot Portal',
+    title: 'Hehebot Portal',
     show: false,
     webPreferences: {
       contextIsolation: true,
@@ -90,9 +90,9 @@ async function configureAuthOriginsFromClipboard() {
 
 function installMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([{
-    label: 'Clawbot Portal',
+    label: 'Hehebot Portal',
     submenu: [
-      { label: 'About Clawbot Portal', role: 'about' },
+      { label: 'About Hehebot Portal', role: 'about' },
       { type: 'separator' },
       { label: 'Switch Portal to Origin on Clipboard…', click: () => void changeOriginFromClipboard() },
       { label: 'Configure Login Origins from Clipboard…', click: () => void configureAuthOriginsFromClipboard() },
@@ -129,7 +129,7 @@ app.whenReady().then(async () => {
       const proposed = parsePortalOrigin(clipboard.readText().trim());
       const result = await dialog.showMessageBox({
         type: 'question', buttons: ['Quit', 'Use Clipboard Origin'], defaultId: 0, cancelId: 0,
-        title: 'Set up Clawbot Portal', message: proposed,
+        title: 'Set up Hehebot Portal', message: proposed,
         detail: 'Use this HTTPS portal origin from the clipboard? It will be stored in a private local configuration.'
       });
       if (result.response !== 1) { app.quit(); return; }
@@ -141,7 +141,7 @@ app.whenReady().then(async () => {
     installMenu();
     mainWindow = secureWindow(portalOrigin, authOrigins);
   } catch (error) {
-    await dialog.showMessageBox({ type: 'error', title: 'Clawbot Portal could not start', message: error.message });
+    await dialog.showMessageBox({ type: 'error', title: 'Hehebot Portal could not start', message: error.message });
     app.quit();
   }
 });

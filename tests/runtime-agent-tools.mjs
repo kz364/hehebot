@@ -43,7 +43,7 @@ test('initialize, ping, list and initialized notifications use JSON-RPC envelope
 test('fixed tools reject unsupported methods, owner review and malformed input locally', async () => {
   const { handle, calls } = fixture();
   assert.equal((await handle({ jsonrpc: '2.0', id: 1, method: 'owner/command' })).error.code, -32601);
-  assert.equal((await handle(call(2, 'clawbot_review_skill', skill))).error.code, -32602);
+  assert.equal((await handle(call(2, 'hehebot_review_skill', skill))).error.code, -32602);
   assert.equal((await handle(call(3, AGENT_TOOL_NAMES[0], { ...skill, name: 'wrong level' }))).error.code, -32602);
   assert.equal((await handle(call(4, AGENT_TOOL_NAMES[0], skill, { actor: 'owner', identity: {} }))).error.code, -32602);
   assert.equal(calls.length, 0);
@@ -72,7 +72,7 @@ test('routine uses canonical shape and backend is called exactly once without re
 test('run and delete tools preserve revision checks and cannot silently save a routine', async () => {
   const { handle, calls } = fixture();
   const payload = { id: uuid(4), expected_revision: 7 };
-  for (const [tool, type] of [['clawbot_run_routine', 'routine.run'], ['clawbot_delete_routine', 'routine.delete']]) {
+  for (const [tool, type] of [['hehebot_run_routine', 'routine.run'], ['hehebot_delete_routine', 'routine.delete']]) {
     await handle(call(1, tool, payload));
     assert.deepEqual(calls.at(-1)[1].command, { schema_version: 1, type, payload });
     assert.equal((await handle(call(2, tool, { id: uuid(4) }))).error.code, -32602);
@@ -83,7 +83,7 @@ test('run and delete tools preserve revision checks and cannot silently save a r
 test('routine read tool routes only a bounded query with host-owned identity', async () => {
   const requests = [];
   const { handle } = fixture({ request: async (...args) => { requests.push(args); return { routines: [], next_cursor: null }; } });
-  const message = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'clawbot_list_routines', arguments: { after: uuid(12) } } };
+  const message = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'hehebot_list_routines', arguments: { after: uuid(12) } } };
   assert.deepEqual(JSON.parse((await handle(message)).result.content[0].text), { routines: [], next_cursor: null });
   assert.deepEqual(requests, [['agent-routines', { after: uuid(12), identity: config.identity, run_id: config.runId, attempt: config.attempt }]]);
   message.params.arguments.identity = { epoch: 99 };
@@ -94,7 +94,7 @@ test('skill read binds host identity and rejects mismatched or malformed returne
   const requests = [];
   let result = { skill: { id: uuid(3), revision: 7, body: skill.body } };
   const { handle } = fixture({ request: async (...args) => { requests.push(args); return result; } });
-  const message = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'clawbot_read_skill', arguments: { skill_id: uuid(3) } } };
+  const message = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'hehebot_read_skill', arguments: { skill_id: uuid(3) } } };
   assert.deepEqual(JSON.parse((await handle(message)).result.content[0].text), result);
   assert.deepEqual(requests, [['agent-skill', { skill_id: uuid(3), identity: config.identity, run_id: config.runId, attempt: config.attempt }]]);
   for (const value of [{ id: uuid(4), revision: 7 }, { id: uuid(3), revision: 0 }, { id: uuid(3), revision: 1.5 }]) {
@@ -112,7 +112,7 @@ test('allowedTools is a host allowlist and cannot name owner-only commands', asy
 });
 
 test('real CLI accepts private grants but rejects symlinks and oversized frames without leaking secrets', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'clawbot-tools-cli-'));
+  const dir = await mkdtemp(join(tmpdir(), 'hehebot-tools-cli-'));
   try {
     const tokenFile = join(dir, 'token'), grant = join(dir, 'grant'), link = join(dir, 'link');
     await writeFile(tokenFile, 'private-fixture-token', { mode: 0o600 });
@@ -120,7 +120,7 @@ test('real CLI accepts private grants but rejects symlinks and oversized frames 
     await symlink(grant, link);
     const run = (path, input) => new Promise((resolve, reject) => {
       const child = spawn(process.execPath, ['runtime/agent-tools.mjs'], {
-        env: { PATH: process.env.PATH, CLAWBOT_AGENT_TOOLS_CONFIG: path }, timeout: 5000,
+        env: { PATH: process.env.PATH, HEHEBOT_AGENT_TOOLS_CONFIG: path }, timeout: 5000,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
       let stdout = '', stderr = '';
@@ -135,7 +135,7 @@ test('real CLI accepts private grants but rejects symlinks and oversized frames 
     for (const [path, input] of [[link, ping], [grant, 'x'.repeat(1024 * 1024 + 1)]]) {
       const failed = await run(path, input);
       assert.equal(failed.code, 1); assert.equal(failed.stdout, '');
-      assert.equal(failed.stderr, 'clawbot-agent-tools: startup failed\n');
+      assert.equal(failed.stderr, 'hehebot-agent-tools: startup failed\n');
     }
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

@@ -7,7 +7,7 @@ import { fixture, bot } from './helpers';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { ExecutionBridge } from '../runtime/execution-bridge.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
-import { OpenClawAdapter } from '../runtime/openclaw-adapter.mjs';
+import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 
 let f: ReturnType<typeof fixture>, life: LifecycleCore, identity: Identity, directory: string;
 let nativeCalls: number, lose: string | undefined;
@@ -15,7 +15,7 @@ beforeEach(async () => {
   f = fixture(true); life = new LifecycleCore(f.store, f.core);
   f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
   identity = life.registerBoot(randomUUID()); life.ready(identity);
-  directory = await mkdtemp(join(tmpdir(), 'clawbot-bridge-'));
+  directory = await mkdtemp(join(tmpdir(), 'hehebot-bridge-'));
   nativeCalls = 0; lose = undefined;
 });
 afterEach(async () => { f.close(); await rm(directory, { recursive: true, force: true }); });
@@ -23,10 +23,14 @@ function enqueue() {
   return f.accept({ schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Synthetic bridge request' } }).resource_id!;
 }
 function bridge(testMode = true) {
-  const native = new OpenClawAdapter({ testMode, journal: new FileJournal(join(directory, 'native')), rpc: async () => {
-    nativeCalls++;
-    if (lose === 'native') throw new Error('lost native admission response');
-    return { runId: 'native-bridge-result' };
+  const native = new CodexAdapter({ cwd: directory, testMode, journal: new FileJournal(join(directory, 'native')), rpc: async (method: string) => {
+    if (method === 'thread/start') return { thread: { id: 'native-bridge-thread' } };
+    if (method === 'turn/start') {
+      nativeCalls++;
+      if (lose === 'native') throw new Error('lost native admission response');
+      return { turn: { id: 'native-bridge-result' } };
+    }
+    throw new Error('Unexpected native call');
   } });
   const control = { request: async (type: string, p: any) => {
     let result;
@@ -38,7 +42,7 @@ function bridge(testMode = true) {
     return result;
   } };
   return new ExecutionBridge({ control, native, journal: new FileJournal(join(directory, 'bridge')), identity,
-    installationId: 'synthetic-installation', personas: { [bot]: { agentId: 'chief-of-staff', model: 'openai/gpt-5.5' } } });
+    installationId: 'synthetic-installation', personas: { [bot]: { agentId: 'chief-of-staff', model: 'gpt-5.5' } } });
 }
 function settled(row: any) {
   return { attemptId: row.attemptId, nativeRunId: row.nativeRunId, rootSettled: true, toolsSettled: true,
@@ -69,7 +73,7 @@ it('sends skill descriptors while retaining the full admitted snapshot in custod
   });
   const row = await executor.claimNext();
   expect(JSON.parse(input.message).skills).toEqual([{ id: skill.id, revision: 7, name: 'Review',
-    description: 'Review a draft', when_to_use: 'Before publishing', load_with: 'clawbot_read_skill' }]);
+    description: 'Review a draft', when_to_use: 'Before publishing', load_with: 'hehebot_read_skill' }]);
   expect(input.message).not.toContain('PRIVATE PROCEDURE SENTINEL');
   expect(JSON.parse(row.claim.run.context_json).skills).toEqual([skill]);
 });

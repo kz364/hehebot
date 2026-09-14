@@ -16,7 +16,7 @@ beforeEach(async () => {
   f = fixture(true); life = new LifecycleCore(f.store, f.core, { idleMode: true });
   f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
   const identity = life.registerBoot(randomUUID()); life.ready(identity);
-  directory = await mkdtemp(join(tmpdir(), 'claw-supervisor-'));
+  directory = await mkdtemp(join(tmpdir(), 'hehe-supervisor-'));
   calls = []; cancellations = []; releases = 0; nativeCalls = 0; hook = undefined;
   eventBind = async () => {};
   const control = { request: async (type: string, p: any) => {

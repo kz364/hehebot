@@ -4,8 +4,8 @@ import { requireThat } from './errors';
 import type {ContextSnapshot,Run} from './types';
 import type {Identity,LifecycleCore} from './lifecycle';
 export type NativeChildReceipt={parent_run_id:string;parent_attempt:number;persona_id:string;native_run_ref:string;native_session_key:string;title:string};
-/** Metadata adapter for observed native sessions_spawn receipts. Native OpenClaw
- * owns child dispatch and concurrency; this class never creates a native task. */
+/** Metadata ledger for observed native child receipts. The harness owns child
+ * dispatch; mapping Codex thread/turn identities into this ledger remains separate integration. */
 export class NativeTaskLedger {
  constructor(private store:Store,private core:ControlCore,private lifecycle:LifecycleCore){}
  register(identity:Identity,input:NativeChildReceipt):Run {

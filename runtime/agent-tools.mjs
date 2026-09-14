@@ -8,11 +8,11 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { ControlClient } from './control-client.mjs';
 
-export const AGENT_TOOL_NAMES = Object.freeze(['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_run_routine', 'clawbot_delete_routine', 'clawbot_list_routines', 'clawbot_read_skill']);
-const COMMAND_TYPES = Object.freeze({ clawbot_propose_skill: 'skill.propose', clawbot_save_routine: 'routine.put', clawbot_run_routine: 'routine.run', clawbot_delete_routine: 'routine.delete' });
+export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill']);
+const COMMAND_TYPES = Object.freeze({ hehebot_propose_skill: 'skill.propose', hehebot_save_routine: 'routine.put', hehebot_run_routine: 'routine.run', hehebot_delete_routine: 'routine.delete' });
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_OUTSTANDING = 16;
-const CONFIG_ENV = 'CLAWBOT_AGENT_TOOLS_CONFIG';
+const CONFIG_ENV = 'HEHEBOT_AGENT_TOOLS_CONFIG';
 
 const clone = value => structuredClone(value);
 const rpcError = (id, code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
@@ -79,7 +79,7 @@ export function createAgentToolsHandler({ controlClient, config, contracts }) {
     if (message.method === 'notifications/initialized' || message.method === 'initialized') return notification ? undefined : rpcError(message.id, -32600, 'Invalid Request');
     if (notification) return undefined;
     if (message.method === 'initialize') return { jsonrpc: '2.0', id: message.id, result: {
-      protocolVersion: '2024-11-05', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'clawbot-agent-tools', version: '0.1.0' },
+      protocolVersion: '2024-11-05', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'hehebot-agent-tools', version: '0.1.0' },
     } };
     if (message.method === 'ping') return { jsonrpc: '2.0', id: message.id, result: {} };
     if (message.method === 'tools/list') return { jsonrpc: '2.0', id: message.id, result: { tools: clone(visible) } };
@@ -93,12 +93,12 @@ export function createAgentToolsHandler({ controlClient, config, contracts }) {
     const payload = clone(args.payload);
     if (type === 'skill.propose') payload.provenance = { kind: 'model', source_ref: config.runId };
     try {
-      if (name === 'clawbot_read_skill') {
+      if (name === 'hehebot_read_skill') {
         const result = await controlClient.request('agent-skill', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
         if (result?.skill?.id !== args.skill_id || !Number.isSafeInteger(result.skill.revision) || result.skill.revision < 1) throw new Error('INVALID_SKILL_RESULT');
         return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify(result) }] } };
       }
-      if (name === 'clawbot_list_routines') {
+      if (name === 'hehebot_list_routines') {
         const result = await controlClient.request('agent-routines', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
         if (!Array.isArray(result?.routines) || !(result.next_cursor === null || typeof result.next_cursor === 'string')) throw new Error('INVALID_QUERY_RESULT');
         return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify(result) }] } };
@@ -166,5 +166,5 @@ export async function runAgentToolsCli() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  runAgentToolsCli().catch(() => { process.stderr.write('clawbot-agent-tools: startup failed\n'); process.exitCode = 1; });
+  runAgentToolsCli().catch(() => { process.stderr.write('hehebot-agent-tools: startup failed\n'); process.exitCode = 1; });
 }

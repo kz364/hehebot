@@ -135,7 +135,7 @@ describe('Sprites partial HTTP adapter', () => {
     const provider = new SpritesProvider('secret', 'gateway', true, fetcher,Date.now,undefined,{url:'https://my-sprite-org.sprites.app',token:'synthetic-wake-secret-'.repeat(3)});
     await provider.wake(ref, command);
     expect(fetcher.mock.calls[0]?.[0]).toBe('https://api.sprites.dev/v1/sprites/my-sprite/services/gateway/start');
-    expect(fetcher.mock.calls[1]?.[1]?.headers).toMatchObject({'X-Claw-Wake-Token':'synthetic-wake-secret-'.repeat(3)});
+    expect(fetcher.mock.calls[1]?.[1]?.headers).toMatchObject({'X-Hehe-Wake-Token':'synthetic-wake-secret-'.repeat(3)});
     await expect(provider.wake(ref, command)).rejects.toMatchObject({ code: 'outcome_unknown' });
   });
   it('refuses to emulate VM stop with destructive deletion or one service stop', async () => {

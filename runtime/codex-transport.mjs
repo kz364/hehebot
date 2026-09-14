@@ -136,7 +136,7 @@ export class CodexTransport extends EventEmitter {
   async initialize({ experimentalApi = false } = {}) {
     if (typeof experimentalApi !== 'boolean') throw new Error('INVALID_INITIALIZE');
     const result = await this.request('initialize', {
-      clientInfo: { name: 'clawbot', version: '0.1.0' },
+      clientInfo: { name: 'hehebot', version: '0.1.0' },
       capabilities: { experimentalApi },
     });
     this.write({ method: 'initialized' });

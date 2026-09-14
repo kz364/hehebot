@@ -1,9 +1,9 @@
-export const description = 'Explicit synthetic Clawbot model checks through Amp thread routing; no credentials or live connectors.';
+export const description = 'Explicit synthetic Hehebot model checks through Amp thread routing; no credentials or live connectors.';
 
-// This is a model-contract probe, not an OpenClaw executor or OAuth token proxy.
+// This is a model-contract probe, not a native executor or OAuth token proxy.
 export default function (amp) {
   amp.registerTool({
-    name: 'clawbot_model_smoke',
+    name: 'hehebot_model_smoke',
     description: 'Run two synthetic routine-interpretation checks using Amp-managed OpenAI routing. Makes two bounded model calls, with no tools, credentials, external actions, retries, or application writes. Billing follows the thread routing; subscription-only enforcement is not exposed by this API.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     async execute(_input, ctx) {

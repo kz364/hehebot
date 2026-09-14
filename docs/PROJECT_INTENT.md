@@ -1,6 +1,6 @@
 # Consolidated project intent and migration requirements
 
-Runtime decision update: the owner selected direct Codex app-server on 2026-09-13. It supersedes this document's older OpenClaw-first and OpenClaw-managed OAuth wording. Preserve supported-native reuse, external durable control, one remote runtime and the no-fork/no-credential-copy constraints; use [Codex setup](CODEX_RUNTIME_SETUP.md) for current authentication and [the handoff](HANDOFF.md) for implementation continuation. Historical Gateway/Mac integration details are requirements or references, not verified direct-Codex capabilities.
+Direct Codex app-server 0.154.0 is the only supported harness. Preserve supported native behavior, external durable control, one remote runtime and the no-patch/no-credential-copy constraints; use [Codex setup](CODEX_RUNTIME_SETUP.md) for authentication and [the handoff](HANDOFF.md) for continuation.
 
 Revision: 2026-09-13. This document preserves the product intent expressed across the remote-client setup, sleeping-assistant design, implementation handoffs, and bot-migration conversations. It is a normative supplement to [SPEC.md](../SPEC.md), with [BOT_ORCHESTRATION_ADDENDUM.md](BOT_ORCHESTRATION_ADDENDUM.md) defining the later concurrency clarification. It contains requirements, not a claim that the application is operational. [IMPLEMENTATION.md](IMPLEMENTATION.md) records implementation evidence and remaining gates.
 
@@ -18,20 +18,20 @@ The portal should support bot conversations, inter-bot 1:1 communication, group 
 
 ## 2. Selected architecture and constraints
 
-- **One authoritative remote Gateway on one Fly Sprite.** Sprites is the owner's selected first provider. Preserve adapter compatibility with Fly Machines, Sprites, Daytona, Railway and E2B; compatibility is a target and must not imply equal verified lifecycle support. Do not create a VM per bot.
+- **One authoritative remote runtime on one Fly Sprite.** Sprites is the owner's selected first provider. Preserve adapter compatibility with Fly Machines, Sprites, Daytona, Railway and E2B; compatibility is a target and must not imply equal verified lifecycle support. Do not create a VM per bot.
 - **Cloudflare hosts the messaging portal, API and external scheduler.** Messages and due jobs must be accepted durably while the Sprite is asleep. A Cloudflare Worker and SQLite Durable Object are the chosen implementation, with owner authentication through Access. A custom domain is not required by the product.
 - **The local Mac is an optional intermittent node/peripheral.** It exposes permitted browser, computer, file, shell and Messages capabilities when online. It is not another independent agent brain and does not synchronize competing authoritative state. Mac-only tasks park durably when it is offline; unrelated cloud work remains usable.
 - **Two browser execution modes remain required:** a persistent remote browser for routine autonomous work and the owner's local signed-in browser/computer when needed and available. Multiple browser tabs are part of the workload. Shared mutable browser/account interactions require locks; model concurrency does not permit crossed input into the same page.
-- **Use native OpenClaw first.** Reuse supported personas, sessions, background tasks, routing, skills, managed auth and cancellation. Do not fork core, replace working native orchestration or build agent-to-agent state synchronization. Add only missing portal, durability, provider-lifecycle and resource integration. Keep customization outside the installed package and upgrades close to update/restart.
+- **Use direct Codex only.** Reuse supported threads, turns, events, steering, cancellation and managed auth. Do not patch runtime internals or build a second model/tool loop. Add only missing portal, durability, policy, provider-lifecycle and resource integration.
 - **Approximately $5/month infrastructure is a target, not a guarantee.** Use transient compute and persistent state. Include portal/scheduler, disk, backups, traffic and wake/idle overhead in estimates; the existing model subscription is separate. Published credits and startup figures discussed in chat are historical research, not enduring entitlements or acceptance evidence.
-- **OpenAI subscription OAuth is required.** Use the documented OpenClaw-managed route. No automatic paid API-key fallback, copying desktop credential caches or duplicating refresh ownership to enable concurrency. Unsupported accounts/models or quota exhaustion produce a visible blocked state.
+- **OpenAI subscription authentication is required.** Use the supported Codex-owned route. No automatic paid API-key fallback, copying credential caches or duplicating refresh ownership. Unsupported accounts/models or quota exhaustion produce a visible blocked state.
 - **Deployment and credential setup remain explicit work.** Local implementation and publishing the repository do not themselves authorize cloud purchases, account connections, live routine adoption or external sends. Provide concrete setup instructions for required owner actions, then verify each installed capability.
 
 The original always-on VPS request was superseded by the sleeping-runtime design. Its requirements for one authority, portability, browser capability, boring operation and easy upgrades survive. Ubuntu/systemd/Tailscale artifacts remain useful for a conventional VM deployment but must not be mistaken for mandatory Sprite service mechanics. Docker is not required merely to satisfy the architecture.
 
 ## 3. State, continuity and lifecycle
 
-The remote Gateway owns persistent sessions, agent/workspace state, memory, configuration and remote tools. Canonical application records must have one writer. Document locations and backup/restore procedures for sessions, memory, configuration, workspace state, credential references, browser profiles and plugin/MCP configuration. Separate secrets, machine-specific configuration and reusable templates; never place credentials in tracked files.
+The remote runtime owns persistent sessions, agent/workspace state, memory, configuration and remote tools. Canonical application records must have one writer. Document locations and backup/restore procedures for sessions, memory, configuration, workspace state, credential references, browser profiles and plugin/MCP configuration. Separate secrets, machine-specific configuration and reusable templates; never place credentials in tracked files.
 
 Memory includes general owner preferences and dedicated persona/routine/skill memory. Share only authorized records and summaries. A coordinator does not need all private task transcripts. Preserve provenance, revisions, corrections and deletions; stale imported facts are not present truth. Distinct personas do not need separate VMs, but task/context isolation must prevent unrelated instructions and histories from contaminating one another.
 
@@ -123,7 +123,7 @@ This is **50 monitoring occurrences plus two daily routines**, before on-demand 
 
 ## 7. Setup, verification and completion contract
 
-Provide a concrete owner checklist for the intended Sprites organization/account, eligible trial verification, Sprites authentication/token, Cloudflare account/deployment access, portal allowlisted login, service authentication, OpenClaw subscription OAuth, Google account/calendar scopes, WhatsApp pairing/chat selection, and Mac pairing/reader permissions. Explain where each secret belongs and how to verify readiness without pasting secrets into chat. Refresh setup guides when implementation changes commands or prerequisites.
+Provide a concrete owner checklist for Sprites, Cloudflare deployment and Access, runtime service authentication, Codex subscription login, Google account/calendar scopes, WhatsApp pairing/chat selection, and Mac reader permissions. Explain where each secret belongs and verify readiness without pasting secrets into chat.
 
 Use benign local forms and synthetic effects to verify navigation, typing, multi-field filling, dropdown/date/checkbox controls, dynamic multi-step pages, screenshots, uploads/downloads, node availability, reconnection/restarts and backup restoration. Verify local file/shell/computer capabilities separately from advertised capability names. Preserve status categories: implemented, locally tested, prepared awaiting live setup, blocked/unsupported. Local mocks, source inspection and transport health are not end-to-end acceptance.
 
@@ -135,7 +135,7 @@ The original deployment handoff requested an architecture diagram, concise statu
 
 | Conversation intent | Current requirement / destination |
 |---|---|
-| Remote-first Mac installation, one authoritative VPS, browser/files/shell, upgrades and no fork | Sections 2–3 and 7; SETUP.md, REMOTE.md, NATIVE_AUTH_SETUP.md |
+| Remote-first execution, one authority, browser/files/shell, upgrades | Sections 2–3 and 7; SETUP.md and AUTH_SETUP.md |
 | Multiple tabs and browser form workload | Sections 2 and 7; browser/resource acceptance |
 | Short-lived instances for cron and incoming chats; approximately $5 infrastructure | Sections 2–3 and 6; lifecycle/cost contracts in SPEC.md |
 | Transient WhatsApp with dedicated chat wake | Section 3 and WhatsApp routine; measured catch-up, persistent pairing |
@@ -143,11 +143,11 @@ The original deployment handoff requested an architecture diagram, concise statu
 | Provider interchangeability and Cloudflare scheduler/portal | Section 2; PROVIDERS.md and provider adapters |
 | Startup times accepted and interest in free testing credits | No new latency blocker; verify live performance/credit eligibility, do not hardcode historical prices |
 | Sprites selected; explicit auth/API setup guidance requested | Sections 2 and 7; AUTH_SETUP.md |
-| Laptop retained as a node | Sections 2 and 5; NATIVE_AUTH_SETUP.md |
+| Laptop retained as a node | Sections 2 and 5; AUTH_SETUP.md |
 | Every bot stays messageable while carrying out other tasks | Sections 1 and 3; normative O01–O09 addendum |
 | Adapt Grok export to one VM/shared accounts rather than copying verbatim | Sections 4–6; BOT_SETUP.md and IMPORT_FORMAT.md |
-| Do not alter native OpenClaw personas/tasks if already supported | Sections 2–3; native-first acceptance, no custom orchestration framework |
+| Preserve supported Codex execution behavior | Sections 2–3; no second model/tool loop |
 | Optional exporter and Codex desktop computer-use backend | Export supplied: normalized import is first path; automated exporter and desktop-specific backend remain optional, requiring supported interfaces |
-| Publish all code, detailed documentation and full intent in private clawbot repository | This consolidated supplement and SPEC.md belong in the private repository; exclude secrets, raw account state and private identity records |
+| Publish code, documentation and full intent privately | This supplement and SPEC.md; exclude secrets, raw account state and private identity records |
 
 Earlier three-persona examples are superseded for onboarding by the five-persona migration. Earlier single-active-run assumptions are superseded by native-first non-interruption requirements. Choosing Sprites supersedes Fly Machines as the deployment priority but not provider portability. Historical per-bot machines/logins, duplicate kick routines, school time subtraction, historical blanket approvals and stale identity/trip assertions are not current setup behavior. The one-time authorization to wipe the former local installation was specific historical work, not a standing instruction to delete later state.

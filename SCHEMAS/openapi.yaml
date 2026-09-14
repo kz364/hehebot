@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Personal sleeping Gateway control plane",
+    "title": "Personal sleeping runtime control plane",
     "version": "0.3.0",
     "description": "Target public contract with local implementation. Placeholder server; not deployed. See docs/IMPLEMENTATION.md for coverage and limitations. Public command variants include reviewed setup.adopt and exact run.followup. Runtime envelopes, including flight endpoints, are separately defined in runtime.json and require runtime bearer auth plus current epoch/attempt checks."
   },

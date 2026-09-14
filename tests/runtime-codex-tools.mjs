@@ -9,10 +9,10 @@ import { createCodexTools } from '../runtime/codex-tools.mjs';
 
 const contracts = JSON.parse(await readFile(new URL('../SCHEMAS/contracts.json', import.meta.url), 'utf8'));
 const runId = '11111111-1111-4111-8111-111111111111';
-const grant = { identity: { epoch: 3, boot_id: '22222222-2222-4222-8222-222222222222' }, runId, attempt: 2, allowedTools: ['clawbot_list_routines'] };
-const params = { threadId: 'root', turnId: 'turn', callId: 'call-19', namespace: null, tool: 'clawbot_list_routines', arguments: {} };
+const grant = { identity: { epoch: 3, boot_id: '22222222-2222-4222-8222-222222222222' }, runId, attempt: 2, allowedTools: ['hehebot_list_routines'] };
+const params = { threadId: 'root', turnId: 'turn', callId: 'call-19', namespace: null, tool: 'hehebot_list_routines', arguments: {} };
 async function fixture(t, request) {
-  const directory = await mkdtemp(join(tmpdir(), 'clawbot-codex-tools-unit-'));
+  const directory = await mkdtemp(join(tmpdir(), 'hehebot-codex-tools-unit-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const journal = new FileJournal(directory), calls = [];
   await journal.putIfAbsent('attempt', { threadId: 'root', nativeRunId: 'turn', status: 'running', rootSettled: false });
@@ -27,7 +27,7 @@ async function fixture(t, request) {
 
 test('exact root identity maps to immutable admitted Worker identity, not model fields', async t => {
   const f = await fixture(t);
-  assert.deepEqual(f.tools.tools.map(tool => tool.name), ['clawbot_list_routines']);
+  assert.deepEqual(f.tools.tools.map(tool => tool.name), ['hehebot_list_routines']);
   const reply = await f.tools.handle(params);
   assert.deepEqual(reply, { success: true, contentItems: [{ type: 'inputText', text: '{"routines":[],"next_cursor":null}' }] });
   assert.deepEqual(f.calls, [{ type: 'agent-routines', payload: { identity: grant.identity, run_id: runId, attempt: 2 } }]);
@@ -39,7 +39,7 @@ test('exact root identity maps to immutable admitted Worker identity, not model 
 test('child, wrong turn, extra authority fields and ungranted tools cannot reach Worker', async t => {
   const f = await fixture(t);
   for (const patch of [{ threadId: 'child' }, { turnId: 'other' }, { namespace: 'foreign' },
-    { tool: 'clawbot_save_routine' }, { arguments: { run_id: runId } }, { run_id: runId }]) {
+    { tool: 'hehebot_save_routine' }, { arguments: { run_id: runId } }, { run_id: runId }]) {
     assert.equal((await f.tools.handle({ ...params, ...patch })).success, false);
   }
   assert.deepEqual(f.calls, []);

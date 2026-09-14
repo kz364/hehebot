@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://claw-personal.invalid/schemas/contracts.json",
+  "$id": "https://hehebot.invalid/schemas/contracts.json",
   "title": "Owner command v1",
   "$defs": {
     "uuid": { "type": "string", "format": "uuid" },

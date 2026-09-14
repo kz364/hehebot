@@ -7,7 +7,7 @@ const hash = value => createHash('sha256').update(value).digest('hex');
 export function stableImportId(kind, slug) {
   const seeded={'chief-of-staff':'11111111-1111-4111-8111-111111111111','inbox-triage':'22222222-2222-4222-8222-222222222222',travel:'33333333-3333-4333-8333-333333333333'};
   if(kind==='persona'&&seeded[slug])return seeded[slug];
-  const bytes = createHash('sha256').update(`claw-personal/bot-import/v1/${kind}/${slug}`).digest().subarray(0,16);
+  const bytes = createHash('sha256').update(`hehebot/bot-import/v1/${kind}/${slug}`).digest().subarray(0,16);
   bytes[6] = (bytes[6] & 15) | 0x80; bytes[8] = (bytes[8] & 63) | 0x80;
   const h=bytes.toString('hex'); return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
 }

@@ -44,7 +44,7 @@ export class ExecutionBridge {
         message: JSON.stringify({ ...context, skills: (context.skills ?? []).map(skill => ({
           id: skill.id, revision: skill.revision, name: skill.body.name,
           description: skill.body.description, when_to_use: skill.body.when_to_use,
-          load_with: 'clawbot_read_skill',
+          load_with: 'hehebot_read_skill',
         })) }),
       };
       await this.journal.update(this.cursor, { phase: 'submission_unknown', attemptId: input.attemptId });

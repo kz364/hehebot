@@ -24,7 +24,7 @@ try {
   const version = await exec(binary, ['--version'], { timeout: timeoutMs, maxBuffer: 1024 });
   report.versionMatch = version.stdout.trim() === `codex-cli ${PINNED}`;
   if (!report.versionMatch) throw new Error('VERSION_MISMATCH');
-  home = await mkdtemp(join(tmpdir(), 'clawbot-codex-probe-'));
+  home = await mkdtemp(join(tmpdir(), 'hehebot-codex-probe-'));
   transport = spawnCodex({ binary, home, cwd: home, timeoutMs });
   const initialized = await transport.initialize();
   if (!['codexHome', 'platformFamily', 'platformOs', 'userAgent'].every(key =>

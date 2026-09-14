@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
-const directory=await mkdtemp(join(tmpdir(),'claw-worker-test-'));
+const directory=await mkdtemp(join(tmpdir(),'hehe-worker-test-'));
 const child=spawn(process.execPath,['node_modules/wrangler/bin/wrangler.js','dev','--local','--env','local','--ip','127.0.0.1','--port','0','--persist-to',directory],{env:{...process.env,WRANGLER_LOG_PATH:join(directory,'logs'),WRANGLER_SEND_METRICS:'false'},stdio:['ignore','pipe','pipe']});
 let logs='';child.stdout.on('data',x=>{logs+=x.toString();});child.stderr.on('data',x=>{logs+=x.toString();});
 const timeout=setTimeout(()=>child.kill('SIGTERM'),45000);

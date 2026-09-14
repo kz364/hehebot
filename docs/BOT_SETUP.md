@@ -4,11 +4,11 @@ Prepared 2026-09-10 from the owner's Grok export. This is the shareable setup su
 
 ## Native-first setup
 
-Use existing OpenClaw persona/session/task behavior and configuration wherever it already provides the requested experience. Do not modify native core behavior or build a separate orchestrator. Prove the remaining gaps before implementing a thin adapter.
+Use supported Codex app-server 0.154.0 thread, turn, event, steering and cancellation interfaces. Do not modify runtime internals or build a second model/tool loop. Prove remaining gaps before implementing a thin adapter.
 
 ## Architecture
 
-Use one Sprite and one authoritative Gateway, Cloudflare portal/API/scheduler, and one optional paired Mac. Create Chief of Staff, Inbox Triage, Whatsapp, Messages and Travel as native personas. Omit the empty New Bot stub. Each persona has a responsive coordinator plus isolated background task sessions, as required by [BOT_ORCHESTRATION_ADDENDUM.md](BOT_ORCHESTRATION_ADDENDUM.md).
+Use one Sprite and one authoritative runtime, Cloudflare portal/API/scheduler, and one optional paired Mac. Create Chief of Staff, Inbox Triage, Whatsapp, Messages and Travel as native personas. Omit the empty New Bot stub. Each persona has a responsive coordinator plus isolated background task sessions, as required by [BOT_ORCHESTRATION_ADDENDUM.md](BOT_ORCHESTRATION_ADDENDUM.md).
 
 Connector accounts are installation-owned and shared through scoped tools. One WhatsApp account/session, one Google account connection with the necessary Gmail/Calendar scopes, and one paired Mac Messages capability; no per-bot VMs, duplicate WhatsApp pairing or copied OAuth caches. Shared login does not broaden the WhatsApp routine beyond the approved family chat. Chief of Staff reads task/event status and delegates; it need not scan raw private connector content for a digest.
 
@@ -34,4 +34,4 @@ Flight restore deadlines must also be durable one-shot Cloudflare alarms, keyed 
 
 ## Setup guide refresh required after implementation
 
-Update AUTH_SETUP.md, NATIVE_AUTH_SETUP.md, SETUP.md and README links with actual implemented setup commands and verification results. Include Google Gmail read/modify (not send), Calendar event-write scopes and exact account/calendar selection; WhatsApp linking once and family-chat identity selection; Mac node pairing, supported Messages reader, host-specific OS permissions and offline catch-up; private Travel profile import/review; model/harness concurrency proof; lock verification; routine/timezone adoption preview; connector-specific notification/effect policies. Do not assert Grok's Full Disk Access or connections transfer to the new Mac process. Use no-secret smoke tests and distinguish pending live checks from passed mocks.
+Keep AUTH_SETUP.md, SETUP.md and README aligned with implemented commands and verification. Include Gmail read/label behavior with no-send enforcement, Calendar writes and exact account/calendar selection, one WhatsApp binding and exact chat, Mac reader permissions/offline catch-up, private Travel profile review, Codex concurrency, locks, timezone preview, and connector-specific effect policies. Use no-secret smoke tests and distinguish mocks from live checks.

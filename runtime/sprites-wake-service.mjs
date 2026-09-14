@@ -1,6 +1,6 @@
 import {timingSafeEqual} from 'node:crypto';
 
-/** Compose with a supervisor on the Sprite HTTP Service port. The native Gateway
+/** Compose with a supervisor on the Sprite HTTP Service port. The native runtime
  * stays loopback-only. This handler only queues a wake; it never submits a model.
  * Private Sprite URL auth is a separate edge layer from this application token. */
 export function createSpritesWakeHandler({token,onWake,onFailure=()=>{}}){
@@ -9,7 +9,7 @@ export function createSpritesWakeHandler({token,onWake,onFailure=()=>{}}){
  return async(req,res)=>{
   const reply=(status,body)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(body));};
   if(req.method!=='POST'||req.url!=='/wake'){reply(404,{error:'NOT_FOUND'});return;}
-  const raw=req.headers['x-claw-wake-token'];const candidate=Buffer.from(typeof raw==='string'?raw:'');
+  const raw=req.headers['x-hehe-wake-token'];const candidate=Buffer.from(typeof raw==='string'?raw:'');
   if(candidate.length!==expected.length||!timingSafeEqual(candidate,expected)){reply(401,{error:'UNAUTHORIZED'});return;}
   if(req.headers['content-type']?.split(';')[0]!=='application/json'){reply(422,{error:'INVALID_INPUT'});return;}
   let body;

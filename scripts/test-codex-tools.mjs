@@ -26,7 +26,7 @@ const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 const SKILL_POLICY = '46b2cbdd-d227-4f54-bffa-33148aad0134';
 const ROUTINE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 const policies = [SKILL_POLICY, ROUTINE_POLICY];
-const allowedTools = ['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_list_routines', 'clawbot_run_routine', 'clawbot_delete_routine', 'clawbot_read_skill'];
+const allowedTools = ['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_list_routines', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_read_skill'];
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 const report = { label: 'codex-agent-tools-native-acceptance', toolTransport: dynamicMode ? 'dynamic' : 'mcp', supervisor: supervisorMode, status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
 const check = (name, fn) => { fn(); report.assertions.push(name); };
@@ -81,7 +81,7 @@ const message = text => [{ id: `msg_${randomUUID().replaceAll('-', '')}`, type: 
 try {
   const version = await promisify(execFile)(binary, ['--version'], { timeout: 10_000 });
   check('exact unmodified Codex version', () => assert.equal(version.stdout.trim(), 'codex-cli 0.154.0'));
-  directory = await mkdtemp(join(tmpdir(), 'clawbot-codex-tools-')); await chmod(directory, 0o700);
+  directory = await mkdtemp(join(tmpdir(), 'hehebot-codex-tools-')); await chmod(directory, 0o700);
   const [workerPort, fixturePort] = await Promise.all([freePort(), freePort()]);
   const keyPath = join(directory, 'tls.key'), certPath = join(directory, 'tls.crt');
   const openssl = join(directory, 'openssl.cnf');
@@ -147,7 +147,7 @@ try {
     if (supervisorMode && report.modelCalls === 1) check('native model receives paused routine instructions and progressive skill catalog only', () => {
       const input = JSON.stringify(body.input);
       assert.match(input, /SUPERVISED_PAUSED_ROUTINE/); assert.ok(input.includes(reviewedId));
-      assert.match(input, /clawbot_read_skill/); assert.equal(input.includes(reviewedBody.steps[0]), false);
+      assert.match(input, /hehebot_read_skill/); assert.equal(input.includes(reviewedBody.steps[0]), false);
     });
     if (report.modelCalls === 2) report.continuationTypes = [...collectTypes(body.input)];
     const continuation = findType(body.input, 'function_call_output') ?? findType(body.input, 'custom_tool_call_output');
@@ -189,21 +189,21 @@ try {
       if (stage === 5) { sendEvents(res, message('MCP_PROPOSAL_STAGED_AND_ROUTINE_LIFECYCLE_VERIFIED')); return; }
     }
     const next = report.modelCalls - 1;
-    const advertised = (body.tools ?? []).find(x => x?.name?.includes(allowedTools[next])) ?? (body.tools ?? []).find(x => x?.name === 'mcp__clawbot');
-    assert.ok(advertised, `clawbot MCP dispatcher not advertised: ${(body.tools ?? []).map(x => x.name).join(',')}`);
+    const advertised = (body.tools ?? []).find(x => x?.name?.includes(allowedTools[next])) ?? (body.tools ?? []).find(x => x?.name === 'mcp__hehebot');
+    assert.ok(advertised, `hehebot MCP dispatcher not advertised: ${(body.tools ?? []).map(x => x.name).join(',')}`);
     const callId = `call_${randomUUID().replaceAll('-', '')}`;
     // Codex 0.154.0 ResponseItem::FunctionCall keeps namespace separate from name.
     sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: callId,
-      ...(advertised.name === 'mcp__clawbot' ? { namespace: 'mcp__clawbot', name: allowedTools[next] } : { name: advertised.name }),
+      ...(advertised.name === 'mcp__hehebot' ? { namespace: 'mcp__hehebot', name: allowedTools[next] } : { name: advertised.name }),
       arguments: JSON.stringify(argumentsByStage[next]) }]);
   } catch (error) { fixtureErrors.push(error.stack ?? String(error)); if (!res.headersSent) sendEvents(res, message('FIXTURE_ASSERTION_FAILED')); else res.end(); } });
   await new Promise((ok, fail) => fixture.once('error', fail).listen(fixturePort, '127.0.0.1', ok));
   const q = value => JSON.stringify(value);
   await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${fixturePort}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
-  if (!dynamicMode) await appendFile(join(home, 'config.toml'), `[mcp_servers.clawbot]\ncommand = ${q(process.execPath)}\nargs = [${q(join(root, 'runtime/agent-tools.mjs'))}]\nstartup_timeout_sec = 10\n[mcp_servers.clawbot.env]\nCLAWBOT_AGENT_TOOLS_CONFIG = ${q(grantPath)}\nNODE_EXTRA_CA_CERTS = ${q(certPath)}\n`);
+  if (!dynamicMode) await appendFile(join(home, 'config.toml'), `[mcp_servers.hehebot]\ncommand = ${q(process.execPath)}\nargs = [${q(join(root, 'runtime/agent-tools.mjs'))}]\nstartup_timeout_sec = 10\n[mcp_servers.hehebot.env]\nHEHEBOT_AGENT_TOOLS_CONFIG = ${q(grantPath)}\nNODE_EXTRA_CA_CERTS = ${q(certPath)}\n`);
   // Explicitly authorize only these disposable scoped tools. This is the
   // supported per-tool policy, not an annotation-based or global approval bypass.
-  if (!dynamicMode) for (const name of allowedTools) await appendFile(join(home, 'config.toml'), `\n[mcp_servers.clawbot.tools.${name}]\napproval_mode = "approve"\n`);
+  if (!dynamicMode) for (const name of allowedTools) await appendFile(join(home, 'config.toml'), `\n[mcp_servers.hehebot.tools.${name}]\napproval_mode = "approve"\n`);
   const eventJournal = new FileJournal(join(home, 'events'));
   const contracts = JSON.parse(await readFile(join(root, 'SCHEMAS/contracts.json'), 'utf8'));
   const adapter = new CodexAdapter({ cwd: workspace, journal: eventJournal, rpc: (method, params) => transport.request(method, params),
@@ -242,7 +242,7 @@ try {
   } else {
     threadId = (await transport.request('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture', approvalPolicy: 'never', sandbox: 'read-only',
       ...(dynamicMode ? { dynamicTools: dynamicTools.tools } : {}) })).thread.id;
-    turnId = (await transport.request('turn/start', { threadId, input: [{ type: 'text', text: 'Use the admitted clawbot proposal tool exactly once.' }] })).turn.id;
+    turnId = (await transport.request('turn/start', { threadId, input: [{ type: 'text', text: 'Use the admitted hehebot proposal tool exactly once.' }] })).turn.id;
     await eventJournal.putIfAbsent(adapterAttempt, { threadId, nativeRunId: turnId, status: 'running', rootSettled: false });
     await router.bind(adapterAttempt);
   }
@@ -264,7 +264,7 @@ try {
     assert.equal(adapter.sleepReadiness().allowed, false); assert.deepEqual(routerFailures, []);
   });
   const read = await transport.request('thread/read', { threadId, includeTurns: true }); const transcript = JSON.stringify(read.thread);
-  check('native receipt and final continuation persisted', () => { assert.match(transcript, /MCP_PROPOSAL_STAGED/); assert.match(transcript, /clawbot_propose_skill/); assert.match(transcript, new RegExp(proposalId)); });
+  check('native receipt and final continuation persisted', () => { assert.match(transcript, /MCP_PROPOSAL_STAGED/); assert.match(transcript, /hehebot_propose_skill/); assert.match(transcript, new RegExp(proposalId)); });
   state = await (await ownerFetch('/v1/state')).json(); const proposal = state.skill_proposals.find(x => x.id === proposalId);
   if (supervisorMode) {
     await assert.rejects(supervisor.complete({ attemptId: adapterAttempt, nativeRunId: turnId, rootSettled: true }), { code: 'NATIVE_SETTLEMENT_INCOMPLETE' });

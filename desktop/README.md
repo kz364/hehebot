@@ -1,6 +1,6 @@
-# Clawbot Portal for macOS
+# Hehebot Portal for macOS
 
-This directory is an independently written, remote-only Electron shell around the authoritative Clawbot web portal. It has no local agent, server, scheduler, task database, wake loop, preload bridge, or renderer IPC. Closing the app does not cancel remote work; remote completion and history remain control-plane responsibilities.
+This directory is an independently written, remote-only Electron shell around the authoritative Hehebot web portal. It has no local agent, server, scheduler, task database, wake loop, preload bridge, or renderer IPC. Closing the app does not cancel remote work; remote completion and history remain control-plane responsibilities.
 
 ## Install and run
 
@@ -13,9 +13,9 @@ npm test
 npm start -- --portal-origin=https://portal.example
 ```
 
-On first run, copy the complete portal origin to the clipboard and confirm it in the native setup dialog. The command-line argument remains available for automated setup. Configuration is saved under Electron's per-user `userData` directory as owner-only `portal-config.json` where supported. To switch later, use **Clawbot Portal → Switch Portal to Origin on Clipboard…**.
+On first run, copy the complete portal origin to the clipboard and confirm it in the native setup dialog. The command-line argument remains available for automated setup. Configuration is saved under Electron's per-user `userData` directory as owner-only `portal-config.json` where supported. To switch later, use **Hehebot Portal → Switch Portal to Origin on Clipboard…**.
 
-Cloudflare Access/OIDC login origins must be explicitly owner-configured: put one complete HTTPS origin per clipboard line and choose **Clawbot Portal → Configure Login Origins from Clipboard…**. Do not include paths or credentials. Trusted login redirects remain inside the portal's isolated persistent Chromium session so login cookies can be set; trusted pages still receive no native API. This local list is never learned from portal content. Each canonical portal origin uses a distinct session partition, so cookies do not cross portals. Portal HTTP is accepted exclusively for `localhost`, `127.0.0.1`, and `[::1]` tests; auth origins are always HTTPS.
+Cloudflare Access/OIDC login origins must be explicitly owner-configured: put one complete HTTPS origin per clipboard line and choose **Hehebot Portal → Configure Login Origins from Clipboard…**. Do not include paths or credentials. Trusted login redirects remain inside the portal's isolated persistent Chromium session so login cookies can be set; trusted pages still receive no native API. This local list is never learned from portal content. Each canonical portal origin uses a distinct session partition, so cookies do not cross portals. Portal HTTP is accepted exclusively for `localhost`, `127.0.0.1`, and `[::1]` tests; auth origins are always HTTPS.
 
 ## Security boundary
 

@@ -14,7 +14,7 @@ function run(directory, code) {
 }
 
 test('OS lock excludes a second executor and releases after process exit', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'claw-lock-'));
+  const directory = await mkdtemp(join(tmpdir(), 'hehe-lock-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const holder = run(directory, "process.stdout.write('ready'); setInterval(()=>{},1000)");
   t.after(() => { if (holder.exitCode === null && holder.signalCode === null) holder.kill(); });
@@ -27,7 +27,7 @@ test('OS lock excludes a second executor and releases after process exit', async
 });
 
 test('symlink and nonprivate state directories cannot acquire ownership', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'claw-lock-invalid-'));
+  const directory = await mkdtemp(join(tmpdir(), 'hehe-lock-invalid-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const link = directory + '-link';
   await symlink(directory, link); t.after(() => rm(link));

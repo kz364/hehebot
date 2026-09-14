@@ -13,7 +13,7 @@ const command = (threadId, turnId, id, status = 'inProgress') => ({ method: stat
 } });
 const root = (threadId, id) => ({ method: 'turn/completed', params: { threadId, turn: { id, status: 'completed' } } });
 async function fixture(t, limits = {}) {
-  const directory = await mkdtemp(join(tmpdir(), 'clawbot-event-router-'));
+  const directory = await mkdtemp(join(tmpdir(), 'hehebot-event-router-'));
   const journal = new FileJournal(directory), transport = new EventEmitter(), recoveries = [], calls = [];
   const adapter = new CodexAdapter({ journal, cwd: directory, rpc: async method => { calls.push(method); throw new Error('No RPC expected'); } });
   const router = new CodexEventRouter({ transport, adapter, onRecovery: value => recoveries.push(value.code), ...limits });

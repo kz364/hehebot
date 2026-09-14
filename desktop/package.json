@@ -1,8 +1,8 @@
 {
-  "name": "clawbot-desktop",
+  "name": "hehebot-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Remote-only macOS shell for the Clawbot portal",
+  "description": "Remote-only macOS shell for the Hehebot portal",
   "main": "src/main.cjs",
   "scripts": {
     "start": "electron .",
@@ -15,9 +15,9 @@
     "electron-builder": "26.0.12"
   },
   "build": {
-    "appId": "com.clawbot.portal",
-    "productName": "Clawbot Portal",
-    "copyright": "Copyright © 2026 Clawbot contributors",
+    "appId": "com.hehebot.portal",
+    "productName": "Hehebot Portal",
+    "copyright": "Copyright © 2026 Hehebot contributors",
     "asar": true,
     "files": [
       "src/**/*",

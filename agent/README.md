@@ -1,3 +1,3 @@
-# Persistent agent/user material
+# Persistent Hehebot material
 
-Keep reviewed, non-secret agent instructions here (for example USER.md, SOUL.md, AGENTS.md). Deploy them to the authoritative Gateway's configured workspace. Runtime memory, sessions, and credentials belong in OpenClaw state, not this repository. No persona or personal details have been invented. No custom plugins, MCP servers, or core patches are needed for this baseline.
+Keep reviewed, non-secret persona and user instructions here. Deploy generated/read-only projections to the single authoritative Codex runtime. Application memory, task identity, policies, and receipts remain owned by the control plane; credentials and runtime-private session state stay outside Git.

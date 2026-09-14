@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import register from '../.amp/plugins/clawbot-smoke.js';
+import register from '../.amp/plugins/hehebot-smoke.js';
 
 test('Amp smoke uses the invoking thread, bounded OpenAI calls, and independently checks both fixtures', async () => {
   let tool;

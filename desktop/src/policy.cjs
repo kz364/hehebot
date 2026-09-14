@@ -62,7 +62,7 @@ function classifyShellNavigation(target, portalOrigin, authOrigins) {
 
 function partitionForOrigin(origin) {
   const digest = crypto.createHash('sha256').update(parsePortalOrigin(origin)).digest('hex');
-  return `persist:clawbot-${digest.slice(0, 24)}`;
+  return `persist:hehebot-${digest.slice(0, 24)}`;
 }
 
 module.exports = { classifyNavigation, classifyShellNavigation, parseAuthOrigins, parsePortalOrigin, partitionForOrigin };

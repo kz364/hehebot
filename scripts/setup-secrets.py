@@ -3,7 +3,7 @@
 import argparse, getpass, os, secrets
 from pathlib import Path
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--generate', action='store_true', help='Create runtime and native Gateway secrets if absent')
+parser.add_argument('--generate', action='store_true', help='Create runtime and wake secrets if absent')
 parser.add_argument('--store', choices=['PROVIDER_TOKEN','CLOUDFLARE_API_TOKEN','CF_ACCESS_CLIENT_ID','CF_ACCESS_CLIENT_SECRET'], help='Read a provider-issued value through a hidden terminal prompt')
 args = parser.parse_args()
 root = Path(__file__).resolve().parent.parent / '.local' / 'secrets'
@@ -18,7 +18,7 @@ def put(name, value):
     with os.fdopen(fd,'w') as f: f.write(value+'\n'); f.flush(); os.fsync(f.fileno())
     print(name+': saved privately')
 if args.generate:
-    for name in ['RUNTIME_TOKEN','GATEWAY_TOKEN','SPRITE_WAKE_TOKEN']: put(name,secrets.token_urlsafe(32))
+    for name in ['RUNTIME_TOKEN','SPRITE_WAKE_TOKEN']: put(name,secrets.token_urlsafe(32))
 if args.store:
     if not os.isatty(0): raise SystemExit('Use an interactive terminal for hidden input')
     put(args.store,getpass.getpass(args.store+' (hidden): ').strip())
