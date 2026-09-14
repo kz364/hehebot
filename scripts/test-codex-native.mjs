@@ -25,11 +25,13 @@ let toolContinuations = 0;
 let heldRequests = 0;
 let heldClosed = 0;
 let spawnedChildId;
+let dynamicChildId;
 const bodies = [];
 const notifications = [];
 const nativeErrors = [];
 const fixtureErrors = [];
 const held = new Map();
+const dynamicCalls = [];
 
 function response(id, output) {
   return { id, object: 'response', created_at: 1, status: 'completed', error: null,
@@ -106,7 +108,7 @@ try {
 
   fixture = createServer(async (req, res) => {
     try {
-    if (req.method !== 'POST' || req.url !== '/v1/responses' || requests >= 12) { res.writeHead(requests >= 12 ? 429 : 404); res.end(); return; }
+    if (req.method !== 'POST' || req.url !== '/v1/responses' || requests >= 18) { res.writeHead(requests >= 18 ? 429 : 404); res.end(); return; }
     requests++;
     const body = await readBody(req);
     bodies.push(body);
@@ -119,6 +121,38 @@ try {
       return;
     }
     const output = input.find(item => item?.type === 'function_call_output');
+    if (input.some(item => item?.role === 'user' && JSON.stringify(item.content).includes('DYNAMIC_CHILD_TOOL_PROOF'))) {
+      const probeTool = body.tools.find(tool => tool.name === 'clawbot_identity_probe' || tool.tools?.some(nested => nested.name === 'clawbot_identity_probe'));
+      report.dynamicChildToolsAvailable = Boolean(probeTool);
+      if (!report.dynamicChildToolsAvailable) { sendEvents(res, message('CHILD_DYNAMIC_UNAVAILABLE')); return; }
+      if (output) { assert.match(String(output.output), /DYNAMIC_IDENTITY_19_43/); sendEvents(res, message('CHILD_DYNAMIC_OK')); return; }
+      sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID().replaceAll('-', '')}`,
+        ...(probeTool.type === 'namespace' ? { namespace: probeTool.name } : {}),
+        name: 'clawbot_identity_probe', arguments: JSON.stringify({ left: 19, right: 43 }) }]);
+      return;
+    }
+    if (raw.includes('DYNAMIC_PARENT_PROOF')) {
+      if (output) {
+        dynamicChildId = JSON.parse(String(output.output)).agent_id; assert.equal(typeof dynamicChildId, 'string');
+        sendEvents(res, message('DYNAMIC_PARENT_DONE')); return;
+      }
+      const spawnTool = body.tools.find(tool => tool.name === 'spawn_agent' || tool.tools?.some(nested => nested.name === 'spawn_agent'));
+      assert.ok(spawnTool);
+      sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID().replaceAll('-', '')}`,
+        ...(spawnTool.type === 'namespace' ? { namespace: spawnTool.name } : {}),
+        name: 'spawn_agent', arguments: JSON.stringify({ message: 'DYNAMIC_CHILD_TOOL_PROOF', agent_type: 'default' }) }]);
+      return;
+    }
+    if (raw.includes('DYNAMIC_ROOT_PROOF')) {
+      if (output) {
+        assert.match(String(output.output), /DYNAMIC_IDENTITY_19_43/);
+        sendEvents(res, message('DYNAMIC_ROOT_OK')); return;
+      }
+      assert.ok(body.tools.some(tool => tool.name === 'clawbot_identity_probe'));
+      sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID().replaceAll('-', '')}`,
+        name: 'clawbot_identity_probe', arguments: JSON.stringify({ left: 19, right: 43 }) }]);
+      return;
+    }
     if (raw.includes('SPAWN_CHILD_PROOF')) {
       if (output) {
         spawnedChildId = JSON.parse(String(output.output)).agent_id;
@@ -161,10 +195,15 @@ try {
   const port = fixture.address().port;
   await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
 
-  transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 10_000 });
+  transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 10_000, onToolCall: async params => {
+    assert.equal(params.tool, 'clawbot_identity_probe'); assert.equal(params.namespace, null);
+    assert.deepEqual(params.arguments, { left: 19, right: 43 });
+    dynamicCalls.push(structuredClone(params));
+    return { success: true, contentItems: [{ type: 'inputText', text: 'DYNAMIC_IDENTITY_19_43' }] };
+  } });
   transport.child.stderr.on('data', chunk => nativeErrors.push(chunk.toString('utf8')));
   transport.on('notification', notification => notifications.push(notification));
-  await transport.initialize();
+  await transport.initialize({ experimentalApi: true });
   const started = await transport.request('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture', approvalPolicy: 'never', sandbox: 'read-only' });
   const threadId = started.thread.id;
   const turn = await transport.request('turn/start', { threadId, input: [{ type: 'text', text: 'READ_ASYMMETRIC_FIXTURE. Use exec_command to cat the named fixture and then return only the required exact marker plus contents.' }] });
@@ -253,6 +292,33 @@ try {
   await waitFor(() => heldClosed === 2, 'child provider request closure');
   report.childOutlivesParent = true;
 
+  const dynamicTools = [{
+    type: 'function', name: 'clawbot_identity_probe', description: 'Synthetic identity-only acceptance tool; no effects.',
+    inputSchema: { type: 'object', properties: { left: { type: 'integer' }, right: { type: 'integer' } }, required: ['left', 'right'], additionalProperties: false },
+  }];
+  const dynamicThread = (await transport.request('thread/start', { cwd: workspace, modelProvider: 'fixture', dynamicTools })).thread.id;
+  const dynamicTurn = (await transport.request('turn/start', { threadId: dynamicThread, input: [{ type: 'text', text: 'DYNAMIC_ROOT_PROOF' }] })).turn.id;
+  assert.equal((await waitTurn(dynamicTurn)).status, 'completed');
+  assert.equal(dynamicCalls.length, 1);
+  assert.equal(dynamicCalls[0].threadId, dynamicThread); assert.equal(dynamicCalls[0].turnId, dynamicTurn);
+  assert.equal(typeof dynamicCalls[0].callId, 'string'); assert.ok(dynamicCalls[0].callId.length > 0);
+  const dynamicHistory = await transport.request('thread/read', { threadId: dynamicThread, includeTurns: true });
+  assert.ok(dynamicHistory.thread.turns.flatMap(saved => saved.items).some(item => item.type === 'agentMessage' && item.text === 'DYNAMIC_ROOT_OK'));
+  report.dynamicRootIdentity = true;
+
+  const dynamicParent = (await transport.request('thread/start', { cwd: workspace, modelProvider: 'fixture', dynamicTools })).thread.id;
+  const dynamicParentTurn = (await transport.request('turn/start', { threadId: dynamicParent, input: [{ type: 'text', text: 'DYNAMIC_PARENT_PROOF' }] })).turn.id;
+  assert.equal((await waitTurn(dynamicParentTurn)).status, 'completed');
+  await waitFor(() => notifications.some(n => n.method === 'turn/started' && n.params?.threadId === dynamicChildId), 'dynamic child turn start');
+  const childDynamicStart = notifications.find(n => n.method === 'turn/started' && n.params?.threadId === dynamicChildId);
+  assert.equal((await waitTurn(childDynamicStart.params.turn.id)).status, 'completed');
+  assert.equal(dynamicCalls.length, report.dynamicChildToolsAvailable ? 2 : 1);
+  if (report.dynamicChildToolsAvailable) {
+    assert.equal(dynamicCalls[1].threadId, dynamicChildId); assert.equal(dynamicCalls[1].turnId, childDynamicStart.params.turn.id);
+  }
+  const childDynamicHistory = await transport.request('thread/read', { threadId: dynamicChildId, includeTurns: true });
+  assert.ok(childDynamicHistory.thread.turns.flatMap(saved => saved.items).some(item => item.type === 'agentMessage' && item.text === (report.dynamicChildToolsAvailable ? 'CHILD_DYNAMIC_OK' : 'CHILD_DYNAMIC_UNAVAILABLE')));
+
   // A new native process must recover disk-backed history, not a live server cache.
   // Stop only after the fixture's held request and command have definitively exited.
   transport.close();
@@ -273,7 +339,7 @@ try {
   assert.equal(restartedAdapter.sleepReadiness().allowed, false);
   report.nativeProcessRestartReadback = true;
 
-  assert.equal(requests, 9);
+  assert.equal(requests, report.dynamicChildToolsAvailable ? 15 : 14);
   assert.equal(toolContinuations, 1);
   assert.deepEqual(fixtureErrors, []);
   assert.ok(bodies.every(body => body.model === 'fixture-model' && body.stream === true));

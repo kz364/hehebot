@@ -80,3 +80,66 @@ test('pending and backpressure bounds reject unsent work without replay', async 
   assert.equal(writes.length, 1);
   child.stdin.emit('drain'); assert.equal(transport.backpressured, false); transport.close();
 });
+
+test('explicit dynamic handler preserves native identity and responds to RPC id, not callId', async () => {
+  const params = { threadId: 'thread-a', turnId: 'turn-b', callId: 'call-c', namespace: null, tool: 'read_fixture', arguments: { value: 19 } };
+  const seen = [];
+  const { child, writes, transport } = fixture({ onToolCall: async (value, { signal }) => {
+    seen.push(value); assert.equal(signal.aborted, false);
+    return { success: true, contentItems: [{ type: 'inputText', text: '43' }] };
+  } });
+  child.stdout.write(JSON.stringify({ id: 'rpc-7', method: 'item/tool/call', params }) + '\n');
+  await new Promise(setImmediate);
+  assert.deepEqual(seen, [params]);
+  assert.deepEqual(writes, [{ id: 'rpc-7', result: { success: true, contentItems: [{ type: 'inputText', text: '43' }] } }]);
+  child.stdout.write('{"id":"approval","method":"item/commandExecution/requestApproval","params":{}}\n');
+  assert.equal(writes.at(-1).error.code, -32601); assert.equal(seen.length, 1);
+  child.stdout.write(JSON.stringify({ id: 'rpc-7', method: 'item/tool/call', params }) + '\n');
+  await new Promise(setImmediate);
+  assert.equal(transport.closed, true); assert.equal(seen.length, 1);
+});
+
+test('dynamic request bounds fence before an extra handler runs', async () => {
+  let count = 0, signal;
+  const { child, transport } = fixture({ maxPending: 1, onToolCall: (_params, options) => {
+    count++; signal = options.signal; return new Promise(() => {});
+  } });
+  child.stdout.write('{"id":1,"method":"item/tool/call","params":{}}\n');
+  await new Promise(setImmediate);
+  child.stdout.write('{"id":2,"method":"item/tool/call","params":{}}\n');
+  await new Promise(setImmediate);
+  assert.equal(count, 1); assert.equal(signal.aborted, true); assert.equal(transport.closed, true);
+});
+
+test('dynamic handler timeout rejects in-flight inference as unknown and suppresses late output', async () => {
+  let finish, signal;
+  const { child, writes, transport } = fixture({ timeoutMs: 15, onToolCall: (_params, options) => {
+    signal = options.signal; return new Promise(resolve => { finish = resolve; });
+  } });
+  child.stdout.write('{"id":"tool","method":"item/tool/call","params":{}}\n');
+  const pending = transport.request('turn/start');
+  await assert.rejects(pending, { code: 'CODEX_TOOL_OUTCOME_UNKNOWN', outcome: 'unknown' });
+  assert.equal(signal.aborted, true);
+  finish({ success: true, contentItems: [{ type: 'inputText', text: 'late' }] });
+  await new Promise(setImmediate);
+  assert.equal(writes.length, 1); assert.equal(transport.closed, true);
+});
+
+test('throwing and malformed dynamic handlers expose only a stable unknown-outcome code', async () => {
+  for (const onToolCall of [() => { throw new Error('private diagnostic'); }, () => ({ success: true, contentItems: [{}] })]) {
+    const { child, writes, transport } = fixture({ onToolCall });
+    const pending = transport.request('turn/start');
+    child.stdout.write('{"id":"tool","method":"item/tool/call","params":{}}\n');
+    await assert.rejects(pending, { code: 'CODEX_TOOL_OUTCOME_UNKNOWN', outcome: 'unknown' });
+    assert.equal(writes.length, 1); assert.equal(transport.closed, true);
+  }
+});
+
+test('experimental API requires explicit boolean opt-in during initialize', async () => {
+  for (const experimentalApi of [false, true]) {
+    const { child, writes, transport } = fixture();
+    const pending = transport.initialize({ experimentalApi });
+    assert.deepEqual(writes[0].params.capabilities, { experimentalApi });
+    child.stdout.write('{"id":1,"result":{}}\n'); await pending; transport.close();
+  }
+});

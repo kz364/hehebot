@@ -4,14 +4,18 @@ import { spawn } from 'node:child_process';
 
 /** Codex 0.154.0's supported stdio protocol. Never retries a request. */
 export class CodexTransport extends EventEmitter {
-  constructor(child, { timeoutMs = 30000, maxFrameBytes = 8 * 1024 * 1024, maxPending = 64 } = {}) {
+  constructor(child, { timeoutMs = 30000, maxFrameBytes = 8 * 1024 * 1024, maxPending = 64, onToolCall = null } = {}) {
     super();
+    if (onToolCall !== null && typeof onToolCall !== 'function') throw new Error('INVALID_TOOL_HANDLER');
     this.child = child;
     this.timeoutMs = timeoutMs;
     this.maxFrameBytes = maxFrameBytes;
     this.maxPending = maxPending;
     this.backpressured = false;
     this.pending = new Map();
+    this.onToolCall = onToolCall;
+    this.serverCalls = new Map();
+    this.seenServerCalls = new Set();
     this.sequence = 0;
     this.closed = false;
     child.stdin.on('drain', () => { this.backpressured = false; });
@@ -48,6 +52,8 @@ export class CodexTransport extends EventEmitter {
       entry.reject(Object.assign(new Error(code), { code, outcome: 'unknown' }));
     }
     this.pending.clear();
+    for (const call of this.serverCalls.values()) { clearTimeout(call.timer); call.controller.abort(); }
+    this.serverCalls.clear();
     this.emit('disconnect', { code });
   }
 
@@ -55,6 +61,10 @@ export class CodexTransport extends EventEmitter {
     if (!message || typeof message !== 'object' || Array.isArray(message)) throw new Error('INVALID');
     if (typeof message.method === 'string') {
       if (Object.hasOwn(message, 'id')) {
+        if (message.method === 'item/tool/call' && this.onToolCall) {
+          this.handleToolCall(message);
+          return;
+        }
         // No remote tool request gains authority merely by arriving on this pipe.
         this.write({ id: message.id, error: { code: -32601, message: 'Client capability not enabled' } });
         this.emit('deniedRequest', { method: message.method });
@@ -72,6 +82,33 @@ export class CodexTransport extends EventEmitter {
     clearTimeout(entry.timer);
     if (message.error) entry.reject(Object.assign(new Error('CODEX_RPC_ERROR'), { code: 'CODEX_RPC_ERROR', rpcCode: message.error.code }));
     else entry.resolve(message.result);
+  }
+
+  handleToolCall(message) {
+    const id = message.id;
+    if (!(Number.isSafeInteger(id) || typeof id === 'string' && id.length > 0 && id.length <= 256) ||
+        this.seenServerCalls.has(id)) return this.fail('CODEX_TOOL_REQUEST_CONFLICT');
+    if (this.serverCalls.size >= this.maxPending || this.seenServerCalls.size >= 4096) return this.fail('CODEX_TOOL_REQUEST_LIMIT');
+    this.seenServerCalls.add(id);
+    const controller = new AbortController();
+    const timer = setTimeout(() => this.fail('CODEX_TOOL_OUTCOME_UNKNOWN'), this.timeoutMs);
+    this.serverCalls.set(id, { controller, timer });
+    // Handler owns exact native identity/grant validation. Merely installing it
+    // grants no command, file, network or approval capability.
+    void Promise.resolve().then(() => {
+      if (this.closed) return;
+      return this.onToolCall(message.params, { signal: controller.signal });
+    }).then(result => {
+      if (this.closed) return;
+      if (!result || typeof result.success !== 'boolean' || !Array.isArray(result.contentItems) ||
+          !result.contentItems.every(item => item && typeof item === 'object' &&
+            (item.type === 'inputText' && typeof item.text === 'string' ||
+             item.type === 'inputImage' && typeof item.imageUrl === 'string' ||
+             item.type === 'inputAudio' && typeof item.audioUrl === 'string'))) throw new Error('INVALID_TOOL_RESPONSE');
+      this.write({ id, result: { success: result.success, contentItems: result.contentItems } });
+    }).catch(() => this.fail('CODEX_TOOL_OUTCOME_UNKNOWN')).finally(() => {
+      clearTimeout(timer); this.serverCalls.delete(id);
+    });
   }
 
   write(message) {
@@ -96,10 +133,11 @@ export class CodexTransport extends EventEmitter {
     });
   }
 
-  async initialize() {
+  async initialize({ experimentalApi = false } = {}) {
+    if (typeof experimentalApi !== 'boolean') throw new Error('INVALID_INITIALIZE');
     const result = await this.request('initialize', {
       clientInfo: { name: 'clawbot', version: '0.1.0' },
-      capabilities: { experimentalApi: false },
+      capabilities: { experimentalApi },
     });
     this.write({ method: 'initialized' });
     return result;
@@ -113,7 +151,7 @@ export class CodexTransport extends EventEmitter {
 }
 
 /** Dedicated customer-owned home; never inherit provider keys or Amp auth. */
-export function spawnCodex({ binary, home, cwd, timeoutMs }) {
+export function spawnCodex({ binary, home, cwd, timeoutMs, onToolCall = null }) {
   if (!binary?.startsWith('/') || !home?.startsWith('/') || !cwd?.startsWith('/')) throw new Error('ABSOLUTE_PATHS_REQUIRED');
   const env = Object.fromEntries(['PATH', 'LANG']
     .filter(key => process.env[key]).map(key => [key, process.env[key]]));
@@ -121,5 +159,5 @@ export function spawnCodex({ binary, home, cwd, timeoutMs }) {
   env.CODEX_HOME = home;
   return new CodexTransport(spawn(binary, ['app-server', '--listen', 'stdio://'], {
     cwd, env, stdio: ['pipe', 'pipe', 'pipe'],
-  }), { timeoutMs });
+  }), { timeoutMs, onToolCall });
 }
