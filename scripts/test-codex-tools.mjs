@@ -15,6 +15,9 @@ import { ControlClient } from '../runtime/control-client.mjs';
 const root = resolve(import.meta.dirname, '..');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 const SKILL_POLICY = '46b2cbdd-d227-4f54-bffa-33148aad0134';
+const ROUTINE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
+const policies = [SKILL_POLICY, ROUTINE_POLICY];
+const allowedTools = ['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_run_routine', 'clawbot_delete_routine'];
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 const report = { label: 'codex-agent-tools-native-acceptance', status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
 const check = (name, fn) => { fn(); report.assertions.push(name); };
@@ -40,8 +43,8 @@ async function stop(child) {
   child.kill('SIGKILL');
   if (!await Promise.race([exited.then(() => true), sleep(2000).then(() => false)])) throw new Error('process shutdown was not confirmed');
 }
-async function jsonBody(req) { const chunks = []; for await (const chunk of req) chunks.push(chunk); return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
-function findType(value, type) { if (!value || typeof value !== 'object') return undefined; if (value.type === type) return value; for (const item of Object.values(value)) { const found = findType(item, type); if (found) return found; } }
+async function jsonBody(req) { const chunks = []; let bytes = 0; for await (const chunk of req) { bytes += chunk.length; if (bytes > 2 * 1024 * 1024) throw new Error('Fixture request exceeds limit'); chunks.push(chunk); } return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+function findType(value, type) { if (!value || typeof value !== 'object') return undefined; if (value.type === type) return value; for (const item of Object.values(value).reverse()) { const found = findType(item, type); if (found) return found; } }
 function collectTypes(value, found = new Set()) { if (!value || typeof value !== 'object') return found; if (typeof value.type === 'string') found.add(value.type); for (const item of Object.values(value)) collectTypes(item, found); return found; }
 function response(id, output) { return { id, object: 'response', created_at: 1, status: 'completed', error: null, incomplete_details: null, instructions: null, model: 'fixture-model', output, parallel_tool_calls: true, temperature: null, tool_choice: 'auto', tools: [], top_p: null, background: false, max_output_tokens: null, max_tool_calls: null, previous_response_id: null, prompt: null, reasoning: { effort: null, summary: null }, service_tier: 'default', store: false, text: { format: { type: 'text' } }, truncation: 'disabled', usage: { input_tokens: 1, input_tokens_details: { cached_tokens: 0 }, output_tokens: 1, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 2 }, user: null, metadata: {} }; }
 function sendEvents(res, output) {
@@ -76,7 +79,7 @@ try {
   await writeFile(openssl, '[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=v3\n[dn]\nCN=127.0.0.1\n[v3]\nsubjectAltName=IP:127.0.0.1\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,digitalSignature\n', { mode: 0o600 });
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-config', openssl, '-keyout', keyPath, '-out', certPath], { timeout: 10_000 });
   const token = randomBytes(32).toString('hex');
-  worker = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--env', 'local', '--ip', '127.0.0.1', '--port', String(workerPort), '--persist-to', join(directory, 'worker-state'), '--local-protocol', 'https', '--https-key-path', keyPath, '--https-cert-path', certPath, '--var', 'EXECUTION_ENABLED:true', '--var', 'NATIVE_VERIFIED:true', '--var', `RUNTIME_TOKEN:${token}`, '--var', `TOOL_POLICY_IDS:${JSON.stringify([SKILL_POLICY])}`, '--var', `PROVIDER_CONFIG:${JSON.stringify({ provider: 'fake', ref: { provider: 'fake', id: 'codex-tools-fixture' } })}`], { cwd: root, env: { ...process.env, WRANGLER_LOG_PATH: join(directory, 'wrangler-logs'), WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  worker = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--env', 'local', '--ip', '127.0.0.1', '--port', String(workerPort), '--persist-to', join(directory, 'worker-state'), '--local-protocol', 'https', '--https-key-path', keyPath, '--https-cert-path', certPath, '--var', 'EXECUTION_ENABLED:true', '--var', 'NATIVE_VERIFIED:true', '--var', `RUNTIME_TOKEN:${token}`, '--var', `TOOL_POLICY_IDS:${JSON.stringify(policies)}`, '--var', `PROVIDER_CONFIG:${JSON.stringify({ provider: 'fake', ref: { provider: 'fake', id: 'codex-tools-fixture' } })}`], { cwd: root, env: { ...process.env, WRANGLER_LOG_PATH: join(directory, 'wrangler-logs'), WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'] });
   worker.stdout.on('data', x => { workerLogs += x; }); worker.stderr.on('data', x => { workerLogs += x; });
   await waitFor(() => workerLogs.replace(/\u001b\[[0-9;]*m/g, '').includes(`Ready on https://127.0.0.1:${workerPort}`), 'HTTPS Worker readiness', 45_000);
   const origin = `https://127.0.0.1:${workerPort}`;
@@ -86,7 +89,7 @@ try {
   const stateResponse = await ownerFetch('/v1/state'); assert.equal(stateResponse.status, 200); let state = await stateResponse.json();
   const persona = state.objects.find(x => x.kind === 'persona');
   const ownerCommand = async (type, payload) => { const r = await ownerFetch('/v1/commands', { method: 'POST', headers: { 'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID() }, body: JSON.stringify({ schema_version: 1, type, payload }) }); return { status: r.status, value: await r.json() }; };
-  const adopted = await ownerCommand('persona.put', { ...persona.body, id: persona.id, expected_revision: persona.revision, tool_policy_ids: [SKILL_POLICY] });
+  const adopted = await ownerCommand('persona.put', { ...persona.body, id: persona.id, expected_revision: persona.revision, tool_policy_ids: policies });
   check('owner explicitly adopted persona tool policy', () => { assert.equal(adopted.status, 202); assert.equal(adopted.value.status, 'applied'); });
   const queued = await ownerCommand('message.send', { conversation_id: persona.id, text: 'Stage the synthetic skill proposal using the admitted tool.' });
   assert.equal(queued.value.status, 'applied');
@@ -99,12 +102,18 @@ try {
   const tokenPath = join(directory, 'runtime.token'), grantPath = join(directory, 'agent-tools.json'), home = join(directory, 'codex-home'), workspace = join(directory, 'workspace');
   await Promise.all([mkdir(home, { mode: 0o700 }), mkdir(workspace, { mode: 0o700 })]);
   await writeFile(tokenPath, token, { mode: 0o600 });
-  await writeFile(grantPath, JSON.stringify({ origin: origin + '/', tokenFile: tokenPath, identity, runId, attempt, allowedTools: ['clawbot_propose_skill'] }), { mode: 0o600 });
+  await writeFile(grantPath, JSON.stringify({ origin: origin + '/', tokenFile: tokenPath, identity, runId, attempt, allowedTools }), { mode: 0o600 });
   const proposalId = randomUUID(), skillId = randomUUID(), idempotencyKey = randomUUID();
   const toolArgs = { idempotency_key: idempotencyKey, payload: { proposal_id: proposalId, skill_id: skillId, expected_skill_revision: 0, body: { name: 'Synthetic native method', description: 'A bounded native MCP acceptance proposal.', when_to_use: 'Only in this synthetic acceptance.', inputs_access: [], steps: ['Record the staged proposal.'], decision_rules: [], validation: ['Verify pending persisted state.'], output: 'A pending proposal.', failure_handling: ['Stop without effects.'], approval_boundaries: ['Owner review is required.'], contains_private_facts: false }, executable_files_changed: false } };
+  const routineId = randomUUID();
+  const routine = { id: routineId, expected_revision: 0, persona_id: persona.id, name: 'Synthetic paused routine', instructions: 'Read synthetic local notes.', enabled: false, schedule: { cron: '0 8 * * 1-5', timezone: 'Asia/Jakarta' }, trigger_source_id: null, action_policy_ids: [], policy: { misfire: 'coalesce', overlap: 'queue_one', max_replay: 1, max_lateness_seconds: 60 } };
+  const argumentsByStage = [toolArgs, { idempotency_key: randomUUID(), payload: routine },
+    { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
+    { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } }];
+  let manualRunId;
   fixture = createServer(async (req, res) => { try {
     if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
-    if (report.modelCalls >= 4) { res.writeHead(400); res.end(); return; }
+    if (report.modelCalls >= 6) { res.writeHead(400); res.end(); return; }
     report.modelCalls++; const body = await jsonBody(req);
     if (report.modelCalls === 2) report.continuationTypes = [...collectTypes(body.input)];
     const continuation = findType(body.input, 'function_call_output') ?? findType(body.input, 'custom_tool_call_output');
@@ -114,22 +123,43 @@ try {
       const output = JSON.parse(raw);
       const content = Array.isArray(output) ? JSON.parse(output.at(-1).text) : output;
       const receipt = content.content ? JSON.parse(content.content.find(x => x.type === 'text').text) : content;
-      assert.equal(receipt.status, 'applied'); assert.equal(receipt.resource_id, proposalId); sendEvents(res, message('MCP_PROPOSAL_STAGED')); return;
+      assert.equal(receipt.status, 'applied');
+      const stage = report.modelCalls - 2;
+      const current = await (await ownerFetch('/v1/state')).json();
+      if (stage === 0) assert.equal(receipt.resource_id, proposalId);
+      else if (stage === 1) check('native routine save persisted paused Jakarta configuration', () => {
+        assert.equal(receipt.resource_id, routineId);
+        assert.deepEqual(current.objects.find(x => x.id === routineId).body, routine);
+      });
+      else if (stage === 2) check('native manual run queued once without enabling routine', () => {
+        manualRunId = receipt.resource_id;
+        assert.equal(current.objects.find(x => x.id === routineId).body.enabled, false);
+        assert.equal(current.runs.filter(x => x.routine_id === routineId).length, 1);
+        assert.equal(current.runs.find(x => x.id === manualRunId).status, 'queued');
+      });
+      else if (stage === 3) check('native deletion cancelled pending routine work, not the caller', () => {
+        assert.equal(receipt.resource_id, routineId); assert.equal(current.objects.some(x => x.id === routineId), false);
+        assert.equal(current.runs.find(x => x.id === manualRunId).status, 'cancelled');
+        assert.equal(current.runs.find(x => x.id === runId).status, 'claimed');
+      });
+      else assert.fail('Unexpected continuation');
+      if (stage === 3) { sendEvents(res, message('MCP_PROPOSAL_STAGED_AND_ROUTINE_LIFECYCLE_VERIFIED')); return; }
     }
-    const advertised = (body.tools ?? []).find(x => x?.name?.includes('clawbot_propose_skill')) ?? (body.tools ?? []).find(x => x?.name === 'mcp__clawbot');
+    const next = report.modelCalls - 1;
+    const advertised = (body.tools ?? []).find(x => x?.name?.includes(allowedTools[next])) ?? (body.tools ?? []).find(x => x?.name === 'mcp__clawbot');
     assert.ok(advertised, `clawbot MCP dispatcher not advertised: ${(body.tools ?? []).map(x => x.name).join(',')}`);
     const callId = `call_${randomUUID().replaceAll('-', '')}`;
     // Codex 0.154.0 ResponseItem::FunctionCall keeps namespace separate from name.
     sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: callId,
-      ...(advertised.name === 'mcp__clawbot' ? { namespace: 'mcp__clawbot', name: 'clawbot_propose_skill' } : { name: advertised.name }),
-      arguments: JSON.stringify(toolArgs) }]);
+      ...(advertised.name === 'mcp__clawbot' ? { namespace: 'mcp__clawbot', name: allowedTools[next] } : { name: advertised.name }),
+      arguments: JSON.stringify(argumentsByStage[next]) }]);
   } catch (error) { fixtureErrors.push(error.stack ?? String(error)); if (!res.headersSent) sendEvents(res, message('FIXTURE_ASSERTION_FAILED')); else res.end(); } });
   await new Promise((ok, fail) => fixture.once('error', fail).listen(fixturePort, '127.0.0.1', ok));
   const q = value => JSON.stringify(value);
   await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${fixturePort}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n[mcp_servers.clawbot]\ncommand = ${q(process.execPath)}\nargs = [${q(join(root, 'runtime/agent-tools.mjs'))}]\nstartup_timeout_sec = 10\n[mcp_servers.clawbot.env]\nCLAWBOT_AGENT_TOOLS_CONFIG = ${q(grantPath)}\nNODE_EXTRA_CA_CERTS = ${q(certPath)}\n`, { mode: 0o600 });
-  // Explicitly authorize only this disposable staged-proposal tool. This is the
+  // Explicitly authorize only these disposable scoped tools. This is the
   // supported per-tool policy, not an annotation-based or global approval bypass.
-  await appendFile(join(home, 'config.toml'), '\n[mcp_servers.clawbot.tools.clawbot_propose_skill]\napproval_mode = "approve"\n');
+  for (const name of allowedTools) await appendFile(join(home, 'config.toml'), `\n[mcp_servers.clawbot.tools.${name}]\napproval_mode = "approve"\n`);
   transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 15_000 });
   transport.child.stderr.on('data', x => nativeErrors.push(x.toString())); transport.on('notification', x => notifications.push(x));
   await transport.initialize();
@@ -142,7 +172,7 @@ try {
   state = await (await ownerFetch('/v1/state')).json(); const proposal = state.skill_proposals.find(x => x.id === proposalId);
   check('actual control state has pending model/run provenance', () => { assert.equal(proposal.status, 'pending'); assert.equal(proposal.skill_id, skillId); assert.deepEqual(proposal.provenance, { kind: 'model', source_ref: runId }); assert.equal(proposal.executable_files_changed, false); });
   check('proposal did not auto-create or approve a skill', () => { assert.equal(state.objects.some(x => x.kind === 'skill' && x.id === skillId), false); assert.equal(state.skill_proposals.filter(x => x.id === proposalId).length, 1); });
-  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, 2); assert.deepEqual(fixtureErrors, []); });
+  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, 5); assert.deepEqual(fixtureErrors, []); });
   report.status = 'passed'; report.runId = runId; report.attempt = attempt; report.proposalId = proposalId; report.nativeReceiptObserved = true;
 } catch (error) {
   report.error = error?.stack ?? String(error); if (fixtureErrors.length) report.fixtureErrors = fixtureErrors;
