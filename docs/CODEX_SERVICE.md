@@ -13,6 +13,7 @@ After the normal `bash scripts/verify-codex.sh` prerequisites:
 ```sh
 node --test tests/runtime-file-journal.mjs tests/runtime-codex-service.mjs
 bash scripts/test-codex-service.sh
+bash scripts/test-codex-service.sh --child
 ```
 
 The second command builds `src/providers/sprites.ts` into the ignored
@@ -29,6 +30,20 @@ and proves root-only completion is rejected. The real Sprite Tasks client and Un
 socket transport are composed, but `http.request` is synthetic: PUT/GET checks
 **do not prove a live Sprite hold**. Successful cleanup removes fixture homes,
 SQLite and certificates. Failures retain private diagnostics for inspection.
+
+The `--child` mode uses four scripted requests. The native root spawns a child,
+finishes, and the child uses its inherited root MCP grant to retrieve the exact
+paused routine from Worker/SQLite. Its next model HTTP response is deliberately
+held open. The actual service child facade persists the native-to-Worker mapping;
+an owner `run.cancel` command then travels through Worker heartbeat and supervisor
+maintenance to exactly one child `turn/interrupt`, even across repeated maintenance.
+The fixture separately observes the exact interrupted turn and HTTP connection
+closure. Five root-owned heartbeat operations retain one unknown coverage record.
+Worker completion returns HTTP 409 `CANCEL_UNCONFIRMED`; the root remains running,
+the child remains cancelling, and supervisor completion/sleep are denied. This is
+not recursive settlement, model judgment, active-work crash recovery, per-child
+effect authentication, or a live Sprite hold test. No service runtime is replaced
+with a stub; only Sprite requests and model decisions are synthetic.
 
 ## Composition contract
 
@@ -78,7 +93,7 @@ syncs observed ancestry and delivers only requested subtree cancellations. Defau
 heartbeat operations use `CodexOperations` with original claim bounds and an
 always-unknown coverage obligation. Before a claim, the projection is empty.
 Unit tests inject synthetic native/control responses; the native service fixture
-does not yet exercise child cancellation through this composition.
+exercises child cancellation through this composition in `--child` mode.
 
 ## Recovery and shutdown are conservative
 

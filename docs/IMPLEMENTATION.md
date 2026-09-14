@@ -12,6 +12,18 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 - Numeric cron/timezone/DST/misfire behavior, reviewed disabled bot import, flight deadline ledger, provider adapters, and Sprite activity-hold components.
 - Static portal and remote-only Electron desktop shell.
 
+Disposable service assembly now composes supervisor, bridge, native transport/router,
+per-root inherited MCP grants, child controls and conservative operation accounting.
+Its native child fixture exercises public owner cancellation through real Worker
+heartbeat to one exact interrupt, while completion/sleep remain denied. See
+[service evidence and limits](CODEX_SERVICE.md). A separate live Sprite Tasks test
+verified hold create/read/renew/delete, not application drain or VM sleep; see
+[provider evidence](PROVIDERS.md).
+
+[Selected portable templates](PORTABLE_TEMPLATES.md) export configuration into
+disabled routines and pending skill proposals with grants removed. This is an
+offline review plan, not full backup/restore or automatic migration.
+
 Scripted native fixtures demonstrate event routing, exact cancellation, callbacks into local Worker/SQLite, and conservative rejection of root-only completion. They do **not** prove model judgment, authenticated inference, recursive descendant/effect settlement, active-work crash recovery, production service assembly, provider sleep, connector behavior, or hardware permissions.
 
 ## Run and verify
@@ -27,7 +39,7 @@ For focused checks use `npm test`, `npm run test:runtime`, `npm run test:e2e`, a
 
 ## Remaining gates
 
-1. Assemble the production Sprite service from supervisor, bridge, adapter, event router, tool handler, activity accounting, and Worker custody; test warm/cold wake, disconnect, lease loss, and uncertain admission.
+1. Promote the disposable service composition only after complete operation coverage, safe recovery/resume and warm/cold lifecycle evidence. Disconnect, lease-loss and uncertain-admission fixtures do not establish production recovery.
 2. Complete owner-authorized Codex login in the executing environment and verify model eligibility, no paid fallback, bounded inference, restart continuity, refresh ownership, and concurrent-turn behavior.
 3. Establish authoritative recursive child/tool/effect settlement and exact cancellation. Root completion or cancellation acknowledgment is insufficient.
 4. Complete intent-aware status/new-task/steer/deferred-follow-up behavior and the full portal/mobile/accessibility UX.

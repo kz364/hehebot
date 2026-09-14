@@ -6,4 +6,4 @@ state="$(mktemp -d)"
 # The Node fixture owns its own temporary state and cleanup. This separate lock
 # directory exists for the complete fixture process, including native children.
 trap 'rmdir "$state"' EXIT
-bash "$ROOT/scripts/with-executor-lock.sh" "$state" node "$ROOT/scripts/test-codex-service.mjs"
+bash "$ROOT/scripts/with-executor-lock.sh" "$state" node "$ROOT/scripts/test-codex-service.mjs" "$@"

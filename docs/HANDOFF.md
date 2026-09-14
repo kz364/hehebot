@@ -29,6 +29,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.
 
+The disposable [service composition](CODEX_SERVICE.md) now exercises native child
+owner-cancel delivery through its actual supervisor facade and Worker heartbeat.
+Unknown coverage still blocks completion and sleep. [Portable templates](PORTABLE_TEMPLATES.md)
+provide selected, authority-stripped offline import plans, not complete backups.
+Live Sprite Tasks hold/renew/delete evidence is recorded in `docs/PROVIDERS.md`;
+it does not prove service sleep, resume or crash recovery.
+
 1. Production service assembly and complete operation accounting.
 2. Owner-authorized authenticated inference, restart, refresh, quota, and no-fallback proof.
 3. Recursive child/tool/effect settlement and exact targeted cancellation at supported interfaces.

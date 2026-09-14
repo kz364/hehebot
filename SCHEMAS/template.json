@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hehebot.invalid/schemas/template.json",
+  "title": "Hehebot portable selected configuration draft v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "commands", "omissions", "sha256"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "kind": { "const": "hehebot-template-draft" },
+    "commands": {
+      "type": "array", "minItems": 1, "maxItems": 100,
+      "items": {
+        "allOf": [
+          { "$ref": "https://hehebot.invalid/schemas/contracts.json" },
+          { "properties": { "type": { "enum": ["persona.put", "routine.put", "skill.propose"] } } }
+        ]
+      }
+    },
+    "omissions": {
+      "const": ["credentials", "connector_state", "history", "attachments", "memory", "active_tasks", "grants", "skill_enablements", "schedule_enablement", "revision_history"]
+    },
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

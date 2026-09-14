@@ -7,14 +7,17 @@ import { createServer } from 'node:http';
 import { EventEmitter } from 'node:events';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Agent } from 'undici';
 import { createSpriteCodexService } from '../runtime/sprites-codex-service.mjs';
 import { ControlClient } from '../runtime/control-client.mjs';
+import { spawnCodex } from '../runtime/codex-transport.mjs';
 
 const root = resolve(import.meta.dirname, '..');
+const childMode = process.argv.includes('--child');
+assert.ok(process.argv.slice(2).every(arg => arg === '--child'), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -54,6 +57,8 @@ function send(res, output) {
 const directory = await mkdtemp(join(tmpdir(), 'hehe-service-native-'));
 const report = { status: 'failed', modelRequests: 0, nativeReceipt: false, spriteHoldLive: false, assistantOperational: false };
 let worker, service, model, dispatcher, workerLogs = '', bound = false;
+let toolRequests = 0, childThreadId, childHeld = false, childClosed = false;
+const interrupts = [], notifications = [];
 const errors = [], taskRequests = [];
 try {
   const workerPort = await port(), token = randomBytes(32).toString('hex');
@@ -99,15 +104,37 @@ try {
       const chunks = []; for await (const chunk of req) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString());
       report.modelRequests++;
+      assert.ok(report.modelRequests <= (childMode ? 4 : 2), 'Unexpected model continuation');
       await wait(() => bound, 'service acknowledged root');
-      assert.match(JSON.stringify(body.input), /SERVICE_ASSEMBLY_19_43/);
-      if (report.modelRequests === 1) {
+      if (childMode) {
+        const isChild = body.input.some(item => item.role === 'user' && JSON.stringify(item.content).includes('SERVICE_CHILD_PROOF'));
+        if (!isChild) {
+          assert.match(JSON.stringify(body.input), /SERVICE_ASSEMBLY_19_43/);
+          const output = body.input.find(item => item.type === 'function_call_output');
+          if (output) {
+            childThreadId = JSON.parse(String(output.output)).agent_id;
+            assert.equal(typeof childThreadId, 'string');
+            send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
+              content: [{ type: 'output_text', text: 'SERVICE_PARENT_DONE', annotations: [] }] }]);
+          } else {
+            const tool = body.tools.find(tool => tool.name === 'spawn_agent' || tool.tools?.some(nested => nested.name === 'spawn_agent'));
+            assert.ok(tool, 'native spawn tool advertised');
+            send(res, [{ id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
+              ...(tool.type === 'namespace' ? { namespace: tool.name } : {}), name: 'spawn_agent',
+              arguments: JSON.stringify({ message: 'SERVICE_CHILD_PROOF', agent_type: 'default' }) }]);
+          }
+          return;
+        }
+        await wait(async () => (await service.observe())?.rootSettled, 'parent terminal before child MCP');
+      } else assert.match(JSON.stringify(body.input), /SERVICE_ASSEMBLY_19_43/);
+      toolRequests++;
+      if (toolRequests === 1) {
         const tool = body.tools.find(tool => tool.name?.includes('hehebot_list_routines')) ?? body.tools.find(tool => tool.name === 'mcp__hehebot');
         assert.ok(tool);
         send(res, [{ id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
           ...(tool.name === 'mcp__hehebot' ? { namespace: 'mcp__hehebot', name: 'hehebot_list_routines' } : { name: tool.name }), arguments: '{}' }]);
       } else {
-        assert.equal(report.modelRequests, 2);
+        assert.equal(toolRequests, 2);
         const output = body.input.find(item => item.type === 'function_call_output').output;
         const decoded = typeof output === 'string' ? JSON.parse(output) : output;
         const content = Array.isArray(decoded) ? JSON.parse(decoded.at(-1).text) : decoded;
@@ -115,6 +142,11 @@ try {
         assert.equal(receipt.next_cursor, null); assert.equal(receipt.routines.length, 1);
         assert.equal(receipt.routines[0].id, routine.id); assert.equal(receipt.routines[0].revision, 1);
         assert.deepEqual(receipt.routines[0].body, routine); report.nativeReceipt = true;
+        if (childMode) {
+          childHeld = true;
+          res.once('close', () => { if (!res.writableEnded) childClosed = true; });
+          return;
+        }
         send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
           content: [{ type: 'output_text', text: 'SERVICE_ASSEMBLY_OK', annotations: [] }] }]);
       }
@@ -145,28 +177,87 @@ try {
     portalOrigin: origin + '/', runtimeTokenFile, tlsCAFile: cert, installationId: 'service-fixture',
     personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model', allowedTools: ['hehebot_list_routines'] } } };
   service = createSpriteCodexService(config, { spriteRequest, fetchImpl: trustedFetch,
+    launch: options => {
+      const transport = spawnCodex(options), request = transport.request.bind(transport);
+      transport.on('notification', notification => notifications.push(notification));
+      transport.request = (method, params) => {
+        if (method === 'turn/interrupt') interrupts.push(structuredClone(params));
+        return request(method, params);
+      };
+      return transport;
+    },
     prepareNative: home => writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) });
   const dispatched = await service.start(); bound = true;
   assert.equal(dispatched.phase, 'running'); assert.equal(dispatched.claim.run.id, queued.resource_id);
   await wait(async () => (await service.observe())?.rootSettled, 'root completion');
+  if (childMode) {
+    await wait(() => childHeld, 'child inherited MCP receipt and open model request');
+    await service.maintain();
+    const observed = await service.observe();
+    const [[childKey, childStatus]] = Object.entries(observed.childTurns);
+    const [targetThread, targetTurn] = JSON.parse(childKey);
+    assert.equal(targetThread, childThreadId); assert.equal(childStatus, 'inProgress');
+    assert.deepEqual(Object.values(observed.childObligations[childKey].mcpCalls), ['completed']);
+    const registered = await (await trustedFetch(`${origin}/v1/state`)).json();
+    const children = registered.runs.filter(run => run.parent_run_id === queued.resource_id);
+    assert.equal(children.length, 1);
+    const child = children[0];
+    const mappingFiles = (await readdir(join(stateDirectory, 'journal'))).filter(name => name.startsWith('native-tasks-'));
+    assert.equal(mappingFiles.length, 1);
+    const mapping = JSON.parse(await readFile(join(stateDirectory, 'journal', mappingFiles[0]), 'utf8'));
+    assert.deepEqual(Object.keys(mapping.children), [childKey]);
+    assert.equal(mapping.children[childKey].runId, child.id);
+    assert.equal(mapping.children[childKey].receipt.native_session_key, targetThread);
+    assert.equal(mapping.children[childKey].receipt.parent_run_id, queued.resource_id);
+    assert.equal(child.status, 'claimed'); assert.equal(child.persona_id, persona.id);
+    assert.equal(childClosed, false); assert.deepEqual(interrupts, []);
+    const cancelled = await (await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
+      'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
+    }, body: JSON.stringify({ schema_version: 1, type: 'run.cancel', payload: {
+      run_id: child.id, reason: 'Disposable service exact child cancellation' } }) })).json();
+    assert.equal(cancelled.status, 'applied');
+    await service.maintain(); await service.maintain();
+    await wait(() => childClosed, 'interrupted child HTTP closure');
+    await wait(() => notifications.some(n => n.method === 'turn/completed' && n.params.threadId === targetThread &&
+      n.params.turn.id === targetTurn && n.params.turn.status === 'interrupted'), 'exact child interrupted event');
+    assert.deepEqual(interrupts, [{ threadId: targetThread, turnId: targetTurn }]);
+    assert.equal((await service.observe()).childTurns[childKey], 'interrupted');
+    assert.equal(service.supervisor.phase, 'running');
+    report.nativeServiceChildCancellation = true;
+  }
   const native = await service.observe();
-  assert.deepEqual(Object.values(native.mcpCalls), ['completed']);
+  assert.deepEqual(Object.values(native.mcpCalls ?? {}), childMode ? [] : ['completed']);
   assert.equal(native.effectsSettled, undefined);
   await service.maintain();
   const operations = await service.supervisor.operations();
-  assert.equal(operations.length, 3);
+  assert.equal(operations.length, childMode ? 5 : 3);
   assert.equal(operations.filter(operation => operation.status === 'unknown').length, 1);
   assert.ok(operations.every(operation => operation.run_id === queued.resource_id && operation.deadline_at === dispatched.claim.deadline_at));
   await assert.rejects(service.supervisor.complete({ attemptId: dispatched.attemptId, nativeRunId: native.nativeRunId, rootSettled: true }), { code: 'NATIVE_SETTLEMENT_INCOMPLETE' });
+  await assert.rejects(service.supervisor.drain({ state: 'fixture' }), { code: 'SLEEP_DENIED' });
+  if (childMode) {
+    assert.equal(operations.find(operation => operation.kind === 'child').status, 'settled');
+    const rejected = await trustedFetch(`${origin}/internal/complete`, { method: 'POST', headers: {
+      'content-type': 'application/json', Authorization: `Bearer ${token}`,
+    }, body: JSON.stringify({ identity: service.supervisor.identity, run_id: queued.resource_id,
+      attempt: dispatched.claim.run.current_attempt, result: { status: 'completed', text: 'Root-only result must fail' } }) });
+    assert.equal(rejected.status, 409); assert.match(JSON.stringify(await rejected.json()), /CANCEL_UNCONFIRMED/);
+  }
   const final = await (await trustedFetch(`${origin}/v1/state`)).json();
   assert.equal(final.runs.find(run => run.id === queued.resource_id).status, 'running');
-  assert.deepEqual(taskRequests, ['PUT', 'GET']); assert.equal(report.modelRequests, 2); assert.deepEqual(errors, []);
+  if (childMode) {
+    assert.equal(final.runs.find(run => run.parent_run_id === queued.resource_id).status, 'cancelling');
+    assert.equal(interrupts.length, 1);
+    Object.assign(report, { interrupts: interrupts.length, childInterrupted: true, childHttpClosed: childClosed,
+      heartbeatOperations: operations.length, unknownCoverage: 1, rootWorkerStatus: 'running', childWorkerStatus: 'cancelling', sleepDenied: true });
+  }
+  assert.deepEqual(taskRequests, ['PUT', 'GET']); assert.equal(report.modelRequests, childMode ? 4 : 2); assert.deepEqual(errors, []);
   await service.stop();
   assert.equal((await service.journal.get('service')).phase, 'recovery');
   report.status = 'passed';
 } catch (error) {
   report.error = error.code ?? error.message;
-  await writeFile(join(directory, 'diagnostics.log'), workerLogs + '\n' + errors.join('\n'), { mode: 0o600 });
+  await writeFile(join(directory, 'diagnostics.log'), workerLogs + '\n' + errors.join('\n') + '\n' + error.stack, { mode: 0o600 });
   process.exitCode = 1;
 } finally {
   try { await service?.stop(); await stop(worker); }
