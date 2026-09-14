@@ -126,6 +126,7 @@ export class PersonalControl extends DurableObject<Env> {
     new EffectLedger(this.store,()=>this.core.now()).transition(p.effect_id,p.run_id,p.status,p.receipt);break;
    }
    case 'agent-command':result=new AgentCommandBoundary(this.core,this.lifecycle).accept(command.payload);break;
+   case 'agent-routines':result=new AgentCommandBoundary(this.core,this.lifecycle).routines(command.payload);break;
   }
   await this.arm();return result;
  });}

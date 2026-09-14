@@ -100,4 +100,21 @@ describe('model-facing agent command boundary',()=>{
   const receipt=boundary.accept(deletion);expect(receipt.status).toBe('applied');expect(boundary.accept(deletion)).toEqual(receipt);
   expect(f.store.run(run.resource_id!).status).toBe('cancelled');
  });
+
+ it('routine queries paginate only the admitted bot without creating commands, runs or wakes',()=>{
+  admit([ROUTINE_MANAGE_POLICY]);
+  const ids=Array.from({length:22},()=>randomUUID()).sort();
+  for(const id of ids)f.store.put(id,'routine',routine({id,enabled:false}),0,'owner',f.core.now());
+  const foreign=routine({persona_id:otherBot});f.store.put(foreign.id,'routine',foreign,0,'owner',f.core.now());
+  const query={identity,run_id:runId,attempt:1};
+  const before=f.db.all('SELECT desired_state,queue_sequence FROM lifecycle');
+  const first=boundary.routines(query);expect(first.routines.map(x=>x.id)).toEqual(ids.slice(0,20));expect(first.next_cursor).toBe(ids[19]);
+  const second=boundary.routines({...query,after:first.next_cursor!});expect(second.routines.map(x=>x.id)).toEqual(ids.slice(20));expect(second.next_cursor).toBeNull();
+  expect(boundary.routines({...query,id:ids[3]}).routines.map(x=>x.id)).toEqual([ids[3]]);
+  expect(boundary.routines({...query,id:foreign.id}).routines).toEqual([]);
+  expect(f.db.all('SELECT desired_state,queue_sequence FROM lifecycle')).toEqual(before);
+  expect(f.db.all('SELECT id FROM commands')).toHaveLength(0);expect(f.db.all('SELECT id FROM runs')).toHaveLength(1);
+  expect(()=>boundary.routines({...query,id:ids[0],after:ids[1]})).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
+  expect(()=>boundary.routines({...query,attempt:2})).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+ });
 });

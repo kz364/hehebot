@@ -10,17 +10,30 @@ export const SKILL_PROPOSE_POLICY='46b2cbdd-d227-4f54-bffa-33148aad0134';
 export const ROUTINE_MANAGE_POLICY='f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 
 export type AgentCommand=Extract<Command,{type:'skill.propose'|'routine.put'|'routine.run'|'routine.delete'}>;
-export type AgentCommandRequest={identity:Identity;run_id:string;attempt:number;idempotency_key:string;command:AgentCommand};
+export type AgentScope={identity:Identity;run_id:string;attempt:number};
+export type AgentCommandRequest=AgentScope & {idempotency_key:string;command:AgentCommand};
+export type AgentRoutineQuery=AgentScope & {id?:string;after?:string};
 
 /** The only bridge from model output to owner command storage. */
 export class AgentCommandBoundary {
  constructor(private core:ControlCore,private lifecycle:LifecycleCore){}
- accept(request:AgentCommandRequest){
+ private admitted(request:AgentScope){
   this.lifecycle.authorizeAttempt(request.identity,request.run_id,request.attempt);
   const run=this.core.store.run(request.run_id);
   requireThat(run.current_attempt===request.attempt&&['claimed','running','finishing'].includes(run.status),'REVISION_CONFLICT','The admitted attempt is no longer active.');
   const snapshot=JSON.parse(run.context_json) as ContextSnapshot;
   requireThat(snapshot.persona.id===run.persona_id,'FORBIDDEN','The admitted persona does not match this run.',403);
+  return {run,snapshot};
+ }
+ routines(request:AgentRoutineQuery){
+  const {run,snapshot}=this.admitted(request);
+  requireThat(snapshot.persona.body.tool_policy_ids.includes(ROUTINE_MANAGE_POLICY),'FORBIDDEN','The admitted persona cannot inspect routines.',403);
+  requireThat(!(request.id&&request.after),'INVALID_INPUT','Choose a routine ID or a pagination cursor, not both.',422);
+  const rows=this.core.store.db.all<{id:string}>("SELECT id FROM objects WHERE kind='routine' AND deleted_at IS NULL AND json_extract(body_json,'$.persona_id')=? AND (? IS NULL OR id=?) AND id>? ORDER BY id LIMIT 21",run.persona_id,request.id??null,request.id??null,request.after??'');
+  return {routines:rows.slice(0,20).map(row=>this.core.store.get<RoutinePut>(row.id,'routine')),next_cursor:rows.length>20?rows[19].id:null};
+ }
+ accept(request:AgentCommandRequest){
+  const {run,snapshot}=this.admitted(request);
 
   // Validate before narrowing so owner-only or malformed commands cannot be smuggled
   // through the runtime envelope.

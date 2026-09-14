@@ -2,6 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "oneOf": [
     {
+      "type":"object", "additionalProperties":false,
+      "properties": {
+        "type":{"const":"agent-routines"},
+        "payload": {
+          "type":"object", "additionalProperties":false,
+          "properties": {
+            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
+            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
+            "id":{"type":"string","format":"uuid"},"after":{"type":"string","format":"uuid"}
+          },"required":["identity","run_id","attempt"]
+        }
+      },"required":["type","payload"]
+    },
+    {
       "type": "object",
       "additionalProperties": false,
       "properties": {

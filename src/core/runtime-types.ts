@@ -2,7 +2,7 @@ import type {FlightRegistration,FlightReceipt,FlightReconciliation} from './flig
 import type { Identity, HeartbeatOperation } from './lifecycle';
 import type {NativeChildReceipt} from './native-tasks';
 import type { EffectIntent } from './effects';
-import type {AgentCommandRequest} from './agent-commands';
+import type {AgentCommandRequest,AgentRoutineQuery} from './agent-commands';
 type Base={identity:Identity};type Attempt={run_id:string;attempt:number};
 export type RuntimePayloads={
  status:Record<string,never>;
@@ -21,5 +21,6 @@ export type RuntimePayloads={
  'effect-intent':Base & {effect:EffectIntent};
  'effect-result':Base & Attempt & {effect_id:string;status:'dispatched'|'confirmed'|'failed'|'outcome_unknown';receipt:Record<string,unknown>|null};
  'agent-command':AgentCommandRequest;
+ 'agent-routines':AgentRoutineQuery;
 };
 export type RuntimeCommand={ [K in keyof RuntimePayloads]:{type:K;payload:RuntimePayloads[K]} }[keyof RuntimePayloads];

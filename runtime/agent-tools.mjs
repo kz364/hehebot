@@ -8,7 +8,7 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { ControlClient } from './control-client.mjs';
 
-export const AGENT_TOOL_NAMES = Object.freeze(['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_run_routine', 'clawbot_delete_routine']);
+export const AGENT_TOOL_NAMES = Object.freeze(['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_run_routine', 'clawbot_delete_routine', 'clawbot_list_routines']);
 const COMMAND_TYPES = Object.freeze({ clawbot_propose_skill: 'skill.propose', clawbot_save_routine: 'routine.put', clawbot_run_routine: 'routine.run', clawbot_delete_routine: 'routine.delete' });
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_OUTSTANDING = 16;
@@ -53,6 +53,9 @@ export function buildToolDefinitions(contracts) {
     { name: AGENT_TOOL_NAMES[1], description: 'Create or update a routine within the admitted persona policy.', inputSchema: wrap(routine) },
     { name: AGENT_TOOL_NAMES[2], description: 'Run a routine once without changing its schedule. Rejects if unfinished work exists.', inputSchema: wrap(commandSchema(contracts, 'routine.run')) },
     { name: AGENT_TOOL_NAMES[3], description: 'Delete future automation and queued work; already active tasks continue.', inputSchema: wrap(commandSchema(contracts, 'routine.delete')) },
+    { name: AGENT_TOOL_NAMES[4], description: 'List current routines for this admitted bot, or inspect one by ID. Follow next_cursor with after for more results. Does not run work.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: { id: resolveRefs(contracts.$defs.uuid, contracts), after: resolveRefs(contracts.$defs.uuid, contracts) },
+    } },
   ]);
 }
 
@@ -87,6 +90,11 @@ export function createAgentToolsHandler({ controlClient, config, contracts }) {
     const payload = clone(args.payload);
     if (type === 'skill.propose') payload.provenance = { kind: 'model', source_ref: config.runId };
     try {
+      if (name === 'clawbot_list_routines') {
+        const result = await controlClient.request('agent-routines', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
+        if (!Array.isArray(result?.routines) || !(result.next_cursor === null || typeof result.next_cursor === 'string')) throw new Error('INVALID_QUERY_RESULT');
+        return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify(result) }] } };
+      }
       const result = await controlClient.request('agent-command', {
         identity: clone(config.identity), run_id: config.runId, attempt: config.attempt,
         idempotency_key: args.idempotency_key, command: { schema_version: 1, type, payload },

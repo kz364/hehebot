@@ -17,7 +17,7 @@ const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 const SKILL_POLICY = '46b2cbdd-d227-4f54-bffa-33148aad0134';
 const ROUTINE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 const policies = [SKILL_POLICY, ROUTINE_POLICY];
-const allowedTools = ['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_run_routine', 'clawbot_delete_routine'];
+const allowedTools = ['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_list_routines', 'clawbot_run_routine', 'clawbot_delete_routine'];
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 const report = { label: 'codex-agent-tools-native-acceptance', status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
 const check = (name, fn) => { fn(); report.assertions.push(name); };
@@ -108,12 +108,13 @@ try {
   const routineId = randomUUID();
   const routine = { id: routineId, expected_revision: 0, persona_id: persona.id, name: 'Synthetic paused routine', instructions: 'Read synthetic local notes.', enabled: false, schedule: { cron: '0 8 * * 1-5', timezone: 'Asia/Jakarta' }, trigger_source_id: null, action_policy_ids: [], policy: { misfire: 'coalesce', overlap: 'queue_one', max_replay: 1, max_lateness_seconds: 60 } };
   const argumentsByStage = [toolArgs, { idempotency_key: randomUUID(), payload: routine },
+    { id: routineId },
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } }];
   let manualRunId;
   fixture = createServer(async (req, res) => { try {
     if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
-    if (report.modelCalls >= 6) { res.writeHead(400); res.end(); return; }
+    if (report.modelCalls >= 7) { res.writeHead(400); res.end(); return; }
     report.modelCalls++; const body = await jsonBody(req);
     if (report.modelCalls === 2) report.continuationTypes = [...collectTypes(body.input)];
     const continuation = findType(body.input, 'function_call_output') ?? findType(body.input, 'custom_tool_call_output');
@@ -123,27 +124,32 @@ try {
       const output = JSON.parse(raw);
       const content = Array.isArray(output) ? JSON.parse(output.at(-1).text) : output;
       const receipt = content.content ? JSON.parse(content.content.find(x => x.type === 'text').text) : content;
-      assert.equal(receipt.status, 'applied');
       const stage = report.modelCalls - 2;
+      if (stage !== 2) assert.equal(receipt.status, 'applied');
       const current = await (await ownerFetch('/v1/state')).json();
       if (stage === 0) assert.equal(receipt.resource_id, proposalId);
       else if (stage === 1) check('native routine save persisted paused Jakarta configuration', () => {
         assert.equal(receipt.resource_id, routineId);
         assert.deepEqual(current.objects.find(x => x.id === routineId).body, routine);
       });
-      else if (stage === 2) check('native manual run queued once without enabling routine', () => {
+      else if (stage === 2) check('native routine inspection returns exact saved revision without running it', () => {
+        assert.equal(receipt.routines.length, 1); assert.equal(receipt.routines[0].id, routineId);
+        assert.equal(receipt.routines[0].revision, 1); assert.deepEqual(receipt.routines[0].body, routine);
+        assert.equal(receipt.next_cursor, null); assert.equal(current.runs.filter(x => x.routine_id === routineId).length, 0);
+      });
+      else if (stage === 3) check('native manual run queued once without enabling routine', () => {
         manualRunId = receipt.resource_id;
         assert.equal(current.objects.find(x => x.id === routineId).body.enabled, false);
         assert.equal(current.runs.filter(x => x.routine_id === routineId).length, 1);
         assert.equal(current.runs.find(x => x.id === manualRunId).status, 'queued');
       });
-      else if (stage === 3) check('native deletion cancelled pending routine work, not the caller', () => {
+      else if (stage === 4) check('native deletion cancelled pending routine work, not the caller', () => {
         assert.equal(receipt.resource_id, routineId); assert.equal(current.objects.some(x => x.id === routineId), false);
         assert.equal(current.runs.find(x => x.id === manualRunId).status, 'cancelled');
         assert.equal(current.runs.find(x => x.id === runId).status, 'claimed');
       });
       else assert.fail('Unexpected continuation');
-      if (stage === 3) { sendEvents(res, message('MCP_PROPOSAL_STAGED_AND_ROUTINE_LIFECYCLE_VERIFIED')); return; }
+      if (stage === 4) { sendEvents(res, message('MCP_PROPOSAL_STAGED_AND_ROUTINE_LIFECYCLE_VERIFIED')); return; }
     }
     const next = report.modelCalls - 1;
     const advertised = (body.tools ?? []).find(x => x?.name?.includes(allowedTools[next])) ?? (body.tools ?? []).find(x => x?.name === 'mcp__clawbot');
@@ -172,7 +178,7 @@ try {
   state = await (await ownerFetch('/v1/state')).json(); const proposal = state.skill_proposals.find(x => x.id === proposalId);
   check('actual control state has pending model/run provenance', () => { assert.equal(proposal.status, 'pending'); assert.equal(proposal.skill_id, skillId); assert.deepEqual(proposal.provenance, { kind: 'model', source_ref: runId }); assert.equal(proposal.executable_files_changed, false); });
   check('proposal did not auto-create or approve a skill', () => { assert.equal(state.objects.some(x => x.kind === 'skill' && x.id === skillId), false); assert.equal(state.skill_proposals.filter(x => x.id === proposalId).length, 1); });
-  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, 5); assert.deepEqual(fixtureErrors, []); });
+  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, 6); assert.deepEqual(fixtureErrors, []); });
   report.status = 'passed'; report.runId = runId; report.attempt = attempt; report.proposalId = proposalId; report.nativeReceiptObserved = true;
 } catch (error) {
   report.error = error?.stack ?? String(error); if (fixtureErrors.length) report.fixtureErrors = fixtureErrors;

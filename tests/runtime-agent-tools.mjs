@@ -80,6 +80,16 @@ test('run and delete tools preserve revision checks and cannot silently save a r
   assert.equal(calls.length, 2);
 });
 
+test('routine read tool routes only a bounded query with host-owned identity', async () => {
+  const requests = [];
+  const { handle } = fixture({ request: async (...args) => { requests.push(args); return { routines: [], next_cursor: null }; } });
+  const message = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'clawbot_list_routines', arguments: { after: uuid(12) } } };
+  assert.deepEqual(JSON.parse((await handle(message)).result.content[0].text), { routines: [], next_cursor: null });
+  assert.deepEqual(requests, [['agent-routines', { after: uuid(12), identity: config.identity, run_id: config.runId, attempt: config.attempt }]]);
+  message.params.arguments.identity = { epoch: 99 };
+  assert.equal((await handle(message)).error.code, -32602); assert.equal(requests.length, 1);
+});
+
 test('allowedTools is a host allowlist and cannot name owner-only commands', async () => {
   const one = createAgentToolsHandler({ controlClient: { request: async () => ({}) }, config: { ...config, allowedTools: [AGENT_TOOL_NAMES[1]] }, contracts });
   assert.deepEqual((await one({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).result.tools.map(x => x.name), [AGENT_TOOL_NAMES[1]]);
