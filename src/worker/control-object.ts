@@ -11,6 +11,7 @@ import { TimelineRetention } from '../core/timeline-retention';
 import { ResultRetention } from '../core/result-retention';
 import { LifecycleCore } from '../core/lifecycle';
 import { EffectLedger } from '../core/effects';
+import { RootChildEffects } from '../core/root-child-effects';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { createProvider, type ProviderConfig, type RuntimeRef } from '../providers';
 import validateRuntime from '../generated/validate-runtime.js';
@@ -139,6 +140,8 @@ export class PersonalControl extends DurableObject<Env> {
     const p=command.payload;this.lifecycle.authorizeAttempt(p.identity,p.run_id,p.attempt);
     new EffectLedger(this.store,()=>this.core.now()).transition(p.effect_id,p.run_id,p.status,p.receipt);break;
    }
+   case 'root-child-effect-intent':result=new RootChildEffects(this.store,this.core,this.lifecycle).intent(command.payload);break;
+   case 'root-child-effect-result':new RootChildEffects(this.store,this.core,this.lifecycle).transition(command.payload);break;
    case 'agent-command':result=new AgentCommandBoundary(this.core,this.lifecycle).accept(command.payload);break;
    case 'agent-routines':result=new AgentCommandBoundary(this.core,this.lifecycle).routines(command.payload);break;
    case 'agent-skill':result=new AgentCommandBoundary(this.core,this.lifecycle).skill(command.payload);break;

@@ -102,6 +102,14 @@ heartbeat to one exact interrupt, while completion/sleep remain denied. See
 verified hold create/read/renew/delete, not application drain or VM sleep; see
 [provider evidence](PROVIDERS.md).
 
+Trusted [root/descendant effect bookkeeping](ROOT_CHILD_EFFECTS.md) now connects
+strict runtime routes to the existing effect/resource ledgers. It validates exact
+lease, attempts, native ancestry and original same-task policy/scope, records
+child-owned effects and locks atomically, and preserves custody-bound replay.
+Reconciliation never releases locks or implies native settlement/sleep. SQLite
+and in-process Worker HTTP/RPC tests use synthetic observations and receipts;
+this is not connector execution or authenticated per-child MCP provenance.
+
 The active-native-crash fixture verifies fencing and restart refusal during an
 open root turn, not successful resume. The [offline recovery diagnostic](CODEX_RECOVERY.md)
 projects current task identities and observed obligations without credentials,

@@ -1,6 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
+    "runtimeIdentity": {
+      "type":"object","additionalProperties":false,
+      "properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},
+      "required":["epoch","boot_id"]
+    },
     "effectIntent": {
       "type":"object","additionalProperties":false,
       "properties": {
@@ -17,6 +22,49 @@
     }
   },
   "oneOf": [
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
+        "type":{"const":"root-child-effect-intent"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "identity":{"$ref":"#/$defs/runtimeIdentity"},
+            "root_run_id":{"type":"string","format":"uuid"},
+            "root_attempt":{"type":"integer","minimum":1},
+            "effect":{"$ref":"#/$defs/effectIntent"},
+            "resources":{"type":"array","minItems":0,"maxItems":8,"uniqueItems":true,"items":{"type":"string","pattern":"^[a-zA-Z0-9:._/-]{1,256}$"}}
+          },
+          "required":["identity","root_run_id","root_attempt","effect","resources"],
+          "allOf":[{
+            "if":{"properties":{"effect":{"properties":{"classification":{"enum":["idempotent","mutation"]}}}}},
+            "then":{"properties":{"resources":{"minItems":1}}}
+          }]
+        }
+      },
+      "required":["type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
+        "type":{"const":"root-child-effect-result"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "identity":{"$ref":"#/$defs/runtimeIdentity"},
+            "root_run_id":{"type":"string","format":"uuid"},
+            "root_attempt":{"type":"integer","minimum":1},
+            "run_id":{"type":"string","format":"uuid"},
+            "attempt":{"type":"integer","minimum":1},
+            "effect_id":{"type":"string","format":"uuid"},
+            "status":{"enum":["dispatched","confirmed","failed","outcome_unknown"]},
+            "receipt":{"type":["object","null"]}
+          },
+          "required":["identity","root_run_id","root_attempt","run_id","attempt","effect_id","status","receipt"]
+        }
+      },
+      "required":["type","payload"]
+    },
     {
       "type":"object", "additionalProperties":false,
       "properties": {

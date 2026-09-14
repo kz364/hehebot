@@ -3,6 +3,7 @@ import type { Identity, HeartbeatOperation } from './lifecycle';
 import type {NativeChildReceipt} from './native-tasks';
 import type { EffectIntent } from './effects';
 import type {AgentCommandRequest,AgentRoutineQuery,AgentSkillQuery} from './agent-commands';
+import type {RootChildEffectIntent,RootChildEffectResult} from './root-child-effects';
 type Base={identity:Identity};type Attempt={run_id:string;attempt:number};
 export type RuntimePayloads={
  status:Record<string,never>;
@@ -20,6 +21,8 @@ export type RuntimePayloads={
  'commit-sleep':Base & {stop_token:string;queue_sequence:number;checkpoint:Record<string,unknown>};
  'effect-intent':Base & {effect:EffectIntent};
  'effect-result':Base & Attempt & {effect_id:string;status:'dispatched'|'confirmed'|'failed'|'outcome_unknown';receipt:Record<string,unknown>|null};
+ 'root-child-effect-intent':RootChildEffectIntent;
+ 'root-child-effect-result':RootChildEffectResult;
  'agent-command':AgentCommandRequest;
  'agent-routines':AgentRoutineQuery;
  'agent-skill':AgentSkillQuery;
