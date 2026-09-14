@@ -38,7 +38,7 @@ async function refresh(force=false){
 function choose(id){selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
 function render(){
  if(!snapshot)return;
- renderBudget();
+ renderBudget();renderMonitoring();
  for(const [kind,target] of [['persona','bots'],['room','rooms']]){
   $(target).replaceChildren();
   for(const object of items(kind).filter(x=>!x.body.archived)){
@@ -146,6 +146,16 @@ function field(label,name,value='',type='text'){const l=node('label',label,'fiel
 function selectField(label,name,options,value){const l=node('label',label,'field');const select=node('select');select.name=name;for(const [v,text]of options){const o=node('option',text);o.value=v;select.append(o);}select.value=value;l.append(select);return l;}
 function openEditor(title,fields,save){editing=save;$('editor-title').textContent=title;$('editor-fields').replaceChildren(...fields);$('editor-error').hidden=true;$('editor').showModal();}
 const dollars=cents=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
+function renderMonitoring(){
+ const m=snapshot.monitoring;$('monitoring-panel').hidden=!m;if(!m)return;
+ const age=seconds=>seconds===null?'Unknown':`${Math.ceil(seconds)}s`;
+ const rows=[['Ready requests',m.queue.count],['Oldest request',m.queue.count?age(m.queue.oldest_request_age_seconds):'None'],['Heartbeat age',m.lease.expected_running?age(m.lease.heartbeat_age_seconds):'Not expected'],['Recorded operations',m.operations.reduce((sum,row)=>sum+row.count,0)],['Resource locks',m.locks],['Uncertain effects',m.effects.find(row=>row.status==='outcome_unknown')?.count??0],['Schedule lag',age(m.schedules.lag_seconds)],['Backup verification','Not verified']];
+ $('monitoring-stats').replaceChildren(...rows.map(([label,value])=>{const row=node('div');row.append(node('dt',label),node('dd',String(value)));return row;}));
+ $('monitoring-operations').replaceChildren(...m.operations.map(row=>node('p',`${row.count} ${row.kind} · ${row.status}`,'hint')));
+ const messages={HEARTBEAT_UNKNOWN:'Runtime heartbeat has not been verified.',HEARTBEAT_STALE:'Runtime heartbeat is overdue.',QUEUE_DELAYED:'Ready requests have waited over two minutes.',CANCEL_UNCONFIRMED:'Cancellation is not confirmed. Do not replay the action.',RECOVERY_REQUIRED:'Tasks need recovery review before resuming.',OUTCOME_UNKNOWN:'External outcomes are unknown. Reconcile before retrying.',OPERATION_OVERDUE:'Recorded operations exceeded their deadline.',SCHEDULE_DELAYED:'Scheduling is more than five minutes behind.',BACKUP_UNVERIFIED:'No coordinated backup has been verified.'};
+ const signature=JSON.stringify(m.alerts),target=$('monitoring-alerts');
+ if(target.dataset.signature!==signature){target.dataset.signature=signature;target.replaceChildren(...m.alerts.map(alert=>node('p',`${messages[alert.code]??alert.code}${alert.count===undefined?'':` (${alert.count})`}`,alert.severity==='error'?'hint danger':'hint')));}
+}
 function renderBudget(){
  const budget=snapshot.budget;$('budget-panel').hidden=!budget;if(!budget)return;
  const status={disabled:'Budget suspension is off',ok:'Within projected cap',BUDGET_UNKNOWN:'Optional work paused: estimate unavailable or expired',BUDGET_BLOCKED:'Optional work paused: projected cap reached'};

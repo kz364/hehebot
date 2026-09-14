@@ -142,6 +142,25 @@ Admitted attempts/effects/locks remain unchanged; budget exceptions never enable
 production gates. SQLite/Worker and inspected Chromium fixtures verify local
 behavior, not actual provider bills, quota, seven-day costs or the USD5 target.
 
+`state().monitoring` provides content-free control-plane observations: ready
+request counts/age (excluding expired and budget-blocked work), heartbeat age,
+unsettled operations grouped by kind/status, unresolved effects, locks,
+cancellation/recovery counts and current schedule lag. Alerts use strict
+45-second heartbeat, 120-second request-age and five-minute schedule thresholds,
+plus immediate uncertainty/deadline notices. Projection reads do not write,
+invoke inference or decide admission/sleep. Worker ingress may independently
+perform its existing maintenance before the snapshot; schedule lag is current,
+not a historical reliability statistic. Request age is original receipt/enqueue
+age, including prior waits, not a newly invented queue-entry timestamp.
+
+The portal displays these counts and warnings without replay controls or repeated
+live-region announcements for unchanged alerts. `node
+scripts/test-portal-monitoring.mjs` covers synthetic empty/active/narrow Chromium
+states and zero mutations; the captures were inspected. Coordinated backup
+verification remains explicitly unavailable, including after local staging
+snapshots. This is not native operation completeness, a metrics/tracing exporter,
+connector last-sync verification, backup-age attestation or measured SLO evidence.
+
 Scripted native fixtures demonstrate event routing, exact cancellation, callbacks into local Worker/SQLite, and conservative rejection of root-only completion. They do **not** prove model judgment, authenticated inference, recursive descendant/effect settlement, active-work crash recovery, production service assembly, provider sleep, connector behavior, or hardware permissions.
 
 ## Run and verify
