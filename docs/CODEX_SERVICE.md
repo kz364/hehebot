@@ -14,6 +14,7 @@ After the normal `bash scripts/verify-codex.sh` prerequisites:
 node --test tests/runtime-file-journal.mjs tests/runtime-codex-service.mjs
 bash scripts/test-codex-service.sh
 bash scripts/test-codex-service.sh --child
+bash scripts/test-codex-service.sh --child-effects
 bash scripts/test-codex-service.sh --crash
 ```
 
@@ -45,6 +46,28 @@ the child remains cancelling, and supervisor completion/sleep are denied. This i
 not recursive settlement, model judgment, active-work crash recovery, per-child
 effect authentication, or a live Sprite hold test. No service runtime is replaced
 with a stub; only Sprite requests and model decisions are synthetic.
+
+The `--child-effects` mode keeps the same four-request native child/cancellation
+sequence, but starts an owner-adopted synthetic routine with a pinned action
+policy. The trusted fixture host uses the service's exact persisted child mapping
+and real certificate-validated HTTPS `ControlClient` to exercise
+[root/descendant effect bookkeeping](ROOT_CHILD_EFFECTS.md). Registration alone
+cannot admit intent; the host first acknowledges the observed child through
+`submitted`. The service itself does not yet perform this child acknowledgement.
+The Worker rejects a changed native reference before updating either task or
+attempt; the exact registered reference still succeeds. No effect tool or new
+grant is exposed to the model.
+
+The fixture checks original-ID replay with reordered resources, changed-resource
+conflict, root-as-child rejection and child-owned locks. A root lock acquisition
+that encounters a held child resource rolls back its preceding free-resource
+acquisition. Synthetic dispatch/unknown/confirmation records reconcile during
+owner cancellation; they are **not observations of an actual connector action**.
+Replay preserves the recorded status, confirmation retains the locks, and direct
+child completion fails with `RESOURCE_BUSY`. Root completion and sleep still fail
+with unknown operation coverage. `connectorDispatches: 0` means no connector ran,
+not proof of a live connector's exactly-once dispatch protocol. Native identity,
+the one exact interrupt, and child HTTP closure remain independently asserted.
 
 The Linux `--crash` mode holds the root's second scripted response after a verified
 MCP read. It identifies the npm launcher's exact native child through `/proc` and

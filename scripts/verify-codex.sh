@@ -25,6 +25,7 @@ node scripts/test-codex-tools.mjs --supervisor
 node scripts/test-codex-tools.mjs --supervisor-child
 bash scripts/test-codex-service.sh
 bash scripts/test-codex-service.sh --child
+bash scripts/test-codex-service.sh --child-effects
 bash scripts/test-codex-service.sh --crash
 npm run build
 

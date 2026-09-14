@@ -17,9 +17,10 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { inspectCodexRecovery } from '../runtime/codex-recovery-inspect.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const childMode = process.argv.includes('--child');
+const effectsMode = process.argv.includes('--child-effects');
+const childMode = process.argv.includes('--child') || effectsMode;
 const crashMode = process.argv.includes('--crash');
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -73,6 +74,7 @@ try {
     '--port', String(workerPort), '--persist-to', join(directory, 'worker'), '--local-protocol', 'https', '--https-key-path', key, '--https-cert-path', cert,
     '--var', 'EXECUTION_ENABLED:true', '--var', 'NATIVE_VERIFIED:true', '--var', `RUNTIME_TOKEN:${token}`,
     '--var', `TOOL_POLICY_IDS:${JSON.stringify([routinePolicy])}`,
+    ...(effectsMode ? ['--var', `ACTION_POLICY_IDS:${JSON.stringify([routinePolicy])}`] : []),
     '--var', `PROVIDER_CONFIG:${JSON.stringify({ provider: 'fake', ref: { provider: 'fake', id: 'assembly-fixture' } })}`],
     { cwd: root, env: { ...process.env, WRANGLER_SEND_METRICS: 'false', WRANGLER_LOG_PATH: join(directory, 'logs') }, stdio: ['ignore', 'pipe', 'pipe'] });
   worker.stdout.on('data', chunk => { workerLogs += chunk; }); worker.stderr.on('data', chunk => { workerLogs += chunk; });
@@ -88,8 +90,8 @@ try {
     id: persona.id, expected_revision: persona.revision, tool_policy_ids: [routinePolicy] } }) })).json();
   assert.equal(adopted.status, 'applied');
   const routine = { id: randomUUID(), expected_revision: 0, persona_id: persona.id, name: 'Assembly fixture 19 versus 43',
-    instructions: 'Compare 19 against 43 without external effects.', enabled: false,
-    schedule: { cron: '0 8 * * 1-5', timezone: 'Asia/Jakarta' }, trigger_source_id: null, action_policy_ids: [],
+    instructions: `${effectsMode ? 'SERVICE_ASSEMBLY_19_43 ' : ''}Compare 19 against 43 without external effects.`, enabled: false,
+    schedule: { cron: '0 8 * * 1-5', timezone: 'Asia/Jakarta' }, trigger_source_id: null, action_policy_ids: effectsMode ? [routinePolicy] : [],
     policy: { misfire: 'coalesce', overlap: 'queue_one', max_replay: 1, max_lateness_seconds: 60 } };
   const saved = await (await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
     'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
@@ -97,7 +99,9 @@ try {
   assert.equal(saved.status, 'applied');
   const queued = await (await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
     'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
-  }, body: JSON.stringify({ schema_version: 1, type: 'message.send', payload: { conversation_id: persona.id, text: 'SERVICE_ASSEMBLY_19_43' } }) })).json();
+  }, body: JSON.stringify(effectsMode
+    ? { schema_version: 1, type: 'routine.run', payload: { id: routine.id, expected_revision: 1 } }
+    : { schema_version: 1, type: 'message.send', payload: { conversation_id: persona.id, text: 'SERVICE_ASSEMBLY_19_43' } }) })).json();
   assert.equal(queued.status, 'applied');
   const control = new ControlClient({ origin: origin + '/', token, fetchImpl: trustedFetch });
   await wait(async () => (await control.request('status', {})).phase === 'BOOTING', 'FakeProvider boot');
@@ -222,6 +226,42 @@ try {
     assert.equal(mapping.children[childKey].receipt.parent_run_id, queued.resource_id);
     assert.equal(child.status, 'claimed'); assert.equal(child.persona_id, persona.id);
     assert.equal(childClosed, false); assert.deepEqual(interrupts, []);
+    let effectInput, effectResult;
+    if (effectsMode) {
+      const identity = service.supervisor.identity;
+      effectInput = { identity, root_run_id: queued.resource_id, root_attempt: dispatched.claim.run.current_attempt,
+        resources: ['calendar:z43', 'browser:a19'], effect: { id: randomUUID(), run_id: child.id, attempt: child.current_attempt,
+          action_key: randomUUID(), classification: 'mutation', authorization_ref: routinePolicy,
+          request_digest: 'synthetic-request-71', provider_idempotency_key: null } };
+      effectResult = (status, receipt = null) => ({ identity, root_run_id: effectInput.root_run_id,
+        root_attempt: effectInput.root_attempt, run_id: child.id, attempt: child.current_attempt,
+        effect_id: effectInput.effect.id, status, receipt });
+      // Registration alone is metadata, not active effect admission. The trusted
+      // fixture submits only the exact acknowledged mapping observed above.
+      await assert.rejects(control.request('root-child-effect-intent', effectInput), { code: 'CONTROL_HTTP_ERROR', status: 409 });
+      await assert.rejects(control.request('submitted', { identity, run_id: child.id, attempt: child.current_attempt,
+        native_ref: 'wrong-native-child-103' }), { code: 'CONTROL_HTTP_ERROR', status: 409 });
+      await control.request('submitted', { identity, run_id: child.id, attempt: child.current_attempt,
+        native_ref: mapping.children[childKey].receipt.native_run_ref });
+      const original = { id: effectInput.effect.id, status: 'intent' };
+      assert.deepEqual(await control.request('root-child-effect-intent', effectInput), original);
+      assert.deepEqual(await control.request('root-child-effect-intent', { ...effectInput,
+        resources: [...effectInput.resources].reverse(), effect: { ...effectInput.effect, id: randomUUID() } }), original);
+      await assert.rejects(control.request('root-child-effect-intent', { ...effectInput, resources: ['browser:a19'] }),
+        { code: 'CONTROL_HTTP_ERROR', status: 409 });
+      await assert.rejects(control.request('root-child-effect-intent', { ...effectInput,
+        effect: { ...effectInput.effect, run_id: queued.resource_id } }), { code: 'CONTROL_HTTP_ERROR', status: 403 });
+      // A root cannot take its child's locks. Failure after the lexically first
+      // free resource must roll back that partial acquisition as well.
+      await assert.rejects(control.request('resource-acquire', { identity, run_id: queued.resource_id,
+        attempt: dispatched.claim.run.current_attempt, resources: ['a:rollback19', 'calendar:z43'] }),
+      { code: 'CONTROL_HTTP_ERROR', status: 409 });
+      await control.request('resource-acquire', { identity, run_id: child.id, attempt: child.current_attempt, resources: ['a:rollback19'] });
+      await control.request('resource-release', { identity, run_id: child.id, attempt: child.current_attempt, resources: ['a:rollback19'] });
+      // Synthetic trusted-executor observations only; no connector is called.
+      await control.request('root-child-effect-result', effectResult('dispatched'));
+      await control.request('root-child-effect-result', effectResult('outcome_unknown'));
+    }
     const cancelled = await (await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
       'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
     }, body: JSON.stringify({ schema_version: 1, type: 'run.cancel', payload: {
@@ -235,6 +275,22 @@ try {
     assert.equal((await service.observe()).childTurns[childKey], 'interrupted');
     assert.equal(service.supervisor.phase, 'running');
     report.nativeServiceChildCancellation = true;
+    if (effectsMode) {
+      assert.deepEqual(await control.request('root-child-effect-intent', effectInput), { id: effectInput.effect.id, status: 'outcome_unknown' });
+      await assert.rejects(control.request('root-child-effect-result', effectResult('confirmed', {})), { code: 'CONTROL_HTTP_ERROR', status: 422 });
+      await control.request('root-child-effect-result', effectResult('confirmed', { synthetic_receipt: 'destination-103' }));
+      assert.deepEqual(await control.request('root-child-effect-intent', effectInput), { id: effectInput.effect.id, status: 'confirmed' });
+      await assert.rejects(control.request('resource-acquire', { identity: service.supervisor.identity,
+        run_id: queued.resource_id, attempt: dispatched.claim.run.current_attempt, resources: effectInput.resources }),
+      { code: 'CONTROL_HTTP_ERROR', status: 409 });
+      const completion = await trustedFetch(`${origin}/internal/complete`, { method: 'POST', headers: {
+        'content-type': 'application/json', Authorization: `Bearer ${token}`,
+      }, body: JSON.stringify({ identity: service.supervisor.identity, run_id: child.id, attempt: child.current_attempt,
+        result: { status: 'cancelled', text: '' } }) });
+      assert.equal(completion.status, 409); assert.equal((await completion.json()).error.code, 'RESOURCE_BUSY');
+      Object.assign(report, { nativeChildEffectCustody: true, childOwnedLocksRetained: true, atomicLockRollback: true,
+        nativeSubmissionIdentityPreserved: true, effectReconciledDuringCancellation: true, effectReplayPreserved: true, connectorDispatches: 0 });
+    }
   }
   const native = await service.observe();
   assert.deepEqual(Object.values(native.mcpCalls ?? {}), childMode ? [] : ['completed']);
