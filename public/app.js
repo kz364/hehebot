@@ -54,7 +54,8 @@ function render(){
  $('runtime-banner').textContent='Your messages and routines are saved. The assistant is waiting for its runtime connection and sign-in before it can work.';
  const conversation=events.filter(x=>x.conversation_id===selected);const runs=snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
  const steering=(snapshot.steering??[]).filter(x=>runs.some(run=>run.id===x.run_id));
- const signature=JSON.stringify([selected,conversation,runs,steering,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
+ const recovery=(snapshot.recovery??[]).filter(x=>runs.some(run=>run.id===x.run_id));
+ const signature=JSON.stringify([selected,conversation,runs,steering,recovery,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;const expanded=new Set([...timeline.querySelectorAll('.task-card[open]')].map(card=>card.dataset.runId));timeline.replaceChildren();
   if(historyFloors.get(selected)){const notice=node('p','Earlier history has expired under the retention policy. Only retained messages and updates are shown.','hint');notice.setAttribute('role','status');timeline.append(notice);}
   if(conversation.length>=100){const conversationId=selected;timeline.append(button('Load earlier messages',async()=>{try{
@@ -74,16 +75,21 @@ function render(){
     if(run.status==='waiting')e.append(node('span',run.error_code==='CAPABILITY_UNAVAILABLE'?'Runtime connection required':run.error_code??'Input required'));
     if(['queued','claimed','running','waiting'].includes(run.status))e.append(button('Cancel',()=>act(()=>command('run.cancel',{run_id:run.id,reason:'Owner requested cancellation.'}))));
     if(['failed','cancelled','recovery_required','waiting'].includes(run.status)&&snapshot.summary.execution_enabled)e.append(button('Retry',()=>act(()=>command('run.retry',{run_id:run.id,expected_attempt:run.current_attempt}))));timeline.append(e);
+   }else if(event.type==='effect.owner_reconciled'||event.type==='run.owner_recovered'){
+    const e=node('div',undefined,'event');e.setAttribute('role','status');
+    e.append(node('span',event.type==='effect.owner_reconciled'?`Owner recorded effect outcome: ${event.payload.outcome}. This is not provider-verified evidence.`:`Recovery closed as ${event.payload.status}. This did not retry the native task.`));timeline.append(e);
    }else if(event.type==='task.followup_expired'){
     const e=node('div',undefined,'event');e.setAttribute('role','status');e.append(node('span','Follow-up expired','status'),node('span','A deferred follow-up expired after 90 days without delivery. Send a fresh follow-up on the task if it is still needed.'));timeline.append(e);
    }else if(event.type==='run.input_expired'){
     const e=node('div',undefined,'event');e.setAttribute('role','status');e.append(node('span','Request expired','status'),node('span','A queued request expired after 90 days without starting. Send a fresh request if it is still needed.'));timeline.append(e);
    }else if(event.type.startsWith('room.')){const e=node('div',undefined,'event');e.append(node('span',event.type==='room.context_update'?'Context update':'Room update'),node('span',event.payload.text??''));timeline.append(e);}
   }
-  for(const run of runs.filter(x=>x.role==='background'||x.status==='running'||steering.some(receipt=>receipt.run_id===x.id))){
+  for(const run of runs.filter(x=>x.role==='background'||['running','recovery_required'].includes(x.status)||steering.some(receipt=>receipt.run_id===x.id))){
    const title=run.title??(run.role==='background'?'Background task':'Conversation task');
    const card=node('details',undefined,'task-card');card.dataset.runId=run.id;card.open=expanded.has(run.id);card.append(node('summary',`${title} · ${statuses[run.status]??run.status}`));
    card.append(node('p',`Task ${run.id}`,'hint'));
+   const recovering=recovery.find(item=>item.run_id===run.id&&item.attempt===run.current_attempt);
+   if(recovering)renderRecovery(card,run,recovering,title);
    const receipts=steering.filter(x=>x.run_id===run.id&&x.attempt===run.current_attempt);
    for(const receipt of receipts){
     const labels={pending:'Steering awaits native acknowledgement. Do not resend while delivery is unresolved.',accepted:'Steering accepted by the native task. Understanding and completion are not yet verified.',outcome_unknown:'Steering delivery is uncertain. Do not resend; reconciliation is required.',not_delivered:'Steering was not delivered because the native task was no longer accepting it.'};
@@ -109,6 +115,25 @@ function render(){
  $('memories').replaceChildren();for(const m of items('memory').filter(x=>x.body.scope.kind==='global'||x.body.scope.kind==='persona'&&x.body.scope.id===selected)){
   const card=node('div',undefined,'card');card.append(node('span',m.body.scope.kind==='global'?'Shared preference':'Bot memory','status'),node('p',m.body.text));const actions=node('div',undefined,'actions');actions.append(button('Edit',()=>editMemory(m)),button('Forget',()=>act(()=>command('memory.delete',{id:m.id,expected_revision:m.revision,purge_transcripts:false})),'danger'));card.append(actions);$('memories').append(card);
  }if(!$('memories').children.length)$('memories').append(node('p','Save preferences you want your bots to remember.','muted'));
+}
+function renderRecovery(card,run,recovery,title){
+ card.append(node('p',recovery.executor_terminated?(recovery.effects.length?'Executor termination confirmed. External effects still need separate review.':'Executor termination confirmed. No unresolved effects are recorded for this task.'):'Executor termination is not confirmed. Recovery actions are unavailable.','review-notice'));
+ for(const [blocked,message] of [[recovery.unresolved_operations,'Operation records are unresolved.'],[recovery.descendants_unsettled,'Recover unfinished descendants before this task.'],[recovery.stale_locks,'A retained lock belongs to a different attempt. Administrative reconciliation is required.']])if(blocked)card.append(node('p',message,'hint'));
+ card.append(node('p',`${recovery.retained_locks} resource lock(s) retained. Nothing is released by recording an effect outcome.`,'hint'));
+ for(const effect of recovery.effects){
+  const row=node('section',undefined,'card');row.append(node('h4',`Unresolved external effect · ${effect.classification}`),node('p',`Effect ${effect.id}`),node('p',`Action ${effect.action_key}`),node('p',`Request ${effect.request_digest}`));
+  const decide=button('Record external outcome',()=>{
+   const key=crypto.randomUUID(),evidence=field('Evidence reference (no URL or private text)','evidence_ref');evidence.querySelector('input').pattern='[A-Za-z0-9:._-]{1,128}';evidence.querySelector('input').maxLength=128;
+   const outcome=selectField('Observed outcome','outcome',[['','Choose an outcome'],['confirmed','The effect occurred'],['failed','The effect did not occur']],'');outcome.querySelector('select').required=true;
+   const affirmation=node('label',undefined,'check'),check=node('input');check.type='checkbox';check.required=true;affirmation.append(check,document.createTextNode('I checked the external destination and can account for this exact effect.'));
+   openEditor('Record an owner effect decision',[node('p',`Selected effect: ${effect.id}`,'message-body'),node('p','This records your decision, not provider-verified evidence. If the outcome is still unknown, cancel and keep it unresolved. This does not resend the action or release its locks.','review-notice'),outcome,evidence,affirmation],form=>command('effect.reconcile',{run_id:run.id,expected_attempt:recovery.attempt,effect_id:effect.id,expected_request_digest:effect.request_digest,outcome:form.get('outcome'),evidence_ref:form.get('evidence_ref')},key));
+  },'quiet');decide.dataset.action='effect-reconcile';decide.disabled=!recovery.can_decide_effects||effect.status!=='outcome_unknown';row.append(decide);card.append(row);
+ }
+ if(recovery.effects_truncated)card.append(node('p','Showing the first 20 unresolved effects. Additional effects remain blocked; refresh after reviewing this page.','hint'));
+ const close=button('Close recovery and release locks',()=>{
+  const key=crypto.randomUUID(),affirmation=node('label',undefined,'check'),check=node('input');check.type='checkbox';check.required=true;affirmation.append(check,document.createTextNode('Release this stopped attempt’s resource locks and close its recovery state.'));
+  openEditor(`Close recovery: ${title}`,[node('p','This records the task as failed or cancelled, never successful. It does not retry the native task. Any previously requested deferred follow-ups may become eligible. The server rechecks effects, descendants and termination.','review-notice'),affirmation],()=>command('run.recover',{run_id:run.id,expected_attempt:recovery.attempt,release_resources:true},key));
+ },'quiet danger');close.dataset.action='run-recover';close.disabled=!recovery.can_recover;card.append(close);
 }
 function lines(value){return String(value??'').split('\n').map(x=>x.trim()).filter(Boolean);}
 function detail(label,value){const wrap=node('section',undefined,'skill-detail');wrap.append(node('h4',label));if(Array.isArray(value)){const list=node('ul');for(const item of value)list.append(node('li',item));wrap.append(list);}else wrap.append(node('p',value||'Not specified'));return wrap;}

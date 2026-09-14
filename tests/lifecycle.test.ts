@@ -160,6 +160,18 @@ describe('executor leases and attempts', () => {
     resources.release(runId, 1, ['calendar:remote']); resources.acquire(next, 1, ['calendar:remote']);
     expect(f.db.all('SELECT run_id FROM resource_locks')).toEqual([{run_id:next}]);
   });
+  it('bounds recovery effect metadata without exposing provider keys or enabling decisions before termination', () => {
+    const root=claimed().run.id;
+    for(let i=0;i<21;i++)unknownEffect(root);
+    f.db.exec("UPDATE effects SET provider_idempotency_key='private-provider-key'");
+    f.db.exec("UPDATE runs SET status='recovery_required' WHERE id=?",root);
+    const before=f.db.all('SELECT * FROM effects ORDER BY id');
+    const recovery=f.core.state().recovery[0];
+    expect(recovery).toMatchObject({run_id:root,executor_terminated:false,can_decide_effects:false,can_recover:false,effects_truncated:true});
+    expect(recovery.effects).toHaveLength(20);
+    expect(JSON.stringify(recovery)).not.toContain('private-provider-key');
+    expect(f.db.all('SELECT * FROM effects ORDER BY id')).toEqual(before);
+  });
   it('owner recovery closes stopped descendants bottom-up only after effect decisions and never retries them', () => {
     const root = claimed().run.id;
     life.submitted(identity,root,1,'recover-root');
@@ -174,6 +186,9 @@ describe('executor leases and attempts', () => {
     f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
     life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
     f.core.options.executionEnabled=false;
+    const recoveryState=(id:string)=>f.core.state().recovery.find(row=>row.run_id===id);
+    expect(recoveryState(child)).toMatchObject({executor_terminated:true,can_decide_effects:true,can_recover:false,retained_locks:1});
+    expect(recoveryState(root)).toMatchObject({descendants_unsettled:true,can_recover:false});
     expect(recover(root)).toMatchObject({status:'rejected',error:{code:'CANCEL_UNCONFIRMED'}});
     expect(recover(child)).toMatchObject({status:'rejected',error:{code:'OUTCOME_UNKNOWN'}});
     const decide = (id:string) => {
@@ -181,15 +196,18 @@ describe('executor leases and attempts', () => {
       expect(f.accept({schema_version:1,type:'effect.reconcile',payload:{run_id:id,expected_attempt:1,effect_id:effect.id,expected_request_digest:effect.request_digest,outcome:'confirmed',evidence_ref:'manual:verified-43'}}).status).toBe('applied');
     };
     decide(child);
+    expect(recoveryState(child)).toMatchObject({can_recover:true,effects:[]});
     // Restored stale lock metadata must roll back even a preceding valid release.
     f.db.exec("INSERT INTO resource_locks VALUES('mail:stale',?,2,?)",child,f.core.now());
     const held=f.db.all('SELECT * FROM resource_locks ORDER BY resource_id');
+    expect(recoveryState(child)).toMatchObject({can_recover:false,stale_locks:true});
     expect(recover(child)).toMatchObject({status:'rejected',error:{code:'FORBIDDEN'}});
     expect(f.db.all('SELECT * FROM resource_locks ORDER BY resource_id')).toEqual(held);
     expect(f.store.run(child).status).toBe('recovery_required');
     f.db.exec("DELETE FROM resource_locks WHERE resource_id='mail:stale'");
     const key=randomUUID(), first=recover(child,key);
     expect(first.status).toBe('applied'); expect(recover(child,key)).toEqual(first);
+    expect(recoveryState(child)).toBeUndefined();
     expect(f.db.all('SELECT resource_id FROM resource_locks')).toEqual([{resource_id:'mail:sibling'}]);
     expect(recover(root).status).toBe('rejected');
     decide(sibling); expect(recover(sibling).status).toBe('applied'); expect(recover(root).status).toBe('applied');

@@ -163,7 +163,21 @@ explicit deferred follow-ups become eligible through the normal follow-up path;
 with execution disabled those stay waiting. A fresh retry is a separate owner
 decision. These APIs implement bookkeeping after trusted stop evidence and owner
 decisions, not a native census, external outcome verification or coordinated
-restore activation. Portal recovery controls remain to be integrated.
+restore activation.
+
+Portal task cards expose these two separate actions even with execution disabled.
+An effect decision requires an explicit outcome, bounded reference and checked
+affirmation; closing recovery requires separate lock-release consent. Snapshot
+metadata reports termination, operation/descendant blockers and retained locks,
+with at most 20 unresolved effects per displayed task and an explicit truncation
+notice. It omits provider idempotency keys and receipt bodies. Snapshot task
+coverage remains the existing bounded 100-run window, not complete recovery
+pagination. The server rechecks each command; stale UI state grants no authority.
+`node scripts/test-portal-recovery.mjs` exercises exact command payloads, required
+consent, an unavailable sibling, disabled execution and narrow rendering using
+synthetic HTTP receipts. The decision and narrow confirmed/unconfirmed states
+were visually inspected. This is browser/control-contract evidence, not a live
+provider recovery drill.
 
 ## Verification and limits
 
