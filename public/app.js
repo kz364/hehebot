@@ -253,5 +253,24 @@ $('add-bot').onclick=()=>editBot();$('edit-bot').onclick=()=>editBot(current());
 $('add-room').onclick=()=>{const bots=items('persona').filter(x=>!x.body.archived);const fields=[field('Room name','name'),selectField('Default responder','responder',bots.map(x=>[x.id,x.body.name]),bots[0]?.id)];for(const bot of bots){const l=node('label',undefined,'check');const c=node('input');c.type='checkbox';c.name='members';c.value=bot.id;c.checked=true;l.append(c,document.createTextNode(bot.body.name));fields.push(l);}openEditor('New room',fields,form=>command('room.put',{id:crypto.randomUUID(),expected_revision:0,name:form.get('name'),member_ids:form.getAll('members'),default_responder_id:form.get('responder')}));};
 $('show-details').onclick=()=>$('details').classList.add('open');$('close-details').onclick=()=>$('details').classList.remove('open');$('refresh').onclick=()=>refresh(true);
 $('show-skills').onclick=()=>choose('skills');
+$('export-control').onclick=async()=>{
+ const trigger=$('export-control'),status=$('export-status');
+ if(trigger.disabled)return;
+ trigger.disabled=true;status.textContent='Preparing private application data…';
+ try{
+  const response=await fetch('/v1/export/control',{cache:'no-store'});
+  if(!response.ok){
+   const message={401:'Sign in again before exporting private data.',429:'Export limit reached. Wait one minute before trying again.',413:'This application export exceeds the supported size limit.'};
+   throw new Error(message[response.status]??'Export unavailable. No download was requested.');
+  }
+  if(response.headers.get('Content-Type')?.split(';')[0]!=='application/json')throw new Error('Unexpected export response. No download was requested.');
+  const blob=await response.blob();
+  if(blob.size>4*1024*1024)throw new Error('This application export exceeds the supported size limit.');
+  const url=URL.createObjectURL(blob),link=node('a');link.href=url;link.download='hehebot-control-export.json';
+  try{document.body.append(link);link.click();}finally{link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
+  status.textContent='Download requested. Check your browser downloads and protect the unencrypted file. No coordinated backup or restore has been verified.';
+ }catch(error){status.textContent=error instanceof TypeError?'Connection failed. No download was requested.':error.message;}
+ finally{trigger.disabled=false;}
+};
 installImportSetup({trigger:$('import-setup'),api,command,onAdopted:()=>refresh(true)});
 await refresh(true);if(selected)$('message').value=localStorage.getItem('personal.draft.'+selected)??'';setInterval(()=>refresh(),5000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(true);});
