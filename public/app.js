@@ -319,11 +319,40 @@ $('editor').addEventListener('close',()=>$('editor').classList.remove('roster-ed
 $('editor-form').onsubmit=async e=>{e.preventDefault();if(!editing)return;const b=e.submitter;b.disabled=true;try{await editing(new FormData(e.target));closeEditor();await refresh(true);}catch(error){$('editor-error').textContent=error.message;$('editor-error').hidden=false;}finally{b.disabled=false;}};
 function editBot(object){openEditor(object?'Bot instructions':'New bot',[field('Name','name',object?.body.name??''),field('Instructions','instructions',object?.body.instructions??'','textarea')],form=>command('persona.put',{id:object?.id??crypto.randomUUID(),expected_revision:object?.revision??0,name:form.get('name'),instructions:form.get('instructions'),tool_policy_ids:object?.body.tool_policy_ids??[],archived:false}));}
 function editRoutine(object){
- const routine=object?.body;openEditor(object?'Edit routine':'New routine',[
+ const routine=object?.body,persona=routine?.persona_id??selected,id=object?.id??crypto.randomUUID(),key=crypto.randomUUID();
+ const picker=routine?.trigger_source_id?null:routineSchedulePicker(routine?.schedule,snapshot.settings?.timezone??'Asia/Jakarta');
+ $('editor').classList.add('roster-editor');openEditor(object?'Edit routine':'New routine',[
   field('Name','name',routine?.name??''),field('What should this bot do?','instructions',routine?.instructions??'','textarea'),
-  field('Schedule (five-field cron)','cron',routine?.schedule?.cron??'0 8 * * 1-5'),node('p','For example, 0 8 * * 1-5 means weekdays at 8am. Or describe your schedule in chat once your bot is connected.','hint'),
-  field('Timezone','timezone',routine?.schedule?.timezone??'Asia/Jakarta'),selectField('State','enabled',[['true','Enabled'],['false','Paused']],String(routine?.enabled??true))
- ],form=>command('routine.put',{id:object?.id??crypto.randomUUID(),expected_revision:object?.revision??0,persona_id:routine?.persona_id??selected,name:form.get('name'),instructions:form.get('instructions'),schedule:{cron:form.get('cron'),timezone:form.get('timezone')},trigger_source_id:null,enabled:form.get('enabled')==='true',policy:routine?.policy??{misfire:'coalesce',overlap:'queue_one',max_replay:1,max_lateness_seconds:86400},action_policy_ids:routine?.action_policy_ids??[]}));
+  picker?.element??node('p','Event-triggered routine. This edit preserves its existing trigger; it does not convert it to a schedule.','review-notice'),
+  selectField('State','enabled',[['true','Enabled'],['false','Paused']],String(routine?.enabled??true))
+ ],form=>command('routine.put',{id,expected_revision:object?.revision??0,persona_id:persona,name:form.get('name'),instructions:form.get('instructions'),schedule:picker?picker.reviewed():null,trigger_source_id:routine?.trigger_source_id??null,enabled:form.get('enabled')==='true',policy:routine?.policy??{misfire:'coalesce',overlap:'queue_one',max_replay:1,max_lateness_seconds:86400},action_policy_ids:routine?.action_policy_ids??[]},key));
+}
+function routineSchedulePicker(schedule,defaultZone){
+ const original=schedule?.cron??'0 8 * * 1-5',parts=original.split(' '),daily=/^\d+ \d+ \* \* (\*|1-5|[0-6])$/.test(original),monthly=/^\d+ \d+ (?:[1-9]|[12]\d|3[01]) \* \*$/.test(original);
+ const mode=daily?(parts[4]==='*'?'daily':parts[4]==='1-5'?'weekdays':'weekly'):monthly?'monthly':original==='*/15 * * * *'?'15':original==='*/30 * * * *'?'30':original==='0 * * * *'?'hourly':'advanced';
+ const element=node('section',undefined,'schedule-picker'),frequency=selectField('Frequency','frequency',[['daily','Every day'],['weekdays','Weekdays'],['weekly','Weekly'],['monthly','Monthly'],['15','Every 15 minutes'],['30','Every 30 minutes'],['hourly','Hourly'],['advanced','Advanced — numeric cron']],mode),clock=field('Local time','local-time',daily||monthly?`${parts[1].padStart(2,'0')}:${parts[0].padStart(2,'0')}`:'08:00','time');
+ const weekday=selectField('Day of week','weekday',[['1','Monday'],['2','Tuesday'],['3','Wednesday'],['4','Thursday'],['5','Friday'],['6','Saturday'],['0','Sunday']],mode==='weekly'?parts[4]:'1'),monthday=field('Day of month','monthday',monthly?parts[2]:'1','number'),cron=field('Five-field numeric cron','cron',original),zone=field('Timezone','timezone',schedule?.timezone??defaultZone),output=node('div');
+ monthday.querySelector('input').min=1;monthday.querySelector('input').max=31;cron.querySelector('input').maxLength=128;zone.querySelector('input').maxLength=80;output.id='schedule-preview';output.setAttribute('role','status');
+ const value=label=>label.querySelector('input,select').value;
+ let approved=null,request=0;
+ const read=()=>{const f=value(frequency),[hour,minute]=value(clock).split(':');return {cron:f==='advanced'?value(cron):f==='15'||f==='30'?`*/${f} * * * *`:f==='hourly'?'0 * * * *':`${Number(minute)} ${Number(hour)} ${f==='monthly'?value(monthday):'*'} * ${f==='weekly'?value(weekday):f==='weekdays'?'1-5':'*'}`,timezone:value(zone)};};
+ const invalidate=()=>{
+  approved=null;request++;output.replaceChildren(node('p','Preview the current schedule before saving.','hint'));
+  const f=value(frequency);for(const [label,show] of [[clock,['daily','weekdays','weekly','monthly'].includes(f)],[weekday,f==='weekly'],[monthday,f==='monthly'],[cron,f==='advanced']]){label.hidden=!show;label.querySelector('input,select').disabled=!show;}
+ };
+ const previewButton=button('Preview next three runs',async()=>{
+  const selectedSchedule=read(),fingerprint=JSON.stringify(selectedSchedule),version=++request;approved=null;output.replaceChildren(node('p','Loading schedule preview…','hint'));
+  try{const response=await api('/v1/schedules/preview?'+new URLSearchParams(selectedSchedule));if(version!==request||!element.isConnected)return;
+   if(JSON.stringify(response.schedule)!==fingerprint||!Array.isArray(response.next_times)||response.next_times.length!==3)throw new Error('Invalid schedule preview.');
+   const list=node('ol');for(const at of response.next_times)list.append(node('li',`${new Date(at).toLocaleString('en-GB',{timeZone:selectedSchedule.timezone})} ${selectedSchedule.timezone} (${at})`));
+   output.replaceChildren(node('p',`Calendar due times from ${response.observed_at}. Paused routines do not run; admission and runtime availability remain separate.`,'hint'),list);approved=fingerprint;
+   if($('editor-error').textContent==='Preview the current schedule before saving.')$('editor-error').hidden=true;
+  }catch(error){if(version===request&&element.isConnected)output.replaceChildren(node('p',error.message,'error'));}
+ },'quiet');
+ element.append(frequency,clock,weekday,monthday,cron,zone,node('p',`Installation default: ${defaultZone}. Existing zones are preserved. DST gaps are skipped; repeated times run once. Monthly dates absent from a month are skipped.`,'hint'));
+ if(schedule&&schedule.timezone!==defaultZone)element.append(node('p',`This routine uses ${schedule.timezone}, not the installation default ${defaultZone}. Saving does not silently change it.`,'review-notice'));
+ element.append(previewButton,output);element.addEventListener('input',invalidate);element.addEventListener('change',invalidate);invalidate();
+ return {element,reviewed:()=>{const current=read();if(approved!==JSON.stringify(current))throw new Error('Preview the current schedule before saving.');return current;}};
 }
 function editMemory(object){
  const source=object?.body.source_event_id??events.findLast(x=>x.type==='message.user')?.id;

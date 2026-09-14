@@ -41,6 +41,18 @@ async function initialize(executionEnabled=false) {
 }
 afterEach(() => { db.close(); vi.useRealTimers(); });
 
+it('serves rate-limited owner schedule previews without reconciliation or wake',async()=>{
+ const env={AUTH_MODE:'local',INSTALLATION_ID:'local-only',CONTROL:{getByName:()=>control}} as unknown as Env;
+ const request=(cron:string,timezone:string,origin='http://127.0.0.1')=>worker.fetch(new Request(`${origin}/v1/schedules/preview?${new URLSearchParams({cron,timezone})}`),env);
+ const tables=['objects','commands','runs','occurrences','schedule_state','lifecycle','events','controller_operations'],before=tables.map(table=>db.all(`SELECT * FROM ${table}`));setAlarm.mockClear();
+ expect((await request('23 9 * * 1-5','Asia/Jakarta','https://control.invalid')).status).toBe(401);
+ const response=await request('23 9 * * 1-5','Asia/Jakarta');expect(response.status).toBe(200);
+ expect(await response.json()).toEqual({schedule:{cron:'23 9 * * 1-5',timezone:'Asia/Jakarta'},observed_at:'2026-09-10T00:00:00.000Z',next_times:['2026-09-10T02:23:00.000Z','2026-09-11T02:23:00.000Z','2026-09-14T02:23:00.000Z']});
+ for(const [cron,zone] of [['','UTC'],['0 8 * * *',''],['x'.repeat(129),'UTC'],['* * * * *','UTC'],['0 8 * * *','Invalid/Zone']])expect((await request(cron,zone)).status).toBe(422);
+ for(let n=6;n<30;n++)await request('', 'UTC');expect((await request('0 8 * * *','UTC')).status).toBe(429);
+ expect(tables.map(table=>db.all(`SELECT * FROM ${table}`))).toEqual(before);expect(setAlarm).not.toHaveBeenCalled();
+});
+
 it('persists owner roster commands idempotently without task or lifecycle effects and rejects nonlocal bypass',async()=>{
  const env={AUTH_MODE:'local',INSTALLATION_ID:'local-only',CONTROL:{getByName:()=>control}} as unknown as Env;
  const key=randomUUID(),section=randomUUID(),payload={expected_revision:0,sections:[{id:section,name:'Travel group',persona_ids:[otherBot,bot],collapsed:true}],hidden_persona_ids:[bot]};

@@ -16,6 +16,22 @@
     }
   ],
   "paths": {
+    "/schedules/preview": {
+      "get": {
+        "operationId": "previewSchedule",
+        "description": "Owner-only, rate-limited calendar preview using the application scheduler. No task, receipt, event, reconciliation or wake is requested. Returned times do not prove runtime admission.",
+        "parameters": [
+          {"name":"cron","in":"query","required":true,"schema":{"type":"string","minLength":1,"maxLength":128}},
+          {"name":"timezone","in":"query","required":true,"schema":{"type":"string","minLength":1,"maxLength":80}}
+        ],
+        "responses": {
+          "200":{"description":"Exact supplied schedule, canonical observed_at and three UTC next_times from the scheduler"},
+          "401":{"description":"Owner authentication required"},
+          "422":{"description":"Invalid cron, timezone or cadence"},
+          "429":{"description":"Thirty previews per minute exceeded"}
+        }
+      }
+    },
     "/commands": {
       "post": {
         "operationId": "acceptCommand",

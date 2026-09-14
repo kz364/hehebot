@@ -195,6 +195,18 @@ remain reachable during search, and disclose stale observations. SQLite/Worker
 and inspected Chromium fixtures cover local behavior. Full native approval and
 question coverage remains unverified; roster edits cannot enable execution.
 
+Routine editing now starts with frequency/time/day controls and an explicit
+timezone; numeric cron remains available under Advanced. The owner-only,
+rate-limited `/v1/schedules/preview` calls the same scheduler used for saving and
+returns three calendar due times without reconciliation, inference or wake.
+Changing a schedule invalidates its reviewed preview; late responses cannot
+authorize Save. Existing custom cron, nondefault zones, action policies and
+trigger-only routines survive ordinary edits. The current installation default
+is Jakarta; importing Singapore routines does not change that default. SQLite
+tests cover preview/save equivalence across DST gaps/folds and absent month-end
+dates; Chromium checks picker mappings, errors, races, trigger preservation and
+narrow rendering. Calendar previews are not runtime admission or execution proof.
+
 [Selected portable templates](PORTABLE_TEMPLATES.md) export configuration into
 disabled routines and pending skill proposals with grants removed. This is an
 offline review plan, not full backup/restore or automatic migration.

@@ -32,6 +32,11 @@ export class ControlCore {
  readonly budget:BudgetLedger;
  constructor(public store:Store,public options:Options){this.budget=new BudgetLedger(store,()=>this.now(),options.uuid);}
  now(){return this.options.now().toISOString();}
+ schedulePreview(cron:string,timezone:string){
+  requireThat(typeof cron==='string'&&cron.length>=1&&cron.length<=128&&typeof timezone==='string'&&timezone.length>=1&&timezone.length<=80,'INVALID_INPUT','Provide a bounded cron expression and timezone.',422);
+  const schedule={cron,timezone};validateSchedule(schedule);const observed_at=this.now();
+  return {schedule,observed_at,next_times:preview(schedule,observed_at,3)};
+ }
  seed():void {
   const count=this.store.db.all<{n:number}>('SELECT COUNT(*) AS n FROM objects')[0].n;
   if(count)return;
@@ -449,6 +454,7 @@ export class ControlCore {
   const steering=new TaskSteering(this.store,()=>now);
   const previews=new OutputPreviews(this.store,()=>now);
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
+   settings:{timezone:'Asia/Jakarta'},
    budget:this.budget.summary(),
    roster:new RosterLedger(this.store,()=>now).summary(),
    roster_activity:{observed_at:now,personas:this.store.db.all<{persona_id:string;unfinished:number;active:number;waiting:number;recovery:number}>(`SELECT persona_id,COUNT(*) AS unfinished,

@@ -27,6 +27,7 @@ export default {
    }
    // Auth is applied before assets as well as API. Local dev is loopback-only.
    const owner=await authenticateOwner(request,env);
+   if(path==='/v1/schedules/preview'&&request.method==='GET')return json(unwrap(await control.getSchedulePreview(owner,url.searchParams.get('cron')??'',url.searchParams.get('timezone')??'')));
    if(path==='/v1/commands'&&request.method==='POST'){
     assertSameOrigin(request);requireThat(request.headers.get('Content-Type')?.split(';')[0]==='application/json','INVALID_INPUT','Use application/json.',422);
     const input=parseJson(await readBounded(request));const key=request.headers.get('Idempotency-Key')??'';
