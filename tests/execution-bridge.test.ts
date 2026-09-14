@@ -119,13 +119,22 @@ it.each(['claim', 'native', 'submitted'])('lost %s acknowledgment survives journ
   expect(f.db.all('SELECT attempt FROM attempts WHERE run_id=?', id)).toHaveLength(1);
 });
 
-it('lost complete acknowledgment can replay the identical result after reconstruction, never a second native turn', async () => {
-  enqueue(); const executor = bridge(), row = await executor.claimNext();
-  lose = 'complete'; await expect(executor.complete(settled(row))).rejects.toThrow('lost acknowledgment');
-  lose = undefined; await bridge().complete(settled(row));
+it.each(['completed', 'waiting', 'retryable_failure'] as const)('lost %s completion acknowledgment replays the persisted attempt result without another turn', async kind => {
+  const id = enqueue(), executor = bridge(), row = await executor.claimNext();
+  const observation = { ...settled(row), result: kind === 'waiting'
+    ? { status: 'waiting', text: 'Needs an owner decision', checkpoint: { cursor: 71, question: 'Which draft?' } }
+    : kind === 'retryable_failure'
+      ? { status: 'failed', text: 'Temporary read failure', error_code: 'TEMPORARY_UNAVAILABLE' }
+      : settled(row).result };
+  lose = 'complete'; await expect(executor.complete(observation)).rejects.toThrow('lost acknowledgment');
+  expect(f.store.run(id).status).toBe(kind === 'completed' ? 'completed' : 'waiting');
+  const before = ['runs', 'attempts', 'outbox', 'events', 'retry_queue', 'lifecycle'].map(table => f.db.all(`SELECT * FROM ${table}`));
+  lose = undefined; const replay = await bridge().complete(observation);
+  expect(replay.phase).toBe('complete');
+  expect(['runs', 'attempts', 'outbox', 'events', 'retry_queue', 'lifecycle'].map(table => f.db.all(`SELECT * FROM ${table}`))).toEqual(before);
   expect(nativeCalls).toBe(1);
   expect(f.db.all("SELECT id FROM events WHERE type='run.result'")).toHaveLength(1);
-  await expect(bridge().complete({ ...settled(row), result: { status: 'completed', text: 'Different reply' } })).rejects.toMatchObject({ code: 'RESULT_CONFLICT' });
+  await expect(bridge().complete({ ...observation, result: { ...observation.result, text: 'Different reply' } })).rejects.toMatchObject({ code: 'RESULT_CONFLICT' });
 });
 
 it('root completion cannot bypass child/tool/effect/output settlement or exact identity', async () => {

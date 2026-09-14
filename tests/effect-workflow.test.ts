@@ -136,7 +136,9 @@ it('restores only the due synthetic flight leg through pinned authority and one 
   ]);
   locks.release(job.id, 1, ['mail:17']);
   life.complete(identity, job.id, 1, { status: 'completed', text: 'Restored synthetic mail 17' });
-  life.complete(identity, job.id, 1, { status: 'completed', text: 'Duplicate' });
+  life.complete(identity, job.id, 1, { status: 'completed', text: 'Restored synthetic mail 17' });
+  expect(() => life.complete(identity, job.id, 1, { status: 'completed', text: 'Duplicate' }))
+    .toThrowError(expect.objectContaining({ code: 'RESULT_CONFLICT' }));
   expect(f.db.all('SELECT id FROM effects')).toHaveLength(1);
   expect(f.db.all('SELECT id FROM outbox WHERE run_id=?', job.id)).toHaveLength(1);
   expect(flights.reconcile()).toBe(0);

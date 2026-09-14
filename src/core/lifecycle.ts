@@ -98,16 +98,22 @@ export class LifecycleCore {
   this.store.db.transaction(()=>{
    this.authorizeAttempt(identity,runId,attempt);const run=this.store.run(runId);
    requireThat(run.current_attempt===attempt,'REVISION_CONFLICT','Attempt has changed.');
-   if(['completed','failed','cancelled'].includes(run.status))return;
+   if(['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code??'')){
+    requireThat(result.status==='cancelled','CONTEXT_INVALIDATED','Cancellation must settle before any result is published.');
+    result={status:'cancelled',text:'',error_code:run.error_code!};
+   }
+   // The attempt receipt, not the run's mutable waiting/retry status, owns replay.
+   // An identical acknowledgment performs no new settlement or publication.
+   const receipt=this.store.db.all<{result_json:string|null}>('SELECT result_json FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
+   if(receipt.result_json!==null){
+    requireThat(receipt.result_json===JSON.stringify(result),'RESULT_CONFLICT','Attempt result differs from its committed receipt.');
+    return;
+   }
    requireThat(['claimed','running','finishing','cancelling','recovery_required'].includes(run.status),'REVISION_CONFLICT','Run is not active.');
    requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND attempt=? AND status!='settled'",runId,attempt).length,'CANCEL_UNCONFIRMED','Live operations have not settled.');
    requireThat(!this.store.db.all('SELECT resource_id FROM resource_locks WHERE run_id=?',runId).length,'RESOURCE_BUSY','Release scoped resources after tool settlement before completing.');
    requireThat(!this.store.db.all("SELECT id FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown')",runId).length,'OUTCOME_UNKNOWN','An external effect needs reconciliation.');
    requireThat(result.status!=='waiting'||result.checkpoint,'INVALID_INPUT','Waiting requires a durable checkpoint.',422);
-   if(['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code??'')){
-    requireThat(result.status==='cancelled','CONTEXT_INVALIDATED','Cancellation must settle before any result is published.');
-    result={status:'cancelled',text:'',error_code:run.error_code!};
-   }
    const now=this.core.now();
    this.store.db.exec('UPDATE attempts SET status=?,settled_at=?,result_json=? WHERE run_id=? AND attempt=?',result.status,now,JSON.stringify(result),runId,attempt);
    this.store.db.exec('UPDATE runs SET status=?,error_code=?,checkpoint_json=?,updated_at=? WHERE id=?',result.status,result.error_code??null,result.checkpoint?JSON.stringify(result.checkpoint):null,now,runId);

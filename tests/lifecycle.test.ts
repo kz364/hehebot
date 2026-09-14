@@ -76,6 +76,36 @@ describe('executor leases and attempts', () => {
     expect(() => life.heartbeat(identity, [op])).toThrowError(expect.objectContaining({ code: 'INVALID_INPUT' }));
     expect(() => life.complete(identity, claim.run.id, 2, { status: 'completed', text: '' })).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
   });
+  it('completion replay uses retained receipts and cannot overwrite a checkpoint or acknowledge a pruned result', () => {
+    const id = claimed().run.id;
+    const result = { status: 'waiting' as const, text: 'Owner input needed', checkpoint: { cursor: 43, draft: 'first' } };
+    life.complete(identity, id, 1, result);
+    const before = f.db.all('SELECT * FROM attempts WHERE run_id=?', id);
+    for (const change of [{ text: 'Different' }, { checkpoint: { cursor: 71, draft: 'first' } }, { status: 'completed' as const }]) {
+      expect(() => life.complete(identity, id, 1, { ...result, ...change }))
+        .toThrowError(expect.objectContaining({ code: 'RESULT_CONFLICT' }));
+    }
+    expect(f.db.all('SELECT * FROM attempts WHERE run_id=?', id)).toEqual(before);
+    // Missing retained evidence cannot become a new publication or an acknowledgment.
+    f.db.exec('UPDATE attempts SET result_json=NULL WHERE run_id=?', id);
+    expect(() => life.complete(identity, id, 1, result)).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
+    expect(f.db.all("SELECT id FROM events WHERE type='run.result'")).toHaveLength(1);
+  });
+  it('retry-queued receipt replay preserves admission state, but a new attempt or epoch fences it', () => {
+    const id = claimed().run.id;
+    const result = { status: 'failed' as const, text: 'Read unavailable', error_code: 'TEMPORARY_UNAVAILABLE' };
+    life.complete(identity, id, 1, result);
+    f.setNow('2026-09-10T00:00:11.000Z'); life.retryDue();
+    expect(f.store.run(id).status).toBe('queued');
+    life.complete(identity, id, 1, result);
+    expect(f.store.run(id).status).toBe('queued');
+    const next = life.claim(identity)!;
+    expect(next.run.current_attempt).toBe(2);
+    expect(() => life.complete(identity, id, 1, result)).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
+    f.db.exec('UPDATE lifecycle SET epoch=2');
+    expect(() => life.complete(identity, id, 1, result)).toThrowError(expect.objectContaining({ code: 'STALE_EPOCH' }));
+    expect(f.db.all("SELECT id FROM events WHERE type='run.result'")).toHaveLength(1);
+  });
   it('root retry waits for nested descendants while preserving their original parent attempt', () => {
     const root = claimed().run;
     life.submitted(identity, root.id, 1, 'root-retry');
@@ -253,7 +283,12 @@ describe('executor leases and attempts', () => {
     const claim = claimed();
     expect(() => life.complete(identity, claim.run.id, 1, { status: 'waiting', text: '' })).toThrowError(expect.objectContaining({ code: 'INVALID_INPUT' }));
     life.complete(identity, claim.run.id, 1, { status: 'completed', text: 'Synthetic result' });
-    life.complete(identity, claim.run.id, 1, { status: 'completed', text: 'Duplicate ignored' });
+    life.complete(identity, claim.run.id, 1, { status: 'completed', text: 'Synthetic result' });
+    expect(() => life.complete(identity, claim.run.id, 1, { status: 'completed', text: 'Conflicting result' }))
+      .toThrowError(expect.objectContaining({ code: 'RESULT_CONFLICT' }));
+    f.db.exec('UPDATE attempts SET result_json=NULL WHERE run_id=?', claim.run.id);
+    expect(() => life.complete(identity, claim.run.id, 1, { status: 'completed', text: 'Synthetic result' }))
+      .toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
     expect(f.db.all('SELECT * FROM outbox')).toHaveLength(1);
     expect(f.db.all("SELECT * FROM events WHERE type='run.result'")).toHaveLength(1);
   });

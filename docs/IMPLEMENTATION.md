@@ -102,6 +102,15 @@ heartbeat to one exact interrupt, while completion/sleep remain denied. See
 verified hold create/read/renew/delete, not application drain or VM sleep; see
 [provider evidence](PROVIDERS.md).
 
+Completion acknowledgments use the retained attempt result, not the mutable run
+status. Identical serialized results can replay after a waiting checkpoint or
+retryable failure, including after the retry becomes queued, without rewriting
+state or publishing another result. Conflicting results fail; pruned receipts
+cannot establish replay success. Current epoch, lease and attempt fences still
+apply. Owner cancellation continues to suppress result text. SQLite/journal tests
+exercise lost acknowledgments and reconstruction, not native restart readiness
+or family settlement.
+
 Observed native child starts are now acknowledged by the service atomically with
 Worker registration. Exact receipt replay recovers a lost acknowledgement without
 resubmitting inference or resurrecting a cancelling/terminal task. Legacy journal

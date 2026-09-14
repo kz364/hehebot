@@ -90,7 +90,9 @@ describe('100 reproducible drain/queue interleavings', () => {
         const claim = life.claim(identity)!;
         expect(expected.has(claim.run.id)).toBe(true); expect(completed.has(claim.run.id)).toBe(false);
         life.complete(identity, claim.run.id, 1, { status: 'completed', text: `Result ${claim.run.id}` });
-        life.complete(identity, claim.run.id, 1, { status: 'completed', text: 'Duplicate must not replace result' });
+        life.complete(identity, claim.run.id, 1, { status: 'completed', text: `Result ${claim.run.id}` });
+        expect(() => life.complete(identity, claim.run.id, 1, { status: 'completed', text: 'Duplicate must not replace result' }))
+          .toThrowError(expect.objectContaining({ code: 'RESULT_CONFLICT' }));
         completed.add(claim.run.id);
       }
       expect(completed).toEqual(expected); expect(life.claim(identity)).toBeNull();
