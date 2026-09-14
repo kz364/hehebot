@@ -27,17 +27,20 @@ export class CodexEventRouter {
   project(value) {
     const method = value?.method, params = value?.params;
     if (method !== 'turn/completed' &&
-        !(['item/started', 'item/completed'].includes(method) && params?.item?.type === 'commandExecution')) return null;
+        !(['item/started', 'item/completed'].includes(method) && ['commandExecution', 'mcpToolCall'].includes(params?.item?.type))) return null;
     const threadId = params?.threadId, turnId = method === 'turn/completed' ? params?.turn?.id : params?.turnId;
     if (![threadId, turnId].every(id => typeof id === 'string' && id.length > 0 && id.length <= 256)) fail('INVALID_EVENT_IDENTITY');
     if (method === 'turn/completed') {
       if (!['completed', 'interrupted', 'failed'].includes(params.turn.status)) fail('INVALID_EVENT_STATUS');
-    } else if (typeof params.item.id !== 'string' || !params.item.id || params.item.id.length > 256 ||
-        !(method === 'item/started' ? ['inProgress'] : ['completed', 'failed', 'declined']).includes(params.item.status)) fail('INVALID_EVENT_ITEM');
+    } else {
+      const terminal = params.item.type === 'commandExecution' ? ['completed', 'failed', 'declined'] : ['completed', 'failed'];
+      if (typeof params.item.id !== 'string' || !params.item.id || params.item.id.length > 256 ||
+          !(method === 'item/started' ? ['inProgress'] : terminal).includes(params.item.status)) fail('INVALID_EVENT_ITEM');
+    }
     // Do not buffer command output, credentials, message text, or unrelated payloads.
     const notification = method === 'turn/completed'
       ? { method, params: { threadId, turn: { id: turnId, status: params.turn.status } } }
-      : { method, params: { threadId, turnId, item: { id: params.item.id, type: 'commandExecution', status: params.item.status } } };
+      : { method, params: { threadId, turnId, item: { id: params.item.id, type: params.item.type, status: params.item.status } } };
     return { key: JSON.stringify([threadId, turnId]), notification };
   }
 

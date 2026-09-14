@@ -94,22 +94,25 @@ export class CodexAdapter {
   async #observeOne(attemptId, notification) {
     const row = await this.requireRun(attemptId);
     const params = notification?.params;
-    if (['item/started', 'item/completed'].includes(notification?.method) && params?.item?.type === 'commandExecution') {
+    const field = params?.item?.type === 'commandExecution' ? 'commands' : params?.item?.type === 'mcpToolCall' ? 'mcpCalls' : null;
+    if (['item/started', 'item/completed'].includes(notification?.method) && field) {
       if (params.threadId !== row.threadId || params.turnId !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const { id, status } = params.item;
+      const terminal = field === 'commands' ? ['completed', 'failed', 'declined'] : ['completed', 'failed'];
       if (typeof id !== 'string' || !id || id.length > 256 ||
-          !(notification.method === 'item/started' ? ['inProgress'] : ['completed', 'failed', 'declined']).includes(status)) fail('CODEX_PROTOCOL_ERROR');
-      const commands = { ...row.commands };
-      const prior = Object.hasOwn(commands, id) ? commands[id] : undefined;
+          !(notification.method === 'item/started' ? ['inProgress'] : terminal).includes(status)) fail('CODEX_PROTOCOL_ERROR');
+      const obligations = { ...row[field] };
+      const prior = Object.hasOwn(obligations, id) ? obligations[id] : undefined;
       if (prior && prior !== 'inProgress') {
         if (prior !== status) fail('SETTLEMENT_CONFLICT');
         return row;
       }
-      if (!Object.hasOwn(commands, id) && Object.keys(commands).length >= 4096) fail('COMMAND_TRACKING_LIMIT');
+      if (!Object.hasOwn(obligations, id) && Object.keys(obligations).length >= 4096) fail('COMMAND_TRACKING_LIMIT');
       // Persist starts even if history omits them. A root/history snapshot cannot
       // remove these obligations; only a matching native terminal event can.
-      Object.defineProperty(commands, id, { value: status, enumerable: true, writable: true, configurable: true });
-      return this.journal.update(attemptId, { commands });
+      Object.defineProperty(obligations, id, { value: status, enumerable: true, writable: true, configurable: true });
+      // An MCP terminal response settles only the invocation, not external effects.
+      return this.journal.update(attemptId, { [field]: obligations });
     }
     if (notification?.method !== 'turn/completed') return row;
     if (params?.threadId !== row.threadId || params?.turn?.id !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');

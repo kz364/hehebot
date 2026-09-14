@@ -54,6 +54,28 @@ test('unknown events are bounded and overflow fences without guessing a task', a
   await assert.rejects(f.router.bind('unknown'), { code: 'EVENT_ROUTER_FENCED' });
 });
 
+test('MCP invocations remain separate from commands and external-effect settlement', async t => {
+  const f = await fixture(t); await f.admit('a', 'thread', 'turn'); await f.router.bind('a');
+  const mcp = status => ({ method: status === 'inProgress' ? 'item/started' : 'item/completed', params: {
+    threadId: 'thread', turnId: 'turn', item: { id: 'mcp', type: 'mcpToolCall', status,
+      arguments: { token: 'PRIVATE_ARGUMENT' }, result: { secret: 'PRIVATE_RESULT' }, readOnlyHint: true },
+  } });
+  f.transport.emit('notification', command('thread', 'turn', 'command'));
+  f.transport.emit('notification', mcp('inProgress')); f.transport.emit('notification', root('thread', 'turn'));
+  await f.router.flush();
+  const unfinished = await f.journal.get('a');
+  assert.deepEqual(unfinished.mcpCalls, { mcp: 'inProgress' }); assert.equal(unfinished.rootSettled, true);
+  assert.deepEqual(unfinished.commands, { command: 'inProgress' });
+  f.transport.emit('notification', mcp('failed')); await f.router.flush();
+  const failed = await f.journal.get('a');
+  assert.deepEqual(failed.mcpCalls, { mcp: 'failed' }); assert.deepEqual(failed.commands, { command: 'inProgress' });
+  assert.doesNotMatch(JSON.stringify(failed), /PRIVATE_|readOnlyHint|effectsSettled/);
+  assert.equal(f.adapter.sleepReadiness().allowed, false);
+  f.transport.emit('notification', mcp('completed')); await f.router.flush();
+  assert.deepEqual(f.recoveries, ['NATIVE_EVENT_RECONCILIATION_FAILED']);
+  assert.deepEqual((await f.journal.get('a')).mcpCalls, { mcp: 'failed' });
+});
+
 test('a second logical attempt cannot take an existing native identity', async t => {
   const f = await fixture(t);
   await f.admit('a', 'thread', 'turn'); await f.admit('b', 'thread', 'turn');

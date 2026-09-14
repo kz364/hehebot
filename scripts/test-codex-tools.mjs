@@ -11,6 +11,9 @@ import { join, resolve } from 'node:path';
 import { Agent } from 'undici';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { ControlClient } from '../runtime/control-client.mjs';
+import { CodexAdapter } from '../runtime/codex-adapter.mjs';
+import { CodexEventRouter } from '../runtime/codex-events.mjs';
+import { FileJournal } from '../runtime/file-journal.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
@@ -21,7 +24,7 @@ const allowedTools = ['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 const report = { label: 'codex-agent-tools-native-acceptance', status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
 const check = (name, fn) => { fn(); report.assertions.push(name); };
-let directory, worker, fixture, transport, dispatcher, workerLogs = '';
+let directory, worker, fixture, transport, dispatcher, router, workerLogs = '';
 const notifications = [], nativeErrors = [], fixtureErrors = [];
 
 async function freePort() {
@@ -180,10 +183,24 @@ try {
   transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 15_000 });
   transport.child.stderr.on('data', x => nativeErrors.push(x.toString())); transport.on('notification', x => notifications.push(x));
   await transport.initialize();
+  const eventJournal = new FileJournal(join(home, 'events'));
+  const adapter = new CodexAdapter({ cwd: workspace, journal: eventJournal, rpc: (method, params) => transport.request(method, params) });
+  const routerFailures = [];
+  router = new CodexEventRouter({ transport, adapter, onRecovery: value => routerFailures.push(value.code) });
   const threadId = (await transport.request('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture', approvalPolicy: 'never', sandbox: 'read-only' })).thread.id;
   const turnId = (await transport.request('turn/start', { threadId, input: [{ type: 'text', text: 'Use the admitted clawbot proposal tool exactly once.' }] })).turn.id;
+  await eventJournal.putIfAbsent('mcp-proof', { threadId, nativeRunId: turnId, status: 'running', rootSettled: false });
+  await router.bind('mcp-proof');
   const completed = await waitFor(() => notifications.find(n => n.method === 'turn/completed' && n.params?.turn?.id === turnId), 'native MCP continuation', 25_000);
   check('native turn completed after MCP continuation', () => assert.equal(completed.params.turn.status, 'completed'));
+  await router.flush();
+  const nativeCalls = await eventJournal.get('mcp-proof');
+  check('native MCP invocation lifetimes are automatically journaled without effect authority', () => {
+    assert.equal(Object.keys(nativeCalls.mcpCalls).length, 6);
+    assert.ok(Object.values(nativeCalls.mcpCalls).every(status => status === 'completed'));
+    assert.equal(nativeCalls.rootSettled, true); assert.equal(nativeCalls.effectsSettled, undefined);
+    assert.equal(adapter.sleepReadiness().allowed, false); assert.deepEqual(routerFailures, []);
+  });
   const read = await transport.request('thread/read', { threadId, includeTurns: true }); const transcript = JSON.stringify(read.thread);
   check('native receipt and final continuation persisted', () => { assert.match(transcript, /MCP_PROPOSAL_STAGED/); assert.match(transcript, /clawbot_propose_skill/); assert.match(transcript, new RegExp(proposalId)); });
   state = await (await ownerFetch('/v1/state')).json(); const proposal = state.skill_proposals.find(x => x.id === proposalId);
@@ -197,6 +214,7 @@ try {
   if (directory) await writeFile(join(directory, 'diagnostics.log'), workerLogs + nativeErrors.join(''), { mode: 0o600 });
   process.exitCode = 1;
 } finally {
+  router?.close(); if (router) await router.tail;
   transport?.close(); if (transport) await stop(transport.child).catch(error => { report.status = 'failed'; report.error = error.message; process.exitCode = 1; });
   await stop(worker).catch(error => { report.status = 'failed'; report.error = error.message; process.exitCode = 1; });
   if (fixture) { fixture.closeAllConnections(); await new Promise(ok => fixture.close(ok)); }
