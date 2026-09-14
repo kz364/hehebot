@@ -76,6 +76,58 @@ describe('executor leases and attempts', () => {
     expect(() => life.heartbeat(identity, [op])).toThrowError(expect.objectContaining({ code: 'INVALID_INPUT' }));
     expect(() => life.complete(identity, claim.run.id, 2, { status: 'completed', text: '' })).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
   });
+  it('root retry waits for nested descendants while preserving their original parent attempt', () => {
+    const root = claimed().run;
+    life.submitted(identity, root.id, 1, 'root-retry');
+    const native = new NativeTaskLedger(f.store, f.core, life);
+    const spawn = (parent: string, ref: string) => native.register(identity, { parent_run_id: parent,
+      parent_attempt: 1, persona_id: bot, native_run_ref: ref, native_session_key: ref, title: ref }, true);
+    const child = spawn(root.id, 'retry-child'), grandchild = spawn(child.id, 'retry-grandchild');
+    life.complete(identity, child.id, 1, { status: 'completed', text: '' });
+    life.complete(identity, root.id, 1, { status: 'failed', text: '' });
+    const retry = () => f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: root.id, expected_attempt: 1 } });
+    expect(retry()).toMatchObject({ status: 'rejected', error: { code: 'CANCEL_UNCONFIRMED' } });
+    expect(f.store.run(root.id)).toMatchObject({ status: 'failed', current_attempt: 1 });
+    expect(f.store.run(grandchild.id)).toMatchObject({ status: 'running', current_attempt: 1 });
+    life.complete(identity, grandchild.id, 1, { status: 'completed', text: '' });
+    expect(retry()).toMatchObject({ status: 'applied', resource_id: root.id });
+    expect(life.claim(identity)?.run).toMatchObject({ id: root.id, current_attempt: 2 });
+  });
+  it('rechecks late child observations before claim without hiding independent queued work', () => {
+    const root = claimed().run;
+    life.submitted(identity, root.id, 1, 'late-root');
+    life.complete(identity, root.id, 1, { status: 'failed', text: '' });
+    expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: root.id, expected_attempt: 1 } })).toMatchObject({ status: 'applied' });
+    const child = new NativeTaskLedger(f.store, f.core, life).register(identity, { parent_run_id: root.id,
+      parent_attempt: 1, persona_id: bot, native_run_ref: 'late-child', native_session_key: 'late-child', title: 'Late observation' }, true);
+    expect(life.claim(identity)).toBeNull();
+    f.setNow('2026-09-10T00:00:01.000Z');
+    const other = enqueue();
+    expect(life.claim(identity)?.run.id).toBe(other);
+    life.complete(identity, other, 1, { status: 'completed', text: '' });
+    expect(f.store.run(root.id).current_attempt).toBe(1);
+    life.complete(identity, child.id, 1, { status: 'completed', text: '' });
+    expect(life.claim(identity)?.run).toMatchObject({ id: root.id, current_attempt: 2 });
+  });
+  it.each(['attempt','operation','lock','effect'] as const)('terminal descendant status does not hide a retained %s during retry admission', kind => {
+    const root = claimed().run;
+    life.submitted(identity, root.id, 1, 'retained-root');
+    const child = new NativeTaskLedger(f.store, f.core, life).register(identity, { parent_run_id: root.id,
+      parent_attempt: 1, persona_id: bot, native_run_ref: 'retained-child', native_session_key: 'retained-child', title: 'Retained evidence' }, true);
+    life.complete(identity, root.id, 1, { status: 'failed', text: '' });
+    if(kind === 'operation')life.heartbeat(identity, [operation(child.id)]);
+    if(kind === 'lock')new ResourceLedger(f.store, () => f.core.now()).acquire(child.id, 1, ['calendar:retained']);
+    if(kind === 'effect')unknownEffect(child.id);
+    // Simulate restored, inconsistent terminal metadata; independent evidence
+    // must still prevent a new root attempt even when the run status is final.
+    f.db.exec("UPDATE runs SET status='completed' WHERE id=?", child.id);
+    if(kind !== 'attempt')f.db.exec("UPDATE attempts SET status='completed',settled_at=? WHERE run_id=?", f.core.now(), child.id);
+    expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: root.id, expected_attempt: 1 } }))
+      .toMatchObject({ status: 'rejected', error: { code: 'CANCEL_UNCONFIRMED' } });
+    f.db.exec("UPDATE runs SET status='queued' WHERE id=?", root.id);
+    expect(life.claim(identity)).toBeNull();
+    expect(f.store.run(root.id).current_attempt).toBe(1);
+  });
   it('unknown effects block completion and retry after provider stop', () => {
     const claim = claimed(); unknownEffect(claim.run.id);
     expect(() => life.complete(identity, claim.run.id, 1, { status: 'completed', text: '' })).toThrowError(expect.objectContaining({ code: 'OUTCOME_UNKNOWN' }));

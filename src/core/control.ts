@@ -7,6 +7,7 @@ import {SkillCatalog} from './skills';
 import {BudgetLedger} from './budget';
 import {controlMonitoring} from './monitoring';
 import {TaskSteering} from './task-steering';
+import {nativeDescendantsSettledSql} from './native-tasks';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
@@ -191,6 +192,10 @@ export class ControlCore {
     requireThat(!uncertain.length,'OUTCOME_UNKNOWN','Reconcile the external result before retrying.');
     const live=this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled'",run.id);
     requireThat(!live.length,'CANCEL_UNCONFIRMED','The old execution has not settled.');
+    // A new root attempt would invalidate the custody needed to reconcile its
+    // old descendants. Root completion alone is not family settlement.
+    const descendants=this.store.db.all(`SELECT r.id FROM runs r WHERE r.id=? AND NOT (${nativeDescendantsSettledSql})`,run.id);
+    requireThat(!descendants.length,'CANCEL_UNCONFIRMED','Native descendants must settle before retrying their coordinator.');
     requireThat(!this.budget.blocks({...run,status:'queued'}),'BUDGET_BLOCKED','Review the budget and use an explicit one-run override.');
     this.store.db.exec('UPDATE runs SET status=?,error_code=?,updated_at=? WHERE id=?',this.options.executionEnabled?'queued':'waiting',this.options.executionEnabled?null:'CAPABILITY_UNAVAILABLE',now,run.id);
     if(this.options.executionEnabled)this.noteRunnable();return run.id;

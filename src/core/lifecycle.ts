@@ -1,6 +1,7 @@
 import { ControlError, requireThat } from './errors';
 import { Store } from './store';
 import type { ControlCore } from './control';
+import { nativeDescendantsSettledSql } from './native-tasks';
 import type { ContextSnapshot, Operation, Run } from './types';
 import type { RuntimeProvider, RuntimeRef, RuntimeObservation } from '../providers';
 export type Phase='STOPPED'|'START_REQUESTED'|'BOOTING'|'READY'|'DRAINING'|'STOP_COMMITTED'|'STOPPING'|'RECOVERY_REQUIRED'|'IDLE_PERMITTED';
@@ -18,7 +19,7 @@ export class LifecycleCore {
  nextClaimableRun():Run|undefined {
   return this.store.db.transaction(()=>{
    const cutoff=new Date(this.core.options.now().getTime()-90*86400000).toISOString(),budget=this.core.budget.admissionPredicate();
-   return this.store.db.all<Run>(`SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings)[0];
+   return this.store.db.all<Run>(`SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) AND (${nativeDescendantsSettledSql}) ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings)[0];
   });
  }
  private touch():void{this.store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('last_activity',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(this.core.now()));}

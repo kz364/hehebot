@@ -20,6 +20,13 @@ Codex 0.154.0 does not inherit root dynamic-tool registrations. Use a supported 
 
 Shared permission is not shared completion. Track every observed descendant turn, command, tool and effect after root completion. Cancellation acceptance does not settle children or authorize releasing locks or sleep holds.
 
+Coordinator retry also waits for all recorded descendants. The owner retry
+command and claim selection share a recursive predicate checking terminal run
+status, attempts, operations, locks and unresolved effects. Claim rechecks before
+its limit so late child observations block the original root without hiding
+independent queued work. This preserves the old parent attempt for reconciliation;
+it does not prove a complete native census or settle missing observations.
+
 ## Current concurrency boundary
 
 [Two-root Worker admission](CODEX_TWO_ROOTS.md) remains globally serialized.

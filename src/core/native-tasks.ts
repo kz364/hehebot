@@ -4,6 +4,19 @@ import { requireThat } from './errors';
 import type {ContextSnapshot,Run} from './types';
 import type {Identity,LifecycleCore} from './lifecycle';
 export type NativeChildReceipt={parent_run_id:string;parent_attempt:number;persona_id:string;native_run_ref:string;native_session_key:string;title:string};
+// Correlated to runs alias r. Recheck at admission: a late native observation
+// can arrive after an owner queues retry but before the next attempt is claimed.
+export const nativeDescendantsSettledSql = `NOT EXISTS(
+ WITH RECURSIVE family(id) AS (
+  SELECT id FROM runs WHERE parent_run_id=r.id
+  UNION SELECT child.id FROM runs child JOIN family f ON child.parent_run_id=f.id
+ ) SELECT 1 FROM runs d JOIN family f ON f.id=d.id WHERE
+  d.status NOT IN ('completed','failed','cancelled')
+  OR EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=d.id AND a.status IN ('claimed','running'))
+  OR EXISTS(SELECT 1 FROM operations o WHERE o.run_id=d.id AND o.status!='settled')
+  OR EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=d.id)
+  OR EXISTS(SELECT 1 FROM effects e WHERE e.run_id=d.id AND e.status IN ('intent','dispatched','outcome_unknown'))
+)`;
 /** Metadata ledger for observed native child receipts. The harness owns dispatch;
  * CodexTaskControl maps exact observed thread/turn ancestry into these records. */
 export class NativeTaskLedger {
