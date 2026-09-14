@@ -44,6 +44,20 @@ test('persists thread before inference; duplicate submission and changed input a
   assert.equal((await journal.get(input.attemptId)).status, 'running');
 });
 
+test('host dynamic definitions are snapshotted and changes cannot reuse a submitted attempt', async t => {
+  const f = await fixture(t);
+  const definitions = [{ type: 'function', name: 'read_fixture', description: 'Read fixture', inputSchema: { type: 'object' } }];
+  const adapter = new CodexAdapter({ cwd: f.cwd, journal: f.journal, rpc: f.adapter.rpc, testMode: true, dynamicTools: definitions });
+  definitions[0].name = 'changed_after_construction';
+  await adapter.submit(input);
+  assert.equal(f.calls[0].params.dynamicTools[0].name, 'read_fixture');
+  assert.equal(f.calls[0].params.approvalPolicy, 'untrusted');
+  await adapter.submit(input); assert.equal(f.calls.length, 2);
+  const changed = new CodexAdapter({ cwd: f.cwd, journal: f.journal, rpc: () => assert.fail('must not resubmit'), testMode: true, dynamicTools: definitions });
+  await assert.rejects(changed.submit(input), { code: 'IDEMPOTENCY_CONFLICT' });
+  await assert.rejects(adapter.submit({ ...input, dynamicTools: definitions }), { code: 'INVALID_SUBMISSION' });
+});
+
 test('lost turn acknowledgement survives journal reopen without repeating inference', async t => {
   const { adapter, calls, journal, cwd } = await fixture(t, async method => {
     if (method === 'thread/start') return { thread: { id: 'thread-a' } };

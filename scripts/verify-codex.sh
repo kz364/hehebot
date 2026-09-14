@@ -17,6 +17,7 @@ npm run test:e2e
 node scripts/test-codex-native.mjs
 node scripts/test-codex-tools.mjs
 node scripts/test-codex-tools.mjs --dynamic
+node scripts/test-codex-tools.mjs --supervisor
 npm run build
 
 printf '%s\n' '{"status":"passed","scope":"credential-free Codex and control contracts","assistantOperational":false,"productionAdmission":false,"modelJudgmentVerified":false}'

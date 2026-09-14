@@ -15,19 +15,22 @@ import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { CodexEventRouter } from '../runtime/codex-events.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { createCodexTools } from '../runtime/codex-tools.mjs';
+import { buildToolDefinitions } from '../runtime/agent-tools.mjs';
+import { ExecutionSupervisor } from '../runtime/execution-supervisor.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const dynamicMode = process.argv.includes('--dynamic');
-assert.ok(process.argv.slice(2).every(arg => arg === '--dynamic'), 'Only --dynamic is supported');
+const supervisorMode = process.argv.includes('--supervisor');
+const dynamicMode = supervisorMode || process.argv.includes('--dynamic');
+assert.ok(process.argv.slice(2).every(arg => ['--dynamic', '--supervisor'].includes(arg)), 'Only --dynamic and --supervisor are supported');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 const SKILL_POLICY = '46b2cbdd-d227-4f54-bffa-33148aad0134';
 const ROUTINE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 const policies = [SKILL_POLICY, ROUTINE_POLICY];
 const allowedTools = ['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_list_routines', 'clawbot_run_routine', 'clawbot_delete_routine', 'clawbot_read_skill'];
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
-const report = { label: 'codex-agent-tools-native-acceptance', toolTransport: dynamicMode ? 'dynamic' : 'mcp', status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
+const report = { label: 'codex-agent-tools-native-acceptance', toolTransport: dynamicMode ? 'dynamic' : 'mcp', supervisor: supervisorMode, status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
 const check = (name, fn) => { fn(); report.assertions.push(name); };
-let directory, worker, fixture, transport, dispatcher, router, workerLogs = '';
+let directory, worker, fixture, transport, dispatcher, router, supervisor, workerLogs = '';
 const notifications = [], nativeErrors = [], fixtureErrors = [];
 
 async function freePort() {
@@ -102,14 +105,25 @@ try {
   assert.equal((await ownerCommand('skill.propose', { proposal_id: reviewedProposal, skill_id: reviewedId, expected_skill_revision: 0, body: reviewedBody, provenance: { kind: 'owner', source_ref: 'fixture' }, executable_files_changed: false })).value.status, 'applied');
   assert.equal((await ownerCommand('skill.review', { proposal_id: reviewedProposal, expected_proposal_revision: 1, decision: 'approve' })).value.status, 'applied');
   assert.equal((await ownerCommand('skill.enable', { skill_id: reviewedId, expected_skill_revision: 1, persona_id: persona.id, enabled: true })).value.status, 'applied');
-  const queued = await ownerCommand('message.send', { conversation_id: persona.id, text: 'Stage the synthetic skill proposal using the admitted tool.' });
+  const sourceRoutineId = randomUUID();
+  if (supervisorMode) assert.equal((await ownerCommand('routine.put', {
+    id: sourceRoutineId, expected_revision: 0, persona_id: persona.id, name: 'Manually invoked native acceptance',
+    instructions: 'SUPERVISED_PAUSED_ROUTINE: Stage the synthetic skill proposal using the admitted tool.', enabled: false,
+    schedule: { cron: '0 8 * * 1-5', timezone: 'Asia/Jakarta' }, trigger_source_id: null, action_policy_ids: [],
+    policy: { misfire: 'coalesce', overlap: 'queue_one', max_replay: 1, max_lateness_seconds: 60 },
+  })).value.status, 'applied');
+  const queued = supervisorMode ? await ownerCommand('routine.run', { id: sourceRoutineId, expected_revision: 1 })
+    : await ownerCommand('message.send', { conversation_id: persona.id, text: 'Stage the synthetic skill proposal using the admitted tool.' });
   assert.equal(queued.value.status, 'applied');
   const control = new ControlClient({ origin: origin + '/', token, fetchImpl: trustedFetch });
   await waitFor(async () => (await control.request('status', {})).phase === 'BOOTING', 'FakeProvider boot');
   const identity = await control.request('boot', { boot_id: randomUUID() }); await control.request('ready', { identity });
-  const claim = await control.request('claim', { identity }); const runId = claim.run.id, attempt = claim.run.current_attempt;
-  check('real SQLite run claimed with fenced identity', () => { assert.equal(runId, queued.value.resource_id); assert.equal(attempt, 1); assert.equal(claim.run.persona_id, persona.id); });
-  assert.equal((await ownerCommand('skill.enable', { skill_id: reviewedId, expected_skill_revision: 1, persona_id: persona.id, enabled: false })).value.status, 'applied');
+  const runId = queued.value.resource_id, attempt = 1;
+  const inspectClaim = async claim => {
+    check('real SQLite run claimed with fenced identity', () => { assert.equal(claim.run.id, runId); assert.equal(claim.run.current_attempt, attempt); assert.equal(claim.run.persona_id, persona.id); });
+    assert.equal((await ownerCommand('skill.enable', { skill_id: reviewedId, expected_skill_revision: 1, persona_id: persona.id, enabled: false })).value.status, 'applied');
+  };
+  if (!supervisorMode) await inspectClaim(await control.request('claim', { identity }));
 
   const tokenPath = join(directory, 'runtime.token'), grantPath = join(directory, 'agent-tools.json'), home = join(directory, 'codex-home'), workspace = join(directory, 'workspace');
   await Promise.all([mkdir(home, { mode: 0o700 }), mkdir(workspace, { mode: 0o700 })]);
@@ -130,6 +144,11 @@ try {
     if (report.modelCalls >= 7) { res.writeHead(400); res.end(); return; }
     report.modelCalls++; const body = await jsonBody(req);
     if (dynamicMode) await waitFor(() => nativeBound, 'durable root acknowledgement before scripted tool selection');
+    if (supervisorMode && report.modelCalls === 1) check('native model receives paused routine instructions and progressive skill catalog only', () => {
+      const input = JSON.stringify(body.input);
+      assert.match(input, /SUPERVISED_PAUSED_ROUTINE/); assert.ok(input.includes(reviewedId));
+      assert.match(input, /clawbot_read_skill/); assert.equal(input.includes(reviewedBody.steps[0]), false);
+    });
     if (report.modelCalls === 2) report.continuationTypes = [...collectTypes(body.input)];
     const continuation = findType(body.input, 'function_call_output') ?? findType(body.input, 'custom_tool_call_output');
     if (continuation) {
@@ -160,7 +179,7 @@ try {
       else if (stage === 4) check('native deletion cancelled pending routine work, not the caller', () => {
         assert.equal(receipt.resource_id, routineId); assert.equal(current.objects.some(x => x.id === routineId), false);
         assert.equal(current.runs.find(x => x.id === manualRunId).status, 'cancelled');
-        assert.equal(current.runs.find(x => x.id === runId).status, 'claimed');
+        assert.equal(current.runs.find(x => x.id === runId).status, supervisorMode ? 'running' : 'claimed');
       });
       else if (stage === 5) check('native skill load returns admitted procedure despite later disablement', () => {
         assert.equal(receipt.skill.id, reviewedId); assert.equal(receipt.skill.revision, 1);
@@ -186,9 +205,12 @@ try {
   // supported per-tool policy, not an annotation-based or global approval bypass.
   if (!dynamicMode) for (const name of allowedTools) await appendFile(join(home, 'config.toml'), `\n[mcp_servers.clawbot.tools.${name}]\napproval_mode = "approve"\n`);
   const eventJournal = new FileJournal(join(home, 'events'));
-  const adapter = new CodexAdapter({ cwd: workspace, journal: eventJournal, rpc: (method, params) => transport.request(method, params) });
-  const dynamicTools = createCodexTools({ adapter, attemptId: 'mcp-proof', controlClient: control,
-    grant: { identity, runId, attempt, allowedTools }, contracts: JSON.parse(await readFile(join(root, 'SCHEMAS/contracts.json'), 'utf8')) });
+  const contracts = JSON.parse(await readFile(join(root, 'SCHEMAS/contracts.json'), 'utf8'));
+  const adapter = new CodexAdapter({ cwd: workspace, journal: eventJournal, rpc: (method, params) => transport.request(method, params),
+    testMode: supervisorMode, dynamicTools: supervisorMode ? buildToolDefinitions(contracts).filter(tool => allowedTools.includes(tool.name)).map(tool => ({ type: 'function', ...tool })) : [] });
+  let adapterAttempt = 'mcp-proof';
+  let dynamicTools = createCodexTools({ adapter, attemptId: adapterAttempt, controlClient: control,
+    grant: { identity, runId, attempt, allowedTools }, contracts });
   const dynamicCalls = [];
   transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 15_000, onToolCall: dynamicMode ? async (params, options) => {
     const result = await dynamicTools.handle(params, options);
@@ -198,17 +220,37 @@ try {
   transport.child.stderr.on('data', x => nativeErrors.push(x.toString())); transport.on('notification', x => notifications.push(x));
   await transport.initialize({ experimentalApi: dynamicMode });
   const routerFailures = [];
-  router = new CodexEventRouter({ transport, adapter, onRecovery: value => routerFailures.push(value.code) });
-  const threadId = (await transport.request('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture', approvalPolicy: 'never', sandbox: 'read-only',
-    ...(dynamicMode ? { dynamicTools: dynamicTools.tools } : {}) })).thread.id;
-  const turnId = (await transport.request('turn/start', { threadId, input: [{ type: 'text', text: 'Use the admitted clawbot proposal tool exactly once.' }] })).turn.id;
-  await eventJournal.putIfAbsent('mcp-proof', { threadId, nativeRunId: turnId, status: 'running', rootSettled: false });
-  await router.bind('mcp-proof');
+  router = new CodexEventRouter({ transport, adapter, onRecovery: value => { routerFailures.push(value.code); supervisor?.disconnect(); } });
+  let threadId, turnId;
+  if (supervisorMode) {
+    const controlCalls = [];
+    supervisor = new ExecutionSupervisor({ control: { request: async (type, payload) => {
+      controlCalls.push(type); const result = await control.request(type, payload);
+      if (type === 'claim') await inspectClaim(result);
+      return result;
+    } }, native: adapter, journal: eventJournal, identity, installationId: 'native-supervisor-fixture',
+      personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model' } }, events: router,
+      activity: { ensure: async () => {}, releaseAfterDrain: async () => assert.fail('No verified drain') }, operations: async () => [] });
+    const dispatched = await supervisor.start();
+    adapterAttempt = dispatched.attemptId;
+    const admitted = await adapter.requireRun(adapterAttempt); threadId = admitted.threadId; turnId = admitted.nativeRunId;
+    dynamicTools = createCodexTools({ adapter, attemptId: adapterAttempt, controlClient: control, grant: { identity, runId, attempt, allowedTools }, contracts });
+    check('real supervisor claims, submits, binds native events and acknowledges Worker custody', () => {
+      assert.equal(dispatched.phase, 'running'); assert.deepEqual(controlCalls, ['heartbeat', 'claim', 'submitted']);
+      assert.equal(dispatched.claim.run.id, runId); assert.equal(dispatched.nativeRunId, turnId);
+    });
+  } else {
+    threadId = (await transport.request('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture', approvalPolicy: 'never', sandbox: 'read-only',
+      ...(dynamicMode ? { dynamicTools: dynamicTools.tools } : {}) })).thread.id;
+    turnId = (await transport.request('turn/start', { threadId, input: [{ type: 'text', text: 'Use the admitted clawbot proposal tool exactly once.' }] })).turn.id;
+    await eventJournal.putIfAbsent(adapterAttempt, { threadId, nativeRunId: turnId, status: 'running', rootSettled: false });
+    await router.bind(adapterAttempt);
+  }
   nativeBound = true;
   const completed = await waitFor(() => notifications.find(n => n.method === 'turn/completed' && n.params?.turn?.id === turnId), 'native MCP continuation', 25_000);
   check('native turn completed after MCP continuation', () => assert.equal(completed.params.turn.status, 'completed'));
   await router.flush();
-  const nativeCalls = await eventJournal.get('mcp-proof');
+  const nativeCalls = await eventJournal.get(adapterAttempt);
   check(dynamicMode ? 'native dynamic tools enforce exact root identity before Worker commands' : 'native MCP invocation lifetimes are automatically journaled without effect authority', () => {
     if (dynamicMode) {
       assert.equal(dynamicCalls.length, 6); assert.equal(new Set(dynamicCalls.map(call => call.callId)).size, 6);
@@ -224,6 +266,15 @@ try {
   const read = await transport.request('thread/read', { threadId, includeTurns: true }); const transcript = JSON.stringify(read.thread);
   check('native receipt and final continuation persisted', () => { assert.match(transcript, /MCP_PROPOSAL_STAGED/); assert.match(transcript, /clawbot_propose_skill/); assert.match(transcript, new RegExp(proposalId)); });
   state = await (await ownerFetch('/v1/state')).json(); const proposal = state.skill_proposals.find(x => x.id === proposalId);
+  if (supervisorMode) {
+    await assert.rejects(supervisor.complete({ attemptId: adapterAttempt, nativeRunId: turnId, rootSettled: true }), { code: 'NATIVE_SETTLEMENT_INCOMPLETE' });
+    state = await (await ownerFetch('/v1/state')).json();
+    check('root completion alone cannot publish a completed Worker result or release activity', () => {
+      assert.equal(state.runs.find(run => run.id === runId).status, 'running'); assert.equal(supervisor.phase, 'running');
+      assert.equal(state.runs.find(run => run.id === runId).routine_id, sourceRoutineId);
+      assert.equal(state.objects.find(object => object.id === sourceRoutineId).body.enabled, false);
+    });
+  }
   check('actual control state has pending model/run provenance', () => { assert.equal(proposal.status, 'pending'); assert.equal(proposal.skill_id, skillId); assert.deepEqual(proposal.provenance, { kind: 'model', source_ref: runId }); assert.equal(proposal.executable_files_changed, false); });
   check('proposal did not auto-create or approve a skill', () => { assert.equal(state.objects.some(x => x.kind === 'skill' && x.id === skillId), false); assert.equal(state.skill_proposals.filter(x => x.id === proposalId).length, 1); });
   check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, 7); assert.deepEqual(fixtureErrors, []); });
@@ -234,6 +285,8 @@ try {
   if (directory) await writeFile(join(directory, 'diagnostics.log'), workerLogs + nativeErrors.join(''), { mode: 0o600 });
   process.exitCode = 1;
 } finally {
+  supervisor?.disconnect();
+  if (supervisor) { await supervisor.work; if (supervisor.maintenance) await supervisor.maintenance.catch(() => {}); }
   router?.close(); if (router) await router.tail;
   transport?.close(); if (transport) await stop(transport.child).catch(error => { report.status = 'failed'; report.error = error.message; process.exitCode = 1; });
   await stop(worker).catch(error => { report.status = 'failed'; report.error = error.message; process.exitCode = 1; });
