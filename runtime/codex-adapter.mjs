@@ -9,10 +9,12 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
  */
 export class CodexAdapter {
   #observations = Promise.resolve();
-  constructor({ rpc, journal, cwd, testMode = false, dynamicTools = [] }) {
-    if (typeof rpc !== 'function' || !journal?.putIfAbsent || !cwd?.startsWith('/') || !Array.isArray(dynamicTools) || dynamicTools.length > 64) fail('INVALID_CONFIGURATION');
+  constructor({ rpc, journal, cwd, testMode = false, dynamicTools = [], mcpServers = {} }) {
+    if (typeof rpc !== 'function' || !journal?.putIfAbsent || !cwd?.startsWith('/') || !Array.isArray(dynamicTools) || dynamicTools.length > 64 ||
+        !mcpServers || typeof mcpServers !== 'object' || Array.isArray(mcpServers) || Object.keys(mcpServers).length > 64) fail('INVALID_CONFIGURATION');
     Object.assign(this, { rpc, journal, cwd, testMode });
     this.dynamicTools = structuredClone(dynamicTools);
+    this.mcpServers = structuredClone(mcpServers);
   }
   admissionReadiness() {
     return { allowed: this.testMode === true, productionVerified: false };
@@ -29,7 +31,8 @@ export class CodexAdapter {
         typeof input.model !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(input.model)) fail('INVALID_SUBMISSION');
     if (!this.admissionReadiness().allowed) fail('COMPATIBILITY_GATE_BLOCKED');
     const values = keys.map(key => input[key]);
-    const fingerprint = hash(this.dynamicTools.length ? [values, this.dynamicTools] : values);
+    const fingerprint = hash(Object.keys(this.mcpServers).length ? [values, this.dynamicTools, this.mcpServers]
+      : this.dynamicTools.length ? [values, this.dynamicTools] : values);
     const prior = await this.journal.putIfAbsent(input.attemptId, {
       attemptId: input.attemptId, fingerprint, status: 'thread_unknown', threadId: null,
       nativeRunId: null, rootSettled: false, cancelAcknowledged: false,
@@ -42,6 +45,7 @@ export class CodexAdapter {
       const started = await this.rpc('thread/start', {
         cwd: this.cwd, model: input.model, approvalPolicy: 'untrusted', sandbox: 'read-only', ephemeral: false,
         ...(this.dynamicTools.length ? { dynamicTools: this.dynamicTools } : {}),
+        ...(Object.keys(this.mcpServers).length ? { config: { mcp_servers: this.mcpServers } } : {}),
       });
       if (typeof started?.thread?.id !== 'string' || !started.thread.id) fail('CODEX_PROTOCOL_ERROR');
       // Persist the native thread before turn/start; even a successful thread start is not inference.

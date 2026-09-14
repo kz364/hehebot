@@ -5,7 +5,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { appendFile, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Agent } from 'undici';
@@ -142,9 +142,31 @@ try {
   let manualRunId, nativeBound = false, toolRequests = 0, childThreadId;
   fixture = createServer(async (req, res) => { try {
     if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
-    if (report.modelCalls >= (childMode ? 9 : 7)) { res.writeHead(400); res.end(); return; }
+    if (report.modelCalls >= (childMode ? 11 : 7)) { res.writeHead(400); res.end(); return; }
     report.modelCalls++; const body = await jsonBody(req);
     if (childMode) {
+      if (body.input.some(item => item?.role === 'user' && JSON.stringify(item.content).includes('UNRELATED_GRANT_PROOF'))) {
+        const output = findType(body.input, 'function_call_output');
+        if (output) {
+          check('unadmitted second root cannot borrow first task Worker authority', () => {
+            const raw = JSON.stringify(output.output);
+            assert.match(raw, /-32000|Agent command failed/);
+            assert.equal(raw.includes(reviewedBody.steps[0]), false);
+          });
+          sendEvents(res, message('UNRELATED_GRANT_DENIED')); return;
+        }
+        check('same-process second root gets its own restricted MCP catalog', () => {
+          const names = body.tools.flatMap(tool => tool.tools ?? [tool]).map(tool => tool.name).filter(name => typeof name === 'string');
+          assert.ok(names.some(name => name.includes('hehebot_read_skill')));
+          assert.ok(!names.some(name => name.includes('hehebot_propose_skill') || name.includes('hehebot_save_routine')));
+        });
+        const advertised = body.tools.find(tool => tool.name?.includes('hehebot_read_skill')) ?? body.tools.find(tool => tool.name === 'mcp__hehebot');
+        assert.ok(advertised);
+        sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID().replaceAll('-', '')}`,
+          ...(advertised.name === 'mcp__hehebot' ? { namespace: 'mcp__hehebot', name: 'hehebot_read_skill' } : { name: advertised.name }),
+          arguments: JSON.stringify({ skill_id: reviewedId }) }]);
+        return;
+      }
       const isChild = body.input.some(item => item?.role === 'user' && JSON.stringify(item.content).includes('SHARED_TASK_CHILD'));
       if (!isChild) {
         const output = findType(body.input, 'function_call_output');
@@ -220,16 +242,17 @@ try {
       arguments: JSON.stringify(argumentsByStage[next]) }]);
   } catch (error) { fixtureErrors.push(error.stack ?? String(error)); if (!res.headersSent) sendEvents(res, message('FIXTURE_ASSERTION_FAILED')); else res.end(); } });
   await new Promise((ok, fail) => fixture.once('error', fail).listen(fixturePort, '127.0.0.1', ok));
-  const q = value => JSON.stringify(value);
   await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${fixturePort}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
-  if (!dynamicMode) await appendFile(join(home, 'config.toml'), `[mcp_servers.hehebot]\ncommand = ${q(process.execPath)}\nargs = [${q(join(root, 'runtime/agent-tools.mjs'))}]\nstartup_timeout_sec = 10\n[mcp_servers.hehebot.env]\nHEHEBOT_AGENT_TOOLS_CONFIG = ${q(grantPath)}\nNODE_EXTRA_CA_CERTS = ${q(certPath)}\n`);
   // Explicitly authorize only these disposable scoped tools. This is the
   // supported per-tool policy, not an annotation-based or global approval bypass.
-  if (!dynamicMode) for (const name of allowedTools) await appendFile(join(home, 'config.toml'), `\n[mcp_servers.hehebot.tools.${name}]\napproval_mode = "approve"\n`);
+  const mcpServers = { hehebot: { command: process.execPath, args: [join(root, 'runtime/agent-tools.mjs')], startup_timeout_sec: 10,
+    env: { HEHEBOT_AGENT_TOOLS_CONFIG: grantPath, NODE_EXTRA_CA_CERTS: certPath },
+    tools: Object.fromEntries(allowedTools.map(name => [name, { approval_mode: 'approve' }])) } };
   const eventJournal = new FileJournal(join(home, 'events'));
   const contracts = JSON.parse(await readFile(join(root, 'SCHEMAS/contracts.json'), 'utf8'));
   const adapter = new CodexAdapter({ cwd: workspace, journal: eventJournal, rpc: (method, params) => transport.request(method, params),
-    testMode: supervisorMode, dynamicTools: supervisorMode ? buildToolDefinitions(contracts).filter(tool => allowedTools.includes(tool.name)).map(tool => ({ type: 'function', ...tool })) : [] });
+    testMode: supervisorMode || !dynamicMode, mcpServers: dynamicMode ? {} : mcpServers,
+    dynamicTools: supervisorMode ? buildToolDefinitions(contracts).filter(tool => allowedTools.includes(tool.name)).map(tool => ({ type: 'function', ...tool })) : [] });
   let adapterAttempt = 'mcp-proof';
   let dynamicTools = createCodexTools({ adapter, attemptId: adapterAttempt, controlClient: control,
     grant: { identity, runId, attempt, allowedTools }, contracts });
@@ -261,6 +284,12 @@ try {
       assert.equal(dispatched.phase, 'running'); assert.deepEqual(controlCalls, ['heartbeat', 'claim', 'submitted']);
       assert.equal(dispatched.claim.run.id, runId); assert.equal(dispatched.nativeRunId, turnId);
     });
+  } else if (!dynamicMode) {
+    const admitted = await adapter.submit({ attemptId: adapterAttempt, installationId: 'mcp-fixture', personaId: persona.id,
+      scope: 'conversation', scopeId: persona.id, model: 'fixture-model',
+      message: childMode ? 'Delegate the shared logical task to a native child.' : 'Use the admitted hehebot proposal tool exactly once.' });
+    assert.equal(admitted.status, 'running'); threadId = admitted.threadId; turnId = admitted.nativeRunId;
+    await router.bind(adapterAttempt);
   } else {
     threadId = (await transport.request('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture', approvalPolicy: 'never', sandbox: 'read-only',
       ...(dynamicMode ? { dynamicTools: dynamicTools.tools } : {}) })).thread.id;
@@ -269,7 +298,25 @@ try {
     await router.bind(adapterAttempt);
   }
   nativeBound = true;
+  let isolated;
+  if (childMode) {
+    const isolatedGrantPath = join(directory, 'unadmitted-grant.json');
+    await writeFile(isolatedGrantPath, JSON.stringify({ origin: origin + '/', tokenFile: tokenPath, identity,
+      runId: randomUUID(), attempt, allowedTools: ['hehebot_read_skill'] }), { mode: 0o600 });
+    const isolatedServers = structuredClone(mcpServers);
+    isolatedServers.hehebot.env.HEHEBOT_AGENT_TOOLS_CONFIG = isolatedGrantPath;
+    const other = new CodexAdapter({ cwd: workspace, journal: eventJournal, rpc: adapter.rpc, testMode: true, mcpServers: isolatedServers });
+    isolated = await other.submit({ attemptId: 'isolation-proof', installationId: 'mcp-fixture', personaId: persona.id,
+      scope: 'conversation', scopeId: persona.id, model: 'fixture-model', message: 'UNRELATED_GRANT_PROOF' });
+    assert.equal(isolated.status, 'running'); await router.bind('isolation-proof');
+  }
   const completed = await waitFor(() => notifications.find(n => n.method === 'turn/completed' && (childMode ? n.params?.threadId === childThreadId : n.params?.threadId === threadId && n.params?.turn?.id === turnId)), 'native MCP continuation', 25_000);
+  if (isolated) {
+    const denied = await waitFor(() => notifications.find(n => n.method === 'turn/completed' && n.params?.threadId === isolated.threadId && n.params?.turn?.id === isolated.nativeRunId), 'unrelated root completion');
+    assert.equal(denied.params.turn.status, 'completed');
+    const history = await transport.request('thread/read', { threadId: isolated.threadId, includeTurns: true });
+    assert.match(JSON.stringify(history.thread), /UNRELATED_GRANT_DENIED/);
+  }
   check('native turn completed after MCP continuation', () => assert.equal(completed.params.turn.status, 'completed'));
   await router.flush();
   const nativeCalls = await eventJournal.get(adapterAttempt);
@@ -306,7 +353,7 @@ try {
   }
   check('actual control state has pending model/run provenance', () => { assert.equal(proposal.status, 'pending'); assert.equal(proposal.skill_id, skillId); assert.deepEqual(proposal.provenance, { kind: 'model', source_ref: runId }); assert.equal(proposal.executable_files_changed, false); });
   check('proposal did not auto-create or approve a skill', () => { assert.equal(state.objects.some(x => x.kind === 'skill' && x.id === skillId), false); assert.equal(state.skill_proposals.filter(x => x.id === proposalId).length, 1); });
-  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, childMode ? 9 : 7); assert.equal(toolRequests, 7); assert.deepEqual(fixtureErrors, []); });
+  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, childMode ? 11 : 7); assert.equal(toolRequests, 7); assert.deepEqual(fixtureErrors, []); });
   report.status = 'passed'; report.runId = runId; report.attempt = attempt; report.proposalId = proposalId; report.nativeReceiptObserved = true;
 } catch (error) {
   report.error = error?.stack ?? String(error); if (fixtureErrors.length) report.fixtureErrors = fixtureErrors;

@@ -58,6 +58,20 @@ test('host dynamic definitions are snapshotted and changes cannot reuse a submit
   await assert.rejects(adapter.submit({ ...input, dynamicTools: definitions }), { code: 'INVALID_SUBMISSION' });
 });
 
+test('task MCP configuration is host-owned, snapshotted and bound to durable submission', async t => {
+  const f = await fixture(t);
+  const mcpServers = { task: { command: '/host/mcp', env: { GRANT_PATH: '/task-a/grant.json' } } };
+  const adapter = new CodexAdapter({ cwd: f.cwd, journal: f.journal, rpc: f.adapter.rpc, testMode: true, mcpServers });
+  mcpServers.task.env.GRANT_PATH = '/task-b/grant.json';
+  await adapter.submit(input);
+  assert.deepEqual(f.calls[0].params.config, { mcp_servers: { task: { command: '/host/mcp', env: { GRANT_PATH: '/task-a/grant.json' } } } });
+  await adapter.submit(input); assert.equal(f.calls.length, 2);
+  const other = new CodexAdapter({ cwd: f.cwd, journal: new FileJournal(f.cwd), rpc: () => assert.fail('must not replay'), testMode: true, mcpServers });
+  await assert.rejects(other.submit(input), { code: 'IDEMPOTENCY_CONFLICT' });
+  await assert.rejects(adapter.submit({ ...input, mcpServers }), { code: 'INVALID_SUBMISSION' });
+  await assert.rejects(adapter.submit({ ...input, config: { mcp_servers: mcpServers } }), { code: 'INVALID_SUBMISSION' });
+});
+
 test('lost turn acknowledgement survives journal reopen without repeating inference', async t => {
   const { adapter, calls, journal, cwd } = await fixture(t, async method => {
     if (method === 'thread/start') return { thread: { id: 'thread-a' } };

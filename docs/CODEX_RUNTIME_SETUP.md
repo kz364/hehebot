@@ -66,14 +66,18 @@ Pinned native spawned children do **not** inherit root dynamic tools (`dynamicCh
 
 The owner permits shared authority within an admitted logical task; see [the normative contract](NATIVE_ORCHESTRATION.md#shared-task-authority). Native children **do inherit task-scoped stdio MCP tools** in the pinned fixture. The supported MCP path reuses the task's fixed Worker grant and forces admitted-run provenance. It does not authenticate per-child effect callers. Separate task/persona grants must remain separate in service assembly; a shared customer runtime is not permission to reuse one task's MCP configuration everywhere.
 
+`CodexAdapter` accepts host-owned `mcpServers`, snapshots it and includes nonempty configuration in the durable submission fingerprint. It passes that snapshot through supported `thread/start.config.mcp_servers`, rather than writing global config. Model submission fields cannot override it. Grant-file contents must remain immutable for the admitted attempt; the config fingerprint binds the path/config, not future file contents. Omission does not disable lower-layer MCP servers: assembly must explicitly disable unwanted configured servers and preserve managed requirements. Do not change MCP configuration on an already-running thread or duplicate model-auth ownership.
+
 The `--child` fixture scripts a native spawn, completes the parent, then executes six inherited tools in the child. Actual decoded outputs and HTTPS Worker/SQLite records prove the same policy-scoped proposal/routine/skill sequence below. The router binds the acknowledged parent, attributes the child from native spawn receipts and turn events, and persists six completed child MCP invocation IDs separately from root obligations. Synthetic tests additionally cover late child tools after child completion, sibling ID collisions, unknown turns, restart binding and conflicting terminal events. Invocation accounting does not establish external effects, recursive settlement or sleep eligibility.
+
+That fixture also starts a second root in the same app-server process with the same MCP server name but a different grant path and a read-only tool list. Its deliberately unadmitted run ID produces an error instead of returning the first task's admitted skill. The first task's child still completes all six scoped calls. This verifies supported per-root configuration and rejection of that unadmitted grant, not a complete cross-task sandbox or two concurrently admitted production tasks.
 
 The native fixture waits for parent completion before returning the dynamic child availability response. This controls request ordering in the fixture; it does not promise native child results can never cause additional parent continuations.
 
 ## Actual control and supervisor fixtures
 
 - `node scripts/test-codex-tools.mjs`: actual Codex → stdio MCP → certificate-validated HTTPS Worker → SQLite.
-- `node scripts/test-codex-tools.mjs --child`: native child inherits the task MCP grant; nine scripted requests (parent spawn/final response plus the child's six tools/final response).
+- `node scripts/test-codex-tools.mjs --child`: native child inherits the task MCP grant; eleven scripted requests (parent spawn/final, child's six tools/final, and unrelated root's rejected read/final).
 - `node scripts/test-codex-tools.mjs --dynamic`: actual Codex host callback → scoped handler → HTTPS Worker/SQLite, no MCP configured.
 - `node scripts/test-codex-tools.mjs --supervisor`: actual supervisor/bridge/adapter/router claim and execute a manually queued paused source routine through the same dynamic tools.
 
