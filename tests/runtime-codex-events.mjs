@@ -54,6 +54,25 @@ test('unknown events are bounded and overflow fences without guessing a task', a
   await assert.rejects(f.router.bind('unknown'), { code: 'EVENT_ROUTER_FENCED' });
 });
 
+for (const early of [false, true]) test(`unacknowledged root continuation fences without replacing task identity (early=${early})`, async t => {
+  const f = await fixture(t);
+  await f.admit('a', 'root-19', 'turn-23');
+  if (!early) await f.router.bind('a');
+  f.transport.emit('notification', root('root-19', 'turn-23'));
+  f.transport.emit('notification', { method: 'turn/started', params: {
+    threadId: 'root-19', turn: { id: 'turn-71', status: 'inProgress' },
+  } });
+  if (early) await assert.rejects(f.router.bind('a'), { code: 'EVENT_ROUTER_FENCED' });
+  await f.router.flush();
+  assert.deepEqual(f.recoveries, ['NATIVE_ROOT_TURN_UNBOUND']);
+  assert.equal(f.router.pending.length, 1);
+  assert.equal(f.router.pending[0].notification.params.turn.id, 'turn-71');
+  const row = await f.journal.get('a');
+  assert.equal(row.nativeRunId, 'turn-23'); assert.equal(row.rootSettled, true);
+  assert.equal(row.effectsSettled, undefined); assert.equal(row.childTurns, undefined);
+  assert.deepEqual(f.calls, []); assert.equal(f.adapter.sleepReadiness().allowed, false);
+});
+
 test('MCP invocations remain separate from commands and external-effect settlement', async t => {
   const f = await fixture(t); await f.admit('a', 'thread', 'turn'); await f.router.bind('a');
   const mcp = status => ({ method: status === 'inProgress' ? 'item/started' : 'item/completed', params: {

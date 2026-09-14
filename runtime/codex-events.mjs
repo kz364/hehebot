@@ -88,7 +88,14 @@ export class CodexEventRouter {
         const event = this.pending[index];
         const isTurn = ['turn/started', 'turn/completed'].includes(event.notification.method);
         const attemptId = this.bindings.get(event.key) ?? (isTurn ? this.childOwners.get(event.notification.params.threadId) : this.childBindings.get(event.key));
-        if (!attemptId) { index++; continue; }
+        if (!attemptId) {
+          // A known root thread executing another turn is not an early child or
+          // an unbound new root. Its prior turn's terminal flag cannot cover it.
+          if ([...this.bindings.keys()].some(key => JSON.parse(key)[0] === event.notification.params.threadId)) {
+            this.recover('NATIVE_ROOT_TURN_UNBOUND'); return;
+          }
+          index++; continue;
+        }
         const row = await this.adapter.observe(attemptId, event.notification);
         this.bindChildren(attemptId, row);
         this.pending.splice(index, 1);

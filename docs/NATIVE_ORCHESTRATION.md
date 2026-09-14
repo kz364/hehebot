@@ -20,6 +20,30 @@ Codex 0.154.0 does not inherit root dynamic-tool registrations. Use a supported 
 
 Shared permission is not shared completion. Track every observed descendant turn, command, tool and effect after root completion. Cancellation acceptance does not settle children or authorize releasing locks or sleep holds.
 
+## Current concurrency boundary
+
+[Two-root Worker admission](CODEX_TWO_ROOTS.md) remains globally serialized.
+The [native V2 capacity probe](CODEX_CAPACITY.md) independently demonstrates
+overlapping native roots and root/child inference with a per-session limit of one;
+that setting is not an installation-wide scheduler. The V2 child's tested tool
+catalog lacks spawn/wait, so waiting-child yield is not behaviorally proved. Do
+not silently switch the service's default native feature family based on this probe.
+
+Preserve independent task grants when evolving admission. Scheduling occupancy
+must be separate from the durable task/attempt and all its outstanding obligations.
+A second host claim slot alone cannot regulate native-initiated continuations.
+Meeting the two-turn reserved-interactive contract requires a supported admission
+boundary covering every native start/resumption, including descendants and yielded
+parents. A notification followed by interruption is too late to enforce that cap.
+Until that boundary is established, do not relax Worker capacity or production gates.
+
+The event router now fences with `NATIVE_ROOT_TURN_UNBOUND` when an observation
+arrives for a new, unacknowledged turn on a known root thread. It retains the
+unprocessed observation and original task identity instead of treating the prior
+root's terminal flag as coverage. Synthetic tests cover observations arriving
+before binding and after root completion. This fence is not proof the native turn
+or its side effects stopped, and the pending buffer is not a durable event archive.
+
 ## Settlement and sleep
 
 The runtime may release its Sprite activity hold only after all model turns, commands, children, tools, subprocesses, transfers, device calls, external effects, output commits, and persistence flushes are definitively settled or durably parked at a restartable checkpoint. On incomplete or conflicting observations, stop admission and enter recovery. Warm/cold wake must reacquire ownership and reconcile before executing.
