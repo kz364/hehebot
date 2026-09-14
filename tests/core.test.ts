@@ -128,6 +128,30 @@ describe('scoped context and data-only collaboration', () => {
     expect(f.accept({ schema_version: 1, type: 'room.publish', payload })).toMatchObject({ status: 'rejected', error: { code: 'FORBIDDEN' } });
     expect(f.accept({ schema_version: 1, type: 'room.publish', payload: { ...payload, recipient_ids: [bot], references: [{ kind: 'memory', id: privateMemory.id, revision: 1 }] } })).toMatchObject({ status: 'rejected', error: { code: 'FORBIDDEN' } });
   });
+  it.each(['delete', 'revise', 'expire'])('rechecks room memory references after %s before including update text in new context', change => {
+    const r = room(), m = memory({ kind: 'global', id: null }, 'Original private fact 43');
+    if (change === 'expire') expect(f.accept({ schema_version: 1, type: 'memory.put', payload: {
+      ...m, expected_revision: 1, expires_at: '2026-09-10T00:01:00.000Z',
+    } }).status).toBe('applied');
+    const revision = change === 'expire' ? 2 : 1;
+    const publish = (text: string, references: { kind: 'memory'; id: string; revision: number }[]) => f.accept({ schema_version: 1, type: 'room.publish', payload: {
+      room_id: r.id, kind: 'context_update', recipient_ids: [bot], text, references, cause_id: randomUUID(),
+    } });
+    expect(publish('Original private fact 43', [{ kind: 'memory', id: m.id, revision }]).status).toBe('applied');
+    expect(publish('Independent update 71', []).status).toBe('applied');
+    expect(f.core.context(bot, 'Before', null, r.id).context_events.map(e => e.payload.text)).toEqual(['Original private fact 43', 'Independent update 71']);
+    if (change === 'delete') f.accept({ schema_version: 1, type: 'memory.delete', payload: { id: m.id, expected_revision: revision, purge_transcripts: false } });
+    else if (change === 'revise') f.accept({ schema_version: 1, type: 'memory.put', payload: { ...m, expected_revision: revision, scope: { kind: 'persona', id: otherBot }, text: 'Other bot fact 103' } });
+    else f.setNow('2026-09-10T00:01:00.000Z'); // Same revision, still physically present.
+    const timeline = f.db.all("SELECT * FROM events WHERE type='room.context_update'");
+    const context = f.core.context(bot, 'After', null, r.id);
+    expect(context.context_events[0].payload).toMatchObject({ context_unavailable: true, references: [] });
+    expect(JSON.stringify(context)).not.toContain('Original private fact 43');
+    expect(JSON.stringify(context)).not.toContain('Other bot fact 103');
+    expect(context.context_events[1].payload.text).toBe('Independent update 71');
+    expect(f.db.all("SELECT * FROM events WHERE type='room.context_update'")).toEqual(timeline);
+    expect(f.db.all('SELECT * FROM runs')).toEqual([]);
+  });
   it('memory delete purges canonical revisions and invalidates captured run context', () => {
     const m = memory({ kind: 'global', id: null }, 'Synthetic secret to erase');
     const run = f.accept(message()).resource_id!;

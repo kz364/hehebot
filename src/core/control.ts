@@ -4,7 +4,7 @@ import { ControlError, requireThat, safeError } from './errors';
 import { Store } from './store';
 import { dueOccurrences, nextDue, preview, validateSchedule } from './schedule';
 import {SkillCatalog} from './skills';
-import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject } from './types';
+import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject, TimelineEvent } from './types';
 export const DEFAULT_BOTS = [
  {id:'11111111-1111-4111-8111-111111111111',name:'Chief of Staff',instructions:'Coordinate the owner’s requests. Keep actions within explicit authorization.'},
  {id:'22222222-2222-4222-8222-222222222222',name:'Inbox Triage',instructions:'Review and organize information. Draft outgoing messages unless sending is explicitly authorized.'},
@@ -223,6 +223,19 @@ export class ControlCore {
   }
  }
  private activePersona(id:string):StoredObject<PersonaPut>{const p=this.store.get<PersonaPut>(id,'persona');requireThat(!p.body.archived,'CAPABILITY_UNAVAILABLE','This bot is archived.');return p;}
+ private currentContextEvent(event:TimelineEvent,personaId:string,now:string):TimelineEvent {
+  const unavailable=(event.payload.references as RoomPublish['references']).some(reference=>{
+   let object:StoredObject;
+   try{object=this.store.get(reference.id);}catch(error){if(error instanceof ControlError&&error.code==='NOT_FOUND')return true;throw error;}
+   if(object.kind!==reference.kind||object.revision!==reference.revision)return true;
+   if(object.kind==='memory'){
+    const memory=object.body as unknown as MemoryPut;
+    return Boolean(memory.expires_at&&Date.parse(memory.expires_at)<=Date.parse(now))||!(memory.scope.kind==='global'||memory.scope.kind==='persona'&&memory.scope.id===personaId);
+   }
+   return false;
+  });
+  return unavailable?{...event,payload:{...event.payload,references:[],context_unavailable:true,text:'This context update is unavailable because a referenced item changed or is no longer accessible.'}}:event;
+ }
  context(personaId:string,instruction:string,routineId:string|null,roomId:string|null):ContextSnapshot {
   const persona=this.activePersona(personaId);
   const routine=routineId?this.store.get<RoutinePut>(routineId,'routine'):null;
@@ -235,7 +248,7 @@ export class ControlCore {
    const cursor=this.store.db.all<{consumed_sequence:number}>('SELECT consumed_sequence FROM consumer_cursors WHERE consumer_id=? AND conversation_id=?',personaId,roomId)[0]?.consumed_sequence??0;
    const page=this.store.contextPage(roomId,personaId,cursor,now);
    if(cursor<page.expiredThrough)contextHistoryGap={requested_after:cursor,expired_through:page.expiredThrough};
-   contextEvents=page.events;
+   contextEvents=page.events.map(event=>this.currentContextEvent(event,personaId,now));
   }
   return {schema_version:1,persona,routine,memories,skills:new SkillCatalog(this.store,()=>this.now(),this.options.uuid).enabled(personaId),scope_key:`${personaId}/${routineId?`routine/${routineId}`:roomId?`room/${roomId}`:'personal'}`,instruction,room_id:roomId,context_events:contextEvents,context_history_gap:contextHistoryGap,task_summaries:this.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>("SELECT id,title,status,updated_at FROM runs WHERE role='background' AND persona_id=? ORDER BY updated_at DESC LIMIT 30",personaId),authorization_policy_ids:routine?.body.action_policy_ids??[]};
  }

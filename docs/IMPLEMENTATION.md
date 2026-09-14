@@ -40,6 +40,12 @@ pre-pruning responses. `node scripts/test-portal-history.mjs --retention` checks
 partial/empty history and stale responses in Chromium with synthetic read-only
 HTTP responses; default and `--error` modes cover cross-bot history races.
 
+New recipient context also rechecks referenced object revisions, deletion and
+memory scope/expiry. Unavailable references replace that update's text with an
+explicit unavailable marker; independent updates remain intact. Original timeline
+rows and already captured/native transcripts are not erased by this read-time
+check. Publication still creates no inference or wake.
+
 Schema v6 adds indexed, 100-row command-payload cleanup at 90 days from original
 acceptance for applied/rejected commands. Receipt identities, body hashes, keys,
 outcomes and foreign-key links remain intact; pending acceptance is not erased.
