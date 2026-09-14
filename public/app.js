@@ -44,7 +44,13 @@ function render(){
  const conversation=events.filter(x=>x.conversation_id===selected);const runs=snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
  const signature=JSON.stringify([selected,conversation,runs]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;timeline.replaceChildren();
-  if(conversation.length>=100){timeline.append(button('Load earlier messages',async()=>{try{const history=await api('/v1/conversations/'+selected+'/events?before='+conversation[0].sequence);olderEvents.set(selected,[...history.events,...conversation].slice(-1000));events=olderEvents.get(selected);lastSignature='';render();}catch(e){report(e.message);}},'quiet'));}
+  if(conversation.length>=100){const conversationId=selected;timeline.append(button('Load earlier messages',async()=>{try{
+   const history=await api('/v1/conversations/'+conversationId+'/events?before='+conversation[0].sequence);
+   const combined=[...history.events,...(olderEvents.get(conversationId)??conversation)];
+   olderEvents.set(conversationId,[...new Map(combined.map(event=>[event.sequence,event])).values()].sort((a,b)=>a.sequence-b.sequence).slice(-1000));
+   if(selected!==conversationId)return;
+   events=olderEvents.get(conversationId);lastSignature='';render();
+  }catch(e){if(selected===conversationId)report(e.message);}},'quiet'));}
   if(!conversation.length){const empty=node('div',undefined,'empty');empty.append(node('h2',`A place to work with ${object?.body.name??'your assistant'}`),node('p','Ask for help, share an update, or describe something you’d like done on a schedule.'));timeline.append(empty);}
   for(const event of conversation){
    if(event.type==='message.user'||event.type==='run.result'){
