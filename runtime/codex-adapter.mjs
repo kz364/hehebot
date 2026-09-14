@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 export const PINNED_CODEX = '0.154.0';
+export const OBSERVED_COLLAB_TOOLS = Object.freeze(['sendInput', 'resumeAgent', 'wait', 'closeAgent', 'sendMessage', 'followupTask', 'interruptAgent', 'listAgents']);
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const observationOwners = row => [row, ...Object.values(row.childObligations ?? {})];
@@ -183,7 +184,7 @@ export class CodexAdapter {
           params.item.senderThreadId !== params.threadId) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const { id, status, receiverThreadIds } = params.item;
       if (typeof id !== 'string' || !id || id.length > 256 ||
-          !(notification.method === 'item/started' ? ['inProgress'] : ['completed', 'failed']).includes(status) ||
+          !(notification.method === 'item/started' ? ['inProgress'] : ['completed', 'failed', 'interrupted']).includes(status) ||
           !Array.isArray(receiverThreadIds) || receiverThreadIds.length > 100 ||
           !receiverThreadIds.every(child => typeof child === 'string' && child.length > 0 && child.length <= 256 && child !== row.threadId && child !== params.threadId) ||
           new Set(receiverThreadIds).size !== receiverThreadIds.length) fail('CODEX_PROTOCOL_ERROR');
@@ -206,27 +207,31 @@ export class CodexAdapter {
     const field = params?.item?.type === 'commandExecution' ? 'commands' : params?.item?.type === 'mcpToolCall' ? 'mcpCalls'
       : params?.item?.type === 'fileChange' ? 'fileChanges' : params?.item?.type === 'dynamicToolCall' ? 'dynamicCalls'
       : params?.item?.type === 'webSearch' ? 'webSearches' : params?.item?.type === 'sleep' ? 'sleeps'
-      : params?.item?.type === 'contextCompaction' ? 'compactions' : null;
+      : params?.item?.type === 'contextCompaction' ? 'compactions'
+      : params?.item?.type === 'collabAgentToolCall' && OBSERVED_COLLAB_TOOLS.includes(params.item.tool) ? 'collabCalls' : null;
     if (['item/started', 'item/completed'].includes(notification?.method) && field) {
       if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      if (field === 'collabCalls' && params.item.senderThreadId !== params.threadId) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const { id } = params.item;
       // These variants have no native success/failure status. Track lifecycle
       // termination only; never trust a payload-supplied status for them.
       const status = ['webSearches', 'sleeps', 'compactions'].includes(field)
         ? notification.method === 'item/started' ? 'inProgress' : 'completed' : params.item.status;
-      const terminal = ['commands', 'fileChanges'].includes(field) ? ['completed', 'failed', 'declined'] : ['completed', 'failed'];
+      const terminal = ['commands', 'fileChanges'].includes(field) ? ['completed', 'failed', 'declined']
+        : field === 'collabCalls' ? ['completed', 'failed', 'interrupted'] : ['completed', 'failed'];
       if (typeof id !== 'string' || !id || id.length > 256 ||
           !(notification.method === 'item/started' ? ['inProgress'] : terminal).includes(status)) fail('CODEX_PROTOCOL_ERROR');
       const obligations = { ...owner[field] };
-      const prior = Object.hasOwn(obligations, id) ? obligations[id] : undefined;
+      const itemKey = field === 'collabCalls' ? JSON.stringify([params.item.tool, id]) : id;
+      const prior = Object.hasOwn(obligations, itemKey) ? obligations[itemKey] : undefined;
       if (prior && prior !== 'inProgress') {
         if (prior !== status) fail('SETTLEMENT_CONFLICT');
         return row;
       }
-      if (!Object.hasOwn(obligations, id) && Object.keys(obligations).length >= 4096) fail('COMMAND_TRACKING_LIMIT');
+      if (!Object.hasOwn(obligations, itemKey) && Object.keys(obligations).length >= 4096) fail('COMMAND_TRACKING_LIMIT');
       // Persist starts even if history omits them. A root/history snapshot cannot
       // remove these obligations; only a matching native terminal event can.
-      Object.defineProperty(obligations, id, { value: status, enumerable: true, writable: true, configurable: true });
+      Object.defineProperty(obligations, itemKey, { value: status, enumerable: true, writable: true, configurable: true });
       // An MCP terminal response settles only the invocation, not external effects.
       return save({ [field]: obligations });
     }

@@ -63,6 +63,14 @@ Synthetic event tests cover root termination with these operations still open,
 content omission and conflicting replay. These tests do not perform live search
 or establish exhaustive operation coverage; the coverage blocker remains unknown.
 
+Non-spawn collaboration calls use the pinned tool enum and retain only sender,
+tool name, item identity and status. Tool name namespaces reused item IDs;
+`interrupted` is a terminal invocation status, including for spawn. Completing
+`wait`, `closeAgent` or `interruptAgent` does not close any recorded child turn.
+Receiver lists and agent-state summaries from non-spawn calls never establish
+ancestry or authority. Synthetic tests cover all enum names without claiming
+that each tool is advertised by the configured V1 runtime.
+
 Spawn receipts preserve receiver IDs and attribute direct-child turn observations, including early events. A child can outlive its parent. `cancelChild` requires an observed exact child thread/turn under that parent, journals intent before interrupt and deduplicates repeated/concurrent requests. Lost acknowledgment is retained without replay. Accepted cancellation is separate from observed interruption and provider request closure.
 
 Nested spawn receipts extend the same routing to observed descendants; each spawn belongs to its exact sender thread/turn. An existing receiver cannot gain a second origin or form an ancestry cycle. Per-descendant tool maps remain distinct even when item/turn IDs repeat across threads. Router reconstruction restores these durable links and `cancelChild` accepts an exactly observed grandchild without interrupting ancestors. This is observation-driven accounting, not discovery of unseen work.

@@ -149,6 +149,30 @@ test(`${type} derives lifetime from notifications, not a fabricated success stat
   assert.deepEqual(f.recoveries, ['NATIVE_EVENT_RECONCILIATION_FAILED']);
 });
 
+test('non-spawn collaboration records invocation only, never adopts receivers or closes their turns', async t => {
+  const f = await fixture(t); await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
+  f.transport.emit('notification', spawn('interrupted', ['child']));
+  f.transport.emit('notification', { method: 'turn/started', params: { threadId: 'child', turn: { id: 'child-turn', status: 'inProgress' } } });
+  await f.router.flush();
+  const event = (tool, status) => ({ method: status === 'inProgress' ? 'item/started' : 'item/completed', params: {
+    threadId: 'parent', turnId: 'turn', item: { id: 'reused', type: 'collabAgentToolCall', tool, status,
+      senderThreadId: 'parent', receiverThreadIds: ['child', 'not-admitted'], prompt: 'PRIVATE_INPUT', agentsStates: { child: 'completed' } },
+  } });
+  for (const tool of ['sendInput', 'resumeAgent', 'wait', 'closeAgent', 'sendMessage', 'followupTask', 'interruptAgent', 'listAgents']) {
+    f.transport.emit('notification', event(tool, 'inProgress'));
+    f.transport.emit('notification', event(tool, tool === 'wait' ? 'interrupted' : 'completed'));
+  }
+  await f.router.flush(); const row = await f.journal.get('a');
+  assert.equal(Object.keys(row.collabCalls).length, 8);
+  assert.equal(row.collabCalls['["wait","reused"]'], 'interrupted');
+  assert.equal(row.childTurns['["child","child-turn"]'], 'inProgress');
+  assert.equal(f.router.childOwners.has('not-admitted'), false);
+  assert.doesNotMatch(JSON.stringify(row), /PRIVATE_INPUT|agentsStates|not-admitted/);
+  const invalid = event('sendInput', 'completed'); invalid.params.item.senderThreadId = 'child';
+  f.transport.emit('notification', invalid); await f.router.flush();
+  assert.deepEqual(f.recoveries, ['NATIVE_EVENT_INVALID']);
+});
+
 test('spawn receipts retain exact receivers after parent completion without settling children', async t => {
   const f = await fixture(t);
   f.transport.emit('notification', spawn('inProgress', []));
