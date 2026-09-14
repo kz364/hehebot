@@ -1,0 +1,42 @@
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, it } from 'vitest';
+import { CodexOperations } from '../runtime/codex-operations.mjs';
+import { FileJournal } from '../runtime/file-journal.mjs';
+import { LifecycleCore, type HeartbeatOperation } from '../src/core/lifecycle';
+import { fixture, bot } from './helpers';
+
+it('persists native invocation states into SQLite without authorizing result publication or sleep', async () => {
+  const f = fixture(true), directory = await mkdtemp(join(tmpdir(), 'hehebot-operation-control-'));
+  try {
+    const life = new LifecycleCore(f.store, f.core);
+    f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
+    const identity = life.registerBoot(randomUUID()); life.ready(identity);
+    f.accept({ schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Synthetic operation accounting' } });
+    const claim = life.claim(identity)!;
+    const journal = new FileJournal(directory);
+    const child = JSON.stringify(['child-a', 'turn']);
+    await journal.putIfAbsent('native-attempt', { threadId: 'root', nativeRunId: 'turn', rootSettled: true,
+      status: 'finishing', childTurns: { [child]: 'completed' },
+      childObligations: { [child]: { mcpCalls: { call: 'inProgress' } } } });
+    const operations = new CodexOperations({ journal, attemptId: 'native-attempt', runId: claim.run.id,
+      attempt: claim.run.current_attempt, startedAt: f.core.now(), deadlineAt: claim.deadline_at });
+    const heartbeat = async () => life.heartbeat(identity, await operations.snapshot() as HeartbeatOperation[]);
+    await heartbeat();
+    expect(f.db.all<{kind: string; status: string}>('SELECT kind,status FROM operations ORDER BY kind,status')).toEqual([
+      { kind: 'child', status: 'settled' }, { kind: 'inference', status: 'settled' },
+      { kind: 'tool', status: 'active' }, { kind: 'tool', status: 'unknown' },
+    ]);
+    await journal.update('native-attempt', { childObligations: { [child]: { mcpCalls: { call: 'completed' } } } });
+    await heartbeat(); await heartbeat();
+    expect(f.db.all('SELECT id FROM operations')).toHaveLength(4);
+    expect(f.db.all("SELECT id FROM operations WHERE status='active'")).toHaveLength(0);
+    expect(f.db.all("SELECT id FROM operations WHERE status='unknown'")).toHaveLength(1);
+    expect(() => life.complete(identity, claim.run.id, 1, { status: 'completed', text: 'Not authorized' }))
+      .toThrowError(expect.objectContaining({ code: 'CANCEL_UNCONFIRMED' }));
+    expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
+    expect(f.store.run(claim.run.id).status).toBe('claimed');
+  } finally { f.close(); await rm(directory, { recursive: true, force: true }); }
+});

@@ -1,0 +1,54 @@
+import { createHash } from 'node:crypto';
+
+const fail = code => { throw Object.assign(new Error(code), { code }); };
+const uuid = value => {
+  const hex = createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+};
+
+/** Host-owned heartbeat projection. Invocation termination is not effect settlement.
+ * All records charge the admitted logical root task, including descendant work.
+ * An unresolved coverage record deliberately prevents completion and sleep until
+ * supported native coverage, external effects and recovery are established.
+ */
+export class CodexOperations {
+  constructor({ journal, attemptId, runId, attempt, startedAt, deadlineAt }) {
+    if (!journal?.get || !/^[a-zA-Z0-9_-]{1,128}$/.test(attemptId ?? '') ||
+        !/^[0-9a-f-]{36}$/i.test(runId ?? '') || !Number.isSafeInteger(attempt) || attempt < 1 ||
+        !Number.isFinite(Date.parse(startedAt)) || !Number.isFinite(Date.parse(deadlineAt)) ||
+        Date.parse(deadlineAt) <= Date.parse(startedAt)) fail('INVALID_OPERATION_CONFIGURATION');
+    this.journal = journal;
+    this.binding = Object.freeze({ attemptId, runId, attempt, startedAt, deadlineAt });
+  }
+
+  async snapshot() {
+    const { attemptId, runId, attempt, startedAt, deadlineAt } = this.binding;
+    const row = await this.journal.get(attemptId);
+    const operations = [];
+    const add = (key, kind, status) => {
+      if (operations.length === 100) fail('NATIVE_OPERATION_LIMIT');
+      operations.push({ id: uuid([attemptId, runId, attempt, key]), run_id: runId, attempt,
+        kind, status, started_at: startedAt, deadline_at: deadlineAt,
+        // Reading the same journal is not fresh native progress.
+        last_progress_at: startedAt });
+    };
+    const status = value => value === 'inProgress' ? 'active'
+      : ['completed', 'failed', 'declined', 'interrupted'].includes(value) ? 'settled' : 'unknown';
+    add(['coverage'], 'tool', 'unknown');
+    add(['root'], 'inference', row?.rootSettled === true ? 'settled'
+      : row?.status === 'cancelling' ? 'cancelling' : row?.status === 'running' ? 'active' : 'unknown');
+    if (!row) return operations;
+    const items = (owner, identity) => {
+      for (const field of ['commands', 'mcpCalls']) {
+        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], 'tool', status(value));
+      }
+      for (const [id, spawn] of Object.entries(owner.spawns ?? {})) {
+        add([identity, 'spawns', id], 'tool', status(spawn.status));
+      }
+    };
+    items(row, [row.threadId, row.nativeRunId]);
+    for (const [key, value] of Object.entries(row.childTurns ?? {})) add(['child', key], 'child', status(value));
+    for (const [key, owner] of Object.entries(row.childObligations ?? {})) items(owner, key);
+    return operations;
+  }
+}

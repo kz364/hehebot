@@ -14,6 +14,7 @@ import { ControlClient } from '../runtime/control-client.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { CodexEventRouter } from '../runtime/codex-events.mjs';
 import { CodexTaskControl } from '../runtime/codex-tasks.mjs';
+import { CodexOperations } from '../runtime/codex-operations.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { createCodexTools } from '../runtime/codex-tools.mjs';
 import { buildToolDefinitions } from '../runtime/agent-tools.mjs';
@@ -290,7 +291,13 @@ try {
       return result;
     } }, native: adapter, journal: eventJournal, identity, installationId: 'native-supervisor-fixture',
       personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model' } }, events: router,
-      activity: { ensure: async () => {}, releaseAfterDrain: async () => assert.fail('No verified drain') }, operations: async () => [] });
+      activity: { ensure: async () => {}, releaseAfterDrain: async () => assert.fail('No verified drain') }, operations: async () => {
+        const current = await eventJournal.get(supervisor.bridge.cursor);
+        if (!current?.attemptId || current.phase === 'complete') return [];
+        return new CodexOperations({ journal: eventJournal, attemptId: current.attemptId, runId: current.claim.run.id,
+          attempt: current.claim.run.current_attempt, startedAt: current.claim.run.updated_at,
+          deadlineAt: current.claim.deadline_at }).snapshot();
+      } });
     const dispatched = await supervisor.start();
     adapterAttempt = dispatched.attemptId;
     const admitted = await adapter.requireRun(adapterAttempt); threadId = admitted.threadId; turnId = admitted.nativeRunId;
@@ -414,6 +421,24 @@ try {
   check('native receipts persisted with final response or observed owner interruption', () => { if (!supervisorChildMode) assert.match(transcript, /MCP_PROPOSAL_STAGED/); assert.match(transcript, /hehebot_propose_skill/); assert.match(transcript, new RegExp(proposalId)); });
   state = await (await ownerFetch('/v1/state')).json(); const proposal = state.skill_proposals.find(x => x.id === proposalId);
   if (supervisorMode) {
+    await supervisor.maintain();
+    const operations = await supervisor.operations();
+    check('real heartbeat retains unknown native coverage after observed invocation termination', () => {
+      assert.equal(operations.filter(op => op.status === 'unknown').length, 1);
+      assert.equal(operations.find(op => op.kind === 'inference').status, 'settled');
+      if (supervisorChildMode) {
+        assert.equal(operations.length, 10);
+        assert.equal(operations.find(op => op.kind === 'child').status, 'settled');
+        assert.equal(operations.filter(op => op.kind === 'tool' && op.status === 'settled').length, 7);
+      }
+      assert.ok(operations.every(op => op.run_id === runId && op.attempt === attempt));
+    });
+    const rejectedCompletion = await trustedFetch(origin + '/internal/complete', { method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ identity, run_id: runId, attempt,
+        result: { status: 'completed', text: 'Root-only publication must fail' } }) });
+    assert.equal(rejectedCompletion.status, 409);
+    assert.match(JSON.stringify(await rejectedCompletion.json()), /CANCEL_UNCONFIRMED/);
     await assert.rejects(supervisor.complete({ attemptId: adapterAttempt, nativeRunId: turnId, rootSettled: true }), { code: 'NATIVE_SETTLEMENT_INCOMPLETE' });
     state = await (await ownerFetch('/v1/state')).json();
     check('root completion alone cannot publish a completed Worker result or release activity', () => {
