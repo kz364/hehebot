@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, opendir, rename, rm, unlink } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, mkdtemp, open, opendir, rename, rm, unlink } from 'node:fs/promises';
 import { isAbsolute, join, parse, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { planBackupRetention } from './plan-backup-retention.mjs';
@@ -171,13 +171,46 @@ async function verifyFiles(directory, entries, states = {}) {
   return verified;
 }
 
+async function stableInventory(directory, now) {
+  const prior = await journals(directory);
+  if ([...prior.values()].some(row => row.phase === 'applying')) fail('PRUNE_INCOMPLETE_APPLY');
+  const catalog = await readJSON(join(directory, 'inventory.json'));
+  const { entries, policy } = inventory(catalog.value, now);
+  return { prior, catalog, entries, policy, verified: await verifyFiles(directory, entries) };
+}
+
+/** Trusted local producer only; the callback must create exactly the supplied private staging file.
+ * Holds the same non-reentrant flock as review/apply across production and publication.
+ * Never removes a final ciphertext, including when publication or inventory commit fails.
+ */
+export async function publishInventoriedBackup(directory, now, metadata, produce) {
+  fields(metadata, ['id', 'snapshot_at']);
+  planBackupRetention({ now, snapshots: [metadata] });
+  return withBackupDirectoryLock(directory, async () => {
+    const { prior, entries } = await stableInventory(directory, now);
+    if (entries.length >= MAX_BACKUPS || entries.some(row => row.id === metadata.id) ||
+        [...prior.values()].some(row => row.plan.entries.some(entry => entry.id === metadata.id))) fail();
+    const work = await mkdtemp(join(directory, '.create-'));
+    try {
+      const staged = join(work, metadata.id + '.age');
+      const result = await produce(staged);
+      fields(result, ['bytes', 'sha256']);
+      const entry = { ...metadata, ...result };
+      const next = { version: 1, backups: inventory({ version: 1, backups: [...entries, entry] }, now).entries };
+      await ciphertext(work, entry);
+      const destination = join(directory, metadata.id + '.age');
+      await copyFile(staged, destination, constants.COPYFILE_EXCL);
+      await sync(destination); await sync(directory);
+      await atomicJSON(join(directory, 'inventory.json'), next, directory);
+      return entry;
+    } finally { await rm(work, { recursive: true, force: true }); await sync(directory); }
+  });
+}
+
 export async function reviewControlBackups(directory, now) {
   return withBackupDirectoryLock(directory, async root => {
-    const prior = await journals(directory);
-    if ([...prior.values()].some(row => row.phase === 'applying')) fail('PRUNE_INCOMPLETE_APPLY');
-    const catalog = await readJSON(join(directory, 'inventory.json'));
-    const { entries, policy } = inventory(catalog.value, now);
-    const plan = { version: 1, now, directory: root, inventory_hash: catalog.hash, entries: await verifyFiles(directory, entries), policy };
+    const { prior, catalog, policy, verified } = await stableInventory(directory, now);
+    const plan = { version: 1, now, directory: root, inventory_hash: catalog.hash, entries: verified, policy };
     const digest = sha(text(plan));
     if (!prior.has(digest)) {
       if (prior.size >= MAX_JOURNALS) fail();
