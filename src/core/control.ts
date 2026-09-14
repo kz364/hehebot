@@ -9,6 +9,7 @@ import {controlMonitoring} from './monitoring';
 import {TaskSteering} from './task-steering';
 import {nativeDescendantsSettledSql} from './native-tasks';
 import {EffectLedger} from './effects';
+import {ResourceLedger} from './resources';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
@@ -62,6 +63,23 @@ export class ControlCore {
   const now=this.now();
   const skills=new SkillCatalog(this.store,()=>this.now(),this.options.uuid);
   switch(command.type){
+   case 'run.recover':{
+    const p=command.payload,run=this.store.run(p.run_id);
+    requireThat(run.current_attempt===p.expected_attempt&&run.status==='recovery_required','REVISION_CONFLICT','Select the current recovery-required attempt.');
+    const attempt=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,p.expected_attempt)[0];
+    requireThat(attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before closing recovery.');
+    requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length,'CANCEL_UNCONFIRMED','The old execution has not settled.');
+    requireThat(!this.store.db.all("SELECT id FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown') LIMIT 1",run.id).length,'OUTCOME_UNKNOWN','Reconcile every external effect before closing recovery.');
+    requireThat(!this.store.db.all(`SELECT r.id FROM runs r WHERE r.id=? AND NOT (${nativeDescendantsSettledSql})`,run.id).length,'CANCEL_UNCONFIRMED','Recover descendants before their parent.');
+    const resources=this.store.db.all<{resource_id:string}>('SELECT resource_id FROM resource_locks WHERE run_id=?',run.id).map(row=>row.resource_id);
+    new ResourceLedger(this.store,()=>this.now()).release(run.id,p.expected_attempt,resources);
+    const cancelled=['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code??''),status=cancelled?'cancelled':'failed';
+    this.store.db.exec('UPDATE runs SET status=?,error_code=?,updated_at=? WHERE id=?',status,cancelled?run.error_code:'EXECUTOR_STOPPED',now,run.id);
+    this.store.db.exec('DELETE FROM retry_queue WHERE run_id=?',run.id);
+    if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='failed' WHERE id=?",run.occurrence_id);
+    this.store.event(this.options.uuid(),run.persona_id,'run.owner_recovered',owner,commandId,{run_id:run.id,attempt:p.expected_attempt,status,released_resources:resources.length},now);
+    this.flushFollowups(run.id);return run.id;
+   }
    case 'effect.reconcile':{
     const p=command.payload,id=new EffectLedger(this.store,()=>this.now()).reconcileStopped(owner,commandId,p);
     this.store.event(this.options.uuid(),this.store.run(p.run_id).persona_id,'effect.owner_reconciled',owner,commandId,

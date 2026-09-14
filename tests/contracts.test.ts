@@ -6,6 +6,14 @@ describe('versioned command schema', () => {
   it('contains all 10 valid command variants and 4 rejection fixtures', () => { expect(vectors.valid).toHaveLength(10); expect(vectors.invalid).toHaveLength(4); });
   it.each(vectors.valid)('accepts $type fixture', (command) => { expect(parseCommand(command)).toEqual(command); });
   it.each(vectors.invalid)('rejects invalid contract %#', ({ command, expected_error }) => { expect(() => parseCommand(command)).toThrowError(expect.objectContaining({ code: expected_error })); });
+  it('requires explicit lock release consent for stopped-run recovery, not supplied shutdown proof', () => {
+    const command=(payload:unknown)=>({schema_version:1,type:'run.recover',payload});
+    const payload={run_id:bot,expected_attempt:1,release_resources:true};
+    expect(parseCommand(command(payload))).toEqual(command(payload));
+    for(const invalid of [{run_id:bot,expected_attempt:1},{...payload,release_resources:false},{...payload,expected_attempt:0},{...payload,executionStopped:true}]) {
+      expect(()=>parseCommand(command(invalid))).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
+    }
+  });
   it('requires an exact stopped-effect decision and bounded reference, without accepting release or shutdown assertions', () => {
     const payload = {run_id:bot,effect_id:bot,expected_attempt:1,expected_request_digest:'digest-19',outcome:'confirmed',evidence_ref:'receipt:43'};
     const command = (payload:unknown) => ({schema_version:1,type:'effect.reconcile',payload});

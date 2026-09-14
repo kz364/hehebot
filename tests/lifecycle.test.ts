@@ -160,6 +160,52 @@ describe('executor leases and attempts', () => {
     resources.release(runId, 1, ['calendar:remote']); resources.acquire(next, 1, ['calendar:remote']);
     expect(f.db.all('SELECT run_id FROM resource_locks')).toEqual([{run_id:next}]);
   });
+  it('owner recovery closes stopped descendants bottom-up only after effect decisions and never retries them', () => {
+    const root = claimed().run.id;
+    life.submitted(identity,root,1,'recover-root');
+    const native = new NativeTaskLedger(f.store,f.core,life);
+    const spawn = (ref:string) => native.register(identity,{parent_run_id:root,parent_attempt:1,persona_id:bot,native_run_ref:ref,native_session_key:ref,title:ref},true).id;
+    const child = spawn('recover-child'), sibling = spawn('recover-sibling');
+    const resources = new ResourceLedger(f.store,()=>f.core.now());
+    resources.acquire(child,1,['mail:child']); resources.acquire(sibling,1,['mail:sibling']);
+    unknownEffect(child); unknownEffect(sibling);
+    const recover = (id:string,key=randomUUID()) => f.accept({schema_version:1,type:'run.recover',payload:{run_id:id,expected_attempt:1,release_resources:true}},key);
+    expect(recover(child).status).toBe('rejected');
+    f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
+    life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
+    f.core.options.executionEnabled=false;
+    expect(recover(root)).toMatchObject({status:'rejected',error:{code:'CANCEL_UNCONFIRMED'}});
+    expect(recover(child)).toMatchObject({status:'rejected',error:{code:'OUTCOME_UNKNOWN'}});
+    const decide = (id:string) => {
+      const effect=f.db.all<{id:string;request_digest:string}>('SELECT id,request_digest FROM effects WHERE run_id=?',id)[0];
+      expect(f.accept({schema_version:1,type:'effect.reconcile',payload:{run_id:id,expected_attempt:1,effect_id:effect.id,expected_request_digest:effect.request_digest,outcome:'confirmed',evidence_ref:'manual:verified-43'}}).status).toBe('applied');
+    };
+    decide(child);
+    // Restored stale lock metadata must roll back even a preceding valid release.
+    f.db.exec("INSERT INTO resource_locks VALUES('mail:stale',?,2,?)",child,f.core.now());
+    const held=f.db.all('SELECT * FROM resource_locks ORDER BY resource_id');
+    expect(recover(child)).toMatchObject({status:'rejected',error:{code:'FORBIDDEN'}});
+    expect(f.db.all('SELECT * FROM resource_locks ORDER BY resource_id')).toEqual(held);
+    expect(f.store.run(child).status).toBe('recovery_required');
+    f.db.exec("DELETE FROM resource_locks WHERE resource_id='mail:stale'");
+    const key=randomUUID(), first=recover(child,key);
+    expect(first.status).toBe('applied'); expect(recover(child,key)).toEqual(first);
+    expect(f.db.all('SELECT resource_id FROM resource_locks')).toEqual([{resource_id:'mail:sibling'}]);
+    expect(recover(root).status).toBe('rejected');
+    decide(sibling); expect(recover(sibling).status).toBe('applied'); expect(recover(root).status).toBe('applied');
+    expect(f.db.all('SELECT status,current_attempt,error_code FROM runs')).toEqual(Array.from({length:3},()=>({status:'failed',current_attempt:1,error_code:'EXECUTOR_STOPPED'})));
+    expect(f.db.all('SELECT status FROM attempts')).toEqual(Array.from({length:3},()=>({status:'terminated'})));
+    expect(f.db.all('SELECT * FROM resource_locks')).toEqual([]); expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+    expect(f.db.all('SELECT phase,boot_id FROM lifecycle')).toEqual([{phase:'STOPPED',boot_id:null}]);
+  });
+  it.each(['OWNER_CANCELLED','CONTEXT_INVALIDATED'])('preserves %s through direct stop and owner recovery', reason => {
+    const root=claimed().run.id;
+    f.db.exec("UPDATE runs SET status='cancelling',error_code=? WHERE id=?",reason,root);
+    f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
+    life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
+    expect(f.accept({schema_version:1,type:'run.recover',payload:{run_id:root,expected_attempt:1,release_resources:true}}).status).toBe('applied');
+    expect(f.store.run(root)).toMatchObject({status:'cancelled',error_code:reason});
+  });
   it('waiting requires checkpoint and terminal result is durable/idempotent', () => {
     const claim = claimed();
     expect(() => life.complete(identity, claim.run.id, 1, { status: 'waiting', text: '' })).toThrowError(expect.objectContaining({ code: 'INVALID_INPUT' }));

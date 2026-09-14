@@ -192,7 +192,7 @@ export class LifecycleCore {
    this.store.db.exec("DELETE FROM resource_locks WHERE NOT EXISTS(SELECT 1 FROM effects e WHERE e.run_id=resource_locks.run_id AND e.status IN ('intent','dispatched','outcome_unknown'))");
    this.store.db.exec("UPDATE attempts SET status='terminated',settled_at=? WHERE status IN ('claimed','running')",this.core.now());
    this.store.db.exec("UPDATE effects SET status='outcome_unknown',updated_at=? WHERE status IN ('intent','dispatched')",this.core.now());
-   this.store.db.exec("UPDATE runs SET status='recovery_required',error_code='OUTCOME_UNKNOWN',updated_at=? WHERE status IN ('claimed','running','finishing','cancelling')",this.core.now());
+   this.store.db.exec("UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'OUTCOME_UNKNOWN' END,updated_at=? WHERE status IN ('claimed','running','finishing','cancelling')",this.core.now());
    for(const run of this.store.db.all<Run>("SELECT * FROM runs WHERE status='recovery_required'"))this.scheduleRetry(run,run.error_code??'OUTCOME_UNKNOWN');
   });
  }

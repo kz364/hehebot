@@ -145,9 +145,25 @@ decision, not independently verified provider evidence**. Same decision replay
 preserves the original receipt; conflicting outcome/reference is rejected. Model
 agent commands cannot call this owner operation. It sends no connector request,
 releases no lock, changes no run/attempt, enqueues no retry and grants no sleep.
-Post-stop lock release and task recovery remain separate work; the old runtime
-identity stays revoked. Synthetic tests exercise both outcomes and rejection
+The old runtime identity stays revoked. Synthetic tests exercise both outcomes and rejection
 before stop, stale identity/digest, replay, closed execution and model exclusion.
+
+The separate owner command `run.recover` takes
+`{run_id, expected_attempt, release_resources: true}`. The release flag is explicit
+owner consent, not evidence of termination. It requires the exact current
+recovery-required run, a terminated attempt, no live operations or unresolved
+effects, and settled descendants. It atomically releases only that attempt's
+locks, preserves the terminated attempt and receipts, and closes the run as
+failed (`EXECUTOR_STOPPED`) or cancelled when owner/context cancellation caused
+the stop. Recover children before parents. A mismatched retained lock prevents
+the transaction from releasing any locks. It cannot mark work successful.
+
+This command does not retry the old native task or enable execution. Existing
+explicit deferred follow-ups become eligible through the normal follow-up path;
+with execution disabled those stay waiting. A fresh retry is a separate owner
+decision. These APIs implement bookkeeping after trusted stop evidence and owner
+decisions, not a native census, external outcome verification or coordinated
+restore activation. Portal recovery controls remain to be integrated.
 
 ## Verification and limits
 

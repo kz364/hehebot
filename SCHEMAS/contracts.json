@@ -62,6 +62,21 @@
     {
       "type":"object","additionalProperties":false,
       "properties": {
+        "schema_version":{"const":1},"type":{"const":"run.recover"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "run_id":{"$ref":"#/$defs/uuid"},"expected_attempt":{"type":"integer","minimum":1},
+            "release_resources":{"const":true}
+          },
+          "required":["run_id","expected_attempt","release_resources"]
+        }
+      },
+      "required":["schema_version","type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
         "schema_version":{"const":1},"type":{"const":"effect.reconcile"},
         "payload": {
           "type":"object","additionalProperties":false,

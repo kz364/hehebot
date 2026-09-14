@@ -89,6 +89,7 @@ describe('model-facing agent command boundary',()=>{
   expect(()=>boundary.accept(request(review))).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
   const reconcile:Command={schema_version:1,type:'effect.reconcile',payload:{run_id:runId,expected_attempt:1,effect_id:randomUUID(),expected_request_digest:'digest',outcome:'confirmed',evidence_ref:'owner-claim'}};
   expect(()=>boundary.accept(request(reconcile))).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
+  expect(()=>boundary.accept(request({schema_version:1,type:'run.recover',payload:{run_id:runId,expected_attempt:1,release_resources:true}}))).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
   expect(f.db.all('SELECT id FROM commands')).toEqual([]);
  });
 
