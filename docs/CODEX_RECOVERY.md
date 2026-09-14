@@ -62,6 +62,32 @@ After inspection, retain the state and reconcile uncertain Worker/native/effect
 outcomes through separately supported procedures. This tool supplies evidence
 only; safe resume, recursive settlement and production sleep gates stay open work.
 
+## Exact native command history recovery
+
+The adapter's separate `reconcile` and `reconcileChild` APIs use supported
+`thread/read` for an already acknowledged exact turn. They can recover a missed
+terminal command observation only for a recorded `commandExecution` item ID in
+that same thread/turn. Child readback additionally verifies the recorded native
+parent. A completed root, omitted item, another turn's matching item ID, or an
+empty background-terminal list cannot settle a command.
+
+Updates serialize with live notifications and validate the whole selected patch
+before one journal write. Duplicate IDs, invalid statuses and conflicting terminal
+observations reject reconciliation without partial settlement. Identical replay
+does not write. This does not import unrecorded items, infer statusless tool
+completion, settle MCP effects, discover missing children, or remove unknown
+operation coverage. Production admission and sleep remain denied.
+
+`node scripts/test-codex-native.mjs` preserves an open command receipt while
+withholding its actual late completion from that receipt. After the FIFO-backed
+command exits, the fixture observes native unload and process exit, restarts the
+pristine pinned server, and recovers the command through exact persisted history.
+The executed report includes `missedCommandCompletionRecovered: true`. This is
+settled-work readback with a deliberately missed notification, not recovery of a
+still-running subprocess after a crash. Adapter tests separately cover root/child
+namespaces, omitted items, unchanged siblings, replay, malformed readback and a
+newer conflicting live observation arriving while the history RPC is pending.
+
 ## Verification
 
 ```sh

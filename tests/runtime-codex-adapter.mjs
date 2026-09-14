@@ -350,3 +350,74 @@ test('concurrent command starts survive root completion and omitted history unti
   await assert.rejects(restored.observe(input.attemptId, event('command-a', 'failed')), { code: 'SETTLEMENT_CONFLICT' });
   assert.equal(restored.sleepReadiness().allowed, false);
 });
+
+for (const child of [false, true]) test(`exact ${child ? 'child' : 'root'} command history recovers missed exits without adopting other work`, async t => {
+  const { adapter, journal, cwd } = await fixture(t);
+  await adapter.submit(input);
+  const key = '["child-a","child-turn"]', sibling = '["sibling","child-turn"]';
+  const obligations = { commands: { done: 'inProgress', missing: 'inProgress', held: 'inProgress' },
+    mcpCalls: { effect: 'inProgress' }, webSearches: { search: 'inProgress' } };
+  await journal.update(input.attemptId, {
+    ...obligations,
+    spawns: { spawn: { status: 'completed', receiverThreadIds: ['child-a', 'sibling'] } },
+    childTurns: { [key]: 'inProgress', [sibling]: 'inProgress' },
+    childObligations: { [key]: obligations, [sibling]: obligations },
+  });
+  const threadId = child ? 'child-a' : 'thread-a', turnId = child ? 'child-turn' : 'turn-b';
+  const command = (id, status) => ({ type: 'commandExecution', id, status });
+  let turn = { id: turnId, status: 'inProgress', items: [command('done', 'failed'), command('held', 'inProgress'),
+    command('unrecorded', 'completed'), { type: 'mcpToolCall', id: 'effect', status: 'completed' }, { type: 'webSearch', id: 'search' }] };
+  const restored = new CodexAdapter({ cwd, journal: new FileJournal(cwd), rpc: async (method, params) => {
+    assert.equal(method, 'thread/read'); assert.deepEqual(params, { threadId, includeTurns: true });
+    return { thread: { id: threadId, source: { subAgent: { thread_spawn: { parent_thread_id: 'thread-a' } } },
+      turns: [{ id: 'other-turn', status: 'completed', items: [command('missing', 'completed')] }, turn] } };
+  } });
+  const reconcile = () => child ? restored.reconcileChild(input.attemptId, { threadId, turnId }) : restored.reconcile(input.attemptId);
+  const row = await reconcile(), selected = child ? row.childObligations[key] : row;
+  assert.deepEqual(selected.commands, { done: 'failed', missing: 'inProgress', held: 'inProgress' });
+  assert.deepEqual(selected.mcpCalls, { effect: 'inProgress' });
+  assert.deepEqual(selected.webSearches, { search: 'inProgress' });
+  assert.deepEqual(row.childObligations[sibling], obligations);
+  if (child) assert.deepEqual(row.commands, obligations.commands);
+  else assert.deepEqual(row.childObligations[key], obligations);
+  assert.equal(row.rootSettled, false);
+  assert.equal(row.childTurns[key], 'inProgress');
+  const update = restored.journal.update.bind(restored.journal);
+  restored.journal.update = () => assert.fail('Exact history replay must not write');
+  assert.deepEqual(await reconcile(), row);
+  restored.journal.update = update;
+  turn = { ...turn, status: 'completed', items: [command('done', 'failed'), command('held', 'declined')] };
+  const terminal = await reconcile();
+  assert.equal((child ? terminal.childObligations[key] : terminal).commands.held, 'declined');
+  assert.equal(terminal.childTurns[sibling], 'inProgress');
+  assert.equal(restored.sleepReadiness().allowed, false);
+});
+
+test('invalid command history cannot partially settle a turn or overwrite a newer live observation', async t => {
+  const { adapter, journal } = await fixture(t);
+  await adapter.submit(input);
+  const before = await journal.update(input.attemptId, { commands: { first: 'inProgress', second: 'inProgress' } });
+  const command = (id, status = 'completed') => ({ id, type: 'commandExecution', status });
+  let items;
+  adapter.rpc = async () => ({ thread: { id: 'thread-a', turns: [{ id: 'turn-b', status: 'completed', items }] } });
+  for (const [bad, code] of [
+    [[command('first'), command('second', 'unknown')], 'CODEX_PROTOCOL_ERROR'],
+    [[command('first'), { ...command('second'), type: 'mcpToolCall' }], 'CODEX_PROTOCOL_ERROR'],
+    [[command('first'), command('second'), command('second')], 'RECONCILIATION_INCOMPLETE'],
+    [{}, 'CODEX_PROTOCOL_ERROR'],
+  ]) {
+    items = bad;
+    await assert.rejects(adapter.reconcile(input.attemptId), { code });
+    assert.deepEqual(await journal.get(input.attemptId), before);
+  }
+  let release;
+  adapter.rpc = () => new Promise(resolve => { release = resolve; });
+  const pending = adapter.reconcile(input.attemptId);
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  await adapter.observe(input.attemptId, { method: 'item/completed', params: {
+    threadId: 'thread-a', turnId: 'turn-b', item: command('second', 'failed'),
+  } });
+  release({ thread: { id: 'thread-a', turns: [{ id: 'turn-b', status: 'completed', items: [command('first'), command('second')] }] } });
+  await assert.rejects(pending, { code: 'SETTLEMENT_CONFLICT' });
+  assert.deepEqual(await journal.get(input.attemptId), { ...before, commands: { first: 'inProgress', second: 'failed' } });
+});

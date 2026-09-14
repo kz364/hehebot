@@ -230,8 +230,8 @@ export class CodexAdapter {
         return row;
       }
       if (!Object.hasOwn(obligations, itemKey) && Object.keys(obligations).length >= 4096) fail('COMMAND_TRACKING_LIMIT');
-      // Persist starts even if history omits them. A root/history snapshot cannot
-      // remove these obligations; only a matching native terminal event can.
+      // Persist starts even if history omits them. Root completion cannot remove
+      // these obligations; command recovery requires an exact status-bearing item.
       Object.defineProperty(obligations, itemKey, { value: status, enumerable: true, writable: true, configurable: true });
       // An MCP terminal response settles only the invocation, not external effects.
       return save({ [field]: obligations });
@@ -264,13 +264,7 @@ export class CodexAdapter {
         !Array.isArray(reply.thread.turns)) fail('CODEX_PROTOCOL_ERROR');
     const matches = reply.thread.turns.filter(turn => turn?.id === turnId);
     if (matches.length !== 1) fail('RECONCILIATION_INCOMPLETE');
-    if (matches[0].status === 'inProgress') {
-      if (row.childTurns[turnKey] !== 'inProgress') fail('SETTLEMENT_CONFLICT');
-      return row;
-    }
-    // History only restores this exact turn's terminal observation. It cannot
-    // erase recorded tools, discover unacknowledged turns, or settle descendants.
-    return this.observe(attemptId, { method: 'turn/completed', params: { threadId, turn: matches[0] } });
+    return this.#reconcileHistory(attemptId, threadId, matches[0]);
   }
 
   async reconcile(attemptId) {
@@ -279,11 +273,47 @@ export class CodexAdapter {
     if (reply?.thread?.id !== row.threadId || !Array.isArray(reply.thread.turns)) fail('CODEX_PROTOCOL_ERROR');
     const matches = reply.thread.turns.filter(turn => turn?.id === row.nativeRunId);
     if (matches.length !== 1) fail('RECONCILIATION_INCOMPLETE');
-    const turn = matches[0];
-    if (turn.status === 'inProgress') {
-      if (row.rootSettled) fail('SETTLEMENT_CONFLICT');
-      return row;
-    }
-    return this.observe(attemptId, { method: 'turn/completed', params: { threadId: row.threadId, turn } });
+    return this.#reconcileHistory(attemptId, row.threadId, matches[0]);
+  }
+
+  #reconcileHistory(attemptId, threadId, turn) {
+    // Serialize with live notifications, re-read current observations after the
+    // RPC, and validate the entire patch before one durable update.
+    const next = this.#observations.then(async () => {
+      const row = await this.requireRun(attemptId);
+      const child = threadId !== row.threadId, key = JSON.stringify([threadId, turn.id]);
+      if (child ? !hasReceiver(row, threadId) || !Object.hasOwn(row.childTurns ?? {}, key)
+        : turn.id !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      if (!['inProgress', 'completed', 'failed', 'interrupted'].includes(turn.status) ||
+          turn.items !== undefined && !Array.isArray(turn.items)) fail('CODEX_PROTOCOL_ERROR');
+      const prior = child ? row.childTurns[key] : row.rootSettled ? row.nativeOutcome : 'inProgress';
+      if (prior !== 'inProgress' && prior !== turn.status) fail('SETTLEMENT_CONFLICT');
+      const owner = child ? row.childObligations?.[key] ?? {} : row;
+      const commands = { ...owner.commands };
+      let changed = false;
+      for (const [id, status] of Object.entries(commands)) {
+        const matches = (turn.items ?? []).filter(item => item?.id === id);
+        if (!matches.length) continue; // Omitted history is not a terminal receipt.
+        if (matches.length !== 1) fail('RECONCILIATION_INCOMPLETE');
+        const item = matches[0];
+        if (item.type !== 'commandExecution' || !['inProgress', 'completed', 'failed', 'declined'].includes(item.status)) fail('CODEX_PROTOCOL_ERROR');
+        if (status !== 'inProgress' && status !== item.status) fail('SETTLEMENT_CONFLICT');
+        if (status !== item.status) { commands[id] = item.status; changed = true; }
+      }
+      const patch = {};
+      if (prior !== turn.status) {
+        if (child) patch.childTurns = { ...row.childTurns, [key]: turn.status };
+        else Object.assign(patch, { rootSettled: true, status: 'finishing', nativeOutcome: turn.status });
+      }
+      if (changed) {
+        if (child) patch.childObligations = { ...row.childObligations, [key]: { ...owner, commands } };
+        else patch.commands = commands;
+      }
+      // No new items, statusless-tool inference, descendant census, or effect
+      // settlement. Identical readback produces no journal write.
+      return Object.keys(patch).length ? this.journal.update(attemptId, patch) : row;
+    });
+    this.#observations = next.catch(() => {});
+    return next;
   }
 }

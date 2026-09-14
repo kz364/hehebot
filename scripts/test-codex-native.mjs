@@ -267,6 +267,9 @@ try {
   assert.equal((await recovery.requireRun('background-proof')).rootSettled, true);
   const stillOpen = await recovery.reconcile('background-proof');
   assert.equal(stillOpen.rootSettled, true); assert.equal(stillOpen.commands[commandAtRoot.id], 'inProgress');
+  // A separate durable receipt models loss of the late notification. It is not
+  // bound to the router and must remain open until native history recovery.
+  await new FileJournal(journalPath).putIfAbsent('background-missed-proof', structuredClone(stillOpen));
   const gate = await open(commandGate, constants.O_WRONLY | constants.O_NONBLOCK);
   try { await gate.writeFile('BACKGROUND_COMMAND_EXIT'); } finally { await gate.close(); }
   await waitFor(() => notifications.some(n => n.method === 'item/completed' && n.params?.turnId === backgroundTurn && n.params.item.id === commandAtRoot.id && n.params.item.status === 'completed'), 'late background command exit');
@@ -396,6 +399,9 @@ try {
     rpc: (method, params) => { assert.equal(method, 'thread/read'); return transport.request(method, params); } });
   assert.equal((await restartedAdapter.reconcile('recovery-proof')).nativeOutcome, 'completed');
   assert.equal((await restartedAdapter.reconcile('background-proof')).commands[commandAtRoot.id], 'completed');
+  assert.equal((await restartedJournal.get('background-missed-proof')).commands[commandAtRoot.id], 'inProgress');
+  assert.equal((await restartedAdapter.reconcile('background-missed-proof')).commands[commandAtRoot.id], 'completed');
+  report.missedCommandCompletionRecovered = true;
   assert.equal(restartedAdapter.sleepReadiness().allowed, false);
   report.nativeProcessRestartReadback = true;
 
