@@ -30,8 +30,8 @@ function mapper(parent = { runId: parentId, personaId: bot, attempt: 1 }) {
   return new CodexTaskControl({ adapter, journal: new FileJournal(directory), identity, attemptId: 'native', parent,
     assertLease: () => { if (!leased) throw Object.assign(new Error('fenced'), { code: 'EXECUTOR_FENCED' }); },
     control: { request: async (method: string, p: any) => {
-      expect(method).toBe('native-child'); registrations.push(p.child);
-      const run = tasks.register(p.identity, p.child);
+      expect(method).toBe('native-child'); expect(p.started).toBe(true); registrations.push(p.child);
+      const run = tasks.register(p.identity, p.child, p.started);
       if (lostAck) { lostAck = false; throw new Error('lost acknowledgement'); }
       return run;
     } },
@@ -48,12 +48,14 @@ it('reconciles lost registration acknowledgements with identical receipts and pr
   lostAck = true;
   await expect(mapper().sync()).rejects.toThrow('lost acknowledgement');
   expect(f.db.all('SELECT * FROM native_task_links')).toHaveLength(1);
+  expect(f.db.all("SELECT status FROM runs WHERE role='background'")).toEqual([{ status: 'running' }]);
   const first = registrations[0], restored = mapper();
   const mapped = await restored.sync();
   expect(registrations[1]).toEqual(first);
   expect(f.db.all('SELECT * FROM native_task_links')).toHaveLength(3);
   const a = mapped['["child-a","turn"]'], b = mapped['["child-b","turn"]'], grand = mapped['["grandchild","turn"]'];
-  expect(f.store.run(grand.runId)).toMatchObject({ parent_run_id: a.runId, persona_id: bot, status: 'claimed' });
+  expect(f.store.run(grand.runId)).toMatchObject({ parent_run_id: a.runId, persona_id: bot, status: 'running' });
+  expect(Object.values(mapped).every((child: any) => child.started === true)).toBe(true);
   expect(a.receipt.native_run_ref).not.toBe(b.receipt.native_run_ref);
   await restored.sync(); expect(registrations).toHaveLength(4);
   f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: a.runId, reason: 'Stop only this subtree' } });
@@ -63,7 +65,7 @@ it('reconciles lost registration acknowledgements with identical receipts and pr
     { method: 'turn/interrupt', params: { threadId: 'child-a', turnId: 'turn' } },
     { method: 'turn/interrupt', params: { threadId: 'grandchild', turnId: 'turn' } },
   ]);
-  expect(f.store.run(b.runId).status).toBe('claimed'); expect(f.store.run(parentId).status).toBe('claimed');
+  expect(f.store.run(b.runId).status).toBe('running'); expect(f.store.run(parentId).status).toBe('claimed');
   expect((await journal.get('native')).childTurns['["grandchild","turn"]']).toBe('inProgress');
   expect(adapter.sleepReadiness().allowed).toBe(false);
   await expect(mapper({ runId: randomUUID(), personaId: bot, attempt: 1 }).sync()).rejects.toMatchObject({ code: 'TASK_GRANT_CONFLICT' });
@@ -87,5 +89,67 @@ it('an unattributed turn cannot manufacture a Worker child or issue an interrupt
   await journal.update('native', { childTurns: { '["stranger","turn"]': 'inProgress' } });
   await expect(mapper().sync()).rejects.toMatchObject({ code: 'NATIVE_CHILD_ORIGIN_UNKNOWN' });
   expect(registrations).toEqual([]); expect(await mapper().cancel([randomUUID()])).toEqual([]);
+  expect(interrupts).toEqual([]);
+});
+
+it('lost start acknowledgement followed by cancellation reconciles without resurrecting the child', async () => {
+  await spawn('root', 'child-a'); lostAck = true;
+  await expect(mapper().sync()).rejects.toThrow('lost acknowledgement');
+  const childId = f.db.all<{ id: string }>("SELECT id FROM runs WHERE role='background'")[0].id;
+  f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: childId, reason: 'Cancel before acknowledgement arrives' } });
+  const before = f.store.run(childId);
+  const mapped = await mapper().sync();
+  expect(mapped['["child-a","turn"]']).toMatchObject({ runId: childId, started: true });
+  expect(f.store.run(childId)).toEqual(before); expect(interrupts).toEqual([]);
+  expect(f.db.all('SELECT * FROM native_task_links')).toHaveLength(1);
+});
+
+it('legacy mapped children acknowledge once; existing cancellation and terminal state survive replay', async () => {
+  await spawn('root', 'child-a');
+  const tasks = mapper();
+  const mapped = await tasks.sync(), key = '["child-a","turn"]', child = mapped[key];
+  // Reproduce the previous journal format and its metadata-only Worker state.
+  f.db.exec("UPDATE runs SET status='claimed' WHERE id=?", child.runId);
+  f.db.exec("UPDATE attempts SET status='claimed' WHERE run_id=?", child.runId);
+  await journal.update(tasks.key, { children: { [key]: { receipt: child.receipt, parentKey: child.parentKey, runId: child.runId } } });
+  expect((await mapper().sync())[key]).toMatchObject({ runId: child.runId, started: true });
+  expect(f.store.run(child.runId).status).toBe('running');
+  life.complete(identity, child.runId, 1, { status: 'completed', text: 'Synthetic externally settled test child' });
+  const before = f.store.run(child.runId);
+  // Lose only the local acknowledgement marker: the exact Worker receipt remains.
+  await journal.update(tasks.key, { children: { [key]: { ...child, started: false } } });
+  await mapper().sync(); expect(f.store.run(child.runId)).toEqual(before);
+  expect(interrupts).toEqual([]);
+});
+
+it('atomic start rejects contradictory child custody and rolls back partial registration on acknowledgement failure', () => {
+  const ledger = new NativeTaskLedger(f.store, f.core, life);
+  const receipt = { parent_run_id: parentId, parent_attempt: 1, persona_id: bot,
+    native_run_ref: 'synthetic-child-43', native_session_key: 'thread-71', title: 'Observed native child' };
+  const child = ledger.register(identity, receipt);
+  expect(child.status).toBe('claimed');
+  f.db.exec("UPDATE attempts SET native_run_ref='contradictory-103' WHERE run_id=?", child.id);
+  expect(() => ledger.register(identity, receipt, true)).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
+  expect(f.store.run(child.id).status).toBe('claimed');
+  const runs = f.db.all('SELECT * FROM runs'), links = f.db.all('SELECT * FROM native_task_links'), events = f.db.all('SELECT * FROM events');
+  const original = life.submitted;
+  life.submitted = () => { throw new Error('synthetic persistence failure'); };
+  expect(() => ledger.register(identity, { ...receipt, native_run_ref: 'another-211', native_session_key: 'another-thread-307' }, true)).toThrow('synthetic persistence failure');
+  life.submitted = original;
+  expect(f.db.all('SELECT * FROM runs')).toEqual(runs); expect(f.db.all('SELECT * FROM native_task_links')).toEqual(links);
+  expect(f.db.all('SELECT * FROM events')).toEqual(events);
+});
+
+it('reconciliation cannot replace a persisted Worker child or accept a metadata-only start reply', async () => {
+  await spawn('root', 'child-a');
+  const tasks = mapper(), key = '["child-a","turn"]', child = (await tasks.sync())[key];
+  const original = tasks.control.request;
+  for (const [patch, code] of [[{ id: randomUUID() }, 'TASK_GRANT_CONFLICT'], [{ status: 'claimed' }, 'INVALID_CHILD_TASK_RECEIPT']] as const) {
+    await journal.update(tasks.key, { children: { [key]: { ...child, started: false } } });
+    tasks.control.request = async (method: string, payload: any) => ({ ...await original(method, payload), ...patch });
+    await expect(tasks.sync()).rejects.toMatchObject({ code });
+    expect((await journal.get(tasks.key)).children[key]).toMatchObject({ runId: child.runId, started: false });
+    expect(f.store.run(child.runId).status).toBe('running');
+  }
   expect(interrupts).toEqual([]);
 });

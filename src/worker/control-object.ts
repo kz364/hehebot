@@ -118,7 +118,7 @@ export class PersonalControl extends DurableObject<Env> {
    case 'flight-register':result=this.flights.register(command.payload);break;
    case 'flight-confirm':this.flights.confirm(command.payload);break;
    case 'flight-reconcile':result=this.flights.reconcileFromRun(command.payload);break;
-   case 'native-child':result=new NativeTaskLedger(this.store,this.core,this.lifecycle).register(command.payload.identity,command.payload.child);break;
+   case 'native-child':result=new NativeTaskLedger(this.store,this.core,this.lifecycle).register(command.payload.identity,command.payload.child,command.payload.started);break;
    case 'resource-acquire':case 'resource-release':{
     const p=command.payload;this.lifecycle.authorizeAttempt(p.identity,p.run_id,p.attempt);
     const ledger=new ResourceLedger(this.store,()=>this.core.now());

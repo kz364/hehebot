@@ -102,6 +102,12 @@ heartbeat to one exact interrupt, while completion/sleep remain denied. See
 verified hold create/read/renew/delete, not application drain or VM sleep; see
 [provider evidence](PROVIDERS.md).
 
+Observed native child starts are now acknowledged by the service atomically with
+Worker registration. Exact receipt replay recovers a lost acknowledgement without
+resubmitting inference or resurrecting a cancelling/terminal task. Legacy journal
+mappings reconcile once without replacing known Worker identities. The native
+service effect fixture no longer needs a manual child submission call.
+
 Trusted [root/descendant effect bookkeeping](ROOT_CHILD_EFFECTS.md) now connects
 strict runtime routes to the existing effect/resource ledgers. It validates exact
 lease, attempts, native ancestry and original same-task policy/scope, records

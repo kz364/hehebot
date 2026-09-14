@@ -165,3 +165,20 @@ it('requires runtime authentication and keeps both routes closed with production
  }
  expect(effects()).toEqual([]); expect(locks()).toEqual([]);
 });
+
+it('validates optional native-start acknowledgement and preserves cancellation on exact replay', async () => {
+ const receipt = { parent_run_id: root, parent_attempt: 1, persona_id: bot, native_run_ref: 'synthetic-start-43',
+  native_session_key: 'synthetic-thread-71', title: 'Observed start' };
+ const registered = await rpc('native-child', { identity, child: receipt }) as Run;
+ expect(registered.status).toBe('claimed');
+ expect(await http('native-child', { identity, child: receipt, started: 'true' }))
+  .toMatchObject({ status: 422, body: { error: { code: 'INVALID_INPUT' } } });
+ expect(db.all('SELECT status FROM runs WHERE id=?', registered.id)).toEqual([{ status: 'claimed' }]);
+ expect(await http('native-child', { identity, child: receipt, started: true }))
+  .toMatchObject({ status: 200, body: { id: registered.id, status: 'running' } });
+ await owner({ schema_version: 1, type: 'run.cancel', payload: { run_id: registered.id, reason: 'Cancel observed child' } });
+ expect(await http('native-child', { identity, child: receipt, started: true }))
+  .toMatchObject({ status: 200, body: { id: registered.id, status: 'cancelling' } });
+ expect(db.all('SELECT run_id FROM native_task_links WHERE native_run_ref=?', receipt.native_run_ref))
+  .toEqual([{ run_id: registered.id }]);
+});

@@ -39,7 +39,7 @@ export class CodexTaskControl {
       this.assertLease();
       const native = await this.adapter.requireRun(this.attemptId);
       let mapped = await this.mapping();
-      const pending = Object.keys(native.childTurns ?? {}).filter(key => !mapped.children[key]?.runId);
+      const pending = Object.keys(native.childTurns ?? {}).filter(key => !mapped.children[key]?.runId || mapped.children[key]?.started !== true);
       if (Object.keys(native.childTurns ?? {}).length > 100) fail('CHILD_TASK_TRACKING_LIMIT');
       const owners = [[null, native], ...Object.entries(native.childObligations ?? {})];
       while (pending.length) {
@@ -58,16 +58,19 @@ export class CodexTaskControl {
           if (prior && hash(prior.receipt) !== hash(child)) fail('TASK_GRANT_CONFLICT');
           this.assertLease();
           mapped = await this.journal.update(this.key, { children: { ...mapped.children,
-            [key]: { receipt: child, parentKey, runId: null } } });
+            [key]: { receipt: child, parentKey, runId: prior?.runId ?? null, started: false } } });
           this.assertLease();
-          // This metadata endpoint is transactionally idempotent by native_run_ref.
-          // A lost response can reconcile only this exact persisted receipt.
-          const run = await this.control.request('native-child', { identity: this.identity, child });
+          // The exact observed turn is registered and acknowledged atomically.
+          // Replay reconciles this receipt, never resubmits inference or resurrects
+          // a cancelled/terminal child after a lost response.
+          const run = await this.control.request('native-child', { identity: this.identity, child, started: true });
           this.assertLease();
           if (typeof run?.id !== 'string' || !run.id || run.parent_run_id !== parentRun ||
-              run.persona_id !== this.parent.personaId || run.current_attempt !== 1 || run.role !== 'background') fail('INVALID_CHILD_TASK_RECEIPT');
+              run.persona_id !== this.parent.personaId || run.current_attempt !== 1 || run.role !== 'background' ||
+              !['running', 'finishing', 'cancelling', 'recovery_required', 'waiting', 'completed', 'failed', 'cancelled'].includes(run.status)) fail('INVALID_CHILD_TASK_RECEIPT');
+          if (prior?.runId && prior.runId !== run.id) fail('TASK_GRANT_CONFLICT');
           mapped = await this.journal.update(this.key, { children: { ...mapped.children,
-            [key]: { ...mapped.children[key], runId: run.id } } });
+            [key]: { ...mapped.children[key], runId: run.id, started: true } } });
           pending.splice(index, 1); progressed = true;
         }
         if (!progressed) fail('NATIVE_CHILD_ORIGIN_UNKNOWN');

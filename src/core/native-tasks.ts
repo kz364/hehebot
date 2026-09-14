@@ -8,7 +8,17 @@ export type NativeChildReceipt={parent_run_id:string;parent_attempt:number;perso
  * CodexTaskControl maps exact observed thread/turn ancestry into these records. */
 export class NativeTaskLedger {
  constructor(private store:Store,private core:ControlCore,private lifecycle:LifecycleCore){}
- register(identity:Identity,input:NativeChildReceipt):Run {
+ private acknowledgeStart(identity:Identity,input:NativeChildReceipt,run:Run):Run {
+  requireThat(run.current_attempt===1,'STALE_EPOCH','Native child attempt has changed.');
+  this.lifecycle.authorizeAttempt(identity,run.id,1);
+  const attempt=this.store.db.all<{native_run_ref:string}>('SELECT native_run_ref FROM attempts WHERE run_id=? AND attempt=1',run.id)[0];
+  requireThat(attempt.native_run_ref===input.native_run_ref,'REVISION_CONFLICT','Native child receipt does not match its attempt.');
+  // A repeated observation is not new inference and must never undo cancellation,
+  // recovery, waiting or terminal state. It only acknowledges a claimed start.
+  if(run.status==='claimed')this.lifecycle.submitted(identity,run.id,1,input.native_run_ref);
+  return this.store.run(run.id);
+ }
+ register(identity:Identity,input:NativeChildReceipt,started=false):Run {
   return this.store.db.transaction(()=>{
    this.lifecycle.authorizeAttempt(identity,input.parent_run_id,input.parent_attempt);
    const parent=this.store.run(input.parent_run_id);
@@ -16,7 +26,7 @@ export class NativeTaskLedger {
    requireThat(input.persona_id===parent.persona_id||parent.role==='coordinator'&&this.core.options.delegations?.[parent.persona_id]?.includes(input.persona_id),'FORBIDDEN','Native delegation target is not authorized.',403);
    requireThat(input.native_run_ref.length>0&&input.native_run_ref.length<=256&&input.native_session_key.length>0&&input.native_session_key.length<=512&&input.title.length>0&&input.title.length<=200,'INVALID_INPUT','Invalid native child receipt.',422);
    const existing=this.store.db.all<{run_id:string;parent_run_id:string;parent_attempt:number;native_session_key:string}>('SELECT * FROM native_task_links WHERE native_run_ref=?',input.native_run_ref)[0];
-   if(existing){requireThat(existing.parent_run_id===parent.id&&existing.parent_attempt===input.parent_attempt&&existing.native_session_key===input.native_session_key&&this.store.run(existing.run_id).persona_id===input.persona_id,'IDEMPOTENCY_CONFLICT','Native child identity was reused.');return this.store.run(existing.run_id);}
+   if(existing){requireThat(existing.parent_run_id===parent.id&&existing.parent_attempt===input.parent_attempt&&existing.native_session_key===input.native_session_key&&this.store.run(existing.run_id).persona_id===input.persona_id,'IDEMPOTENCY_CONFLICT','Native child identity was reused.');const run=this.store.run(existing.run_id);return started?this.acknowledgeStart(identity,input,run):run;}
    const oldContext=JSON.parse(parent.context_json) as ContextSnapshot;
    const context=input.persona_id===parent.persona_id?{...oldContext,instruction:input.title}:this.core.context(input.persona_id,input.title,null,oldContext.room_id);
    const id=this.core.options.uuid(),now=this.core.now();
@@ -27,7 +37,7 @@ export class NativeTaskLedger {
    this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,native_run_ref,epoch,boot_id,status,deadline_at,started_at) VALUES(?,1,?,?,?,?,?,?,?)",id,`native:${input.native_run_ref}`,input.native_run_ref,identity.epoch,identity.boot_id,'claimed',deadline,now);
    this.store.db.exec('INSERT INTO native_task_links(run_id,parent_run_id,parent_attempt,native_run_ref,native_session_key) VALUES(?,?,?,?,?)',id,parent.id,input.parent_attempt,input.native_run_ref,input.native_session_key);
    this.store.event(this.core.options.uuid(),input.persona_id,'task.registered','native',parent.command_id,{run_id:id,parent_run_id:parent.id,title:input.title,status:cancellation?'cancelling':'claimed'},now);
-   return this.store.run(id);
+   const run=this.store.run(id);return started?this.acknowledgeStart(identity,input,run):run;
   });
  }
 }

@@ -501,7 +501,8 @@ try {
       for (const [key, child] of Object.entries(mapped)) {
         const run = current.runs.find(run => run.id === child.runId);
         assert.equal(run.parent_run_id, child.receipt.parent_run_id);
-        assert.equal(run.persona_id, persona.id); assert.equal(run.status, supervisorChildMode ? 'cancelling' : 'claimed');
+        assert.equal(run.persona_id, persona.id); assert.equal(run.status, supervisorChildMode ? 'cancelling' : 'running');
+        assert.equal(child.started, true);
         assert.equal(child.receipt.native_session_key, JSON.parse(key)[0]);
       }
       const leaf = mapped[JSON.stringify([childThreadId, completed.params.turn.id])];

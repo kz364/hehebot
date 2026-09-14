@@ -52,11 +52,11 @@ sequence, but starts an owner-adopted synthetic routine with a pinned action
 policy. The trusted fixture host uses the service's exact persisted child mapping
 and real certificate-validated HTTPS `ControlClient` to exercise
 [root/descendant effect bookkeeping](ROOT_CHILD_EFFECTS.md). Registration alone
-cannot admit intent; the host first acknowledges the observed child through
-`submitted`. The service itself does not yet perform this child acknowledgement.
-The Worker rejects a changed native reference before updating either task or
-attempt; the exact registered reference still succeeds. No effect tool or new
-grant is exposed to the model.
+cannot admit intent; the service's child controller now sends `started: true`
+with its exact observed receipt. The Worker atomically registers and acknowledges
+that start. No fixture-owned child `submitted` call is used. Replaying the exact
+receipt returns the original running child; a changed session identity conflicts.
+No effect tool or new grant is exposed to the model.
 
 The fixture checks original-ID replay with reordered resources, changed-resource
 conflict, root-as-child rejection and child-owned locks. A root lock acquisition
@@ -123,7 +123,16 @@ CLI failures are sanitized. Loopback HTTPS tests prove header propagation and
 redirect rejection with synthetic values, not real Cloudflare Access admission.
 
 The child hook selects `CodexTaskControl` from the current durable bridge attempt,
-syncs observed ancestry and delivers only requested subtree cancellations. Default
+syncs observed ancestry, acknowledges starts and delivers only requested subtree
+cancellations. The optional boolean `native-child.started` defaults to false for
+metadata-only callers. A true observation advances only a claimed child, under
+its exact original attempt/epoch/boot/native reference; cancellation, recovery,
+waiting and terminal states are never resurrected. Registration and acknowledgement
+share one SQLite transaction. A lost response can replay only the same persisted
+receipt, including when cancellation arrives before readback. Legacy journal
+mappings without a start marker reconcile that exact receipt once; known run IDs
+are retained and cannot be rebound. This does not replay native inference, settle
+operations or authorize service restart. Default
 heartbeat operations use `CodexOperations` with original claim bounds and an
 always-unknown coverage obligation. Before a claim, the projection is empty.
 Unit tests inject synthetic native/control responses; the native service fixture

@@ -10,7 +10,7 @@ export type RuntimePayloads={
  'flight-register':FlightRegistration;
  'flight-confirm':FlightReceipt;
  'flight-reconcile':FlightReconciliation;
- 'native-child':Base & {child:NativeChildReceipt};
+ 'native-child':Base & {child:NativeChildReceipt;started?:boolean};
  'resource-acquire':Base & Attempt & {resources:string[]};
  'resource-release':Base & Attempt & {resources:string[]};
  boot:{boot_id:string};ready:Base;claim:Base;

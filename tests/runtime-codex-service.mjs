@@ -169,7 +169,8 @@ test('assembly synchronizes exact child mapping before delivering a selected can
     if (type === 'native-child') {
       registrations++;
       assert.equal(payload.child.native_session_key, 'child-thread');
-      return { id: 'worker-child', parent_run_id: 'run', persona_id: 'bot', current_attempt: 1, role: 'background' };
+      assert.equal(payload.started, true);
+      return { id: 'worker-child', parent_run_id: 'run', persona_id: 'bot', current_attempt: 1, role: 'background', status: 'running' };
     }
     const result = await original(type, payload);
     return type === 'heartbeat' && cancellation ? { ...result, cancellations: ['worker-child'] } : result;

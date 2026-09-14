@@ -224,7 +224,9 @@ try {
     assert.equal(mapping.children[childKey].runId, child.id);
     assert.equal(mapping.children[childKey].receipt.native_session_key, targetThread);
     assert.equal(mapping.children[childKey].receipt.parent_run_id, queued.resource_id);
-    assert.equal(child.status, 'claimed'); assert.equal(child.persona_id, persona.id);
+    assert.equal(mapping.children[childKey].started, true);
+    assert.equal(child.status, 'running'); assert.equal(child.persona_id, persona.id);
+    report.nativeStartAcknowledgedByService = true;
     assert.equal(childClosed, false); assert.deepEqual(interrupts, []);
     let effectInput, effectResult;
     if (effectsMode) {
@@ -236,13 +238,13 @@ try {
       effectResult = (status, receipt = null) => ({ identity, root_run_id: effectInput.root_run_id,
         root_attempt: effectInput.root_attempt, run_id: child.id, attempt: child.current_attempt,
         effect_id: effectInput.effect.id, status, receipt });
-      // Registration alone is metadata, not active effect admission. The trusted
-      // fixture submits only the exact acknowledged mapping observed above.
-      await assert.rejects(control.request('root-child-effect-intent', effectInput), { code: 'CONTROL_HTTP_ERROR', status: 409 });
-      await assert.rejects(control.request('submitted', { identity, run_id: child.id, attempt: child.current_attempt,
-        native_ref: 'wrong-native-child-103' }), { code: 'CONTROL_HTTP_ERROR', status: 409 });
-      await control.request('submitted', { identity, run_id: child.id, attempt: child.current_attempt,
-        native_ref: mapping.children[childKey].receipt.native_run_ref });
+      // Service-owned acknowledgement already made the child running. The host
+      // fixture never submits that child; it only verifies exact receipt replay.
+      const receipt = mapping.children[childKey].receipt;
+      await assert.rejects(control.request('native-child', { identity, started: true,
+        child: { ...receipt, native_session_key: 'wrong-thread-103' } }), { code: 'CONTROL_HTTP_ERROR', status: 409 });
+      const replay = await control.request('native-child', { identity, child: receipt, started: true });
+      assert.equal(replay.id, child.id); assert.equal(replay.status, 'running');
       const original = { id: effectInput.effect.id, status: 'intent' };
       assert.deepEqual(await control.request('root-child-effect-intent', effectInput), original);
       assert.deepEqual(await control.request('root-child-effect-intent', { ...effectInput,

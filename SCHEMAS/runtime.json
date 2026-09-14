@@ -715,6 +715,7 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "started": { "type": "boolean" },
             "identity": {
               "type": "object",
               "additionalProperties": false,
