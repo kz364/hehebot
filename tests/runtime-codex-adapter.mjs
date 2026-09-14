@@ -200,6 +200,45 @@ test('descendant steering binds exact turn and command, survives terminal replay
   assert.equal(restored.sleepReadiness().allowed, false);
 });
 
+test('read-only child recovery requires exact recorded ancestry and turn, preserving open tools and siblings', async t => {
+  const { adapter, journal, cwd } = await fixture(t);
+  await adapter.submit(input);
+  const childKey = JSON.stringify(['child-a', 'turn-17']), grandKey = JSON.stringify(['grandchild', 'turn-39']);
+  const prior = await journal.update(input.attemptId, {
+    spawns: { spawn: { status: 'completed', receiverThreadIds: ['child-a', 'sibling'] } },
+    childTurns: { [childKey]: 'inProgress', [grandKey]: 'inProgress', '["sibling","turn-83"]': 'inProgress' },
+    childObligations: { [childKey]: { commands: { open: 'inProgress' }, spawns: { nested: { status: 'completed', receiverThreadIds: ['grandchild'] } } } },
+  });
+  let response = { id: 'grandchild', source: { subAgent: { thread_spawn: { parent_thread_id: 'child-a' } } },
+    turns: [{ id: 'newer', status: 'failed' }, { id: 'turn-39', status: 'completed', items: [] }] };
+  const calls = [];
+  const restored = new CodexAdapter({ cwd, journal: new FileJournal(cwd), rpc: async (method, params) => {
+    calls.push({ method, params }); return { thread: response };
+  } });
+  for (const target of [{ threadId: 'grandchild', turnId: 'missing' }, { threadId: 'other', turnId: 'turn-39' }])
+    await assert.rejects(restored.reconcileChild(input.attemptId, target), { code: 'SETTLEMENT_IDENTITY_MISMATCH' });
+  assert.equal(calls.length, 0);
+  const target = { threadId: 'grandchild', turnId: 'turn-39' };
+  for (const patch of [{ id: 'wrong' }, { source: {} }, { source: { subAgent: { thread_spawn: { parent_thread_id: 'thread-a' } } } }]) {
+    const original = response; response = { ...response, ...patch };
+    await assert.rejects(restored.reconcileChild(input.attemptId, target), { code: 'CODEX_PROTOCOL_ERROR' }); response = original;
+  }
+  for (const turns of [[], [{ id: 'other', status: 'completed' }], [{ id: 'turn-39', status: 'completed' }, { id: 'turn-39', status: 'completed' }]]) {
+    const original = response; response = { ...response, turns };
+    await assert.rejects(restored.reconcileChild(input.attemptId, target), { code: 'RECONCILIATION_INCOMPLETE' }); response = original;
+  }
+  assert.deepEqual(await journal.get(input.attemptId), prior);
+  const recovered = await restored.reconcileChild(input.attemptId, target);
+  assert.deepEqual(recovered, { ...prior, childTurns: { ...prior.childTurns, [grandKey]: 'completed' } });
+  assert.deepEqual(await restored.reconcileChild(input.attemptId, target), recovered);
+  for (const status of ['inProgress', 'interrupted']) {
+    response = { ...response, turns: [{ id: 'turn-39', status }] };
+    await assert.rejects(restored.reconcileChild(input.attemptId, target), { code: 'SETTLEMENT_CONFLICT' });
+  }
+  assert.ok(calls.every(call => call.method === 'thread/read' && call.params.threadId === 'grandchild' && call.params.includeTurns === true));
+  assert.equal(restored.sleepReadiness().allowed, false);
+});
+
 test('lost or mismatched steering acknowledgement stays unknown across journal reopen without text retention', async t => {
   for (const response of ['lost', 'wrong-turn']) {
     const { adapter, journal, cwd } = await fixture(t);

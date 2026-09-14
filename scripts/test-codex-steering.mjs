@@ -142,7 +142,7 @@ try {
     } catch (error) { errors.push('MODEL_FIXTURE_FAILED'); capture('fixture.error', error.stack); if (!res.headersSent) res.writeHead(400); res.end(); }
   });
   await new Promise(ok => server.listen(0, '127.0.0.1', ok));
-  await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\nmulti_agent = true\nmulti_agent_v2 = false\n[agents]\nmax_threads = 4\nmax_depth = 1\n[model_providers.fixture]\nname = "Scripted loopback only"\nbase_url = "http://127.0.0.1:${server.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
+  await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\nthread_unload_delay_secs = 2\n[features]\ncode_mode = false\nmulti_agent = true\nmulti_agent_v2 = false\n[agents]\nmax_threads = 4\nmax_depth = 1\n[model_providers.fixture]\nname = "Scripted loopback only"\nbase_url = "http://127.0.0.1:${server.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
   native = spawn(binary, ['app-server', '--strict-config', '--listen', 'stdio://'], { env, cwd, stdio: ['pipe', 'pipe', 'pipe'] });
   transport = new ObservedTransport(native, { timeoutMs: 10000 });
   native.stderr.on('data', data => capture('native.stderr', data.toString()));
@@ -160,6 +160,7 @@ try {
   check('strict config confirms V1 multi-agent, not V2', () => {
     assert.equal(config.config.features.multi_agent, true); assert.equal(config.config.features.multi_agent_v2, false);
     assert.equal(config.config.features.code_mode, false);
+    assert.equal(config.config.thread_unload_delay_secs, 2);
   });
   adapter = reopened(); router = new CodexEventRouter({ transport, adapter, onRecovery: value => errors.push(value.code) });
   root = await adapter.submit({ attemptId, installationId: 'fixture-installation', personaId: 'fixture-persona', scope: 'conversation',
@@ -207,8 +208,20 @@ try {
   await assert.rejects(reopened().steerChild(attemptId, child, { ...childInstruction, text: 'changed' }), { code: 'IDEMPOTENCY_CONFLICT' });
   assert.deepEqual(await journalHashes(), beforeChildReplay);
   check('child replay and wrong-target/content rejection issue no extra native steer', () => assert.equal(report.steerRPCs, 2));
+  const recoveryJournal = new FileJournal(join(directory, 'recovery-journal'));
+  const beforeChildTerminal = await adapter.requireRun(attemptId);
+  await recoveryJournal.putIfAbsent(attemptId, beforeChildTerminal);
   send(childNext.res, message('CHILD_FINISHED'));
   await wait(() => terminal.has(JSON.stringify([child.threadId, child.turnId])), 'CHILD_TERMINAL'); await router.flush();
+  const recovery = new CodexAdapter({ rpc: async (method, params) => {
+    assert.equal(method, 'thread/read'); return transport.request(method, params);
+  }, journal: recoveryJournal, cwd });
+  const recovered = await recovery.reconcileChild(attemptId, child);
+  check('read-only reopened child history restores a missed terminal event with exact native parent and leaves sibling live', () => {
+    assert.deepEqual(recovered, { ...beforeChildTerminal, childTurns: { ...beforeChildTerminal.childTurns,
+      [JSON.stringify([child.threadId, child.turnId])]: 'completed' } });
+    siblingUnchanged(sibling, siblingHash); assert.equal(recovery.sleepReadiness().allowed, false);
+  });
   assert.deepEqual(await reopened().steerChild(attemptId, child, childInstruction), childAccepted);
   const row = await adapter.requireRun(attemptId);
   check('logical/native identities persist and native completion does not enable sleep', () => {
@@ -226,6 +239,32 @@ try {
     assert.equal(outcomes.get(JSON.stringify([child.threadId, child.turnId])), 'completed');
     assert.equal(outcomes.get(JSON.stringify([sibling.threadId, sibling.turnId])), 'interrupted');
     assert.ok([...held.values()].every(value => value.closed)); assert.equal(report.approvals, 0); assert.deepEqual(errors, []);
+  });
+  // This fixture owns the entire process; never unload another task's threads.
+  const loaded = await transport.request('thread/loaded/list', {});
+  assert.equal(loaded.nextCursor, null);
+  assert.ok(loaded.data.every(id => [root.threadId, child.threadId, sibling.threadId].includes(id)));
+  for (const threadId of loaded.data) {
+    assert.deepEqual(await transport.request('thread/backgroundTerminals/list', { threadId }), { data: [], nextCursor: null });
+    assert.ok(['unsubscribed', 'notSubscribed'].includes((await transport.request('thread/unsubscribe', { threadId })).status));
+  }
+  await wait(async () => {
+    const list = await transport.request('thread/loaded/list', {});
+    return list.nextCursor === null && list.data.length === 0;
+  }, 'NATIVE_UNLOADED');
+  router.close(); native.stdin.end();
+  await wait(() => native.exitCode !== null || native.signalCode !== null, 'NATIVE_STOPPED', 5000);
+  assert.equal(native.exitCode, 0); assert.equal(native.signalCode, null);
+  native = spawn(binary, ['app-server', '--strict-config', '--listen', 'stdio://'], { env, cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+  transport = new ObservedTransport(native, { timeoutMs: 10000 });
+  native.stderr.on('data', data => capture('native.stderr', data.toString()));
+  transport.on('deniedRequest', () => report.approvals++);
+  await transport.initialize({ experimentalApi: true });
+  const restartedChild = await recovery.reconcileChild(attemptId, child);
+  check('new native process reads exact persisted child history without inference or family settlement', () => {
+    assert.deepEqual(restartedChild, recovered);
+    assert.deepEqual(Object.fromEntries(counts), { ROOT19: 4, TARGET47: 2, SIBLING83: 1 });
+    assert.equal(report.approvals, 0); assert.equal(recovery.sleepReadiness().allowed, false);
   });
   assert.equal((await lstat(journalPath)).mode & 0o777, 0o700);
   for (const name of await readdir(journalPath)) assert.equal((await lstat(join(journalPath, name))).mode & 0o777, 0o600);

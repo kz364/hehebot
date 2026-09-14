@@ -237,6 +237,29 @@ export class CodexAdapter {
   /** Read-only recovery for a durably acknowledged turn. Never infer a missing turn
    * ID from position, a matching prompt, or the most recent turn in a thread.
    */
+  async reconcileChild(attemptId, target) {
+    if (!target || Object.keys(target).some(key => !['threadId', 'turnId'].includes(key)) ||
+        ![target.threadId, target.turnId].every(id => typeof id === 'string' && id.length > 0 && id.length <= 256)) fail('INVALID_RECONCILIATION_TARGET');
+    const row = await this.requireRun(attemptId), { threadId, turnId } = target;
+    const turnKey = JSON.stringify([threadId, turnId]);
+    if (!Object.hasOwn(row.childTurns ?? {}, turnKey)) fail('SETTLEMENT_IDENTITY_MISMATCH');
+    const parents = [[row.threadId, row], ...Object.entries(row.childObligations ?? {}).map(([key, owner]) => [JSON.parse(key)[0], owner])]
+      .flatMap(([parent, owner]) => Object.values(owner.spawns ?? {}).filter(spawn => spawn.receiverThreadIds.includes(threadId)).map(() => parent));
+    if (parents.length !== 1) fail('SETTLEMENT_IDENTITY_MISMATCH');
+    const reply = await this.rpc('thread/read', { threadId, includeTurns: true });
+    if (reply?.thread?.id !== threadId || reply.thread.source?.subAgent?.thread_spawn?.parent_thread_id !== parents[0] ||
+        !Array.isArray(reply.thread.turns)) fail('CODEX_PROTOCOL_ERROR');
+    const matches = reply.thread.turns.filter(turn => turn?.id === turnId);
+    if (matches.length !== 1) fail('RECONCILIATION_INCOMPLETE');
+    if (matches[0].status === 'inProgress') {
+      if (row.childTurns[turnKey] !== 'inProgress') fail('SETTLEMENT_CONFLICT');
+      return row;
+    }
+    // History only restores this exact turn's terminal observation. It cannot
+    // erase recorded tools, discover unacknowledged turns, or settle descendants.
+    return this.observe(attemptId, { method: 'turn/completed', params: { threadId, turn: matches[0] } });
+  }
+
   async reconcile(attemptId) {
     const row = await this.requireRun(attemptId);
     const reply = await this.rpc('thread/read', { threadId: row.threadId, includeTurns: true });
