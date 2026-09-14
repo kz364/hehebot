@@ -52,8 +52,18 @@ outcomes and foreign-key links remain intact; pending acceptance is not erased.
 Tests preserve same-key and webhook replay/conflict behavior after body removal.
 This does not claim dedupe-key reuse or deletion of receipt metadata at 90 days.
 
-Captured task contexts, attempts/outbox results, follow-ups, revisions, native
-data and backups remain outside this cleanup.
+Schema v7 adds indexed, transactional cleanup of at most 100 terminal attempt
+results per reconciliation, 90 days after settlement. The current attempt's
+delivered portal copy is redacted in the same transaction; a replacement result
+uses its own settlement date, not the original outbox creation or delivery update.
+Waiting/recoverable runs, pending retries/deliveries, unresolved operations/effects
+and resource locks prevent this cleanup. Identity, statuses, timestamps and
+checkpoints are preserved; expiry is never evidence of native settlement or sleep.
+The Worker schedules cleanup even with execution disabled. Physical purge may lag
+the cutoff; these stored result copies have no current retrieval endpoint.
+
+Captured task contexts, protected results, non-portal outbox payloads, follow-ups,
+revisions, native data and backups remain outside this cleanup.
 Compact provenance/causal records currently have no expiry. These are explicit
 remaining retention gaps, not proof of full S30 or "forget everywhere". Existing
 publication digest semantics are preserved; full per-edge collaboration,

@@ -40,5 +40,10 @@ export function migrateApplication(db:Database,now:string):void {
   db.exec("CREATE INDEX commands_payload_expiry ON commands(accepted_at,id) WHERE payload_json!='{}' AND status IN ('applied','rejected')");
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(6,?)',now);
  });
- requireThat([5,6].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===5)version=6;
+ if(version===6)db.transaction(()=>{
+  db.exec("CREATE INDEX attempts_result_expiry ON attempts(settled_at,run_id,attempt) WHERE result_json IS NOT NULL AND settled_at IS NOT NULL AND status IN ('completed','failed','cancelled')");
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(7,?)',now);
+ });
+ requireThat([6,7].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }
