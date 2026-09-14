@@ -159,6 +159,61 @@ test('steering targets expected turn, deduplicates and never silently changes a 
   await adapter.steer(input.attemptId, { commandId: 'cmd1', text: 'Change goal' });
   assert.equal(calls.length, 3); assert.equal(calls[2].params.expectedTurnId, 'turn-b');
   await assert.rejects(adapter.steer(input.attemptId, { commandId: 'cmd1', text: 'Different goal' }), { code: 'IDEMPOTENCY_CONFLICT' });
+  await adapter.observe(input.attemptId, { method: 'turn/completed', params: {
+    threadId: 'thread-a', turn: { id: 'turn-b', status: 'completed' },
+  } });
+  assert.equal((await adapter.steer(input.attemptId, { commandId: 'cmd1', text: 'Change goal' })).status, 'accepted');
+  await assert.rejects(adapter.steer(input.attemptId, { commandId: 'new', text: 'Too late' }), { code: 'TASK_NOT_RUNNING' });
+  assert.equal(calls.length, 3);
+});
+
+test('descendant steering binds exact turn and command, survives terminal replay and never steers siblings', async t => {
+  const { adapter, calls, journal, cwd } = await fixture(t);
+  await adapter.submit(input);
+  await adapter.observe(input.attemptId, { method: 'item/completed', params: { threadId: 'thread-a', turnId: 'turn-b',
+    item: { id: 'spawn', type: 'collabAgentToolCall', tool: 'spawnAgent', senderThreadId: 'thread-a', status: 'completed', receiverThreadIds: ['child-a', 'child-b'] },
+  } });
+  for (const threadId of ['child-a', 'child-b']) await adapter.observe(input.attemptId, { method: 'turn/started', params: { threadId, turn: { id: 'same-turn', status: 'inProgress' } } });
+  await adapter.observe(input.attemptId, { method: 'turn/completed', params: { threadId: 'thread-a', turn: { id: 'turn-b', status: 'completed' } } });
+  const before = await journal.get(input.attemptId);
+  adapter.rpc = async (method, params) => {
+    calls.push({ method, params });
+    return { turnId: params.expectedTurnId };
+  };
+  const target = { threadId: 'child-a', turnId: 'same-turn' }, instruction = { commandId: 'child-steer', text: 'Use tomorrow for A' };
+  await Promise.all([adapter.steerChild(input.attemptId, target, instruction), adapter.steerChild(input.attemptId, target, instruction)]);
+  assert.deepEqual(calls.slice(2), [{ method: 'turn/steer', params: { threadId: 'child-a', expectedTurnId: 'same-turn',
+    input: [{ type: 'text', text: instruction.text }], clientUserMessageId: instruction.commandId } }]);
+  assert.deepEqual(await journal.get(input.attemptId), before);
+  await assert.rejects(adapter.steerChild(input.attemptId, { threadId: 'child-b', turnId: 'same-turn' }, instruction), { code: 'IDEMPOTENCY_CONFLICT' });
+  await assert.rejects(adapter.steerChild(input.attemptId, target, { ...instruction, text: 'Another day' }), { code: 'IDEMPOTENCY_CONFLICT' });
+  for (const target of [{ threadId: 'foreign', turnId: 'same-turn' }, { threadId: 'child-a', turnId: 'unobserved' }, { threadId: 'thread-a', turnId: 'turn-b' }])
+    await assert.rejects(adapter.steerChild(input.attemptId, target, instruction), { code: 'SETTLEMENT_IDENTITY_MISMATCH' });
+  await assert.rejects(adapter.steerChild(input.attemptId, { ...target, latest: true }, instruction), { code: 'INVALID_STEER_TARGET' });
+  for (const instruction of [null, { commandId: 'x', text: '' }, { commandId: '../x', text: 'text' }, { commandId: 'x', text: 'text', permissions: 'all' }])
+    await assert.rejects(adapter.steerChild(input.attemptId, target, instruction), { code: 'INVALID_STEERING' });
+  await adapter.observe(input.attemptId, { method: 'turn/completed', params: { threadId: 'child-a', turn: { id: 'same-turn', status: 'completed' } } });
+  const restored = new CodexAdapter({ cwd, journal: new FileJournal(cwd), rpc: () => assert.fail('must not replay native steer') });
+  assert.equal((await restored.steerChild(input.attemptId, target, instruction)).status, 'accepted');
+  await assert.rejects(restored.steerChild(input.attemptId, target, { ...instruction, commandId: 'late-command' }), { code: 'TASK_NOT_RUNNING' });
+  assert.equal((await journal.get(input.attemptId)).childTurns[JSON.stringify(['child-b', 'same-turn'])], 'inProgress');
+  assert.equal(restored.sleepReadiness().allowed, false);
+});
+
+test('lost or mismatched steering acknowledgement stays unknown across journal reopen without text retention', async t => {
+  for (const response of ['lost', 'wrong-turn']) {
+    const { adapter, journal, cwd } = await fixture(t);
+    await adapter.submit(input);
+    let calls = 0;
+    adapter.rpc = async () => { calls++; if (response === 'lost') throw new Error('private transport failure'); return { turnId: 'wrong-turn' }; };
+    const instruction = { commandId: 'unknown-command', text: 'Private steering canary' };
+    assert.equal((await adapter.steer(input.attemptId, instruction)).status, 'unknown');
+    const restored = new CodexAdapter({ cwd, journal: new FileJournal(cwd), rpc: () => assert.fail('uncertain steering must not replay') });
+    assert.equal((await restored.steer(input.attemptId, instruction)).status, 'unknown');
+    const key = `steer-${createHash('sha256').update(JSON.stringify([input.attemptId, instruction.commandId])).digest('hex')}`;
+    assert.equal(JSON.stringify(await journal.get(key)).includes(instruction.text), false);
+    assert.equal(calls, 1);
+  }
 });
 
 test('interrupt acknowledgement and root completion do not authorize sleep or complete children', async t => {

@@ -74,21 +74,47 @@ export class CodexAdapter {
     if (!row?.threadId || !row.nativeRunId) fail('SUBMISSION_OUTCOME_UNKNOWN');
     return row;
   }
-  async steer(attemptId, { commandId, text }) {
-    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(commandId ?? '') || typeof text !== 'string' || !text.trim() || text.length > 100000) fail('INVALID_STEERING');
+  async steer(attemptId, instruction) {
     const row = await this.requireRun(attemptId);
-    if (row.status !== 'running') fail('TASK_NOT_RUNNING');
+    return this.#steer(attemptId, instruction, { threadId: row.threadId, turnId: row.nativeRunId }, row.status === 'running', false);
+  }
+
+  /** Host-selected observed descendant only. Parent completion does not prevent
+   * steering an active child; acknowledgement does not prove consumption.
+   */
+  async steerChild(attemptId, target, instruction) {
+    if (!target || Object.keys(target).some(key => !['threadId', 'turnId'].includes(key)) ||
+        ![target.threadId, target.turnId].every(id => typeof id === 'string' && id.length > 0 && id.length <= 256)) fail('INVALID_STEER_TARGET');
+    const row = await this.requireRun(attemptId);
+    const key = JSON.stringify([target.threadId, target.turnId]);
+    if (!hasReceiver(row, target.threadId) || !Object.hasOwn(row.childTurns ?? {}, key)) fail('SETTLEMENT_IDENTITY_MISMATCH');
+    return this.#steer(attemptId, instruction, target, row.childTurns[key] === 'inProgress', true);
+  }
+
+  async #steer(attemptId, instruction, target, active, child) {
+    if (!instruction || Object.keys(instruction).some(key => !['commandId', 'text'].includes(key)) ||
+        !/^[a-zA-Z0-9_-]{1,128}$/.test(instruction.commandId ?? '') || typeof instruction.text !== 'string' ||
+        !instruction.text.trim() || instruction.text.length > 100000) fail('INVALID_STEERING');
+    const { commandId, text } = instruction;
     const key = `steer-${hash([attemptId, commandId])}`;
-    const fingerprint = hash(text);
-    const prior = await this.journal.putIfAbsent(key, { fingerprint, status: 'unknown' });
-    if (prior) {
+    // Preserve old root receipts. Child fingerprints bind the exact namespace,
+    // so a reused owner command cannot retarget a sibling or another child turn.
+    const fingerprint = hash(child ? [target.threadId, target.turnId, text] : text);
+    const replay = prior => {
       if (prior.fingerprint !== fingerprint) fail('IDEMPOTENCY_CONFLICT');
       return prior;
+    };
+    const recorded = await this.journal.get(key);
+    if (recorded) return replay(recorded);
+    if (!active) fail('TASK_NOT_RUNNING');
+    const prior = await this.journal.putIfAbsent(key, { fingerprint, status: 'unknown' });
+    if (prior) {
+      return replay(prior);
     }
     try {
-      const reply = await this.rpc('turn/steer', { threadId: row.threadId, expectedTurnId: row.nativeRunId,
+      const reply = await this.rpc('turn/steer', { threadId: target.threadId, expectedTurnId: target.turnId,
         input: [{ type: 'text', text }], clientUserMessageId: commandId });
-      if (reply?.turnId !== row.nativeRunId) fail('CODEX_PROTOCOL_ERROR');
+      if (reply?.turnId !== target.turnId) fail('CODEX_PROTOCOL_ERROR');
       return this.journal.update(key, { status: 'accepted' });
     } catch { return this.journal.get(key); }
   }
