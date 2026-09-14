@@ -35,6 +35,10 @@ export class Store {
   const rows=conversation ? this.db.all<Row>('SELECT * FROM events WHERE sequence>? AND conversation_id=? ORDER BY sequence LIMIT ?',after,conversation,limit):this.db.all<Row>('SELECT * FROM events WHERE sequence>? ORDER BY sequence LIMIT ?',after,limit);
   return rows.map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
  }
+ contextEvents(conversation:string,recipient:string,after:number,limit=100):TimelineEvent[] {
+  type Row=Omit<TimelineEvent,'payload'>&{payload_json:string};
+  return this.db.all<Row>("SELECT * FROM events WHERE conversation_id=? AND sequence>? AND type='room.context_update' AND EXISTS (SELECT 1 FROM json_each(events.payload_json,'$.recipient_ids') WHERE value=?) ORDER BY sequence LIMIT ?",conversation,after,recipient,limit).map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
+ }
  conversationEvents(conversation:string,before=Number.MAX_SAFE_INTEGER,limit=100):TimelineEvent[] {
   type Row={sequence:number;id:string;conversation_id:string|null;type:string;actor_id:string;cause_id:string|null;payload_json:string;created_at:string};
   return this.db.all<Row>('SELECT * FROM events WHERE conversation_id=? AND sequence<? ORDER BY sequence DESC LIMIT ?',conversation,before,limit).reverse().map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));

@@ -101,6 +101,27 @@ describe('scoped context and data-only collaboration', () => {
     expect(f.accept(command).resource_id).toBeDefined();
     expect(f.db.all("SELECT * FROM events WHERE type='room.context_update'")).toHaveLength(1);
   });
+  it('paginates recipient context after filtering unrelated room events without waking work', () => {
+    const r = room();
+    const publish = (recipient: string, text: string) => {
+      expect(f.accept({ schema_version: 1, type: 'room.publish', payload: {
+        room_id: r.id, kind: 'context_update', recipient_ids: [recipient], text,
+        references: [], cause_id: randomUUID(),
+      } }).status).toBe('applied');
+    };
+    for (let i = 0; i < 100; i++) {
+      publish(otherBot, `Other recipient ${i}`);
+      f.store.event(randomUUID(), r.id, 'message.user', 'owner', null, { text: 'Not a context update' }, f.core.now());
+    }
+    for (let i = 0; i < 101; i++) publish(bot, `Required update ${i}`);
+    const first = f.core.context(bot, 'Read', null, r.id).context_events;
+    expect(first.map(e => e.payload.text)).toEqual(Array.from({ length: 100 }, (_, i) => `Required update ${i}`));
+    f.db.exec('UPDATE consumer_cursors SET consumed_sequence=? WHERE consumer_id=? AND conversation_id=?', first.at(-1)!.sequence, bot, r.id);
+    expect(f.core.context(bot, 'Read next', null, r.id).context_events.map(e => e.payload.text)).toEqual(['Required update 100']);
+    expect(f.core.context(otherBot, 'Read', null, r.id).context_events.map(e => e.payload.text)).toEqual(Array.from({ length: 100 }, (_, i) => `Other recipient ${i}`));
+    expect(f.db.all('SELECT * FROM runs')).toEqual([]);
+    expect(f.db.all('SELECT desired_state,queue_sequence FROM lifecycle')).toEqual([{ desired_state: 'STOP', queue_sequence: 0 }]);
+  });
   it('rejects nonmember recipients and private-memory cross-recipient sharing', () => {
     const r = room([bot]); const privateMemory = memory({ kind: 'persona', id: otherBot });
     const payload = { room_id: r.id, kind: 'context_update' as const, recipient_ids: [otherBot], text: 'Synthetic', references: [], cause_id: randomUUID() };
