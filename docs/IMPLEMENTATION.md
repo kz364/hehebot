@@ -132,6 +132,16 @@ locks and identities. This is unencrypted local staging, not live DO extraction,
 coordinated native backup, restore admission or complete retention. SQLite may
 update shared-memory reader markers even though source DB/WAL bytes remain intact.
 
+[Optional-routine budget admission](BUDGET.md) now connects owner-reviewed caps
+and optional routine selections to a trusted infrastructure projection ledger.
+Missing/stale reports or projections at cap park only unstarted selected scheduled
+work; one-run owner overrides bind the exact run and policy revision. Claim/wake
+queries enforce the same predicate before LIMIT and across provider-observation
+awaits. Bounded alarm maintenance does not depend on execution being enabled.
+Admitted attempts/effects/locks remain unchanged; budget exceptions never enable
+production gates. SQLite/Worker and inspected Chromium fixtures verify local
+behavior, not actual provider bills, quota, seven-day costs or the USD5 target.
+
 Scripted native fixtures demonstrate event routing, exact cancellation, callbacks into local Worker/SQLite, and conservative rejection of root-only completion. They do **not** prove model judgment, authenticated inference, recursive descendant/effect settlement, active-work crash recovery, production service assembly, provider sleep, connector behavior, or hardware permissions.
 
 ## Run and verify

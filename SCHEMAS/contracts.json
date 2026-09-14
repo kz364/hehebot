@@ -60,6 +60,35 @@
   },
   "oneOf": [
     {
+      "type":"object","additionalProperties":false,
+      "properties": {
+        "schema_version":{"const":1},"type":{"const":"budget.set"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "expected_revision":{"type":"integer","minimum":0},
+            "enabled":{"type":"boolean"},
+            "monthly_cap_cents":{"type":"integer","minimum":1,"maximum":1000000000},
+            "optional_routine_ids":{"type":"array","maxItems":20,"uniqueItems":true,"items":{"$ref":"#/$defs/uuid"}}
+          },
+          "required":["expected_revision","enabled","monthly_cap_cents","optional_routine_ids"]
+        }
+      },
+      "required":["schema_version","type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
+        "schema_version":{"const":1},"type":{"const":"budget.override"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties":{"run_id":{"$ref":"#/$defs/uuid"},"expected_revision":{"type":"integer","minimum":1}},
+          "required":["run_id","expected_revision"]
+        }
+      },
+      "required":["schema_version","type","payload"]
+    },
+    {
       "type": "object", "additionalProperties": false,
       "properties": {
         "schema_version": { "const": 1 }, "type": { "enum": ["routine.run", "routine.delete"] },

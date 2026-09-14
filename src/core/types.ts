@@ -1,3 +1,4 @@
+import type { BudgetPolicy } from './budget';
 export type Scope = { kind: 'global' | 'persona' | 'routine' | 'skill'; id: string | null };
 export type BasePut = { id: string; expected_revision: number };
 export type PersonaPut = BasePut & { name: string; instructions: string; tool_policy_ids: string[]; archived: boolean };
@@ -14,6 +15,8 @@ export type SkillProvenance = { kind:'owner'|'task'|'notes'|'file'|'url'|'import
 export type SkillProposal = { proposal_id:string; skill_id:string; expected_skill_revision:number; body:SkillBody; provenance:SkillProvenance; executable_files_changed:boolean };
 export type RoomPublish = { room_id: string; kind: 'context_update' | 'action_request' | 'message'; recipient_ids: string[]; text: string; references: { kind: string; id: string; revision: number }[]; cause_id: string };
 export type PayloadMap = {
+ 'budget.set':BudgetPolicy;
+ 'budget.override':{run_id:string;expected_revision:number};
  'run.followup':{run_id:string;text:string};
  'setup.adopt':{commands:Array<{schema_version:1;type:'persona.put';payload:PersonaPut}|{schema_version:1;type:'routine.put';payload:RoutinePut}>;monitoring_timezone:'Asia/Singapore'|'Asia/Jakarta';reviewed_hash:string};
  'message.send': { conversation_id: string; text: string };

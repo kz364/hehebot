@@ -25,6 +25,32 @@
     {
       "type":"object","additionalProperties":false,
       "properties": {
+        "type":{"const":"budget-report"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "identity":{"$ref":"#/$defs/runtimeIdentity"},
+            "run_id":{"type":"string","format":"uuid"},
+            "attempt":{"type":"integer","minimum":1},
+            "report": {
+              "type":"object","additionalProperties":false,
+              "properties": {
+                "period":{"type":"string","pattern":"^[0-9]{4}-(0[1-9]|1[0-2])$"},
+                "projected_cents":{"type":"integer","minimum":0,"maximum":1000000000},
+                "observed_at":{"type":"string","format":"date-time"},
+                "source_ref":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}
+              },
+              "required":["period","projected_cents","observed_at","source_ref"]
+            }
+          },
+          "required":["identity","run_id","attempt","report"]
+        }
+      },
+      "required":["type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
         "type":{"const":"root-child-effect-intent"},
         "payload": {
           "type":"object","additionalProperties":false,

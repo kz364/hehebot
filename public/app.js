@@ -38,6 +38,7 @@ async function refresh(force=false){
 function choose(id){selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
 function render(){
  if(!snapshot)return;
+ renderBudget();
  for(const [kind,target] of [['persona','bots'],['room','rooms']]){
   $(target).replaceChildren();
   for(const object of items(kind).filter(x=>!x.body.archived)){
@@ -144,6 +145,32 @@ $('composer').onsubmit=async event=>{
 function field(label,name,value='',type='text'){const l=node('label',label,'field');let input;if(type==='textarea')input=node('textarea');else{input=node('input');input.type=type;}input.name=name;input.value=value;input.required=true;l.append(input);return l;}
 function selectField(label,name,options,value){const l=node('label',label,'field');const select=node('select');select.name=name;for(const [v,text]of options){const o=node('option',text);o.value=v;select.append(o);}select.value=value;l.append(select);return l;}
 function openEditor(title,fields,save){editing=save;$('editor-title').textContent=title;$('editor-fields').replaceChildren(...fields);$('editor-error').hidden=true;$('editor').showModal();}
+const dollars=cents=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
+function renderBudget(){
+ const budget=snapshot.budget;$('budget-panel').hidden=!budget;if(!budget)return;
+ const status={disabled:'Budget suspension is off',ok:'Within projected cap',BUDGET_UNKNOWN:'Optional work paused: estimate unavailable or expired',BUDGET_BLOCKED:'Optional work paused: projected cap reached'};
+ $('budget-summary').replaceChildren(node('p',status[budget.status]),node('p',`${dollars(budget.policy.monthly_cap_cents)} monthly cap · ${budget.period} (Asia/Jakarta)`,'hint'),node('p',budget.report?`${dollars(budget.report.projected_cents)} projected · ${budget.freshness} · observed ${time(budget.report.observed_at)}`:'No infrastructure projection available.','hint'));
+ if(budget.policy.enabled&&budget.freshness==='fresh'&&budget.threshold>=70){const alert=node('p',`Projection has reached ${budget.threshold}% of the cap.`,'hint');alert.setAttribute('role','status');$('budget-summary').append(alert);}
+ $('budget-waits').replaceChildren();
+ for(const run of snapshot.runs.filter(run=>run.status==='waiting'&&run.current_attempt===0&&['BUDGET_UNKNOWN','BUDGET_BLOCKED'].includes(run.error_code))){
+  const name=items('routine').find(item=>item.id===run.routine_id)?.body.name??'Optional routine';
+  const row=node('div',undefined,'routine-card');row.append(node('p',name),button('Allow this run once',()=>{
+   const key=crypto.randomUUID();openEditor(`Allow once: ${name}`,[node('p','Allow only this scheduled run despite the budget wait. This does not enable runtime execution, grant connector permissions, or change the monthly cap.','hint')],()=>command('budget.override',{run_id:run.id,expected_revision:budget.revision},key));
+  },'quiet'));$('budget-waits').append(row);
+ }
+}
+$('edit-budget').onclick=()=>{
+ const budget=snapshot.budget;if(!budget)return;const key=crypto.randomUUID();
+ const fields=[selectField('Budget suspension','enabled',[['false','Off'],['true','On for selected optional routines']],String(budget.policy.enabled)),field('Monthly infrastructure cap (USD)','cap',(budget.policy.monthly_cap_cents/100).toFixed(2)),node('p','Select up to 20 optional routines. Missing or 24-hour-old projections pause their new scheduled runs; active work and owner messages are unaffected.','hint')];
+ for(const routine of items('routine')){const label=node('label',undefined,'check'),input=node('input');input.type='checkbox';input.name='optional';input.value=routine.id;input.checked=budget.policy.optional_routine_ids.includes(routine.id);label.append(input,document.createTextNode(routine.body.name));fields.push(label);}
+ openEditor('Infrastructure budget',fields,form=>{
+  const value=String(form.get('cap'));if(!/^\d+(\.\d{1,2})?$/.test(value))throw new Error('Enter a USD amount with at most two decimal places.');
+  const [whole,fraction='']=value.split('.'),cents=Number(whole)*100+Number(fraction.padEnd(2,'0'));
+  if(!Number.isSafeInteger(cents)||cents<1||cents>1000000000)throw new Error('The cap must be between $0.01 and $10,000,000.00.');
+  const optional=form.getAll('optional');if(optional.length>20)throw new Error('Select at most 20 optional routines.');
+  return command('budget.set',{expected_revision:budget.revision,enabled:form.get('enabled')==='true',monthly_cap_cents:cents,optional_routine_ids:optional},key);
+ });
+};
 function closeEditor(){$('editor').close();editing=null;}
 $('close-editor').onclick=closeEditor;$('cancel-editor').onclick=closeEditor;
 $('editor-form').onsubmit=async e=>{e.preventDefault();if(!editing)return;const b=e.submitter;b.disabled=true;try{await editing(new FormData(e.target));closeEditor();await refresh(true);}catch(error){$('editor-error').textContent=error.message;$('editor-error').hidden=false;}finally{b.disabled=false;}};

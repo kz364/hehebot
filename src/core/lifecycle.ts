@@ -11,10 +11,15 @@ export class LifecycleCore {
  constructor(public store:Store,public core:ControlCore,private options:{idleMode?:boolean}={}){}
  get():Lifecycle{return this.store.db.all<Lifecycle>('SELECT * FROM lifecycle WHERE singleton=1')[0];}
  initialize(ref:RuntimeRef|Record<string,never>):void{this.store.db.exec("INSERT OR IGNORE INTO lifecycle(singleton,provider_ref_json,epoch,phase,desired_state,queue_sequence,wake_after_stop) VALUES(1,?,0,'STOPPED','STOP',0,0)",JSON.stringify(ref));}
- private active():boolean{return this.store.db.all("SELECT resource_id FROM resource_locks LIMIT 1").length>0 || this.store.db.all("SELECT id FROM runs WHERE status IN ('queued','claimed','running','finishing','cancelling','recovery_required') LIMIT 1").length>0 || this.store.db.all("SELECT id FROM operations WHERE status!='settled' LIMIT 1").length>0 || this.store.db.all("SELECT e.id FROM effects e JOIN runs r ON r.id=e.run_id WHERE e.status IN ('intent','dispatched') OR (e.status='outcome_unknown' AND r.status IN ('claimed','running','finishing','cancelling')) LIMIT 1").length>0;}
- private nextClaimableRun():Run|undefined {
-  const cutoff=new Date(this.core.options.now().getTime()-90*86400000).toISOString();
-  return this.store.db.all<Run>("SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) ORDER BY r.created_at,r.id LIMIT 1",cutoff)[0];
+ private active():boolean{
+  const budget=this.core.budget.admissionPredicate();
+  return this.store.db.all("SELECT resource_id FROM resource_locks LIMIT 1").length>0 || this.store.db.all(`SELECT r.id FROM runs r WHERE r.status IN ('claimed','running','finishing','cancelling','recovery_required') OR (r.status='queued' AND (${budget.sql})) LIMIT 1`,...budget.bindings).length>0 || this.store.db.all("SELECT id FROM operations WHERE status!='settled' LIMIT 1").length>0 || this.store.db.all("SELECT e.id FROM effects e JOIN runs r ON r.id=e.run_id WHERE e.status IN ('intent','dispatched') OR (e.status='outcome_unknown' AND r.status IN ('claimed','running','finishing','cancelling')) LIMIT 1").length>0;
+ }
+ nextClaimableRun():Run|undefined {
+  return this.store.db.transaction(()=>{
+   const cutoff=new Date(this.core.options.now().getTime()-90*86400000).toISOString(),budget=this.core.budget.admissionPredicate();
+   return this.store.db.all<Run>(`SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings)[0];
+  });
  }
  private touch():void{this.store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('last_activity',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(this.core.now()));}
  private identity(identity:Identity,allowBoot=false):Lifecycle {

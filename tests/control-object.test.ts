@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { TestDatabase, bot, otherBot, routine } from './helpers';
 import { PersonalControl } from '../src/worker/control-object';
 import { Store } from '../src/core/store';
+import { BudgetLedger } from '../src/core/budget';
 
 // Exercise the real RPC methods and SQL; only the Cloudflare host is replaced.
 vi.mock('cloudflare:workers', () => ({ DurableObject: class {
@@ -18,6 +19,9 @@ beforeEach(async () => {
   vi.setSystemTime(new Date('2026-09-10T00:00:00.000Z'));
   setAlarm.mockClear(); deleteAlarm.mockClear();
   db = new TestDatabase();
+  await initialize();
+});
+async function initialize(executionEnabled=false) {
   let initialized: Promise<unknown> = Promise.resolve();
   const ctx = {
     storage: {
@@ -29,11 +33,11 @@ beforeEach(async () => {
     blockConcurrencyWhile: (fn: () => Promise<unknown>) => { initialized = fn(); },
   };
   control = new PersonalControl(ctx as unknown as DurableObjectState, {
-    EXECUTION_ENABLED: 'false', NATIVE_VERIFIED: 'false', PROVIDER_CONFIG: '{}',
+    EXECUTION_ENABLED: String(executionEnabled), NATIVE_VERIFIED: String(executionEnabled), PROVIDER_CONFIG: '{}',
     ACTION_POLICY_IDS: '[]', TOOL_POLICY_IDS: '[]', TRIGGER_CONFIG: '{}',
   } as Env);
   await initialized;
-});
+}
 afterEach(() => { db.close(); vi.useRealTimers(); });
 
 async function overdue() {
@@ -164,4 +168,48 @@ it('timeline reads hide overdue backlog immediately and keep the history floor s
   const other = await control.getTimeline('owner', otherBot);
   expect(other).toMatchObject({ ok: true, value: { history_gap: false, pruned_through: 0 } });
   expect(db.all('SELECT * FROM runs')).toEqual([]); expect(db.all('SELECT * FROM controller_operations')).toEqual([]);
+});
+
+it('keeps host infrastructure reporting behind runtime gates and strict schemas', async () => {
+  const payload={identity:{epoch:1,boot_id:randomUUID()},run_id:randomUUID(),attempt:1,report:{period:'2026-09',projected_cents:499,observed_at:new Date().toISOString(),source_ref:'synthetic:19'}};
+  expect(await control.runtime({type:'budget-report',payload})).toMatchObject({ok:false,error:{code:'CAPABILITY_UNAVAILABLE'}});
+  for(const report of [{...payload.report,projected_cents:499.5},{...payload.report,source_ref:'https://private.invalid'},{...payload.report,grant:true}]){
+    expect(await control.runtime({type:'budget-report',payload:{...payload,report}})).toMatchObject({ok:false,error:{code:'INVALID_INPUT'}});
+  }
+  expect(db.all("SELECT * FROM runtime_metadata WHERE key='budget-report'")).toEqual([]);
+});
+
+it('authenticates report custody and transactionally releases or parks only optional unstarted work', async () => {
+  await initialize(true);
+  const r=routine();
+  expect(await control.accept('owner',randomUUID(),'routine',{schema_version:1,type:'routine.put',payload:r})).toMatchObject({ok:true,value:{status:'applied'}});
+  expect(await control.accept('owner',randomUUID(),'budget',{schema_version:1,type:'budget.set',payload:{expected_revision:0,enabled:true,monthly_cap_cents:500,optional_routine_ids:[r.id]}})).toMatchObject({ok:true,value:{status:'applied'}});
+  vi.setSystemTime(new Date('2026-09-10T00:15:00.000Z'));await control.getState('owner');
+  const scheduled=db.all<{id:string}>("SELECT id FROM runs WHERE occurrence_id IS NOT NULL")[0].id;
+  expect(db.all('SELECT status,error_code FROM runs WHERE id=?',scheduled)).toEqual([{status:'waiting',error_code:'BUDGET_UNKNOWN'}]);
+  await control.accept('owner',randomUUID(),'owner-message',message());
+  const root=db.all<{id:string}>('SELECT id FROM runs WHERE occurrence_id IS NULL')[0].id,identity={epoch:1,boot_id:randomUUID()};
+  db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:17:00.000Z'");
+  expect(await control.runtime({type:'boot',payload:{boot_id:identity.boot_id}})).toMatchObject({ok:true});
+  expect(await control.runtime({type:'ready',payload:{identity}})).toMatchObject({ok:true});
+  expect(await control.runtime({type:'claim',payload:{identity}})).toMatchObject({ok:true,value:{run:{id:root}}});
+  const payload={identity,run_id:root,attempt:1,report:{period:'2026-09',projected_cents:499,observed_at:new Date().toISOString(),source_ref:'synthetic:19'}};
+  expect(await control.runtime({type:'budget-report',payload:{...payload,identity:{...identity,epoch:2}}})).toMatchObject({ok:false,error:{code:'STALE_EPOCH'}});
+  expect(await control.runtime({type:'budget-report',payload})).toMatchObject({ok:true});
+  expect(db.all('SELECT status,error_code FROM runs WHERE id=?',scheduled)).toEqual([{status:'queued',error_code:null}]);
+  const admitted=db.all('SELECT * FROM runs WHERE id=?',root);
+  vi.setSystemTime(new Date('2026-09-10T00:15:01.000Z'));
+  expect(await control.runtime({type:'budget-report',payload:{...payload,report:{...payload.report,projected_cents:501,observed_at:new Date().toISOString()}}})).toMatchObject({ok:true});
+  expect(db.all('SELECT status,error_code FROM runs WHERE id=?',scheduled)).toEqual([{status:'waiting',error_code:'BUDGET_BLOCKED'}]);
+  expect(db.all('SELECT * FROM runs WHERE id=?',root)).toEqual(admitted);
+});
+
+it('schedules budget freshness maintenance even with execution disabled',async()=>{
+  const r=routine({enabled:false});await control.accept('owner',randomUUID(),'routine',{schema_version:1,type:'routine.put',payload:r});
+  await control.accept('owner',randomUUID(),'budget',{schema_version:1,type:'budget.set',payload:{expected_revision:0,enabled:true,monthly_cap_cents:500,optional_routine_ids:[r.id]}});
+  new BudgetLedger(new Store(db),()=>new Date().toISOString(),randomUUID).report({period:'2026-09',projected_cents:499,observed_at:new Date().toISOString(),source_ref:'synthetic:19'});
+  await control.getState('owner');expect(setAlarm).toHaveBeenLastCalledWith(Date.parse('2026-09-11T00:00:00.000Z'));
+  vi.setSystemTime(new Date('2026-09-11T00:00:00.000Z'));await control.alarm();
+  expect(await control.getState('owner')).toMatchObject({ok:true,value:{budget:{freshness:'stale',status:'BUDGET_UNKNOWN'},summary:{execution_enabled:false}}});
+  expect(db.all('SELECT * FROM controller_operations')).toEqual([]);expect(db.all('SELECT * FROM attempts')).toEqual([]);
 });

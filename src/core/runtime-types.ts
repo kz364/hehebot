@@ -4,9 +4,11 @@ import type {NativeChildReceipt} from './native-tasks';
 import type { EffectIntent } from './effects';
 import type {AgentCommandRequest,AgentRoutineQuery,AgentSkillQuery} from './agent-commands';
 import type {RootChildEffectIntent,RootChildEffectResult} from './root-child-effects';
+import type {BudgetReport} from './budget';
 type Base={identity:Identity};type Attempt={run_id:string;attempt:number};
 export type RuntimePayloads={
  status:Record<string,never>;
+ 'budget-report':Base & Attempt & {report:BudgetReport};
  'flight-register':FlightRegistration;
  'flight-confirm':FlightReceipt;
  'flight-reconcile':FlightReconciliation;

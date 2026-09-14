@@ -4,6 +4,7 @@ import { ControlError, requireThat, safeError } from './errors';
 import { Store } from './store';
 import { dueOccurrences, nextDue, preview, validateSchedule } from './schedule';
 import {SkillCatalog} from './skills';
+import {BudgetLedger} from './budget';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
@@ -21,7 +22,8 @@ export function parseCommand(value:unknown):Command {
  return command;
 }
 export class ControlCore {
- constructor(public store:Store,public options:Options){}
+ readonly budget:BudgetLedger;
+ constructor(public store:Store,public options:Options){this.budget=new BudgetLedger(store,()=>this.now(),options.uuid);}
  now(){return this.options.now().toISOString();}
  seed():void {
   const count=this.store.db.all<{n:number}>('SELECT COUNT(*) AS n FROM objects')[0].n;
@@ -56,6 +58,13 @@ export class ControlCore {
   const now=this.now();
   const skills=new SkillCatalog(this.store,()=>this.now(),this.options.uuid);
   switch(command.type){
+   case 'budget.set':{
+    const id=this.budget.set(owner,commandId,command.payload);this.reconcileBudget();return id;
+   }
+   case 'budget.override':{
+    requireThat(this.budget.summary().revision===command.payload.expected_revision,'REVISION_CONFLICT','The budget policy changed. Review it before allowing this run.');
+    const id=this.budget.override(owner,commandId,command.payload.run_id);this.reconcileBudget();return id;
+   }
    case 'skill.propose':return skills.propose(owner,commandId,command.payload);
    case 'skill.review':return skills.review(owner,commandId,command.payload);
    case 'skill.enable':return skills.enable(owner,commandId,command.payload);
@@ -174,6 +183,7 @@ export class ControlCore {
     requireThat(!uncertain.length,'OUTCOME_UNKNOWN','Reconcile the external result before retrying.');
     const live=this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled'",run.id);
     requireThat(!live.length,'CANCEL_UNCONFIRMED','The old execution has not settled.');
+    requireThat(!this.budget.blocks({...run,status:'queued'}),'BUDGET_BLOCKED','Review the budget and use an explicit one-run override.');
     this.store.db.exec('UPDATE runs SET status=?,error_code=?,updated_at=? WHERE id=?',this.options.executionEnabled?'queued':'waiting',this.options.executionEnabled?null:'CAPABILITY_UNAVAILABLE',now,run.id);
     if(this.options.executionEnabled)this.noteRunnable();return run.id;
    }
@@ -188,6 +198,37 @@ export class ControlCore {
     if(p.decision==='approve'&&this.options.executionEnabled)this.noteRunnable();return a.id;
    }
   }
+ }
+ private budgetChanges(limit:number){
+  const predicate=this.budget.admissionPredicate(),status=this.budget.summary().status;
+  return this.store.db.all<Run&{budget_allowed:number}>(`WITH candidates AS (
+   SELECT r.*,(${predicate.sql}) AS budget_allowed FROM runs r WHERE r.current_attempt=0
+   AND (r.status='queued' OR (r.status='waiting' AND r.error_code IN ('BUDGET_UNKNOWN','BUDGET_BLOCKED'))))
+   SELECT * FROM candidates WHERE (status='queued' AND NOT budget_allowed)
+   OR (status='waiting' AND (budget_allowed OR error_code<>?)) ORDER BY created_at,id LIMIT ?`,...predicate.bindings,status,limit);
+ }
+ reconcileBudget():number {
+  return this.store.db.transaction(()=>{
+   const changes=this.budgetChanges(100),now=this.now(),reason=this.budget.summary().status;
+   for(const run of changes){
+    const status=run.budget_allowed&&this.options.executionEnabled?'queued':'waiting';
+    const error=run.budget_allowed?(this.options.executionEnabled?null:'CAPABILITY_UNAVAILABLE'):reason;
+    // Budget waiting does not renew the instruction's original age or settle work.
+    this.store.db.exec('UPDATE runs SET status=?,error_code=? WHERE id=?',status,error,run.id);
+    this.store.event(this.options.uuid(),run.persona_id,'run.budget_changed','system',run.command_id,{run_id:run.id,status,reason:error},now);
+    if(status==='queued')this.noteRunnable();
+   }
+   return changes.length;
+  });
+ }
+ nextBudgetMaintenance():string|null {
+  return this.store.db.transaction(()=>{
+   if(this.budgetChanges(1).length)return this.now();
+   const summary=this.budget.summary();
+   if(!summary.policy.enabled||!summary.policy.optional_routine_ids.length||summary.freshness!=='fresh'||!summary.report)return null;
+   const [year,month]=summary.period.split('-').map(Number);
+   return new Date(Math.min(Date.parse(summary.report.observed_at)+86400000,Date.UTC(year,month,1,-7))).toISOString();
+  });
  }
  private purgeMemories(ids:string[],owner:string,commandId:string|null,purgeTranscripts:boolean,now:string):void {
   // Purge current and prior canonical text immediately; retain only tombstone identity.
@@ -300,10 +341,14 @@ export class ControlCore {
  }
  enqueue(personaId:string,instruction:string,commandId:string|null,routineId:string|null,occurrenceId:string|null,roomId:string|null=null):string {
   const id=this.options.uuid(),now=this.now(),context=this.context(personaId,instruction,routineId,roomId);
-  const status=this.options.executionEnabled?'queued':'waiting';
-  this.store.db.exec('INSERT INTO runs(id,command_id,occurrence_id,persona_id,routine_id,context_json,status,error_code,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',id,commandId,occurrenceId,personaId,routineId,JSON.stringify(context),status,this.options.executionEnabled?null:'CAPABILITY_UNAVAILABLE',now,now);
-  this.store.event(this.options.uuid(),roomId??personaId,'run.accepted','system',commandId,{run_id:id,status,reason:this.options.executionEnabled?null:'Runtime execution is not configured and verified yet.'},now);
-  if(this.options.executionEnabled)this.noteRunnable();return id;
+  let status=this.options.executionEnabled?'queued':'waiting',reason:string|null=this.options.executionEnabled?null:'CAPABILITY_UNAVAILABLE';
+  this.store.db.exec('INSERT INTO runs(id,command_id,occurrence_id,persona_id,routine_id,context_json,status,error_code,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',id,commandId,occurrenceId,personaId,routineId,JSON.stringify(context),status,reason,now,now);
+  if(this.budget.blocks(this.store.run(id))){
+   status='waiting';reason=this.budget.summary().status;
+   this.store.db.exec('UPDATE runs SET status=?,error_code=? WHERE id=?',status,reason,id);
+  }
+  this.store.event(this.options.uuid(),roomId??personaId,'run.accepted','system',commandId,{run_id:id,status,reason:reason==='CAPABILITY_UNAVAILABLE'?'Runtime execution is not configured and verified yet.':reason},now);
+  if(status==='queued')this.noteRunnable();return id;
  }
  private noteRunnable(){
   this.store.db.exec("UPDATE lifecycle SET queue_sequence=queue_sequence+1,desired_state='RUN',stop_token=CASE WHEN phase='DRAINING' THEN NULL ELSE stop_token END,wake_after_stop=CASE WHEN phase IN ('STOP_COMMITTED','STOPPING') THEN 1 ELSE wake_after_stop END,phase=CASE WHEN phase='DRAINING' THEN 'READY' ELSE phase END WHERE singleton=1");
@@ -352,6 +397,7 @@ export class ControlCore {
   if(after!==undefined){const first=this.store.db.all<{seq:number}>('SELECT MIN(sequence) AS seq FROM events')[0].seq;if(after<this.store.retentionFloor(now)||first&&after<first-1)throw new ControlError('HISTORY_GAP','Fetch a new snapshot.');}
   const page=after===undefined?[]:this.store.events(after,limit,now);
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
+   budget:this.budget.summary(),
    objects:after===undefined?(['persona','room','routine','memory','skill'] as const).flatMap(kind=>this.store.list(kind)):undefined,
    skill_enablements:after===undefined?this.store.db.all<{skill_id:string;persona_id:string;skill_revision:number;enabled:number}>('SELECT skill_id,persona_id,skill_revision,enabled FROM skill_enablements ORDER BY skill_id,persona_id').map(row=>({...row,enabled:Boolean(row.enabled)})):undefined,
    skill_proposals:after===undefined?this.store.db.all<{id:string;skill_id:string;proposal_revision:number;expected_skill_revision:number;body_json:string;provenance_json:string;status:string;executable_files_changed:number;created_at:string;reviewed_at:string|null}>("SELECT id,skill_id,proposal_revision,expected_skill_revision,body_json,provenance_json,status,executable_files_changed,created_at,reviewed_at FROM skill_proposals ORDER BY created_at,id").map(({body_json,provenance_json,executable_files_changed,...row})=>({...row,body:JSON.parse(body_json),provenance:JSON.parse(provenance_json),executable_files_changed:Boolean(executable_files_changed)})):undefined,

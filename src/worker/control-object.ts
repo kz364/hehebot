@@ -79,7 +79,7 @@ export class PersonalControl extends DurableObject<Env> {
   try{this.reconcile();}finally{await this.arm();}
  }
  private reconcile(){
-  this.core.expireMemories();this.core.expireCommandPayloads();this.core.expireFollowups();this.core.expireQueuedContexts();this.retention.prune();this.resultRetention.prune();this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();
+  this.core.expireMemories();this.core.expireCommandPayloads();this.core.expireFollowups();this.core.expireQueuedContexts();this.retention.prune();this.resultRetention.prune();this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();this.core.reconcileBudget();
  }
  async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{await this.beforeRequest(owner+':write',60);const result=this.core.accept(owner,key,hash,input);await this.arm();return result;});}
  getReceipt(owner:string,id:string){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receipt(id);});}
@@ -115,6 +115,12 @@ export class PersonalControl extends DurableObject<Env> {
   requireThat(this.core.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified.');
   let result:unknown={ok:true};
   switch(command.type){
+   case 'budget-report':{
+    this.store.db.transaction(()=>{
+     const p=command.payload;this.lifecycle.authorizeAttempt(p.identity,p.run_id,p.attempt);
+     this.core.budget.report(p.report);this.core.reconcileBudget();
+    });break;
+   }
    case 'flight-register':result=this.flights.register(command.payload);break;
    case 'flight-confirm':this.flights.confirm(command.payload);break;
    case 'flight-reconcile':result=this.flights.reconcileFromRun(command.payload);break;
@@ -150,6 +156,7 @@ export class PersonalControl extends DurableObject<Env> {
  });}
  private async arm(delayMs=0):Promise<void>{
   const times:number[]=[];
+  const budgetDue=this.core.nextBudgetMaintenance();if(budgetDue)times.push(Date.parse(budgetDue));
   const retentionDue=this.retention.nextDue();if(retentionDue)times.push(Date.parse(retentionDue));
   const resultDue=this.resultRetention.nextDue();if(resultDue)times.push(Date.parse(resultDue));
   const commandExpiry=this.core.nextCommandPayloadExpiry();if(commandExpiry)times.push(Date.parse(commandExpiry));
@@ -161,7 +168,7 @@ export class PersonalControl extends DurableObject<Env> {
   if(due)times.push(Date.parse(due.next_due_at));
   const retry=this.store.db.all<{due_at:string}>('SELECT due_at FROM retry_queue ORDER BY due_at LIMIT 1')[0];if(retry&&this.core.options.executionEnabled)times.push(Date.parse(retry.due_at));
   const state=this.lifecycle.get();
-  if(this.core.options.executionEnabled&&(!['STOPPED','IDLE_PERMITTED'].includes(state.phase)||this.store.db.all("SELECT id FROM runs WHERE status='queued' LIMIT 1").length))times.push(Date.now()+Math.max(delayMs,5000));
+  if(this.core.options.executionEnabled&&(!['STOPPED','IDLE_PERMITTED'].includes(state.phase)||this.lifecycle.nextClaimableRun()))times.push(Date.now()+Math.max(delayMs,5000));
   if(times.length)await this.ctx.storage.setAlarm(Math.max(Date.now()+Math.max(100,delayMs),Math.min(...times)));
   else await this.ctx.storage.deleteAlarm();
  }
