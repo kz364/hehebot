@@ -368,10 +368,21 @@ try {
   report.nativeBackgroundTerminalReadback = true;
   report.nativeThreadUnloadObserved = true;
 
+  // This fixture owns every session in this process. Never apply this global
+  // drain to an installation with unaccounted or unrelated active work.
+  for (const id of loaded.data) {
+    assert.deepEqual(await transport.request('thread/backgroundTerminals/list', { threadId: id }), { data: [], nextCursor: null });
+    assert.ok(['unsubscribed', 'notSubscribed'].includes((await transport.request('thread/unsubscribe', { threadId: id })).status));
+  }
+  await waitFor(() => loaded.data.every(id => notifications.some(n => n.method === 'thread/closed' && n.params?.threadId === id)), 'all known loaded threads closed');
+  assert.deepEqual(await transport.request('thread/loaded/list', {}), { data: [], nextCursor: null });
+
   // A new native process must recover disk-backed history, not a live server cache.
-  // Stop only after the fixture's held request and command have definitively exited.
-  transport.close();
+  // EOF after observed unload, without sending a termination signal.
+  transport.child.stdin.end();
   await waitFor(() => transport.child.exitCode !== null || transport.child.signalCode !== null, 'native restart stop', 5000);
+  assert.equal(transport.child.exitCode, 0); assert.equal(transport.child.signalCode, null);
+  report.nativeGracefulProcessExit = true;
   transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 10_000 });
   transport.child.stderr.on('data', chunk => nativeErrors.push(chunk.toString('utf8')));
   await transport.initialize();

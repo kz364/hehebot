@@ -12,7 +12,7 @@ export function createSpritesTaskTransport({request = http.request, timeoutMs = 
    const chunks=[];let size=0;
    res.on('data',chunk=>{size+=chunk.length;if(size>16384){fail();res.destroy();req.destroy();}else chunks.push(chunk);});
    res.on('error',fail);res.on('aborted',fail);
-   res.on('end',()=>{if(settled)return;try{const raw=Buffer.concat(chunks).toString('utf8');const body=raw?JSON.parse(raw):undefined;settled=true;resolve({status:res.statusCode??0,body});}catch{fail();}});
+   res.on('end',()=>{if(settled)return;try{const raw=Buffer.concat(chunks).toString('utf8');const body=input.method==='GET'&&res.statusCode===200&&raw?JSON.parse(raw):undefined;settled=true;resolve({status:res.statusCode??0,body});}catch{fail();}});
   });
   req.setTimeout(timeoutMs,()=>{fail();req.destroy();});req.on('error',fail);req.end(data);
  });

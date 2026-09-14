@@ -39,6 +39,10 @@ socket transport and activity guard with `createCodexService`. Configuration has
 - `binary`: absolute pinned Codex executable;
 - `portalOrigin`, `runtimeTokenFile`, optional `tlsCAFile`: HTTPS control origin,
   private runtime bearer file and fixture CA;
+- optional paired `accessClientIdFile`, `accessClientSecretFile`: absolute,
+  owner-owned regular files with no group/other permission bits, each 1–16384
+  bytes. Symlinks are rejected. Trimmed contents must be nonempty and contain
+  no embedded CR, LF or NUL. Both references must be supplied or both omitted;
 - `installationId`, `personas`: host-owned persona mappings containing `agentId`,
   `model`, and an explicit `allowedTools` subset;
 - `disposableTest: true`: explicit opt-in for test composition only. Omission or
@@ -58,6 +62,16 @@ root with supported `thread/start.config.mcp_servers`. There is no global MCP gr
 in the native home. Grant selection is host-owned; the Worker still validates the
 admitted attempt and policies. Configuration/files in one same-UID process are not
 a filesystem security boundary. Do not rewrite grant files during an attempt.
+
+Access values are loaded only by the host service and MCP CLI into the existing
+fixed-origin `ControlClient`. Both Access headers accompany the runtime bearer;
+redirects are rejected. Only file references enter the immutable root grant,
+never credential values, model arguments or native subprocess environment values.
+Raw `accessClientId`/`accessClientSecret` configuration fields are rejected.
+Keep referenced files stable for an admitted attempt; separate processes read them
+at startup, so file references do not provide atomic credential rotation.
+CLI failures are sanitized. Loopback HTTPS tests prove header propagation and
+redirect rejection with synthetic values, not real Cloudflare Access admission.
 
 The child hook selects `CodexTaskControl` from the current durable bridge attempt,
 syncs observed ancestry and delivers only requested subtree cancellations. Default
@@ -82,7 +96,6 @@ completion remains `NATIVE_SETTLEMENT_INCOMPLETE`, and sleep remains denied.
 
 Remaining production work includes verified operation/effect coverage, recovery
 and service resume policy, live Sprite hold/lock behavior, supported account auth,
-and production Access credentials across both supervisor and MCP subprocesses.
-The existing MCP CLI does not carry Access service-token headers. These are not
-solved by setting `disposableTest`, injecting a mock operation list or disabling
+and live production Access configuration/acceptance. These are not solved by
+setting `disposableTest`, injecting a mock operation list or disabling
 the production preflight gate.

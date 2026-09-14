@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, writeFile, symlink, rm } from 'node:fs/promises';
+import { readFile, mkdtemp, writeFile, symlink, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { createServer } from 'node:https';
+import { promisify } from 'node:util';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { AGENT_TOOL_NAMES, buildToolDefinitions, createAgentToolsHandler } from '../runtime/agent-tools.mjs';
@@ -22,6 +24,88 @@ function fixture(overrides = {}) {
   return { calls, handle: createAgentToolsHandler({ controlClient, config, contracts }) };
 }
 const call = (id, name, payload, extra = {}) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: { idempotency_key: uuid(9), payload, ...extra } } });
+
+function runCli(path, input, cert) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ['runtime/agent-tools.mjs'], {
+      env: { PATH: process.env.PATH, HEHEBOT_AGENT_TOOLS_CONFIG: path, ...(cert ? { NODE_EXTRA_CA_CERTS: cert } : {}) },
+      timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', x => { stdout += x; }); child.stderr.on('data', x => { stderr += x; });
+    child.stdin.on('error', () => {}); child.on('error', reject);
+    child.on('close', code => resolve({ code, stdout, stderr })); child.stdin.end(input);
+  });
+}
+
+test('CLI loads paired Access files and sends both headers only to its fixed HTTPS origin', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'hehebot-access-cli-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const key = join(directory, 'tls.key'), cert = join(directory, 'tls.crt');
+  await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+    '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', key, '-out', cert]);
+  const tls = { key: await readFile(key), cert: await readFile(cert) };
+  let redirected = 0, redirect = false;
+  const other = createServer(tls, (req, res) => { redirected++; res.end('{}'); });
+  await new Promise(ok => other.listen(0, '127.0.0.1', ok));
+  t.after(() => new Promise(ok => { other.closeAllConnections(); other.close(ok); }));
+  const received = [];
+  const server = createServer(tls, async (req, res) => {
+    const chunks = []; for await (const chunk of req) chunks.push(chunk);
+    received.push({ path: req.url, headers: req.headers, body: JSON.parse(Buffer.concat(chunks)) });
+    if (redirect) { res.writeHead(302, { location: `https://127.0.0.1:${other.address().port}/stolen` }); res.end(); }
+    else { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"routines":[],"next_cursor":null}'); }
+  });
+  await new Promise(ok => server.listen(0, '127.0.0.1', ok));
+  t.after(() => new Promise(ok => { server.closeAllConnections(); server.close(ok); }));
+  const tokenFile = join(directory, 'runtime'), accessClientIdFile = join(directory, 'access-id'), accessClientSecretFile = join(directory, 'access-secret');
+  await writeFile(tokenFile, 'synthetic-runtime-17', { mode: 0o600 });
+  await writeFile(accessClientIdFile, 'synthetic-client-19\n', { mode: 0o600 });
+  await writeFile(accessClientSecretFile, 'synthetic-secret-43\n', { mode: 0o600 });
+  const grant = join(directory, 'grant');
+  await writeFile(grant, JSON.stringify({ ...config, origin: `https://127.0.0.1:${server.address().port}/`,
+    tokenFile, accessClientIdFile, accessClientSecretFile }), { mode: 0o600 });
+  const query = JSON.stringify({ jsonrpc: '2.0', id: 19, method: 'tools/call', params: { name: 'hehebot_list_routines', arguments: { after: uuid(43) } } }) + '\n';
+  const result = await runCli(grant, query, cert);
+  assert.equal(result.code, 0); assert.equal(result.stderr, '');
+  assert.deepEqual(JSON.parse(JSON.parse(result.stdout).result.content[0].text), { routines: [], next_cursor: null });
+  assert.equal(received.length, 1); assert.equal(received[0].path, '/internal/agent-routines');
+  assert.equal(received[0].headers['cf-access-client-id'], 'synthetic-client-19');
+  assert.equal(received[0].headers['cf-access-client-secret'], 'synthetic-secret-43');
+  assert.equal(received[0].headers.authorization, 'Bearer synthetic-runtime-17');
+  assert.deepEqual(received[0].body, { after: uuid(43), identity: config.identity, run_id: config.runId, attempt: config.attempt });
+  assert.doesNotMatch(result.stdout, /synthetic-|accessClient/);
+  redirect = true;
+  const rejected = await runCli(grant, query, cert);
+  assert.equal(rejected.code, 0); assert.equal(JSON.parse(rejected.stdout).error.code, -32000);
+  assert.equal(received.length, 2); assert.equal(redirected, 0);
+});
+
+test('CLI rejects partial, malformed and nonprivate Access files before processing input', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'hehebot-access-invalid-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const tokenFile = join(directory, 'runtime'), id = join(directory, 'id'), secret = join(directory, 'secret');
+  await writeFile(tokenFile, 'synthetic-runtime-17', { mode: 0o600 });
+  await writeFile(id, 'synthetic-id-19', { mode: 0o600 }); await writeFile(secret, 'synthetic-secret-43', { mode: 0o600 });
+  const base = { ...config, origin: 'https://127.0.0.1:1/', tokenFile };
+  const invalid = [{ accessClientIdFile: id }, { accessClientSecretFile: secret },
+    { accessClientIdFile: 'relative', accessClientSecretFile: secret },
+    { accessClientIdFile: id, accessClientSecretFile: null }, { accessClientId: 'raw-value', accessClientSecret: 'raw-secret' }];
+  for (const [name, contents, mode] of [['public', 'synthetic-secret', 0o644], ['empty', '', 0o600],
+    ['large', 'x'.repeat(16385), 0o600], ['newline', 'first\nsecond', 0o600], ['nul', 'first\0second', 0o600]]) {
+    const path = join(directory, name); await writeFile(path, contents, { mode });
+    invalid.push({ accessClientIdFile: id, accessClientSecretFile: path });
+  }
+  const link = join(directory, 'link'); await symlink(secret, link);
+  const folder = join(directory, 'folder'); await mkdir(folder, { mode: 0o700 });
+  for (const path of [link, folder, join(directory, 'missing')]) invalid.push({ accessClientIdFile: path, accessClientSecretFile: secret });
+  const grant = join(directory, 'grant');
+  for (const fields of invalid) {
+    await writeFile(grant, JSON.stringify({ ...base, ...fields }), { mode: 0o600 });
+    const result = await runCli(grant, '{"jsonrpc":"2.0","id":1,"method":"ping"}\n');
+    assert.deepEqual(result, { code: 1, stdout: '', stderr: 'hehebot-agent-tools: startup failed\n' });
+  }
+});
 
 test('tool schemas derive from canonical command payloads and resolve root refs', () => {
   const tools = buildToolDefinitions(contracts); const ajv = new Ajv({ strict: true }); addFormats(ajv);

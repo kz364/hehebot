@@ -9,3 +9,17 @@ test('expired warm-resume hold refuses reclaim and notifies supervisor',async()=
 test('unproven drain retains Task, confirmed drain releases',async()=>{const f=fixture();await f.guard.ensure();await assert.rejects(f.guard.releaseAfterDrain({nativeSettled:true}));assert.equal(f.counts().releases,0);await f.guard.releaseAfterDrain({nativeSettled:true,checkpointDurable:true,controlCommitted:true});assert.equal(f.counts().releases,1);});
 test('failed hold blocks admission and never removes prior Task',async()=>{const f=fixture();f.tasks.hold=async()=>{throw Error('private payload');};await assert.rejects(f.guard.ensure(),e=>!e.message.includes('private payload'));await assert.rejects(f.guard.ensure());assert.equal(f.counts().releases,0);});
 test('unix transport uses fixed socket and no external auth header',async()=>{let options;const request=(o,cb)=>{options=o;const req=new EventEmitter();req.setTimeout=()=>{};req.destroy=()=>{};req.end=()=>{const res=new EventEmitter();res.statusCode=200;cb(res);res.emit('data',Buffer.from('{"name":"test"}'));res.emit('end');};return req;};const transport=createSpritesTaskTransport({request});const r=await transport({socketPath:'/.sprite/api.sock',host:'sprite',method:'GET',path:'/v1/tasks/test'});assert.equal(r.body.name,'test');assert.equal(options.headers.Authorization,undefined);await assert.rejects(transport({socketPath:'/tmp/bad',host:'sprite',method:'GET',path:'/v1/tasks/test'}));});
+test('native plain-text absence and mutation responses preserve status without exposing bodies', async () => {
+ const input={socketPath:'/.sprite/api.sock',host:'sprite',method:'GET',path:'/v1/tasks/test'};
+ let status=404;
+ const request=(_options,callback)=>{
+  const req=new EventEmitter();req.setTimeout=()=>{};req.destroy=()=>{};
+  req.end=()=>{const res=new EventEmitter();res.statusCode=status;callback(res);res.emit('data',Buffer.from('private provider text: task not found'));res.emit('end');};return req;
+ };
+ const transport=createSpritesTaskTransport({request});
+ assert.deepEqual(await transport(input),{status:404,body:undefined});
+ status=500;assert.deepEqual(await transport(input),{status:500,body:undefined});
+ status=200;await assert.rejects(transport(input),/outcome unknown/);
+ assert.deepEqual(await transport({...input,method:'PUT',body:{expire:30}}),{status:200,body:undefined});
+ status=204;assert.deepEqual(await transport({...input,method:'DELETE'}),{status:204,body:undefined});
+});

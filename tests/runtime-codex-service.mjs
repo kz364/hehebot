@@ -53,6 +53,53 @@ test('default production gate rejects before disk, provider, control or native a
   assert.deepEqual(f.calls, []); assert.deepEqual(await readdir(f.directory), ['token']);
 });
 
+test('service validates Access files, carries both headers and persists only per-root file references', async t => {
+  const f = await fixture(t);
+  const accessClientIdFile = join(f.directory, 'access-id'), accessClientSecretFile = join(f.directory, 'access-secret');
+  await writeFile(accessClientIdFile, 'synthetic-client-19\n', { mode: 0o600 });
+  await writeFile(accessClientSecretFile, 'synthetic-secret-43\n', { mode: 0o600 });
+  const request = f.dependencies.control.request, received = [];
+  const service = createCodexService({ ...f.config, accessClientIdFile, accessClientSecretFile }, {
+    ...f.dependencies, control: undefined, fetchImpl: async (url, options) => {
+      received.push(url);
+      assert.equal(new URL(url).origin, 'https://fixture.invalid');
+      assert.equal(options.headers['CF-Access-Client-Id'], 'synthetic-client-19');
+      assert.equal(options.headers['CF-Access-Client-Secret'], 'synthetic-secret-43');
+      assert.equal(options.redirect, 'error');
+      return Response.json(await request(new URL(url).pathname.slice('/internal/'.length), JSON.parse(options.body)));
+    },
+  });
+  t.after(() => service.stop());
+  await service.start();
+  assert.ok(received.includes('https://fixture.invalid/internal/submitted'));
+  const launch = f.calls.find(call => call.method === 'thread/start');
+  const raw = await readFile(launch.params.config.mcp_servers.hehebot.env.HEHEBOT_AGENT_TOOLS_CONFIG, 'utf8');
+  const grant = JSON.parse(raw);
+  assert.equal(grant.accessClientIdFile, accessClientIdFile); assert.equal(grant.accessClientSecretFile, accessClientSecretFile);
+  assert.doesNotMatch(raw, /synthetic-client-19|synthetic-secret-43/);
+  assert.doesNotMatch(JSON.stringify(launch), /synthetic-client-19|synthetic-secret-43/);
+  await service.stop();
+});
+
+test('service rejects invalid Access configuration before control, journal or native activity', async t => {
+  const f = await fixture(t), id = join(f.directory, 'id'), secret = join(f.directory, 'secret');
+  await writeFile(id, 'synthetic-id-19', { mode: 0o600 });
+  await writeFile(secret, 'first\nsecond', { mode: 0o600 });
+  const publicFile = join(f.directory, 'public'); await writeFile(publicFile, 'synthetic-secret-43', { mode: 0o644 });
+  for (const fields of [{ accessClientIdFile: id }, { accessClientSecretFile: id },
+    { accessClientIdFile: id, accessClientSecretFile: secret },
+    { accessClientIdFile: publicFile, accessClientSecretFile: id },
+    { accessClientIdFile: 'relative', accessClientSecretFile: id },
+    { accessClientIdFile: null, accessClientSecretFile: id },
+    { portalOrigin: 'https://fixture.invalid/untrusted', accessClientIdFile: id, accessClientSecretFile: id },
+    { accessClientId: 'raw-value', accessClientSecret: 'raw-secret' }]) {
+    const service = createCodexService({ ...f.config, ...fields }, f.dependencies);
+    await assert.rejects(service.start(), error => ['SERVICE_RECOVERY_REQUIRED', 'INVALID_SERVICE_CONFIGURATION'].includes(error.code));
+    assert.deepEqual(f.calls, []);
+    assert.equal((await readdir(f.directory)).includes('journal'), false);
+  }
+});
+
 test('assembly claims before creating a private root grant, binds events before submitted, and retains recovery', async t => {
   const f = await fixture(t), row = await f.service.start();
   assert.equal(row.phase, 'running');

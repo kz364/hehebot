@@ -35,8 +35,11 @@ export class SpritesTasksClient {
     return { name, expiresAt };
   }
   async hold(hold: ActivityHold): Promise<SpritesTaskReceipt> {
-    const seconds = Math.ceil((hold.expiresAt - this.now()) / 1000);
-    if (!Number.isFinite(seconds) || seconds < 1 || seconds > 3600) throw new ProviderError('invalid_ref', 'Sprite task expiry must be within the next hour');
+    const now = this.now(), duration = hold.expiresAt - now;
+    if (!Number.isFinite(duration) || duration <= 0 || duration > 3600000) throw new ProviderError('invalid_ref', 'Sprite task expiry must be within the next hour');
+    // Native readback has whole-second precision. Round outward, retaining the
+    // one-hour wire cap and strict readback check even at that cap.
+    const seconds = Math.min(3600, Math.ceil(hold.expiresAt / 1000) - Math.floor(now / 1000));
     const response = await this.request('PUT', hold.id, seconds);
     if (response.status !== 200) throw new ProviderError('outcome_unknown', 'Native Sprite task renewal was not accepted', response.status);
     const receipt = await this.observe(hold.id);

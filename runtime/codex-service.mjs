@@ -4,7 +4,7 @@ import { lstat, mkdir, readFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { AGENT_TOOL_NAMES } from './agent-tools.mjs';
+import { AGENT_TOOL_NAMES, readAccessCredentials } from './agent-tools.mjs';
 import { ControlClient } from './control-client.mjs';
 import { FileJournal } from './file-journal.mjs';
 import { CodexAdapter, PINNED_CODEX } from './codex-adapter.mjs';
@@ -65,6 +65,8 @@ export function createCodexService(config, dependencies) {
       if (phase !== 'stopped') fail('SERVICE_ALREADY_STARTED');
       // No environment variable or persisted compatibility flag enables this.
       if (config.disposableTest !== true) fail('NATIVE_COMPATIBILITY_GATE_BLOCKED');
+      if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile'].includes(key))) fail('INVALID_SERVICE_CONFIGURATION');
       if (!tasks?.hold || !tasks?.release || typeof operations !== 'function' ||
           !isAbsolute(config.binary) || !config.personas || !isAbsolute(config.stateDirectory)) fail('INVALID_SERVICE_CONFIGURATION');
       for (const persona of Object.values(config.personas)) {
@@ -76,7 +78,9 @@ export function createCodexService(config, dependencies) {
         await privatePath(config.stateDirectory, true);
         await privatePath(config.runtimeTokenFile);
         const token = (await readFile(config.runtimeTokenFile, 'utf8')).trim();
-        control = dependencies.control ?? new ControlClient({ origin: config.portalOrigin, token, fetchImpl });
+        const access = await readAccessCredentials(config);
+        const configuredControl = new ControlClient({ origin: config.portalOrigin, token, fetchImpl, ...access });
+        control = dependencies.control ?? configuredControl;
         journal = new FileJournal(join(config.stateDirectory, 'journal'));
         const bootId = randomUUID();
         if (await journal.putIfAbsent('service', { phase: 'boot_unknown', bootId })) fail('SERVICE_RECOVERY_REQUIRED');
@@ -108,6 +112,7 @@ export function createCodexService(config, dependencies) {
             const run = row.claim.run, persona = config.personas[run.persona_id];
             if (!persona) fail('NATIVE_PERSONA_UNMAPPED');
             const grant = { origin: config.portalOrigin, tokenFile: config.runtimeTokenFile,
+              ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}),
               identity, runId: run.id, attempt: run.current_attempt, allowedTools: persona.allowedTools };
             // Write once, fsync, never rewrite an admitted grant in place.
             const key = `grant-${input.attemptId}`;

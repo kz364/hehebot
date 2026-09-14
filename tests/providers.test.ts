@@ -207,6 +207,19 @@ describe('Sprites native Tasks client', () => {
     expect(transport.mock.calls[0]?.[0]).toEqual({ socketPath: '/.sprite/api.sock', host: 'sprite', method: 'PUT', path: '/v1/tasks/gateway-epoch-1', body: { expire: 300 } });
     expect(transport.mock.calls[1]?.[0].method).toBe('GET');
   });
+  it('rounds outward for whole-second provider expiry without relaxing deadline confirmation', async () => {
+    const clock = now + 558;
+    let seconds = 0;
+    const transport = vi.fn<SpritesTaskTransport>(async request => {
+      if (request.method === 'PUT') { seconds = request.body!.expire; return { status: 200 }; }
+      return { status: 200, body: { name: hold.id, expires_at: new Date(now + seconds * 1000).toISOString() } };
+    });
+    const client = new SpritesTasksClient(transport, () => clock);
+    expect(await client.hold({ ...hold, expiresAt: clock + 30000 })).toEqual({ name: hold.id, expiresAt: now + 31000 });
+    expect(seconds).toBe(31);
+    await expect(client.hold({ ...hold, expiresAt: clock + 3600000 })).rejects.toMatchObject({ code: 'outcome_unknown' });
+    expect(seconds).toBe(3600);
+  });
   it.each([now - 1, now, now + 3600_001, Number.NaN])('rejects invalid expiry %s without native call', async (expiresAt) => {
     const transport = vi.fn<SpritesTaskTransport>();
     await expect(new SpritesTasksClient(transport, () => now).hold({ ...hold, expiresAt })).rejects.toMatchObject({ code: 'invalid_ref' });
