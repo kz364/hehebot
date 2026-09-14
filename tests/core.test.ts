@@ -78,6 +78,18 @@ describe('scoped context and data-only collaboration', () => {
     expect(f.core.context(bot, 'Synthetic', r.id, null).memories.map(m => m.id).sort()).toEqual([global.id, own.id, scoped.id].sort());
     expect(f.core.context(bot, 'Synthetic', null, null).memories.map(m => m.id).sort()).toEqual([global.id, own.id].sort());
   });
+  it('excludes sibling routine memory even when both routines belong to the same persona', () => {
+    const a = routine(), b = routine();
+    for (const r of [a, b]) expect(f.accept({ schema_version: 1, type: 'routine.put', payload: r }).status).toBe('applied');
+    const shared = memory({ kind: 'global', id: null }, 'Shared preference');
+    const privateA = memory({ kind: 'routine', id: a.id }, 'Only routine A may retrieve this');
+    const privateB = memory({ kind: 'routine', id: b.id }, 'Only routine B may retrieve this');
+    const contextA = f.core.context(bot, 'Routine A', a.id, null);
+    const contextB = f.core.context(bot, 'Routine B', b.id, null);
+    expect(contextA.memories.map(m => m.id).sort()).toEqual([shared.id, privateA.id].sort());
+    expect(contextB.memories.map(m => m.id).sort()).toEqual([shared.id, privateB.id].sort());
+    expect(contextA.scope_key).not.toBe(contextB.scope_key);
+  });
   it('context updates create no run or wake, and enter only recipient context', () => {
     const r = room(); const cause = randomUUID();
     const command: Command = { schema_version: 1, type: 'room.publish', payload: { room_id: r.id, kind: 'context_update', recipient_ids: [bot], text: 'Synthetic update', references: [], cause_id: cause } };

@@ -82,6 +82,8 @@ For a Cloudflare occurrence, submit a bounded ordinary coordinator turn carrying
 
 ## Status, continuations and exact cancellation
 
+Owner clarification (2026-09-13): the conversational coordinator must distinguish intentional active-task steering from independent work, status and deferred follow-ups. The Puck/Codex voice analogy specifies the interaction, not an alternative runtime. Native steering is desirable for a resolved target; indiscriminate steering of every inbound message is not. The after-settlement fallback below remains a compatibility limitation and does not satisfy the expanded O03 acceptance criterion.
+
 - Read native `tasks.list` / `tasks.get` and session status first; no inference is necessary to display recorded state. `tasks.get` takes `{ "taskId": "returned-native-task-id" }`.
 - `sessions_send` accepts `sessionKey`/`label`/`agentId`, `message`, `timeoutSeconds`, and optional `watch`. **There is no non-steering mode parameter.** A successful result can say `targetDisposition:steered`; `timeoutSeconds:0` means return immediately, not “never inject.” Therefore do not use it for unqualified owner follow-ups to a running task.
 - `chat.send` exposes `queueMode:followup`, which queues after the current turn instead of steering. Exact child session routing and subsequent background-lane attribution must be verified before exposing it as a safe active-task continuation. Until then, retain the targeted follow-up as pending metadata and dispatch only after native settlement/checkpoint evidence; disclose the pending state. Never mutate the child transcript directly.
@@ -101,20 +103,28 @@ This source inspection does not prove the selected Codex harness's two-turn refr
 
 | Requirement | Evidence now | Remaining live gate |
 | --- | --- | --- |
-| O01 | Separate coordinator/child sessions and lane caps exist | Silent child + owner question retain unchanged child input and measured coordinator latency |
+| O01 | Real quiet child remains held while main coordinator completes, tested with scripted loopback provider in two orbs | Intelligent owner question routing and latency under real browser work |
 | O02 | Native isolated spawn and task ledger exist | Second independent task remains separate under tool/resource waits |
-| O03 | Targeted followup schema exists; sessions_send steering hazard identified | Ambiguity handling and verified non-steering child continuation/lane |
-| O04 | Exact native task/root cancellation contracts | Child B cancellation settles without affecting A/coordinator |
+| O03 | Real `followup` executes after settlement, `interrupt` aborts/replaces exact root, `steer` injects at tool/model boundary; two orbs | Model intent/target resolution and portal-to-child delivery integration |
+| O04 | Real exact quiet-child abort settles without affecting coordinator; application sibling/lock tests pass | Arbitrary tool/child tree cancellation and external-effect settlement |
 | O05 | No universal cross-bot connector lock proved | Browser/account/entity-specific lock and effect checks |
-| O06 | Independent native main/subagent caps proved by source | Harness overlap, fairness, parent yield and no extra-lane escape |
+| O06 | Actual main=1/subagent=1 overlap observed with held quiet child and completing coordinator | Broader fairness, parent yield and no extra-lane escape |
 | O07 | Native task/session identities exist | Crash/replay mapping and missing-spawn-receipt reconciliation |
 | O08 | Native activity surfaces exist | Complete tool/child/flush coverage feeding Sprite activity hold |
 | O09 | Native keyed refresh queue/file lock proved by source | Actual shared-profile refresh race and no paid fallback |
 
 `tests/native-orchestration-contracts.test.mjs` checks installed source field compatibility and required native behaviors/guards as static evidence. It starts no runtime and makes no model calls. These checks are deliberately not labelled live behavior tests. **O01–O09 remain unverified end to end.**
 
+`scripts/test-native-agent.mjs` adds 16 direct native execution assertions with 12 scripted loopback model calls, reproduced in two orbs. It is not intelligent model acceptance. Steer does not abort an in-flight model response; it applies at the next tool/model boundary. A queued follow-up acknowledgment ID is not necessarily the eventual execution ID: tests correlate native events and persisted unique output rather than treating `agent.wait(ackId)` as proof of failure. `scripts/test-native-bridge.mjs` separately proves bounded portal-to-native tool/reply persistence, not generic orchestration integration. See [orb evidence](ORB_TESTING.md).
+
 ## Application adapter evidence
 
 `tests/orchestration.test.ts` verifies synthetic native-receipt metadata, coordinator availability, target-only follow-ups/cancel, cancellation timeout isolation, atomic resource locks, metadata reconstruction and sleep blocking. These checks do not prove the native event producer or model decisions. `NativeTaskLedger` accepts only current-epoch parent receipts and an explicitly allowed persona target; cross-persona delegation remains closed by default in Worker configuration. Native allowAgents configuration and the application target map must agree before CoS delegation is enabled. Scoped locks provide exclusion, not tool authority.
 
 The portal stores follow-ups until terminal native settlement, then queues a coordinator request naming the same logical task. It does not inject into active child input. Automatic retries of background executions are disabled; use an explicitly targeted follow-up after settlement. Installation lease loss is a global ownership failure; a single task's ignored cancel request is not.
+
+## Upstream-only upgrade boundary
+
+The owner reaffirmed on 2026-09-13 that Clawbot is scaffolding around OpenClaw, not a fork. Use native configuration, documented RPCs and supported plugin extension points. Keep application metadata, provider lifecycle and portal contracts in this repository. Do not patch the installed package, import hashed bundle modules into the adapter, or edit native storage. The current source-contract tests inspect bundle text only as version-specific evidence; bundle reshuffling can break those tests without breaking an API.
+
+For an upgrade, install the exact candidate separately with disposable state, inspect official migration/API changes, then run schema checks, real transport health and the behavioral adapter/O01–O09 gates that the deployed feature depends on. A version mismatch must block promotion, not trigger a blind pin update or substring-test rewrite. Pin the tested package/image and adapter together. Preserve the previous image and coordinated backup; native data migration and rollback compatibility must be checked before touching persistent state. If a required behavior has no supported extension point, record the gap and prefer an upstream request; a core patch is an explicit exception, not the default workaround. This reduces upgrade coupling but cannot guarantee upstream never changes its APIs.

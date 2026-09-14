@@ -10,8 +10,8 @@ export class EffectLedger {
   const context=JSON.parse(run.context_json) as ContextSnapshot;
   if(input.classification!=='read_only')requireThat(context.authorization_policy_ids.includes(input.authorization_ref),'FORBIDDEN','This effect is not authorized by the run policy.',403);
   if(input.classification==='idempotent')requireThat(input.provider_idempotency_key,'INVALID_INPUT','Idempotent effects require a provider key.',422);
-  const existing=this.store.db.all<{id:string;status:string;request_digest:string;run_id:string}>('SELECT * FROM effects WHERE action_key=?',input.action_key)[0];
-  if(existing){requireThat(existing.request_digest===input.request_digest&&existing.run_id===input.run_id,'IDEMPOTENCY_CONFLICT','Effect key conflicts with an existing action.');return {id:existing.id,status:existing.status};}
+  const existing=this.store.db.all<Pick<EffectIntent,'id'|'request_digest'|'run_id'|'classification'|'authorization_ref'|'provider_idempotency_key'>&{status:string}>('SELECT * FROM effects WHERE action_key=?',input.action_key)[0];
+  if(existing){requireThat(existing.request_digest===input.request_digest&&existing.run_id===input.run_id&&existing.classification===input.classification&&existing.authorization_ref===input.authorization_ref&&existing.provider_idempotency_key===input.provider_idempotency_key,'IDEMPOTENCY_CONFLICT','Effect key conflicts with an existing action.');return {id:existing.id,status:existing.status};}
   this.store.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,provider_idempotency_key,updated_at) VALUES(?,?,?,?,'intent',?,?,?,?)",input.id,input.run_id,input.action_key,input.classification,input.authorization_ref,input.request_digest,input.provider_idempotency_key,this.now());
   return {id:input.id,status:'intent'};
  });}

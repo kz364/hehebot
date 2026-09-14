@@ -1,0 +1,39 @@
+{
+  "name": "clawbot-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Remote-only macOS shell for the Clawbot portal",
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "build:mac": "electron-builder --mac",
+    "pack:mac": "electron-builder --mac dir"
+  },
+  "devDependencies": {
+    "electron": "39.0.0",
+    "electron-builder": "26.0.12"
+  },
+  "build": {
+    "appId": "com.clawbot.portal",
+    "productName": "Clawbot Portal",
+    "copyright": "Copyright © 2026 Clawbot contributors",
+    "asar": true,
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "identity": null,
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
+  }
+}

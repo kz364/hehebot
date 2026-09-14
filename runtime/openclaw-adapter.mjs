@@ -38,6 +38,9 @@ export class OpenClawAdapter {
     this.journal = journal;
     this.testMode = testMode;
   }
+  admissionReadiness() {
+    return { allowed: this.testMode === true, productionVerified: false };
+  }
   async submit(input) {
     const keys = ['attemptId', 'installationId', 'personaId', 'scope', 'scopeId', 'message', 'model'];
     if (!input || Object.keys(input).some((k) => !keys.includes(k)) || !id(input.attemptId) ||

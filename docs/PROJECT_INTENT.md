@@ -10,6 +10,8 @@ Build a low-maintenance personal assistant that is always reachable through a de
 
 Every bot remains conversationally available while its existing tasks continue. A message to Travel during a form task may be a status question, a new task, an explicit follow-up or a cancellation; it must not automatically interrupt or replace the form task. Independent work has isolated execution context, and results appear in the bot's visible timeline. Exact task controls are available when useful without imposing a thread-management workflow. Chief of Staff additionally coordinates across bots; it is not the only bot allowed to coordinate its own work.
 
+The owner's 2026-09-13 analogy is **Puck in Amp or orchestration in Codex voice mode**: an always-available conversational orchestrator dispatches and supervises separate executors. This describes the desired interaction, not verified internals of those products. A message can intentionally steer an identified active task, queue independent work, ask for status, or cancel/pause a target. Do not interpret non-interruption as a ban on intentional steering, or require users to manage native sessions. The present after-settlement-only follow-up implementation is a temporary limitation, not the target contract; see O03 in the orchestration addendum.
+
 The portal should support bot conversations, inter-bot 1:1 communication, group rooms, routine creation/editing in natural language, task status and scoped memory. Data-only context updates between bots persist useful information without invoking a model, waking the runtime or manufacturing a reply. Group communication must remain bounded and attributed rather than an unlimited debate loop.
 
 ## 2. Selected architecture and constraints

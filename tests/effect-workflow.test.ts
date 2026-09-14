@@ -1,0 +1,111 @@
+import { randomUUID } from 'node:crypto';
+import { afterEach, beforeEach, expect, it } from 'vitest';
+import { ControlCore } from '../src/core/control';
+import { Store } from '../src/core/store';
+import { LifecycleCore, type Identity } from '../src/core/lifecycle';
+import { EffectLedger, type EffectIntent } from '../src/core/effects';
+import { FlightRestoreIntegration, FLIGHT_ROUTINES } from '../src/core/flight-integration';
+import { ResourceLedger } from '../src/core/resources';
+import { fixture, routine } from './helpers';
+
+const policy = '44444444-4444-4444-8444-444444444444';
+const otherPolicy = '55555555-5555-4555-8555-555555555555';
+let f: ReturnType<typeof fixture>, life: LifecycleCore, identity: Identity;
+let flights: FlightRestoreIntegration, effects: EffectLedger;
+function reconstruct() {
+  const store = new Store(f.db), core = new ControlCore(store, f.core.options);
+  life = new LifecycleCore(store, core); effects = new EffectLedger(store, () => core.now());
+  flights = new FlightRestoreIntegration(store, core, life, { enabled: true, policyId: policy }); flights.initialize();
+}
+beforeEach(() => {
+  f = fixture(true); f.core.options.actionPolicyIds.push(policy, otherPolicy);
+  for (const id of [FLIGHT_ROUTINES.triage, FLIGHT_ROUTINES.restore]) {
+    const r = routine({ id, persona_id: FLIGHT_ROUTINES.inbox, action_policy_ids: [policy, otherPolicy] });
+    expect(f.accept({ schema_version: 1, type: 'routine.put', payload: r }).status).toBe('applied');
+  }
+  reconstruct();
+  f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
+  identity = life.registerBoot(randomUUID()); life.ready(identity);
+});
+afterEach(() => f.close());
+function activeRoutine(id: string = FLIGHT_ROUTINES.restore) {
+  const run = f.core.enqueue(FLIGHT_ROUTINES.inbox, 'Synthetic input, never connector authority', null, id, null);
+  expect(life.claim(identity)?.run.id).toBe(run); life.submitted(identity, run, 1, `native:${run}`);
+  return run;
+}
+function intent(run_id: string): EffectIntent {
+  return { id: randomUUID(), run_id, attempt: 1, action_key: 'synthetic:mail-17:restore', classification: 'idempotent',
+    authorization_ref: policy, request_digest: 'sha256:mail-17-INBOX', provider_idempotency_key: 'destination-mail-17' };
+}
+
+it.each([
+  { request_digest: 'sha256:different-mail' },
+  { classification: 'read_only' as const },
+  { authorization_ref: otherPolicy },
+  { provider_idempotency_key: 'different-destination-key' },
+])('rejects altered immutable effect identity after reconstruction: %j', changed => {
+  const input = intent(activeRoutine()), first = effects.intent(input);
+  reconstruct();
+  expect(effects.intent({ ...input, id: randomUUID() })).toEqual(first);
+  expect(() => effects.intent({ ...input, ...changed })).toThrowError(expect.objectContaining({ code: 'IDEMPOTENCY_CONFLICT' }));
+  expect(f.db.all('SELECT id FROM effects')).toHaveLength(1);
+});
+
+it.each(['intent', 'dispatched'] as const)('never replays a %s mutation after lost executor ownership, reconstruction and owner retry', crashAt => {
+  const run = activeRoutine(), input = { ...intent(run), classification: 'mutation' as const, provider_idempotency_key: null };
+  effects.intent(input);
+  const destinationWrites: string[] = [];
+  if (crashAt === 'dispatched') {
+    effects.transition(input.id, run, 'dispatched', null);
+    destinationWrites.push('synthetic-mail-17 restored'); // Fake destination succeeded; receipt deliberately lost.
+  }
+  reconstruct(); f.setNow('2026-09-10T00:01:31.000Z'); life.watchdog();
+  expect(f.db.all('SELECT status FROM effects')).toEqual([{ status: 'outcome_unknown' }]);
+  life.observeStopped({ phase: 'stopped', executionStopped: true, persistentState: 'retained', observedAt: Date.now() });
+  reconstruct(); f.setNow('2026-09-10T01:00:00.000Z'); life.retryDue(); life.retryDue();
+  expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: run, expected_attempt: 1 } })).toMatchObject({ status: 'rejected', error: { code: 'OUTCOME_UNKNOWN' } });
+  expect(() => effects.transition(input.id, run, 'dispatched', null)).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
+  expect(() => effects.intent(input)).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
+  expect(f.store.run(run).status).toBe('recovery_required');
+  expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0); expect(f.db.all('SELECT * FROM outbox')).toHaveLength(0);
+  expect(destinationWrites).toEqual(crashAt === 'dispatched' ? ['synthetic-mail-17 restored'] : []);
+});
+
+// Real core admission/auth/effect/flight SQL, with synthetic structured mail and
+// a fake destination receipt. This is NOT a Gmail connector implementation.
+it('restores only the due synthetic flight leg through pinned authority and one durable effect/receipt across reconstruction', () => {
+  const triage = activeRoutine(FLIGHT_ROUTINES.triage);
+  const due = { leg_id: 'flight17', revision: 1, departure_at: '2026-09-10T07:00:00+08:00', departure_zone: 'Asia/Singapore', source_ref: 'synthetic-mail-17' };
+  const later = { leg_id: 'flight93', revision: 1, departure_at: '2026-09-12T19:30:00+09:00', departure_zone: 'Asia/Tokyo', source_ref: 'synthetic-mail-93' };
+  for (const leg of [due, later]) flights.register({ identity, run_id: triage, attempt: 1, leg });
+  life.complete(identity, triage, 1, { status: 'completed', text: 'Two synthetic flight records' });
+  reconstruct();
+  expect(flights.reconcile()).toBe(1); expect(flights.reconcile()).toBe(0);
+  const job = life.claim(identity)!.run;
+  expect(job.routine_id).toBe(FLIGHT_ROUTINES.restore);
+  expect(JSON.parse(job.context_json).instruction).toContain('synthetic-mail-17');
+  expect(JSON.parse(job.context_json).instruction).not.toContain('synthetic-mail-93');
+  life.submitted(identity, job.id, 1, 'synthetic-native-restore');
+  const locks = new ResourceLedger(f.store, () => f.core.now()); locks.acquire(job.id, 1, ['mail:17']);
+  const input = { ...intent(job.id), action_key: 'flight-restore:flight17:1' };
+  // Acquiring a lock does not authorize an ungranted effect.
+  expect(() => effects.intent({ ...input, authorization_ref: 'ungranted' })).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
+  const effect = effects.intent(input);
+  effects.transition(effect.id, job.id, 'dispatched', null);
+  const receipt = { message_ref: 'synthetic-mail-17', labels_verified: ['INBOX'], revision: 7 };
+  effects.transition(effect.id, job.id, 'confirmed', receipt);
+  reconstruct(); // Receipt committed, flight confirmation not yet persisted.
+  expect(effects.intent(input)).toEqual({ id: effect.id, status: 'confirmed' });
+  const confirmation = { identity, run_id: job.id, attempt: 1, leg_id: due.leg_id, revision: 1, effect_id: effect.id };
+  flights.confirm(confirmation); flights.confirm(confirmation);
+  expect(f.db.all('SELECT leg_id,status,receipt_json FROM flight_restore_deadlines ORDER BY leg_id')).toEqual([
+    { leg_id: 'flight17', status: 'confirmed', receipt_json: JSON.stringify(receipt) },
+    { leg_id: 'flight93', status: 'pending', receipt_json: null },
+  ]);
+  locks.release(job.id, 1, ['mail:17']);
+  life.complete(identity, job.id, 1, { status: 'completed', text: 'Restored synthetic mail 17' });
+  life.complete(identity, job.id, 1, { status: 'completed', text: 'Duplicate' });
+  expect(f.db.all('SELECT id FROM effects')).toHaveLength(1);
+  expect(f.db.all('SELECT id FROM outbox WHERE run_id=?', job.id)).toHaveLength(1);
+  expect(flights.reconcile()).toBe(0);
+});

@@ -66,16 +66,24 @@ export class PersonalControl extends DurableObject<Env> {
    this.store.db.exec('INSERT INTO rate_limits(subject,window_start,count) VALUES(?,?,1) ON CONFLICT(subject,window_start) DO UPDATE SET count=count+1',subject,window);
   });
  }
- async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{this.rate(owner+':write',60);const result=this.core.accept(owner,key,hash,input);await this.arm();return result;});}
- getReceipt(owner:string,id:string){return rpcResult(()=>{this.rate(owner+':read',120);return this.core.receipt(id);});}
- async getState(owner:string,after?:number,limit=100){return rpcResult(async()=>{this.rate(owner+':read',120);this.core.tick();await this.arm();return {...this.core.state(after,limit),provider:this.providerSummary()};});}
- getTimeline(owner:string,id:string,before?:number){return rpcResult(()=>{this.rate(owner+':read',120);const object=this.store.get(id);requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);const events=this.store.conversationEvents(id,before,100);return {events,before_cursor:events[0]?.sequence??null,has_more:events.length===100};});}
+ private async beforeRequest(subject:string,limit:number){
+  this.rate(subject,limit);
+  // Recover missed scheduling/watchdog alarms without making a provider call on ingress.
+  try{this.reconcile();}finally{await this.arm();}
+ }
+ private reconcile(){
+  this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();
+ }
+ async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{await this.beforeRequest(owner+':write',60);const result=this.core.accept(owner,key,hash,input);await this.arm();return result;});}
+ getReceipt(owner:string,id:string){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receipt(id);});}
+ async getState(owner:string,after?:number,limit=100){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return {...this.core.state(after,limit),provider:this.providerSummary()};});}
+ getTimeline(owner:string,id:string,before?:number){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);const object=this.store.get(id);requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);const events=this.store.conversationEvents(id,before,100);return {events,before_cursor:events[0]?.sequence??null,has_more:events.length===100};});}
  private providerSummary(){
   try{const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);return {id:provider.id,capabilities:provider.capabilities,live_verified:false};}
   catch{return {id:'unconfigured',capabilities:null,live_verified:false};}
  }
  async trigger(sourceId:string,eventId:string,bodyHash:string,type:string,data:Record<string,unknown>){return rpcResult(async()=>{
-  this.rate(sourceId+':trigger',120);
+  await this.beforeRequest(sourceId+':trigger',120);
   const old=this.store.db.all<{body_hash:string;command_id:string}>('SELECT body_hash,command_id FROM webhook_receipts WHERE source_id=? AND event_id=?',sourceId,eventId)[0];
   if(old){requireThat(old.body_hash===bodyHash,'IDEMPOTENCY_CONFLICT','Event ID already has different content.');return this.core.receipt(old.command_id);}
   const result=this.store.db.transaction(()=>{
@@ -145,7 +153,7 @@ export class PersonalControl extends DurableObject<Env> {
  async alarm():Promise<void>{
   let failed=false;
   try{
-   this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();
+   this.reconcile();
    if(this.core.options.executionEnabled){const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);await this.lifecycle.drive(provider);}
   }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code}));}
   finally{await this.arm(failed?300000:0);}

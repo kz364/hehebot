@@ -44,4 +44,37 @@ describe('schedule safety and DST', () => {
     f.accept({ schema_version: 1, type: 'routine.put', payload: { ...r, expected_revision: 1, instructions: 'Edited instruction' } });
     expect(f.db.all('SELECT status,context_json FROM runs')[0]).toEqual({ status: 'claimed', context_json: previous });
   });
+  it.each([
+    ['2026-09-10T03:00:59.999Z', ['2026-09-10T03:00:00.000Z'], 11],
+    ['2026-09-10T03:01:00.000Z', [], 12],
+    ['2026-09-10T03:01:00.001Z', [], 12],
+  ])('skip misfires across twelve ticks at %s', (now, selected, skipped) => {
+    const r = routine(); r.policy.misfire = 'skip';
+    expect(dueOccurrences(r, '2026-09-10T00:15:00.000Z', now as string)).toEqual({ selected, skipped, next: '2026-09-10T03:15:00.000Z' });
+  });
+  it.each([
+    ['2026-09-10T00:16:00.000Z', ['2026-09-10T00:15:00.000Z'], 0],
+    ['2026-09-10T00:16:00.001Z', [], 1],
+  ])('coalesce uses an inclusive max-lateness boundary at %s', (now, selected, skipped) => {
+    const r = routine(); r.policy.max_lateness_seconds = 60;
+    expect(dueOccurrences(r, '2026-09-10T00:15:00.000Z', now as string)).toEqual({ selected, skipped, next: '2026-09-10T00:30:00.000Z' });
+  });
+  it('caps twelve missed ticks at the latest three independently enumerated instants', () => {
+    const r = routine(); r.policy.misfire = 'replay'; r.policy.max_replay = 3;
+    expect(dueOccurrences(r, '2026-09-10T00:15:00.000Z', '2026-09-10T03:00:00.000Z')).toEqual({
+      selected: ['2026-09-10T02:30:00.000Z', '2026-09-10T02:45:00.000Z', '2026-09-10T03:00:00.000Z'], skipped: 9, next: '2026-09-10T03:15:00.000Z',
+    });
+  });
+  it('overlap skip records a skipped occurrence without replacing existing work', () => {
+    const r = routine(); r.policy.overlap = 'skip';
+    f.accept({ schema_version: 1, type: 'routine.put', payload: r });
+    f.setNow('2026-09-10T00:15:00.000Z'); f.core.tick();
+    const before = f.db.all('SELECT * FROM runs');
+    f.setNow('2026-09-10T00:30:00.000Z'); f.core.tick(); f.core.tick();
+    expect(f.db.all('SELECT * FROM runs')).toEqual(before);
+    expect(f.db.all('SELECT nominal_due_at,status FROM occurrences ORDER BY nominal_due_at')).toEqual([
+      { nominal_due_at: '2026-09-10T00:15:00.000Z', status: 'queued' },
+      { nominal_due_at: '2026-09-10T00:30:00.000Z', status: 'skipped' },
+    ]);
+  });
 });

@@ -1,6 +1,12 @@
-# Clawbot repository publication snapshot
+# Hehebot repository publication snapshots
 
-Date: 2026-09-13. Destination: `kz364/clawbot`, private GitHub repository. This snapshot publishes accumulated code, tests, configuration templates, schemas, full specification and project documentation. It does not deploy the assistant or enable cloud execution.
+Current destination: [kz364/hehebot](https://github.com/kz364/hehebot), private GitHub repository, renamed by the owner on 2026-09-14. Repository metadata and the README use Hehebot; existing application/storage identifiers remain unchanged.
+
+The current publication includes the direct Codex 0.154.0 adapter, durable journal/event routing, exact child cancellation, scoped root dynamic tools and supervisor fixtures, plus accumulated control-plane, desktop and documentation work. Run `bash scripts/verify-codex.sh` for the current credential-free acceptance entrypoint. The independently verified v14 snapshot passed 343 core tests, 99 runtime tests, 4 setup tests, 20 HTTP checks, native lifecycle and three tool/control fixture modes, and typecheck/build dry run. Scripted model responses do not establish model judgment. Child effect grants, recursive settlement and production admission remain unresolved; execution gates stay false.
+
+## Historical 2026-09-13 snapshot
+
+The sections below record the earlier Clawbot/OpenClaw publication and its checks, not the current direct-Codex acceptance status. That snapshot published accumulated code, tests, configuration templates, schemas, full specification and project documentation. It did not deploy the assistant or enable cloud execution.
 
 ## What is included
 
