@@ -33,7 +33,11 @@ preserving duplicate suppression and the existing causal contribution count.
 Global cursors report interior history gaps and never reset when all events
 expire. Recipient contexts disclose expired history alongside current authorized
 objects and retained deltas; cleanup never advances consumed watermarks. Timeline
-responses expose truncation, but the portal does not yet display that notice.
+responses expose truncation. The portal displays an expired-history notice,
+invalidates cached pages when the retention floor advances, and rejects delayed
+pre-pruning responses. `node scripts/test-portal-history.mjs --retention` checks
+partial/empty history and stale responses in Chromium with synthetic read-only
+HTTP responses; default and `--error` modes cover cross-bot history races.
 
 Command payloads/receipts, captured task contexts, attempts/outbox results,
 follow-ups, revisions, native data and backups remain outside this cleanup.

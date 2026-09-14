@@ -1,6 +1,7 @@
 import { installImportSetup } from './import-setup.js';
 const $=id=>document.getElementById(id);
 const olderEvents=new Map();
+const historyFloors=new Map();
 let snapshot=null,selected=localStorage.getItem('personal.selected'),events=[],loading=false,lastSignature='',editing=null;
 const names={IDLE_PERMITTED:'Idle — hibernation permitted',STOPPED:'Sleeping',START_REQUESTED:'Waking',BOOTING:'Starting',READY:'Awake',DRAINING:'Finishing up',STOP_COMMITTED:'Stopping',STOPPING:'Stopping',RECOVERY_REQUIRED:'Recovery needed'};
 const statuses={queued:'Queued',claimed:'Starting',running:'Working',finishing:'Saving result',completed:'Completed',waiting:'Waiting',failed:'Failed',cancelling:'Cancelling',cancelled:'Cancelled',recovery_required:'Needs recovery'};
@@ -16,11 +17,20 @@ function items(kind){return snapshot?.objects?.filter(x=>x.kind===kind)??[];}
 function current(){return snapshot?.objects?.find(x=>x.id===selected);}
 function skillsSelected(){return selected==='skills';}
 function button(text,fn,cls=''){const b=node('button',text,cls);b.type='button';b.onclick=fn;return b;}
+function acceptHistory(conversationId,history){
+ const floor=history.pruned_through??0,previous=historyFloors.get(conversationId)??0;
+ if(floor<previous)return false; // A delayed response predates known retention; never restore its text.
+ if(floor>previous){
+  olderEvents.set(conversationId,(olderEvents.get(conversationId)??events.filter(e=>e.conversation_id===conversationId)).filter(e=>e.sequence>floor));
+  historyFloors.set(conversationId,floor);
+ }
+ return true;
+}
 async function refresh(force=false){
  if(loading||document.hidden&&!force)return;loading=true;
- try{const value=await api('/v1/state');snapshot=value;events=value.timeline??[];
+ try{const value=await api('/v1/state');snapshot=value;
   if(!selected||selected!=='skills'&&!value.objects.some(x=>x.id===selected))selected=items('persona').find(x=>!x.body.archived)?.id;
-  const conversationId=selected;if(conversationId!=='skills'){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
+  const conversationId=selected;if(conversationId!=='skills'){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId&&acceptHistory(conversationId,history)){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
   $('connection').textContent='Connected';$('connection-dot').classList.add('online');render();
  }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);}
  finally{loading=false;}
@@ -42,10 +52,12 @@ function render(){
  $('runtime-banner').hidden=snapshot.summary.execution_enabled;
  $('runtime-banner').textContent='Your messages and routines are saved. The assistant is waiting for its runtime connection and sign-in before it can work.';
  const conversation=events.filter(x=>x.conversation_id===selected);const runs=snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
- const signature=JSON.stringify([selected,conversation,runs]);
+ const signature=JSON.stringify([selected,conversation,runs,historyFloors.get(selected)]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;timeline.replaceChildren();
+  if(historyFloors.get(selected)){const notice=node('p','Earlier history has expired under the retention policy. Only retained messages and updates are shown.','hint');notice.setAttribute('role','status');timeline.append(notice);}
   if(conversation.length>=100){const conversationId=selected;timeline.append(button('Load earlier messages',async()=>{try{
    const history=await api('/v1/conversations/'+conversationId+'/events?before='+conversation[0].sequence);
+   if(!acceptHistory(conversationId,history))return;
    const combined=[...history.events,...(olderEvents.get(conversationId)??conversation)];
    olderEvents.set(conversationId,[...new Map(combined.map(event=>[event.sequence,event])).values()].sort((a,b)=>a.sequence-b.sequence).slice(-1000));
    if(selected!==conversationId)return;

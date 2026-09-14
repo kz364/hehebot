@@ -2,14 +2,15 @@
 // Real portal DOM with delayed, synthetic read-only history responses.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 
 const alpha = '11111111-1111-4111-8111-111111111111', beta = '22222222-2222-4222-8222-222222222222';
 const failureMode = process.argv.includes('--error');
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => arg === '--error'));
+const retentionMode = process.argv.includes('--retention');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--error', '--retention'].includes(arg)));
 const session = `history-${randomUUID().slice(0, 8)}`;
 const browser = (...args) => promisify(execFile)('agent-browser', ['--session', session, ...args], { timeout: 30000 });
 const message = (conversation_id, sequence, text) => ({ conversation_id, sequence, id: String(sequence),
@@ -18,7 +19,7 @@ const recent = Array.from({ length: 100 }, (_, i) => message(alpha, i + 101, `Al
 const betaEvents = [message(beta, 301, 'Beta retained 71 versus 103')];
 const state = { objects: [[alpha, 'Alpha'], [beta, 'Beta']].map(([id, name]) => ({ id, kind: 'persona', revision: 1, body: { name } })),
   timeline: [], runs: [], summary: { phase: 'STOPPED', execution_enabled: false, queued_runs: 0, blocked_runs: 0 } };
-let release, historyRequested, mutations = 0;
+let release, historyRequested, mutations = 0, expired = 0;
 const requested = new Promise(ok => { historyRequested = ok; });
 const server = createServer(async (req, res) => {
   const json = value => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(value)); };
@@ -34,7 +35,7 @@ const server = createServer(async (req, res) => {
         };
         historyRequested(); return;
       }
-      return json({ events: recent, has_more: true });
+      return json(expired ? { events: expired === 199 ? recent.slice(-1) : [], has_more: false, history_gap: true, pruned_through: expired } : { events: recent, has_more: true });
     }
     if (url.pathname === `/v1/conversations/${beta}/events`) return json({ events: betaEvents, has_more: false });
     const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
@@ -67,6 +68,39 @@ try {
   assert.doesNotMatch(restored.stdout, /Beta retained/);
   const count = await browser('get', 'count', '.message-body');
   assert.equal(Number(count.stdout.trim()), failureMode ? 100 : 101);
+  if (retentionMode) {
+    const secondRequested = new Promise(ok => { historyRequested = ok; });
+    await browser('eval', 'Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Load earlier messages").click()');
+    await Promise.race([secondRequested, new Promise((_, reject) => setTimeout(() => reject(Error('SECOND_HISTORY_NOT_REQUESTED')), 5000).unref())]);
+    expired = 199;
+    await browser('eval', 'Array.from(document.querySelectorAll("#bots button")).find(b => b.textContent.endsWith("Beta")).click()');
+    await browser('wait', '--fn', 'document.querySelector(".message-body")?.textContent === "Beta retained 71 versus 103"');
+    await browser('eval', 'Array.from(document.querySelectorAll("#bots button")).find(b => b.textContent.endsWith("Alpha")).click()');
+    await browser('wait', '--fn', 'document.querySelectorAll(".message-body").length === 1 && document.querySelector(".message-body").textContent === "Alpha recent 200"');
+    release();
+    await browser('wait', '--fn', 'performance.getEntriesByType("resource").some(e => e.name.endsWith("events?before=19"))');
+    await browser('eval', 'new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
+    assert.equal(Number((await browser('get', 'count', '.message-body')).stdout.trim()), 1);
+    assert.match((await browser('get', 'text', '#timeline')).stdout, /Earlier history has expired/);
+    const artifacts = new URL('../.amp/in/artifacts/', import.meta.url);
+    await mkdir(artifacts, { recursive: true });
+    await browser('eval', 'document.querySelector("#timeline").scrollTop = 0');
+    await browser('screenshot', new URL('portal-retention.png', artifacts).pathname);
+    expired = 200;
+    await browser('eval', 'Array.from(document.querySelectorAll("#bots button")).find(b => b.textContent.endsWith("Beta")).click()');
+    await browser('wait', '--fn', 'document.querySelector(".message-body")?.textContent === "Beta retained 71 versus 103"');
+    await browser('eval', 'Array.from(document.querySelectorAll("#bots button")).find(b => b.textContent.endsWith("Alpha")).click()');
+    await browser('wait', '--fn', 'document.querySelector("#conversation-name").textContent === "Alpha" && document.querySelectorAll(".message-body").length === 0 && document.querySelector("#timeline").textContent.includes("Earlier history has expired")');
+    await browser('screenshot', new URL('portal-retention-empty.png', artifacts).pathname);
+    // A stale latest-history response must not expose an older /state timeline either.
+    expired = 0; state.timeline = [message(alpha, 19, 'Stale snapshot canary')];
+    await browser('eval', `window.historyRequestCount = performance.getEntriesByType('resource').filter(e => e.name.endsWith('/v1/conversations/${alpha}/events')).length`);
+    await browser('eval', 'Array.from(document.querySelectorAll("#bots button")).find(b => b.textContent.endsWith("Alpha")).click()');
+    await browser('wait', '--fn', `performance.getEntriesByType('resource').filter(e => e.name.endsWith('/v1/conversations/${alpha}/events')).length > window.historyRequestCount`);
+    await browser('eval', 'new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
+    assert.equal(Number((await browser('get', 'count', '.message-body')).stdout.trim()), 0);
+    console.log('PASS: retention clears cached expired messages, rejects a delayed pre-pruning response, and explains partial/empty retained history.');
+  }
   assert.equal(mutations, 0);
   console.log(`PASS: delayed Alpha history ${failureMode ? 'failure' : 'success'} preserves selected Beta DOM and returns to Alpha without crossed messages/errors; zero mutations.`);
 } finally {
