@@ -124,6 +124,30 @@ it('incomplete child proof does not publish a result', async () => {
   expect(f.store.run(id).status).toBe('running'); expect(supervisor.phase).toBe('running');
 });
 
+it('maintenance synchronizes child identities before delivering targeted cancellations', async () => {
+  const id = enqueue(); await supervisor.start();
+  f.db.exec("UPDATE runs SET status='cancelling' WHERE id=?", id);
+  const order: string[] = [];
+  supervisor.children = {
+    sync: async () => { expect(calls.at(-1)).toBe('heartbeat'); order.push('sync'); },
+    cancel: async (ids: string[]) => { expect(ids).toEqual([id]); order.push('cancel'); },
+  };
+  await supervisor.maintain();
+  expect(order).toEqual(['sync', 'cancel']); expect(cancellations).toHaveLength(1);
+  expect(f.store.run(id).status).toBe('cancelling'); expect(releases).toBe(0);
+});
+
+it('lease loss during child synchronization prevents native cancellation and releases nothing', async () => {
+  const id = enqueue(); await supervisor.start();
+  f.db.exec("UPDATE runs SET status='cancelling' WHERE id=?", id);
+  supervisor.children = {
+    sync: async () => { f.setNow('2026-09-10T00:01:30.000Z'); },
+    cancel: async () => { throw new Error('must not reach child interrupt'); },
+  };
+  await expect(supervisor.maintain()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  expect(supervisor.phase).toBe('recovery'); expect(cancellations).toEqual([]); expect(releases).toBe(0);
+});
+
 it('lost sleep commit acknowledgement retains the provider hold and stops requests', async () => {
   await supervisor.start(); f.setNow('2026-09-10T00:01:00.000Z');
   const request = supervisor.control.request;

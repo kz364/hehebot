@@ -130,4 +130,34 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(() => tasks.register(identity, { ...receipt(p), persona_id: otherBot })).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
     expect(f.db.all('SELECT * FROM native_task_links')).toHaveLength(1);
   });
+
+  it('registers same-task descendants under background parents without widening persona authority', () => {
+    const p = parent(), child = tasks.register(identity, receipt(p));
+    const input = receipt(child.id, 'Nested native work');
+    const grandchild = tasks.register(identity, input);
+    expect(grandchild).toMatchObject({ parent_run_id: child.id, persona_id: bot, role: 'background', status: 'claimed' });
+    expect(JSON.parse(grandchild.context_json)).toEqual({ ...JSON.parse(child.context_json), instruction: input.title });
+    expect(tasks.register(identity, input).id).toBe(grandchild.id);
+    f.core.options.delegations = { [bot]: [otherBot] };
+    expect(() => tasks.register(identity, { ...receipt(child.id), persona_id: otherBot })).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
+    f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: child.id, reason: 'Stop nested work' } });
+    expect(tasks.register(identity, receipt(child.id, 'Late observed descendant')).status).toBe('cancelling');
+    f.db.exec('UPDATE runs SET current_attempt=2 WHERE id=?', p);
+    expect(() => tasks.register(identity, receipt(p))).toThrowError(expect.objectContaining({ code: 'STALE_EPOCH' }));
+    expect(f.db.all('SELECT * FROM native_task_links')).toHaveLength(3);
+  });
+
+  it('descendants inherit the original hard deadline instead of extending it at each spawn', () => {
+    const p = parent(), deadline = '2026-09-10T00:00:30.000Z';
+    f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?', deadline, p);
+    f.setNow('2026-09-10T00:00:19.000Z');
+    const child = tasks.register(identity, receipt(p));
+    expect(child.status).toBe('claimed');
+    expect(f.db.all('SELECT deadline_at FROM attempts WHERE run_id=?', child.id)).toEqual([{ deadline_at: deadline }]);
+    f.setNow(deadline);
+    const late = tasks.register(identity, receipt(child.id));
+    expect(late).toMatchObject({ status: 'cancelling', error_code: 'DEADLINE_EXCEEDED' });
+    expect(f.db.all('SELECT deadline_at FROM attempts WHERE run_id=?', late.id)).toEqual([{ deadline_at: deadline }]);
+    expect(life.heartbeat(identity, []).cancellations).toContain(late.id);
+  });
 });

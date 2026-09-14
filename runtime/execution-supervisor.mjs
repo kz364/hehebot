@@ -9,11 +9,13 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
 export class ExecutionSupervisor {
   constructor({ control, native, journal, identity, installationId, personas, activity,
     operations, events = /** @type {{bind: (attemptId: string) => Promise<void>} | null} */ (null),
+    children = /** @type {{sync: () => Promise<unknown>, cancel: (runIds: string[]) => Promise<unknown>} | null} */ (null),
     now = Date.now, intervalMs = 20000, onRecovery = () => {} }) {
     if (!activity?.ensure || !activity?.releaseAfterDrain || typeof operations !== 'function' ||
         (events && typeof events.bind !== 'function') ||
+        (children && (typeof children.sync !== 'function' || typeof children.cancel !== 'function')) ||
         !Number.isInteger(intervalMs) || intervalMs < 1 || intervalMs > 30000) fail('INVALID_SUPERVISOR_CONFIGURATION');
-    Object.assign(this, { control, native, journal, identity, activity, operations, now, intervalMs, onRecovery });
+    Object.assign(this, { control, native, journal, identity, activity, operations, children, now, intervalMs, onRecovery });
     this.phase = 'stopped';
     this.leaseUntil = 0;
     this.timer = null;
@@ -90,6 +92,12 @@ export class ExecutionSupervisor {
         this.assertLease(); // A resumed process must not renew an already-expired lease.
         await this.activity.ensure();
         const cancellations = await this.heartbeat();
+        this.assertLease();
+        // The installed task controller uses durable native lineage. Registration
+        // and interrupt acknowledgement never imply child/effect settlement.
+        await this.children?.sync();
+        this.assertLease();
+        await this.children?.cancel(cancellations);
         this.assertLease();
         const row = await this.journal.get(this.bridge.cursor);
         if (row?.phase === 'running' && cancellations.includes(row.claim.run.id)) {

@@ -13,6 +13,7 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { ControlClient } from '../runtime/control-client.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { CodexEventRouter } from '../runtime/codex-events.mjs';
+import { CodexTaskControl } from '../runtime/codex-tasks.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { createCodexTools } from '../runtime/codex-tools.mjs';
 import { buildToolDefinitions } from '../runtime/agent-tools.mjs';
@@ -355,6 +356,30 @@ try {
     assert.equal(nativeCalls.mcpCalls, undefined); assert.equal(router.pending.length, 0);
     assert.equal(dynamicCalls.length, 0);
   });
+  if (childMode) {
+    const lease = await control.request('heartbeat', { identity, operations: [] });
+    let registrations = 0;
+    const taskControl = new CodexTaskControl({ adapter, journal: eventJournal, identity, attemptId: adapterAttempt,
+      parent: { runId, personaId: persona.id, attempt },
+      assertLease: () => assert.ok(Date.now() < Date.parse(lease.lease_until)),
+      control: { request: (type, payload) => { registrations++; return control.request(type, payload); } } });
+    const mapped = await taskControl.sync(); await taskControl.sync();
+    const current = await (await ownerFetch('/v1/state')).json();
+    check('observed native descendants map idempotently to exact Worker task ancestry without completing them', () => {
+      assert.equal(registrations, grandchildMode ? 2 : 1);
+      assert.equal(Object.keys(mapped).length, registrations);
+      for (const [key, child] of Object.entries(mapped)) {
+        const run = current.runs.find(run => run.id === child.runId);
+        assert.equal(run.parent_run_id, child.receipt.parent_run_id);
+        assert.equal(run.persona_id, persona.id); assert.equal(run.status, 'claimed');
+        assert.equal(child.receipt.native_session_key, JSON.parse(key)[0]);
+      }
+      const leaf = mapped[JSON.stringify([childThreadId, completed.params.turn.id])];
+      if (grandchildMode) assert.equal(leaf.receipt.parent_run_id, Object.entries(mapped).find(([key]) => JSON.parse(key)[0] === intermediateThreadId)[1].runId);
+      else assert.equal(leaf.receipt.parent_run_id, runId);
+      assert.equal(current.runs.find(run => run.id === runId).status, 'claimed');
+    });
+  }
   const read = await transport.request('thread/read', { threadId: childMode ? childThreadId : threadId, includeTurns: true }); const transcript = JSON.stringify(read.thread);
   check('native receipt and final continuation persisted', () => { assert.match(transcript, /MCP_PROPOSAL_STAGED/); assert.match(transcript, /hehebot_propose_skill/); assert.match(transcript, new RegExp(proposalId)); });
   state = await (await ownerFetch('/v1/state')).json(); const proposal = state.skill_proposals.find(x => x.id === proposalId);
