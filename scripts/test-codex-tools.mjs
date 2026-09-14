@@ -21,13 +21,14 @@ import { buildToolDefinitions } from '../runtime/agent-tools.mjs';
 import { ExecutionSupervisor } from '../runtime/execution-supervisor.mjs';
 
 const root = resolve(import.meta.dirname, '..');
+const twoRootsMode = process.argv.includes('--two-roots');
 const supervisorChildMode = process.argv.includes('--supervisor-child');
 const supervisorMode = supervisorChildMode || process.argv.includes('--supervisor');
 const dynamicMode = !supervisorChildMode && (supervisorMode || process.argv.includes('--dynamic'));
 const grandchildMode = process.argv.includes('--grandchild');
 const childMode = supervisorChildMode || grandchildMode || process.argv.includes('--child');
 const expectedModelCalls = grandchildMode ? 13 : childMode ? 11 : 7;
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--dynamic', '--supervisor', '--child', '--grandchild', '--supervisor-child'].includes(arg)), 'Choose one supported fixture mode');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--two-roots', '--dynamic', '--supervisor', '--child', '--grandchild', '--supervisor-child'].includes(arg)), 'Choose one supported fixture mode');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 const SKILL_POLICY = '46b2cbdd-d227-4f54-bffa-33148aad0134';
 const ROUTINE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
@@ -84,6 +85,94 @@ function sendEvents(res, output) {
 }
 const message = text => [{ id: `msg_${randomUUID().replaceAll('-', '')}`, type: 'message', status: 'completed', role: 'assistant', content: [{ type: 'output_text', text, annotations: [], logprobs: [] }] }];
 
+async function verifyTwoRoots({ ownerCommand, ownerFetch, control, identity, persona, reviewedId, reviewedBody,
+  runId, attempt, origin, tokenPath, certPath, home, workspace, grantPath, fixturePort }) {
+  const otherPersona = randomUUID(), otherSkill = randomUUID(), proposal = randomUUID();
+  const otherBody = { ...reviewedBody, name: 'Other persona private procedure', steps: ['Compare exactly 71 against 103.'] };
+  assert.equal((await ownerCommand('persona.put', { ...persona.body, id: otherPersona, expected_revision: 0,
+    name: 'Independent persona 71', tool_policy_ids: [SKILL_POLICY] })).value.status, 'applied');
+  assert.equal((await ownerCommand('skill.propose', { proposal_id: proposal, skill_id: otherSkill, expected_skill_revision: 0,
+    body: otherBody, provenance: { kind: 'owner', source_ref: 'fixture' }, executable_files_changed: false })).value.status, 'applied');
+  assert.equal((await ownerCommand('skill.review', { proposal_id: proposal, expected_proposal_revision: 1, decision: 'approve' })).value.status, 'applied');
+  assert.equal((await ownerCommand('skill.enable', { skill_id: otherSkill, expected_skill_revision: 1, persona_id: otherPersona, enabled: true })).value.status, 'applied');
+  const queued = await ownerCommand('message.send', { conversation_id: otherPersona, text: 'Independent root 71 scope proof' });
+  assert.equal(queued.value.status, 'applied');
+  assert.notEqual(queued.value.resource_id, runId);
+  const secondClaim = await control.request('claim', { identity });
+  check('second independent coordinator is queued, but first claimed coordinator blocks claim', () => {
+    assert.notEqual(otherPersona, persona.id);
+    assert.equal(secondClaim, null, 'Second coordinator admission contract changed; extend positive fixture rather than fabricate admission');
+  });
+  let bound = false;
+  const callIds = [];
+  fixture = createServer(async (req, res) => { try {
+    assert.equal(req.url, '/v1/responses'); const body = await jsonBody(req);
+    report.modelCalls++; assert.ok(report.modelCalls <= 3);
+    await waitFor(() => bound, 'first root submitted custody');
+    if (report.modelCalls > 1) {
+      const raw = findType(body.input, 'function_call_output').output;
+      if (report.modelCalls === 2) {
+        const decoded = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        const content = Array.isArray(decoded) ? JSON.parse(decoded.at(-1).text) : decoded;
+        const receipt = content.content ? JSON.parse(content.content.find(item => item.type === 'text').text) : content;
+        check('admitted native root reads its own pinned skill snapshot', () => {
+          assert.equal(receipt.skill.id, reviewedId); assert.deepEqual(receipt.skill.body, reviewedBody);
+        });
+      } else {
+        check('native cross-persona skill read fails without exposing asymmetric body', () => {
+          assert.match(JSON.stringify(raw), /-32000|Agent command failed/);
+          assert.equal(JSON.stringify(raw).includes(otherBody.steps[0]), false);
+        });
+        sendEvents(res, message('FIRST_ROOT_SCOPE_CHECKED')); return;
+      }
+    }
+    const tool = body.tools.find(tool => tool.name?.includes('hehebot_read_skill')) ?? body.tools.find(tool => tool.name === 'mcp__hehebot');
+    assert.ok(tool);
+    const callId = `call_${randomUUID().replaceAll('-', '')}`; callIds.push(callId);
+    sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: callId,
+      ...(tool.name === 'mcp__hehebot' ? { namespace: tool.name, name: 'hehebot_read_skill' } : { name: tool.name }),
+      arguments: JSON.stringify({ skill_id: report.modelCalls === 1 ? reviewedId : otherSkill }) }]);
+  } catch (error) { fixtureErrors.push(error.message); sendEvents(res, message('FIXTURE_FAILED')); } });
+  await new Promise(ok => fixture.listen(fixturePort, '127.0.0.1', ok));
+  await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${fixturePort}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
+  await writeFile(grantPath, JSON.stringify({ origin: origin + '/', tokenFile: tokenPath, identity, runId, attempt,
+    allowedTools: ['hehebot_read_skill'] }), { mode: 0o600 });
+  const journal = new FileJournal(join(home, 'events'));
+  transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 15000 });
+  transport.child.stderr.on('data', x => nativeErrors.push(x.toString()));
+  transport.on('notification', x => notifications.push(x)); await transport.initialize();
+  const adapter = new CodexAdapter({ journal, cwd: workspace, rpc: (method, params) => transport.request(method, params), testMode: true,
+    mcpServers: { hehebot: { command: process.execPath, args: [join(root, 'runtime/agent-tools.mjs')],
+      env: { HEHEBOT_AGENT_TOOLS_CONFIG: grantPath, NODE_EXTRA_CA_CERTS: certPath },
+      tools: { hehebot_read_skill: { approval_mode: 'approve' } } } } });
+  router = new CodexEventRouter({ transport, adapter, onRecovery: value => fixtureErrors.push(value.code) });
+  const native = await adapter.submit({ attemptId: 'two-root-first', installationId: 'two-root-fixture', personaId: persona.id,
+    scope: 'conversation', scopeId: persona.id, message: 'First independently admitted root reads its snapshot.', model: 'fixture-model' });
+  assert.equal(native.status, 'running'); await router.bind('two-root-first');
+  await control.request('submitted', { identity, run_id: runId, attempt, native_ref: native.nativeRunId });
+  assert.equal(await control.request('claim', { identity }), null); bound = true;
+  const done = await waitFor(() => notifications.find(n => n.method === 'turn/completed' && n.params.threadId === native.threadId && n.params.turn.id === native.nativeRunId), 'first root terminal');
+  assert.equal(done.params.turn.status, 'completed'); await router.flush();
+  assert.equal(await control.request('claim', { identity }), null);
+  await assert.rejects(control.request('agent-skill', { identity, run_id: runId, attempt, skill_id: otherSkill }), error => error.status === 404);
+  const final = await (await ownerFetch('/v1/state')).json();
+  check('root terminal does not admit second Worker coordinator or settle the first', () => {
+    assert.equal(final.runs.find(run => run.id === runId).status, 'running');
+    const second = final.runs.find(run => run.id === queued.value.resource_id);
+    assert.equal(second.status, 'queued'); assert.equal(second.current_attempt, 0); assert.equal(second.persona_id, otherPersona);
+    assert.equal(adapter.sleepReadiness().allowed, false);
+  });
+  const observed = await adapter.requireRun('two-root-first');
+  check('one pristine app-server executed two distinct scoped read invocations', () => {
+    assert.equal(report.modelCalls, 3); assert.equal(new Set(callIds).size, 2);
+    assert.equal(Object.keys(observed.mcpCalls).length, 2); assert.equal(observed.rootSettled, true);
+    assert.equal(observed.effectsSettled, undefined); assert.deepEqual(fixtureErrors, []);
+  });
+  Object.assign(report, { status: 'blocked', blocker: 'WORKER_SINGLE_COORDINATOR_ADMISSION',
+    independentlyAdmittedRoots: 1, queuedRoots: 1, nativeProcesses: 1, twoAdmittedRootIsolationProved: false });
+  process.exitCode = 2;
+}
+
 try {
   const version = await promisify(execFile)(binary, ['--version'], { timeout: 10_000 });
   check('exact unmodified Codex version', () => assert.equal(version.stdout.trim(), 'codex-cli 0.154.0'));
@@ -135,6 +224,10 @@ try {
   await Promise.all([mkdir(home, { mode: 0o700 }), mkdir(workspace, { mode: 0o700 })]);
   await writeFile(tokenPath, token, { mode: 0o600 });
   await writeFile(grantPath, JSON.stringify({ origin: origin + '/', tokenFile: tokenPath, identity, runId, attempt, allowedTools }), { mode: 0o600 });
+  if (twoRootsMode) {
+    await verifyTwoRoots({ ownerCommand, ownerFetch, control, identity, persona, reviewedId, reviewedBody, runId, attempt,
+      origin, tokenPath, certPath, home, workspace, grantPath, fixturePort });
+  } else {
   const proposalId = randomUUID(), skillId = randomUUID(), idempotencyKey = randomUUID();
   const toolArgs = { idempotency_key: idempotencyKey, payload: { proposal_id: proposalId, skill_id: skillId, expected_skill_revision: 0, body: { name: 'Synthetic native method', description: 'A bounded native MCP acceptance proposal.', when_to_use: 'Only in this synthetic acceptance.', inputs_access: [], steps: ['Record the staged proposal.'], decision_rules: [], validation: ['Verify pending persisted state.'], output: 'A pending proposal.', failure_handling: ['Stop without effects.'], approval_boundaries: ['Owner review is required.'], contains_private_facts: false }, executable_files_changed: false } };
   const routineId = randomUUID();
@@ -451,6 +544,7 @@ try {
   check('proposal did not auto-create or approve a skill', () => { assert.equal(state.objects.some(x => x.kind === 'skill' && x.id === skillId), false); assert.equal(state.skill_proposals.filter(x => x.id === proposalId).length, 1); });
   check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, expectedModelCalls); assert.equal(toolRequests, 7); assert.deepEqual(fixtureErrors, []); });
   report.status = 'passed'; report.runId = runId; report.attempt = attempt; report.proposalId = proposalId; report.nativeReceiptObserved = true;
+  }
 } catch (error) {
   report.error = error?.stack ?? String(error); if (fixtureErrors.length) report.fixtureErrors = fixtureErrors;
   // Worker startup output can include the disposable runtime bearer. Keep it private.
@@ -466,6 +560,6 @@ try {
   await dispatcher?.close();
   report.externalModelCalls = 0;
   report.note = 'Execution/native flags, FakeProvider, TLS CA, runtime token, MCP grant, Codex home, model fixture, and SQLite are disposable process-local test state; production configuration is untouched.';
-  if (report.status === 'passed' && directory) await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  if (['passed', 'blocked'].includes(report.status) && directory) await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   process.stdout.write(JSON.stringify(report, null, 2) + '\n');
 }
