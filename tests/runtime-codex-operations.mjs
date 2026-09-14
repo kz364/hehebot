@@ -65,9 +65,9 @@ test('file and dynamic lifetimes charge distinct operations even with reused ite
 test('statusless and collaboration lifetimes remain separate from coverage and inference', async t => {
   const f = await fixture(t);
   await f.journal.putIfAbsent('attempt-a', { status: 'running', webSearches: { same: 'completed' },
-    sleeps: { same: 'inProgress' }, compactions: { same: 'completed' }, collabCalls: { '["wait","same"]': 'interrupted' } });
+    sleeps: { same: 'inProgress' }, compactions: { same: 'completed' }, collabCalls: { '["wait","same"]': 'interrupted' }, imageGenerations: { same: 'inProgress' } });
   const rows = await f.operations.snapshot();
-  assert.equal(new Set(rows.map(row => row.id)).size, 6);
-  assert.deepEqual(rows.map(row => row.status), ['unknown', 'active', 'settled', 'active', 'settled', 'settled']);
+  assert.equal(new Set(rows.map(row => row.id)).size, 7);
+  assert.deepEqual(rows.map(row => row.status), ['unknown', 'active', 'settled', 'active', 'settled', 'settled', 'active']);
   assert.ok(rows.every(row => row.last_progress_at === f.config.startedAt));
 });

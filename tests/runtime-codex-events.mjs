@@ -131,11 +131,11 @@ const spawn = (status, receiverThreadIds, extra = {}) => ({ method: status === '
     senderThreadId: 'parent', status, receiverThreadIds, prompt: 'PRIVATE_TASK', agentsStates: { private: 'PRIVATE_RESULT' }, ...extra },
 } });
 
-for (const [type, field] of [['webSearch', 'webSearches'], ['sleep', 'sleeps'], ['contextCompaction', 'compactions']])
+for (const [type, field] of [['webSearch', 'webSearches'], ['sleep', 'sleeps'], ['contextCompaction', 'compactions'], ['imageGeneration', 'imageGenerations']])
 test(`${type} derives lifetime from notifications, not a fabricated success status`, async t => {
   const f = await fixture(t); await f.admit('a', 'thread', 'turn'); await f.router.bind('a');
   const event = method => ({ method, params: { threadId: 'thread', turnId: 'turn', item: {
-    id: 'operation', type, status: 'completed', query: 'PRIVATE_QUERY', results: ['PRIVATE_RESULTS'], durationMs: 9000,
+    id: 'operation', type, status: type === 'imageGeneration' ? 'PRIVATE_STATUS' : 'completed', query: 'PRIVATE_QUERY', results: ['PRIVATE_RESULTS'], durationMs: 9000,
   } } });
   const projected = f.router.project(event('item/started'));
   assert.deepEqual(projected.notification.params.item, { id: 'operation', type });

@@ -63,6 +63,12 @@ Synthetic event tests cover root termination with these operations still open,
 content omission and conflicting replay. These tests do not perform live search
 or establish exhaustive operation coverage; the coverage blocker remains unknown.
 
+`imageGeneration` has an unrestricted native status string rather than a closed
+enum. Its accounting likewise records notification boundaries only, dropping
+the status string, output paths and image data. Synthetic tests prove that an
+arbitrary status cannot enter the journal or imply success; no live image service
+or artifact-persistence verification is claimed.
+
 Non-spawn collaboration calls use the pinned tool enum and retain only sender,
 tool name, item identity and status. Tool name namespaces reused item IDs;
 `interrupted` is a terminal invocation status, including for spawn. Completing
