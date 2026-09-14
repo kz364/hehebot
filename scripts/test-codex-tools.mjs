@@ -20,12 +20,13 @@ import { buildToolDefinitions } from '../runtime/agent-tools.mjs';
 import { ExecutionSupervisor } from '../runtime/execution-supervisor.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const supervisorMode = process.argv.includes('--supervisor');
-const dynamicMode = supervisorMode || process.argv.includes('--dynamic');
+const supervisorChildMode = process.argv.includes('--supervisor-child');
+const supervisorMode = supervisorChildMode || process.argv.includes('--supervisor');
+const dynamicMode = !supervisorChildMode && (supervisorMode || process.argv.includes('--dynamic'));
 const grandchildMode = process.argv.includes('--grandchild');
-const childMode = grandchildMode || process.argv.includes('--child');
+const childMode = supervisorChildMode || grandchildMode || process.argv.includes('--child');
 const expectedModelCalls = grandchildMode ? 13 : childMode ? 11 : 7;
-assert.ok(process.argv.slice(2).every(arg => ['--dynamic', '--supervisor', '--child', '--grandchild'].includes(arg)) && !(childMode && dynamicMode), 'Use --child, --grandchild, --dynamic or --supervisor');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--dynamic', '--supervisor', '--child', '--grandchild', '--supervisor-child'].includes(arg)), 'Choose one supported fixture mode');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 const SKILL_POLICY = '46b2cbdd-d227-4f54-bffa-33148aad0134';
 const ROUTINE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
@@ -142,11 +143,16 @@ try {
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
     { skill_id: reviewedId }];
-  let manualRunId, nativeBound = false, toolRequests = 0, childThreadId, intermediateThreadId;
+  let manualRunId, nativeBound = false, toolRequests = 0, childThreadId, intermediateThreadId, childFinalHeld = false, childFinalClosed = false;
   fixture = createServer(async (req, res) => { try {
     if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
     if (report.modelCalls >= expectedModelCalls) { res.writeHead(400); res.end(); return; }
     report.modelCalls++; const body = await jsonBody(req);
+    if (supervisorMode && report.modelCalls === 1) check('native model receives paused routine instructions and progressive skill catalog only', () => {
+      const input = JSON.stringify(body.input);
+      assert.match(input, /SUPERVISED_PAUSED_ROUTINE/); assert.ok(input.includes(reviewedId));
+      assert.match(input, /hehebot_read_skill/); assert.equal(input.includes(reviewedBody.steps[0]), false);
+    });
     if (childMode) {
       if (body.input.some(item => item?.role === 'user' && JSON.stringify(item.content).includes('UNRELATED_GRANT_PROOF'))) {
         const output = findType(body.input, 'function_call_output');
@@ -196,11 +202,6 @@ try {
     }
     toolRequests++;
     if (dynamicMode) await waitFor(() => nativeBound, 'durable root acknowledgement before scripted tool selection');
-    if (supervisorMode && report.modelCalls === 1) check('native model receives paused routine instructions and progressive skill catalog only', () => {
-      const input = JSON.stringify(body.input);
-      assert.match(input, /SUPERVISED_PAUSED_ROUTINE/); assert.ok(input.includes(reviewedId));
-      assert.match(input, /hehebot_read_skill/); assert.equal(input.includes(reviewedBody.steps[0]), false);
-    });
     if (toolRequests === 2) report.continuationTypes = [...collectTypes(body.input)];
     const continuation = findType(body.input, 'function_call_output') ?? findType(body.input, 'custom_tool_call_output');
     if (continuation) {
@@ -238,7 +239,13 @@ try {
         assert.deepEqual(receipt.skill.body, reviewedBody);
       });
       else assert.fail('Unexpected continuation');
-      if (stage === 5) { sendEvents(res, message('MCP_PROPOSAL_STAGED_AND_ROUTINE_LIFECYCLE_VERIFIED')); return; }
+      if (stage === 5) {
+        if (supervisorChildMode) {
+          childFinalHeld = true;
+          res.once('close', () => { if (!res.writableEnded) childFinalClosed = true; });
+        } else sendEvents(res, message('MCP_PROPOSAL_STAGED_AND_ROUTINE_LIFECYCLE_VERIFIED'));
+        return;
+      }
     }
     const next = toolRequests - 1;
     const advertised = (body.tools ?? []).find(x => x?.name?.includes(allowedTools[next])) ?? (body.tools ?? []).find(x => x?.name === 'mcp__hehebot');
@@ -260,7 +267,7 @@ try {
   const contracts = JSON.parse(await readFile(join(root, 'SCHEMAS/contracts.json'), 'utf8'));
   const adapter = new CodexAdapter({ cwd: workspace, journal: eventJournal, rpc: (method, params) => transport.request(method, params),
     testMode: supervisorMode || !dynamicMode, mcpServers: dynamicMode ? {} : mcpServers,
-    dynamicTools: supervisorMode ? buildToolDefinitions(contracts).filter(tool => allowedTools.includes(tool.name)).map(tool => ({ type: 'function', ...tool })) : [] });
+    dynamicTools: supervisorMode && dynamicMode ? buildToolDefinitions(contracts).filter(tool => allowedTools.includes(tool.name)).map(tool => ({ type: 'function', ...tool })) : [] });
   let adapterAttempt = 'mcp-proof';
   let dynamicTools = createCodexTools({ adapter, attemptId: adapterAttempt, controlClient: control,
     grant: { identity, runId, attempt, allowedTools }, contracts });
@@ -318,6 +325,29 @@ try {
       scope: 'conversation', scopeId: persona.id, model: 'fixture-model', message: 'UNRELATED_GRANT_PROOF' });
     assert.equal(isolated.status, 'running'); await router.bind('isolation-proof');
   }
+  if (supervisorChildMode) {
+    await waitFor(() => childFinalHeld, 'active child awaiting final inference');
+    await router.flush();
+    supervisor.children = new CodexTaskControl({ adapter, control, journal: eventJournal, identity, attemptId: adapterAttempt,
+      parent: { runId, personaId: persona.id, attempt }, assertLease: () => supervisor.assertLease() });
+    await supervisor.maintain();
+    const mapped = await supervisor.children.sync();
+    const [[key, child]] = Object.entries(mapped);
+    const [targetThread, targetTurn] = JSON.parse(key);
+    assert.equal(targetThread, childThreadId);
+    assert.equal((await adapter.requireRun(adapterAttempt)).childTurns[key], 'inProgress');
+    const cancelled = await ownerCommand('run.cancel', { run_id: child.runId, reason: 'Synthetic exact child cancellation' });
+    assert.equal(cancelled.value.status, 'applied');
+    const interrupts = [], rpc = adapter.rpc;
+    adapter.rpc = (method, params) => { if (method === 'turn/interrupt') interrupts.push(params); return rpc(method, params); };
+    await supervisor.maintain(); await supervisor.maintain();
+    await waitFor(() => childFinalClosed, 'native interrupted child provider connection closure');
+    check('owner cancellation flows through Worker heartbeat and real supervisor to one exact native child', () => {
+      assert.deepEqual(interrupts, [{ threadId: targetThread, turnId: targetTurn }]);
+      assert.equal(supervisor.phase, 'running'); assert.equal(adapter.sleepReadiness().allowed, false);
+    });
+    report.nativeSupervisorChildCancellation = true;
+  }
   const completed = await waitFor(() => notifications.find(n => n.method === 'turn/completed' && (childMode ? n.params?.threadId === childThreadId : n.params?.threadId === threadId && n.params?.turn?.id === turnId)), 'native MCP continuation', 25_000);
   if (isolated) {
     const denied = await waitFor(() => notifications.find(n => n.method === 'turn/completed' && n.params?.threadId === isolated.threadId && n.params?.turn?.id === isolated.nativeRunId), 'unrelated root completion');
@@ -325,7 +355,7 @@ try {
     const history = await transport.request('thread/read', { threadId: isolated.threadId, includeTurns: true });
     assert.match(JSON.stringify(history.thread), /UNRELATED_GRANT_DENIED/);
   }
-  check('native turn completed after MCP continuation', () => assert.equal(completed.params.turn.status, 'completed'));
+  check('native turn reached its expected terminal outcome after MCP continuation', () => assert.equal(completed.params.turn.status, supervisorChildMode ? 'interrupted' : 'completed'));
   await router.flush();
   const nativeCalls = await eventJournal.get(adapterAttempt);
   check(dynamicMode ? 'native dynamic tools enforce exact root identity before Worker commands' : 'native MCP invocation lifetimes are automatically journaled without effect authority', () => {
@@ -343,7 +373,7 @@ try {
   });
   if (childMode) check('native child inherits task MCP grant and remains accounted after parent completion', () => {
     assert.deepEqual(Object.values(nativeCalls.spawns).flatMap(spawn => spawn.receiverThreadIds), [grandchildMode ? intermediateThreadId : childThreadId]);
-    const expectedTurns = { [JSON.stringify([childThreadId, completed.params.turn.id])]: 'completed' };
+    const expectedTurns = { [JSON.stringify([childThreadId, completed.params.turn.id])]: supervisorChildMode ? 'interrupted' : 'completed' };
     if (grandchildMode) {
       const intermediate = notifications.find(n => n.method === 'turn/completed' && n.params?.threadId === intermediateThreadId);
       const key = JSON.stringify([intermediateThreadId, intermediate.params.turn.id]);
@@ -366,22 +396,22 @@ try {
     const mapped = await taskControl.sync(); await taskControl.sync();
     const current = await (await ownerFetch('/v1/state')).json();
     check('observed native descendants map idempotently to exact Worker task ancestry without completing them', () => {
-      assert.equal(registrations, grandchildMode ? 2 : 1);
-      assert.equal(Object.keys(mapped).length, registrations);
+      assert.equal(registrations, supervisorChildMode ? 0 : grandchildMode ? 2 : 1);
+      assert.equal(Object.keys(mapped).length, grandchildMode ? 2 : 1);
       for (const [key, child] of Object.entries(mapped)) {
         const run = current.runs.find(run => run.id === child.runId);
         assert.equal(run.parent_run_id, child.receipt.parent_run_id);
-        assert.equal(run.persona_id, persona.id); assert.equal(run.status, 'claimed');
+        assert.equal(run.persona_id, persona.id); assert.equal(run.status, supervisorChildMode ? 'cancelling' : 'claimed');
         assert.equal(child.receipt.native_session_key, JSON.parse(key)[0]);
       }
       const leaf = mapped[JSON.stringify([childThreadId, completed.params.turn.id])];
       if (grandchildMode) assert.equal(leaf.receipt.parent_run_id, Object.entries(mapped).find(([key]) => JSON.parse(key)[0] === intermediateThreadId)[1].runId);
       else assert.equal(leaf.receipt.parent_run_id, runId);
-      assert.equal(current.runs.find(run => run.id === runId).status, 'claimed');
+      assert.equal(current.runs.find(run => run.id === runId).status, supervisorMode ? 'running' : 'claimed');
     });
   }
   const read = await transport.request('thread/read', { threadId: childMode ? childThreadId : threadId, includeTurns: true }); const transcript = JSON.stringify(read.thread);
-  check('native receipt and final continuation persisted', () => { assert.match(transcript, /MCP_PROPOSAL_STAGED/); assert.match(transcript, /hehebot_propose_skill/); assert.match(transcript, new RegExp(proposalId)); });
+  check('native receipts persisted with final response or observed owner interruption', () => { if (!supervisorChildMode) assert.match(transcript, /MCP_PROPOSAL_STAGED/); assert.match(transcript, /hehebot_propose_skill/); assert.match(transcript, new RegExp(proposalId)); });
   state = await (await ownerFetch('/v1/state')).json(); const proposal = state.skill_proposals.find(x => x.id === proposalId);
   if (supervisorMode) {
     await assert.rejects(supervisor.complete({ attemptId: adapterAttempt, nativeRunId: turnId, rootSettled: true }), { code: 'NATIVE_SETTLEMENT_INCOMPLETE' });
@@ -411,6 +441,6 @@ try {
   await dispatcher?.close();
   report.externalModelCalls = 0;
   report.note = 'Execution/native flags, FakeProvider, TLS CA, runtime token, MCP grant, Codex home, model fixture, and SQLite are disposable process-local test state; production configuration is untouched.';
-  if (report.status === 'passed' && directory) await rm(directory, { recursive: true, force: true });
+  if (report.status === 'passed' && directory) await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   process.stdout.write(JSON.stringify(report, null, 2) + '\n');
 }
