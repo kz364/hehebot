@@ -26,6 +26,7 @@ let heldRequests = 0;
 let heldClosed = 0;
 let spawnedChildId;
 let dynamicChildId;
+let dynamicParentThread;
 const bodies = [];
 const notifications = [];
 const nativeErrors = [];
@@ -122,6 +123,10 @@ try {
     }
     const output = input.find(item => item?.type === 'function_call_output');
     if (input.some(item => item?.role === 'user' && JSON.stringify(item.content).includes('DYNAMIC_CHILD_TOOL_PROOF'))) {
+      // A fast child result can inject another continuation while its parent is
+      // still answering. This availability probe orders completion explicitly;
+      // it does not assume one provider request per native turn.
+      await waitFor(() => notifications.some(n => n.method === 'turn/completed' && n.params?.threadId === dynamicParentThread), 'dynamic parent completion before child response');
       const probeTool = body.tools.find(tool => tool.name === 'clawbot_identity_probe' || tool.tools?.some(nested => nested.name === 'clawbot_identity_probe'));
       report.dynamicChildToolsAvailable = Boolean(probeTool);
       if (!report.dynamicChildToolsAvailable) { sendEvents(res, message('CHILD_DYNAMIC_UNAVAILABLE')); return; }
@@ -332,6 +337,7 @@ try {
   report.dynamicRootIdentity = true;
 
   const dynamicParent = (await transport.request('thread/start', { cwd: workspace, modelProvider: 'fixture', dynamicTools })).thread.id;
+  dynamicParentThread = dynamicParent;
   const dynamicParentTurn = (await transport.request('turn/start', { threadId: dynamicParent, input: [{ type: 'text', text: 'DYNAMIC_PARENT_PROOF' }] })).turn.id;
   assert.equal((await waitTurn(dynamicParentTurn)).status, 'completed');
   await waitFor(() => notifications.some(n => n.method === 'turn/started' && n.params?.threadId === dynamicChildId), 'dynamic child turn start');

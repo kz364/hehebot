@@ -14,15 +14,18 @@ import { ControlClient } from '../runtime/control-client.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { CodexEventRouter } from '../runtime/codex-events.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
+import { createCodexTools } from '../runtime/codex-tools.mjs';
 
 const root = resolve(import.meta.dirname, '..');
+const dynamicMode = process.argv.includes('--dynamic');
+assert.ok(process.argv.slice(2).every(arg => arg === '--dynamic'), 'Only --dynamic is supported');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 const SKILL_POLICY = '46b2cbdd-d227-4f54-bffa-33148aad0134';
 const ROUTINE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 const policies = [SKILL_POLICY, ROUTINE_POLICY];
 const allowedTools = ['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_list_routines', 'clawbot_run_routine', 'clawbot_delete_routine', 'clawbot_read_skill'];
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
-const report = { label: 'codex-agent-tools-native-acceptance', status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
+const report = { label: 'codex-agent-tools-native-acceptance', toolTransport: dynamicMode ? 'dynamic' : 'mcp', status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
 const check = (name, fn) => { fn(); report.assertions.push(name); };
 let directory, worker, fixture, transport, dispatcher, router, workerLogs = '';
 const notifications = [], nativeErrors = [], fixtureErrors = [];
@@ -121,11 +124,12 @@ try {
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
     { skill_id: reviewedId }];
-  let manualRunId;
+  let manualRunId, nativeBound = false;
   fixture = createServer(async (req, res) => { try {
     if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
     if (report.modelCalls >= 7) { res.writeHead(400); res.end(); return; }
     report.modelCalls++; const body = await jsonBody(req);
+    if (dynamicMode) await waitFor(() => nativeBound, 'durable root acknowledgement before scripted tool selection');
     if (report.modelCalls === 2) report.continuationTypes = [...collectTypes(body.input)];
     const continuation = findType(body.input, 'function_call_output') ?? findType(body.input, 'custom_tool_call_output');
     if (continuation) {
@@ -176,28 +180,44 @@ try {
   } catch (error) { fixtureErrors.push(error.stack ?? String(error)); if (!res.headersSent) sendEvents(res, message('FIXTURE_ASSERTION_FAILED')); else res.end(); } });
   await new Promise((ok, fail) => fixture.once('error', fail).listen(fixturePort, '127.0.0.1', ok));
   const q = value => JSON.stringify(value);
-  await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${fixturePort}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n[mcp_servers.clawbot]\ncommand = ${q(process.execPath)}\nargs = [${q(join(root, 'runtime/agent-tools.mjs'))}]\nstartup_timeout_sec = 10\n[mcp_servers.clawbot.env]\nCLAWBOT_AGENT_TOOLS_CONFIG = ${q(grantPath)}\nNODE_EXTRA_CA_CERTS = ${q(certPath)}\n`, { mode: 0o600 });
+  await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${fixturePort}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
+  if (!dynamicMode) await appendFile(join(home, 'config.toml'), `[mcp_servers.clawbot]\ncommand = ${q(process.execPath)}\nargs = [${q(join(root, 'runtime/agent-tools.mjs'))}]\nstartup_timeout_sec = 10\n[mcp_servers.clawbot.env]\nCLAWBOT_AGENT_TOOLS_CONFIG = ${q(grantPath)}\nNODE_EXTRA_CA_CERTS = ${q(certPath)}\n`);
   // Explicitly authorize only these disposable scoped tools. This is the
   // supported per-tool policy, not an annotation-based or global approval bypass.
-  for (const name of allowedTools) await appendFile(join(home, 'config.toml'), `\n[mcp_servers.clawbot.tools.${name}]\napproval_mode = "approve"\n`);
-  transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 15_000 });
-  transport.child.stderr.on('data', x => nativeErrors.push(x.toString())); transport.on('notification', x => notifications.push(x));
-  await transport.initialize();
+  if (!dynamicMode) for (const name of allowedTools) await appendFile(join(home, 'config.toml'), `\n[mcp_servers.clawbot.tools.${name}]\napproval_mode = "approve"\n`);
   const eventJournal = new FileJournal(join(home, 'events'));
   const adapter = new CodexAdapter({ cwd: workspace, journal: eventJournal, rpc: (method, params) => transport.request(method, params) });
+  const dynamicTools = createCodexTools({ adapter, attemptId: 'mcp-proof', controlClient: control,
+    grant: { identity, runId, attempt, allowedTools }, contracts: JSON.parse(await readFile(join(root, 'SCHEMAS/contracts.json'), 'utf8')) });
+  const dynamicCalls = [];
+  transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 15_000, onToolCall: dynamicMode ? async (params, options) => {
+    const result = await dynamicTools.handle(params, options);
+    dynamicCalls.push({ threadId: params.threadId, turnId: params.turnId, callId: params.callId, success: result.success });
+    return result;
+  } : null });
+  transport.child.stderr.on('data', x => nativeErrors.push(x.toString())); transport.on('notification', x => notifications.push(x));
+  await transport.initialize({ experimentalApi: dynamicMode });
   const routerFailures = [];
   router = new CodexEventRouter({ transport, adapter, onRecovery: value => routerFailures.push(value.code) });
-  const threadId = (await transport.request('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture', approvalPolicy: 'never', sandbox: 'read-only' })).thread.id;
+  const threadId = (await transport.request('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture', approvalPolicy: 'never', sandbox: 'read-only',
+    ...(dynamicMode ? { dynamicTools: dynamicTools.tools } : {}) })).thread.id;
   const turnId = (await transport.request('turn/start', { threadId, input: [{ type: 'text', text: 'Use the admitted clawbot proposal tool exactly once.' }] })).turn.id;
   await eventJournal.putIfAbsent('mcp-proof', { threadId, nativeRunId: turnId, status: 'running', rootSettled: false });
   await router.bind('mcp-proof');
+  nativeBound = true;
   const completed = await waitFor(() => notifications.find(n => n.method === 'turn/completed' && n.params?.turn?.id === turnId), 'native MCP continuation', 25_000);
   check('native turn completed after MCP continuation', () => assert.equal(completed.params.turn.status, 'completed'));
   await router.flush();
   const nativeCalls = await eventJournal.get('mcp-proof');
-  check('native MCP invocation lifetimes are automatically journaled without effect authority', () => {
-    assert.equal(Object.keys(nativeCalls.mcpCalls).length, 6);
-    assert.ok(Object.values(nativeCalls.mcpCalls).every(status => status === 'completed'));
+  check(dynamicMode ? 'native dynamic tools enforce exact root identity before Worker commands' : 'native MCP invocation lifetimes are automatically journaled without effect authority', () => {
+    if (dynamicMode) {
+      assert.equal(dynamicCalls.length, 6); assert.equal(new Set(dynamicCalls.map(call => call.callId)).size, 6);
+      assert.ok(dynamicCalls.every(call => call.threadId === threadId && call.turnId === turnId && call.success));
+      assert.equal(nativeCalls.mcpCalls, undefined);
+    } else {
+      assert.equal(Object.keys(nativeCalls.mcpCalls).length, 6);
+      assert.ok(Object.values(nativeCalls.mcpCalls).every(status => status === 'completed'));
+    }
     assert.equal(nativeCalls.rootSettled, true); assert.equal(nativeCalls.effectsSettled, undefined);
     assert.equal(adapter.sleepReadiness().allowed, false); assert.deepEqual(routerFailures, []);
   });
