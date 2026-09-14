@@ -5,7 +5,8 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, rm, writeFile, open } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
@@ -98,6 +99,8 @@ try {
   await mkdir(workspace, { mode: 0o700 });
   const fixturePath = join(workspace, 'asymmetric-fixture.txt');
   await writeFile(fixturePath, `${payload}\n`, { mode: 0o600 });
+  const commandGate = join(workspace, 'command-gate');
+  await promisify(execFile)('mkfifo', ['-m', '600', commandGate], { timeout: 5000 });
 
   fixture = createServer(async (req, res) => {
     try {
@@ -114,6 +117,12 @@ try {
       return;
     }
     const output = input.find(item => item?.type === 'function_call_output');
+    if (raw.includes('BACKGROUND_EXECUTION_PROOF')) {
+      if (output) { sendEvents(res, message('ROOT_FINISHED_BEFORE_COMMAND')); return; }
+      sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID().replaceAll('-', '')}`,
+        name: 'exec_command', arguments: JSON.stringify({ cmd: `cat ${JSON.stringify(commandGate)}`, yield_time_ms: 1000, max_output_chars: 2000 }) }]);
+      return;
+    }
     if (output) {
       toolContinuations++;
       assert.match(String(output.output), new RegExp(payload));
@@ -177,7 +186,33 @@ try {
   assert.equal((await waitTurn(heldTurn)).status, 'interrupted');
   await waitFor(() => heldClosed === 1, 'held HTTP request closure');
 
-  assert.equal(requests, 4);
+  const backgroundThread = (await transport.request('thread/start', { cwd: workspace, modelProvider: 'fixture' })).thread.id;
+  const backgroundTurn = (await transport.request('turn/start', { threadId: backgroundThread, input: [{ type: 'text', text: 'BACKGROUND_EXECUTION_PROOF' }] })).turn.id;
+  assert.equal((await waitTurn(backgroundTurn)).status, 'completed');
+  const rootHistory = await transport.request('thread/read', { threadId: backgroundThread, includeTurns: true });
+  const commandAtRoot = notifications.find(n => n.method === 'item/started' && n.params?.turnId === backgroundTurn && n.params.item?.type === 'commandExecution')?.params.item;
+  report.backgroundAtRoot = {
+    historyItemTypes: rootHistory.thread.turns.find(x => x.id === backgroundTurn).items.map(x => x.type),
+    events: notifications.filter(n => n.params?.turnId === backgroundTurn).map(n => ({ method: n.method, type: n.params.item?.type, status: n.params.item?.status })),
+  };
+  assert.equal(commandAtRoot.status, 'inProgress');
+  assert.equal(notifications.some(n => n.method === 'item/completed' && n.params?.turnId === backgroundTurn && n.params.item?.id === commandAtRoot.id), false);
+  await new FileJournal(journalPath).putIfAbsent('background-proof', { threadId: backgroundThread, nativeRunId: backgroundTurn, status: 'running', rootSettled: false });
+  await recovery.observe('background-proof', notifications.find(n => n.method === 'item/started' && n.params?.item?.id === commandAtRoot.id));
+  const stillOpen = await recovery.reconcile('background-proof');
+  assert.equal(stillOpen.rootSettled, true); assert.equal(stillOpen.commands[commandAtRoot.id], 'inProgress');
+  const gate = await open(commandGate, constants.O_WRONLY | constants.O_NONBLOCK);
+  try { await gate.writeFile('BACKGROUND_COMMAND_EXIT'); } finally { await gate.close(); }
+  await waitFor(() => notifications.some(n => n.method === 'item/completed' && n.params?.turnId === backgroundTurn && n.params.item.id === commandAtRoot.id && n.params.item.status === 'completed'), 'late background command exit');
+  const settledCommand = await recovery.observe('background-proof', notifications.find(n => n.method === 'item/completed' && n.params?.item?.id === commandAtRoot.id));
+  assert.equal(settledCommand.commands[commandAtRoot.id], 'completed');
+  const lateHistory = await transport.request('thread/read', { threadId: backgroundThread, includeTurns: true });
+  const commandAfterExit = lateHistory.thread.turns.find(x => x.id === backgroundTurn).items.find(x => x.id === commandAtRoot.id);
+  assert.equal(commandAfterExit.status, 'completed'); assert.equal(commandAfterExit.exitCode, 0);
+  assert.match(commandAfterExit.aggregatedOutput, /BACKGROUND_COMMAND_EXIT/);
+  report.backgroundCommandOutlivesRoot = true;
+
+  assert.equal(requests, 6);
   assert.equal(toolContinuations, 1);
   assert.deepEqual(fixtureErrors, []);
   assert.ok(bodies.every(body => body.model === 'fixture-model' && body.stream === true));
@@ -197,6 +232,8 @@ try {
       .catch(() => { report.status = 'failed'; process.exitCode = 1; home = null; });
   }
   if (fixture) { fixture.closeAllConnections(); await new Promise(resolveClose => fixture.close(resolveClose)); }
-  if (home) await rm(home, { recursive: true, force: true });
+  if (home) await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => {
+    report.status = 'failed'; report.cleanupError = 'PRIVATE_HOME_CLEANUP_FAILED'; process.exitCode = 1;
+  });
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }

@@ -8,6 +8,7 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
  * Production admission awaits real authentication and whole-operation settlement tests.
  */
 export class CodexAdapter {
+  #observations = Promise.resolve();
   constructor({ rpc, journal, cwd, testMode = false }) {
     if (typeof rpc !== 'function' || !journal?.putIfAbsent || !cwd?.startsWith('/')) fail('INVALID_CONFIGURATION');
     Object.assign(this, { rpc, journal, cwd, testMode });
@@ -85,10 +86,32 @@ export class CodexAdapter {
       return this.journal.update(attemptId, { cancelAcknowledged: true });
     } catch { return this.journal.get(attemptId); }
   }
-  async observe(attemptId, notification) {
+  observe(attemptId, notification) {
+    const next = this.#observations.then(() => this.#observeOne(attemptId, notification));
+    this.#observations = next.catch(() => {});
+    return next;
+  }
+  async #observeOne(attemptId, notification) {
     const row = await this.requireRun(attemptId);
+    const params = notification?.params;
+    if (['item/started', 'item/completed'].includes(notification?.method) && params?.item?.type === 'commandExecution') {
+      if (params.threadId !== row.threadId || params.turnId !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      const { id, status } = params.item;
+      if (typeof id !== 'string' || !id || id.length > 256 ||
+          !(notification.method === 'item/started' ? ['inProgress'] : ['completed', 'failed', 'declined']).includes(status)) fail('CODEX_PROTOCOL_ERROR');
+      const commands = { ...row.commands };
+      const prior = Object.hasOwn(commands, id) ? commands[id] : undefined;
+      if (prior && prior !== 'inProgress') {
+        if (prior !== status) fail('SETTLEMENT_CONFLICT');
+        return row;
+      }
+      if (!Object.hasOwn(commands, id) && Object.keys(commands).length >= 4096) fail('COMMAND_TRACKING_LIMIT');
+      // Persist starts even if history omits them. A root/history snapshot cannot
+      // remove these obligations; only a matching native terminal event can.
+      Object.defineProperty(commands, id, { value: status, enumerable: true, writable: true, configurable: true });
+      return this.journal.update(attemptId, { commands });
+    }
     if (notification?.method !== 'turn/completed') return row;
-    const params = notification.params;
     if (params?.threadId !== row.threadId || params?.turn?.id !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');
     if (!['completed', 'interrupted', 'failed'].includes(params.turn.status)) fail('CODEX_PROTOCOL_ERROR');
     if (row.rootSettled) {

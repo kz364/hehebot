@@ -116,3 +116,24 @@ test('missing or duplicate history and lost submission acknowledgment cannot be 
   adapter.rpc = () => assert.fail('Do not guess an unacknowledged turn from history');
   await assert.rejects(adapter.reconcile(input.attemptId), { code: 'SUBMISSION_OUTCOME_UNKNOWN' });
 });
+
+test('concurrent command starts survive root completion and omitted history until exact late exit', async t => {
+  const { adapter, journal, cwd } = await fixture(t);
+  await adapter.submit(input);
+  const event = (id, status = 'inProgress', threadId = 'thread-a') => ({
+    method: status === 'inProgress' ? 'item/started' : 'item/completed',
+    params: { threadId, turnId: 'turn-b', item: { id, type: 'commandExecution', status } },
+  });
+  await Promise.all([adapter.observe(input.attemptId, event('command-a')), adapter.observe(input.attemptId, event('command-b'))]);
+  const restored = new CodexAdapter({ cwd, journal: new FileJournal(cwd), rpc: async () => ({ thread: {
+    id: 'thread-a', turns: [{ id: 'turn-b', status: 'completed', items: [] }],
+  } }) });
+  const root = await restored.reconcile(input.attemptId);
+  assert.equal(root.rootSettled, true);
+  assert.deepEqual(root.commands, { 'command-a': 'inProgress', 'command-b': 'inProgress' });
+  await assert.rejects(restored.observe(input.attemptId, event('command-a', 'completed', 'other')), { code: 'SETTLEMENT_IDENTITY_MISMATCH' });
+  await restored.observe(input.attemptId, event('command-a', 'completed'));
+  assert.deepEqual((await journal.get(input.attemptId)).commands, { 'command-a': 'completed', 'command-b': 'inProgress' });
+  await assert.rejects(restored.observe(input.attemptId, event('command-a', 'failed')), { code: 'SETTLEMENT_CONFLICT' });
+  assert.equal(restored.sleepReadiness().allowed, false);
+});
