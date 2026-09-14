@@ -16,6 +16,7 @@ export class ResourceLedger {
  }
  release(runId:string,attempt:number,resources:string[]):void {
   this.store.db.transaction(()=>{
+   requireThat(!resources.length||!this.store.db.all("SELECT id FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown') LIMIT 1",runId).length,'OUTCOME_UNKNOWN','Reconcile pending effects before releasing shared resources.');
    for(const resource of resources){
     const owner=this.store.db.all<{run_id:string;attempt:number}>('SELECT run_id,attempt FROM resource_locks WHERE resource_id=?',resource)[0];
     requireThat(!owner||owner.run_id===runId&&owner.attempt===attempt,'FORBIDDEN','This task does not own the resource lock.',403);

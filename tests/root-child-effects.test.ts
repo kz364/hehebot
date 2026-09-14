@@ -167,7 +167,9 @@ it('new and intent-replay contention rolls back every partial lock and new effec
  expect(effects()).toEqual([]); expect(locks()).toEqual(held);
  new ResourceLedger(f.store, () => f.core.now()).release(sibling, 1, ['calendar:z']);
  boundary.intent(input); const before = effects();
- new ResourceLedger(f.store, () => f.core.now()).release(child, 1, input.resources);
+ rejects(() => new ResourceLedger(f.store, () => f.core.now()).release(child, 1, input.resources), 'OUTCOME_UNKNOWN');
+ // Simulate missing locks in legacy/restored state, not a permitted release.
+ f.db.exec('DELETE FROM resource_locks WHERE run_id=?', child);
  new ResourceLedger(f.store, () => f.core.now()).acquire(sibling, 1, ['calendar:z']);
  const contended = locks(); rejects(() => boundary.intent(input), 'RESOURCE_BUSY');
  expect(effects()).toEqual(before); expect(locks()).toEqual(contended);
@@ -180,8 +182,9 @@ it('unknown and terminal replay never reacquire or release locks, even while can
  boundary.transition(result(input, 'outcome_unknown', { reason: 'synthetic lost acknowledgement' }));
  expect(boundary.intent(input)).toEqual({ id: input.effect.id, status: 'outcome_unknown' }); expect(locks()).toEqual(held);
  rejects(() => life.complete(identity, child, 1, { status: 'cancelled', text: '' }), 'RESOURCE_BUSY');
- // Simulate independently managed locks; replay must not try to take them back.
- new ResourceLedger(f.store, () => f.core.now()).release(child, 1, input.resources);
+ // Simulate legacy lock loss; replay must not take locks back or dispatch again.
+ rejects(() => new ResourceLedger(f.store, () => f.core.now()).release(child, 1, input.resources), 'OUTCOME_UNKNOWN');
+ f.db.exec('DELETE FROM resource_locks WHERE run_id=?', child);
  new ResourceLedger(f.store, () => f.core.now()).acquire(sibling, 1, input.resources);
  const differentOwner = locks(); expect(boundary.intent(input).status).toBe('outcome_unknown');
  rejects(() => boundary.transition(result(input, 'confirmed', {})), 'INVALID_INPUT');

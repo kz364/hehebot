@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LifecycleCore, type Identity, type HeartbeatOperation } from '../src/core/lifecycle';
 import { NativeTaskLedger } from '../src/core/native-tasks';
+import { ResourceLedger } from '../src/core/resources';
+import { EffectLedger } from '../src/core/effects';
 import { FakeProvider, type RuntimeRef } from '../src/providers';
 import { fixture, bot } from './helpers';
 let f: ReturnType<typeof fixture>, life: LifecycleCore, identity: Identity;
@@ -80,6 +82,31 @@ describe('executor leases and attempts', () => {
     f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
     life.observeStopped({ phase: 'stopped', executionStopped: true, persistentState: 'retained', observedAt: Date.now() });
     expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: claim.run.id, expected_attempt: 1 } })).toMatchObject({ status: 'rejected', error: { code: 'OUTCOME_UNKNOWN' } });
+  });
+  it.each(['intent','dispatched','outcome_unknown'] as const)('retains %s effect locks across confirmed stop and rejects competing work until reconciliation', effectStatus => {
+    const claim = claimed(), runId = claim.run.id, resources = new ResourceLedger(f.store, () => f.core.now());
+    life.submitted(identity, runId, 1, 'native-root');
+    const child = new NativeTaskLedger(f.store, f.core, life).register(identity, { parent_run_id: runId, parent_attempt: 1,
+      persona_id: bot, native_run_ref: 'native-child', native_session_key: 'thread-child', title: 'Unrelated resource' });
+    resources.acquire(runId, 1, ['calendar:remote']); resources.acquire(child.id, 1, ['browser:local']);
+    unknownEffect(runId); f.db.exec('UPDATE effects SET status=? WHERE run_id=?', effectStatus, runId);
+    expect(() => resources.release(runId, 1, ['calendar:remote'])).toThrowError(expect.objectContaining({ code: 'OUTCOME_UNKNOWN' }));
+    f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
+    const observation = { phase: 'stopped' as const, executionStopped: true, persistentState: 'retained' as const, observedAt: Date.now() };
+    life.observeStopped(observation); life.observeStopped(observation);
+    expect(f.db.all('SELECT resource_id,run_id,attempt FROM resource_locks')).toEqual([{ resource_id: 'calendar:remote', run_id: runId, attempt: 1 }]);
+    expect(f.db.all('SELECT status FROM effects WHERE run_id=?', runId)).toEqual([{ status: 'outcome_unknown' }]);
+    expect(() => life.heartbeat(identity, [])).toThrowError(expect.objectContaining({ code: 'STALE_EPOCH' }));
+    f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=2,lease_until='2026-09-10T00:02:00.000Z'");
+    const nextIdentity = life.registerBoot(randomUUID()); life.ready(nextIdentity);
+    const next = enqueue(); expect(life.claim(nextIdentity)?.run.id).toBe(next);
+    expect(() => resources.acquire(next, 1, ['calendar:remote'])).toThrowError(expect.objectContaining({ code: 'RESOURCE_BUSY' }));
+    const effect = f.db.all<{id:string}>('SELECT id FROM effects WHERE run_id=?', runId)[0].id;
+    const ledger = new EffectLedger(f.store, () => f.core.now());
+    expect(() => ledger.transition(effect, runId, 'confirmed', null)).toThrow();
+    ledger.transition(effect, runId, 'confirmed', { destination_id: 'synthetic-reconciled-37' });
+    resources.release(runId, 1, ['calendar:remote']); resources.acquire(next, 1, ['calendar:remote']);
+    expect(f.db.all('SELECT run_id FROM resource_locks')).toEqual([{run_id:next}]);
   });
   it('waiting requires checkpoint and terminal result is durable/idempotent', () => {
     const claim = claimed();

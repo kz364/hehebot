@@ -186,7 +186,9 @@ export class LifecycleCore {
    const state=this.get();requireThat(['STOPPING','STOP_COMMITTED','RECOVERY_REQUIRED','STOPPED'].includes(state.phase),'REVISION_CONFLICT','Unexpected stop observation.');
    this.store.db.exec("UPDATE lifecycle SET phase='STOPPED',boot_id=NULL,lease_until=NULL,stop_token=NULL,provider_operation_id=NULL WHERE singleton=1");
    this.store.db.exec("UPDATE operations SET status='settled' WHERE status!='settled'");
-   this.store.db.exec('DELETE FROM resource_locks');
+   // Process termination does not settle a remote effect. Without a per-effect
+   // resource mapping, retain every lock owned by an unresolved effect's task.
+   this.store.db.exec("DELETE FROM resource_locks WHERE NOT EXISTS(SELECT 1 FROM effects e WHERE e.run_id=resource_locks.run_id AND e.status IN ('intent','dispatched','outcome_unknown'))");
    this.store.db.exec("UPDATE attempts SET status='terminated',settled_at=? WHERE status IN ('claimed','running')",this.core.now());
    this.store.db.exec("UPDATE effects SET status='outcome_unknown',updated_at=? WHERE status IN ('intent','dispatched')",this.core.now());
    this.store.db.exec("UPDATE runs SET status='recovery_required',error_code='OUTCOME_UNKNOWN',updated_at=? WHERE status IN ('claimed','running','finishing','cancelling')",this.core.now());

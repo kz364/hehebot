@@ -259,7 +259,10 @@ try {
         attempt: dispatched.claim.run.current_attempt, resources: ['a:rollback19', 'calendar:z43'] }),
       { code: 'CONTROL_HTTP_ERROR', status: 409 });
       await control.request('resource-acquire', { identity, run_id: child.id, attempt: child.current_attempt, resources: ['a:rollback19'] });
-      await control.request('resource-release', { identity, run_id: child.id, attempt: child.current_attempt, resources: ['a:rollback19'] });
+      // No per-effect resource mapping exists: even this additional lock stays
+      // held while the child's external effect is unresolved.
+      await assert.rejects(control.request('resource-release', { identity, run_id: child.id,
+        attempt: child.current_attempt, resources: ['a:rollback19'] }), { code: 'CONTROL_HTTP_ERROR', status: 409 });
       // Synthetic trusted-executor observations only; no connector is called.
       await control.request('root-child-effect-result', effectResult('dispatched'));
       await control.request('root-child-effect-result', effectResult('outcome_unknown'));

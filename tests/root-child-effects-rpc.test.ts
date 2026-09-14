@@ -85,14 +85,21 @@ it('routes child-owned intent/replay and cancellation reconciliation without set
  expect(await http('root-child-effect-intent', input)).toEqual({ status: 200, body: { id: input.effect.id, status: 'intent' } });
  expect(locks()).toEqual(['browser:a19', 'calendar:z43'].map(resource_id => ({ resource_id, run_id: child, attempt: 1 })));
  const held = locks(), before = effects();
+ const release = { identity, run_id: child, attempt: 1, resources: input.resources };
+ expect(await http('resource-release', release)).toMatchObject({ status: 409, body: { error: { code: 'OUTCOME_UNKNOWN' } } });
+ expect(locks()).toEqual(held);
  expect(await http('root-child-effect-intent', { ...input, resources: [...input.resources].reverse(), effect: { ...input.effect, id: randomUUID() } }))
   .toEqual({ status: 200, body: { id: input.effect.id, status: 'intent' } });
  expect(effects()).toEqual(before);
  expect(await http('root-child-effect-intent', { ...input, resources: ['browser:a19'] }))
   .toMatchObject({ status: 409, body: { error: { code: 'IDEMPOTENCY_CONFLICT' } } });
  expect((await http('root-child-effect-result', result(input, 'dispatched'))).status).toBe(200);
+ expect(await http('resource-release', release)).toMatchObject({ status: 409, body: { error: { code: 'OUTCOME_UNKNOWN' } } });
+ expect(locks()).toEqual(held);
  await owner({ schema_version: 1, type: 'run.cancel', payload: { run_id: child, reason: 'Synthetic owner cancellation' } });
  expect((await http('root-child-effect-result', result(input, 'outcome_unknown'))).status).toBe(200);
+ expect(await http('resource-release', release)).toMatchObject({ status: 409, body: { error: { code: 'OUTCOME_UNKNOWN' } } });
+ expect(locks()).toEqual(held);
  expect(await http('root-child-effect-intent', input)).toEqual({ status: 200, body: { id: input.effect.id, status: 'outcome_unknown' } });
  expect(await http('root-child-effect-result', result(input, 'confirmed', {})))
   .toMatchObject({ status: 422, body: { error: { code: 'INVALID_INPUT' } } });
@@ -104,6 +111,8 @@ it('routes child-owned intent/replay and cancellation reconciliation without set
  expect(await http('complete', { identity, run_id: child, attempt: 1, result: { status: 'cancelled', text: '' } }))
   .toMatchObject({ status: 409, body: { error: { code: 'RESOURCE_BUSY' } } });
  expect(await http('prepare-sleep', { identity })).toMatchObject({ status: 409, body: { error: { code: 'SLEEP_DENIED' } } });
+ expect((await http('resource-release', release)).status).toBe(200);
+ expect(locks()).toEqual([]);
 });
 
 it('enforces resource bounds and strict envelopes before any effect/lock writes', async () => {

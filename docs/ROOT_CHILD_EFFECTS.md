@@ -116,6 +116,14 @@ There is **no automatic lock release, operation settlement, native cancellation,
 run completion, retry, dispatch or sleep authorization**, including after an
 effect is confirmed. Existing lifecycle blockers remain authoritative.
 
+Explicit resource release rejects unresolved `intent`, `dispatched` or
+`outcome_unknown` effects owned by the run. Confirmed executor termination also
+preserves that run's locks: stopping a process cannot settle an external action.
+Because the ledger has no per-effect/resource mapping, all locks belonging to an
+affected run remain held conservatively. Receipt-backed reconciliation permits
+subsequent explicit release; it does not release locks itself. Recovery must
+preserve those records and cannot blindly replay the action.
+
 ## Verification and limits
 
 `npx vitest run tests/root-child-effects.test.ts` uses real SQLite and existing
