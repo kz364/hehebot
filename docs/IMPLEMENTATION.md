@@ -125,6 +125,13 @@ network calls or state writes; unknown coverage remains a blocker.
 disabled routines and pending skill proposals with grants removed. This is an
 offline review plan, not full backup/restore or automatic migration.
 
+[Offline application SQLite snapshots](CONTROL_BACKUP.md) use the supported online
+backup API to preserve one committed state, including WAL-backed rows. Private
+output includes schema/count/hash verification and preserves unresolved effects,
+locks and identities. This is unencrypted local staging, not live DO extraction,
+coordinated native backup, restore admission or complete retention. SQLite may
+update shared-memory reader markers even though source DB/WAL bytes remain intact.
+
 Scripted native fixtures demonstrate event routing, exact cancellation, callbacks into local Worker/SQLite, and conservative rejection of root-only completion. They do **not** prove model judgment, authenticated inference, recursive descendant/effect settlement, active-work crash recovery, production service assembly, provider sleep, connector behavior, or hardware permissions.
 
 ## Run and verify
