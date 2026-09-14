@@ -9,6 +9,9 @@ export type RoutinePut = BasePut & {
   action_policy_ids: string[];
 };
 export type MemoryPut = BasePut & { scope: Scope; text: string; source_event_id: string; expires_at: string | null; sensitivity: 'ordinary' | 'sensitive' };
+export type SkillBody = { name:string; description:string; when_to_use:string; inputs_access:string[]; steps:string[]; decision_rules:string[]; validation:string[]; output:string; failure_handling:string[]; approval_boundaries:string[]; contains_private_facts:false };
+export type SkillProvenance = { kind:'owner'|'task'|'notes'|'file'|'url'|'import'|'model'; source_ref:string };
+export type SkillProposal = { proposal_id:string; skill_id:string; expected_skill_revision:number; body:SkillBody; provenance:SkillProvenance; executable_files_changed:boolean };
 export type RoomPublish = { room_id: string; kind: 'context_update' | 'action_request' | 'message'; recipient_ids: string[]; text: string; references: { kind: string; id: string; revision: number }[]; cause_id: string };
 export type PayloadMap = {
  'run.followup':{run_id:string;text:string};
@@ -19,6 +22,11 @@ export type PayloadMap = {
  'room.publish': RoomPublish; 'run.cancel': { run_id: string; reason: string };
  'run.retry': { run_id: string; expected_attempt: number };
  'approval.resolve': { approval_id: string; decision: 'approve' | 'deny'; expected_revision: number };
+ 'skill.propose':SkillProposal;
+ 'skill.review':{proposal_id:string;expected_proposal_revision:number;decision:'approve'|'reject'};
+ 'skill.enable':{skill_id:string;expected_skill_revision:number;persona_id:string;enabled:boolean};
+ 'skill.delete':BasePut;
+ 'skill.restore':{proposal_id:string;skill_id:string;expected_skill_revision:number;source_revision:number};
 };
 export type Command = { [K in keyof PayloadMap]: { schema_version: 1; type: K; payload: PayloadMap[K] } }[keyof PayloadMap];
 export type ObjectKind = 'persona' | 'room' | 'routine' | 'memory' | 'skill' | 'trigger' | 'approval' | 'policy';
@@ -27,6 +35,6 @@ export type Receipt = { id: string; status: 'accepted' | 'applied' | 'rejected';
 export type RunStatus = 'queued' | 'claimed' | 'running' | 'finishing' | 'completed' | 'waiting' | 'failed' | 'cancelling' | 'cancelled' | 'recovery_required';
 export type Run = { role:'coordinator'|'background';parent_run_id:string|null;title:string|null;id: string; command_id: string | null; occurrence_id: string | null; persona_id: string; routine_id: string | null; context_json: string; status: RunStatus; current_attempt: number; error_code: string | null; checkpoint_json: string | null; created_at: string; updated_at: string };
 export type Operation = { id: string; kind: 'inference' | 'tool' | 'child' | 'transfer' | 'node' | 'flush' | 'delivery'; status: 'active' | 'cancelling' | 'settled' | 'unknown'; started_at: string; deadline_at: string; last_progress_at: string };
-export type ContextSnapshot = {task_summaries?:Array<{id:string;title:string|null;status:string;updated_at:string}>; schema_version: 1; persona: StoredObject<PersonaPut>; routine: StoredObject<RoutinePut> | null; memories: StoredObject<MemoryPut>[]; scope_key: string; instruction: string; room_id: string | null; context_events: TimelineEvent[]; authorization_policy_ids: string[] };
+export type ContextSnapshot = {task_summaries?:Array<{id:string;title:string|null;status:string;updated_at:string}>; schema_version: 1; persona: StoredObject<PersonaPut>; routine: StoredObject<RoutinePut> | null; memories: StoredObject<MemoryPut>[]; skills:StoredObject<SkillBody>[]; scope_key: string; instruction: string; room_id: string | null; context_events: TimelineEvent[]; authorization_policy_ids: string[] };
 export type TimelineEvent = { sequence: number; id: string; conversation_id: string | null; type: string; actor_id: string; cause_id: string | null; payload: Record<string, unknown>; created_at: string };
 export type Options = { delegations?:Record<string,string[]>;executionEnabled: boolean; actionPolicyIds: string[]; toolPolicyIds: string[]; now: () => Date; uuid: () => string };

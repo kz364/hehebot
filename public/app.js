@@ -14,17 +14,18 @@ async function command(type,payload,key=crypto.randomUUID()){
 }
 function items(kind){return snapshot?.objects?.filter(x=>x.kind===kind)??[];}
 function current(){return snapshot?.objects?.find(x=>x.id===selected);}
+function skillsSelected(){return selected==='skills';}
 function button(text,fn,cls=''){const b=node('button',text,cls);b.type='button';b.onclick=fn;return b;}
 async function refresh(force=false){
  if(loading||document.hidden&&!force)return;loading=true;
  try{const value=await api('/v1/state');snapshot=value;events=value.timeline??[];
-  if(!selected||!value.objects.some(x=>x.id===selected))selected=items('persona').find(x=>!x.body.archived)?.id;
-  const conversationId=selected;const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}
+  if(!selected||selected!=='skills'&&!value.objects.some(x=>x.id===selected))selected=items('persona').find(x=>!x.body.archived)?.id;
+  const conversationId=selected;if(conversationId!=='skills'){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
   $('connection').textContent='Connected';$('connection-dot').classList.add('online');render();
  }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);}
  finally{loading=false;}
 }
-function choose(id){selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);$('message').focus();}
+function choose(id){selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
 function render(){
  if(!snapshot)return;
  for(const [kind,target] of [['persona','bots'],['room','rooms']]){
@@ -33,6 +34,9 @@ function render(){
    const b=button('',()=>choose(object.id),'nav-item');b.setAttribute('aria-current',String(object.id===selected));b.append(node('span',object.body.name.slice(0,1),'avatar'),node('span',object.body.name));$(target).append(b);
   }
  }
+ $('show-skills').setAttribute('aria-current',String(skillsSelected()));
+ if(skillsSelected()){renderSkills();return;}
+ document.querySelector('.app').classList.remove('skills-mode');$('details').hidden=false;$('composer').hidden=false;$('show-details').hidden=false;$('edit-bot').hidden=false;
  const object=current();$('conversation-name').textContent=object?.body.name??'Choose a bot';$('conversation-type').textContent=object?.kind==='room'?'SHARED ROOM':'ASSISTANT';$('edit-bot').hidden=object?.kind!=='persona';
  $('runtime-state').textContent=names[snapshot.summary.phase]??snapshot.summary.phase;$('runtime-provider').textContent=snapshot.provider?.id??'Unconfigured';$('runtime-queued').textContent=snapshot.summary.queued_runs;$('runtime-waiting').textContent=snapshot.summary.blocked_runs;
  $('runtime-banner').hidden=snapshot.summary.execution_enabled;
@@ -70,6 +74,40 @@ function render(){
   const card=node('div',undefined,'card');card.append(node('span',m.body.scope.kind==='global'?'Shared preference':'Bot memory','status'),node('p',m.body.text));const actions=node('div',undefined,'actions');actions.append(button('Edit',()=>editMemory(m)),button('Forget',()=>act(()=>command('memory.delete',{id:m.id,expected_revision:m.revision,purge_transcripts:false})),'danger'));card.append(actions);$('memories').append(card);
  }if(!$('memories').children.length)$('memories').append(node('p','Save preferences you want your bots to remember.','muted'));
 }
+function lines(value){return String(value??'').split('\n').map(x=>x.trim()).filter(Boolean);}
+function detail(label,value){const wrap=node('section',undefined,'skill-detail');wrap.append(node('h4',label));if(Array.isArray(value)){const list=node('ul');for(const item of value)list.append(node('li',item));wrap.append(list);}else wrap.append(node('p',value||'Not specified'));return wrap;}
+function enablement(skillId,personaId){return (snapshot.skill_enablements??[]).find(x=>x.skill_id===skillId&&x.persona_id===personaId);}
+function renderSkillBody(target,body){
+ target.append(detail('Purpose',body.description),detail('When to use',body.when_to_use),detail('Inputs and access',body.inputs_access),detail('Procedure',body.steps),detail('Decision rules',body.decision_rules),detail('Validation',body.validation),detail('Output',body.output),detail('Failure handling',body.failure_handling),detail('Approval boundaries',body.approval_boundaries));
+}
+function renderSkills(){
+ const signature=JSON.stringify(['skills',items('skill'),items('persona'),snapshot.skill_proposals,snapshot.skill_enablements]);
+ if(lastSignature===signature)return;
+ lastSignature=signature;
+ const openSummaries=new Set([...$('timeline').querySelectorAll('details[open] > summary')].map(x=>x.textContent));
+ const scrollTop=$('timeline').scrollTop;
+ const timeline=$('timeline');document.querySelector('.app').classList.add('skills-mode');$('conversation-type').textContent='MANAGED CATALOG';$('conversation-name').textContent='Skills';$('edit-bot').hidden=true;$('show-details').hidden=true;$('composer').hidden=true;$('details').hidden=true;$('details').classList.remove('open');
+ timeline.replaceChildren();const intro=node('div',undefined,'skills-intro');const heading=node('div',undefined,'skills-heading');const copy=node('div');copy.append(node('h2','Reviewed procedures'),node('p','Drafts stay proposals until you explicitly approve them. Enabling a skill is a separate per-bot choice.','muted'));heading.append(copy,button('+ Draft skill',()=>editSkillProposal(),'primary'));intro.append(heading);timeline.append(intro);
+ const pending=(snapshot.skill_proposals??[]).filter(x=>x.status==='pending');timeline.append(node('h2',`Pending proposals (${pending.length})`,'subheading'));
+ if(!pending.length)timeline.append(node('p','No proposals are waiting for review.','muted'));
+ for(const proposal of pending){const card=node('details',undefined,'skill-card proposal');const summary=node('summary');summary.append(node('span',proposal.body.name),node('span',proposal.provenance?.kind==='owner'?'Owner draft':`${proposal.provenance?.kind??'Unknown'} content`,'status'));card.append(summary,node('p',`Source: ${proposal.provenance?.source_ref??'Not recorded'} · Proposal revision ${proposal.proposal_revision}`,'hint'));renderSkillBody(card,proposal.body);const notice=node('p','Approval confirms this procedure contains no private facts. Imported or model-written content is never approved automatically.','review-notice');const actions=node('div',undefined,'actions');actions.append(button('Approve',()=>reviewProposal(proposal,'approve'),'primary'),button('Reject',()=>reviewProposal(proposal,'reject'),'quiet danger'));card.append(notice,actions);timeline.append(card);}
+ const catalog=items('skill').filter(x=>!x.deleted_at);timeline.append(node('h2',`Approved catalog (${catalog.length})`,'subheading'));
+ if(!catalog.length)timeline.append(node('p','No skills have been approved yet.','muted'));
+ for(const skill of catalog){const card=node('details',undefined,'skill-card');const summary=node('summary');summary.append(node('span',skill.body.name),node('span',`Revision ${skill.revision}`,'status'));card.append(summary,node('p',skill.body.description,'skill-description'));renderSkillBody(card,skill.body);const bots=node('div',undefined,'skill-bots');bots.append(node('h4','Bot access'));for(const persona of items('persona').filter(x=>!x.body.archived)){const record=enablement(skill.id,persona.id),enabled=record?.enabled===true;const row=node('div',undefined,'skill-bot-row');row.append(node('span',persona.body.name),button(enabled?'Disable':'Enable',()=>act(()=>command('skill.enable',{skill_id:skill.id,expected_skill_revision:skill.revision,persona_id:persona.id,enabled:!enabled})),enabled?'quiet danger':'quiet'));bots.append(row);}const actions=node('div',undefined,'actions');actions.append(button('Propose an update',()=>editSkillProposal(skill),'quiet'));card.append(bots,actions);timeline.append(card);}
+ for(const details of timeline.querySelectorAll('details'))details.open=openSummaries.has(details.querySelector('summary')?.textContent);
+ timeline.scrollTop=scrollTop;
+}
+function reviewProposal(proposal,decision){
+ const fields=[node('p',decision==='approve'?'Review the complete procedure above before approving. Approval does not enable it for any bot.':'Reject this proposal without changing the approved catalog.','hint')];
+ if(decision==='approve'){const label=node('label',undefined,'check affirmation');const check=node('input');check.type='checkbox';check.name='affirm';check.required=true;label.append(check,document.createTextNode('I affirm this draft contains no private facts.'));fields.push(label);}
+ openEditor(`${decision==='approve'?'Approve':'Reject'} ${proposal.body.name}`,fields,()=>command('skill.review',{proposal_id:proposal.id,expected_proposal_revision:proposal.proposal_revision,decision}));
+}
+function editSkillProposal(skill){
+ const draftId=skill?.id??crypto.randomUUID(),body=skill?.body??{};const existing=items('skill');const options=[['new','Create a new stable skill'],...existing.map(x=>[x.id,`Update ${x.body.name} (revision ${x.revision})`])];
+ const fields=[selectField('Draft target','target',options,skill?.id??'new'),field('Name','name',body.name??''),field('Purpose','description',body.description??'','textarea'),field('When should a bot use it?','when_to_use',body.when_to_use??'','textarea'),field('Inputs and access (one per line)','inputs_access',(body.inputs_access??[]).join('\n'),'textarea'),field('Steps (one per line)','steps',(body.steps??[]).join('\n'),'textarea'),field('Decision rules (one per line)','decision_rules',(body.decision_rules??[]).join('\n'),'textarea'),field('Validation checks (one per line)','validation',(body.validation??[]).join('\n'),'textarea'),field('Expected output','output',body.output??'','textarea'),field('Failure handling (one per line)','failure_handling',(body.failure_handling??[]).join('\n'),'textarea'),field('Approval boundaries (one per line)','approval_boundaries',(body.approval_boundaries??[]).join('\n'),'textarea')];
+ const affirmation=node('label',undefined,'check affirmation');const check=node('input');check.type='checkbox';check.name='affirm';check.required=true;affirmation.append(check,document.createTextNode('I affirm this procedural draft contains no private facts.'));fields.push(node('p','The portal does not scan for private facts. Your affirmation is required, and submission creates a pending proposal—not an approved skill.','review-notice'),affirmation);
+ openEditor(skill?'Propose a skill update':'Draft a skill',fields,form=>{const target=form.get('target'),existingSkill=existing.find(x=>x.id===target);return command('skill.propose',{proposal_id:crypto.randomUUID(),skill_id:existingSkill?.id??draftId,expected_skill_revision:existingSkill?.revision??0,body:{name:form.get('name'),description:form.get('description'),when_to_use:form.get('when_to_use'),inputs_access:lines(form.get('inputs_access')),steps:lines(form.get('steps')),decision_rules:lines(form.get('decision_rules')),validation:lines(form.get('validation')),output:form.get('output'),failure_handling:lines(form.get('failure_handling')),approval_boundaries:lines(form.get('approval_boundaries')),contains_private_facts:false},provenance:{kind:'owner',source_ref:'portal:owner-draft'},executable_files_changed:false});});
+}
 async function act(fn){try{report('');await fn();await refresh(true);}catch(e){report(e.message);}}
 $('message').oninput=()=>{if(selected)localStorage.setItem('personal.draft.'+selected,$('message').value);$('draft-status').textContent='Unsent draft saved on this device';};
 $('composer').onsubmit=async event=>{
@@ -101,5 +139,6 @@ function editMemory(object){
 $('add-bot').onclick=()=>editBot();$('edit-bot').onclick=()=>editBot(current());$('add-routine').onclick=()=>editRoutine();$('add-memory').onclick=()=>editMemory();
 $('add-room').onclick=()=>{const bots=items('persona').filter(x=>!x.body.archived);const fields=[field('Room name','name'),selectField('Default responder','responder',bots.map(x=>[x.id,x.body.name]),bots[0]?.id)];for(const bot of bots){const l=node('label',undefined,'check');const c=node('input');c.type='checkbox';c.name='members';c.value=bot.id;c.checked=true;l.append(c,document.createTextNode(bot.body.name));fields.push(l);}openEditor('New room',fields,form=>command('room.put',{id:crypto.randomUUID(),expected_revision:0,name:form.get('name'),member_ids:form.getAll('members'),default_responder_id:form.get('responder')}));};
 $('show-details').onclick=()=>$('details').classList.add('open');$('close-details').onclick=()=>$('details').classList.remove('open');$('refresh').onclick=()=>refresh(true);
+$('show-skills').onclick=()=>choose('skills');
 installImportSetup({trigger:$('import-setup'),api,command,onAdopted:()=>refresh(true)});
 await refresh(true);if(selected)$('message').value=localStorage.getItem('personal.draft.'+selected)??'';setInterval(()=>refresh(),5000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(true);});

@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (2, '2026-09-10T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (3, '2026-09-14T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -117,3 +117,17 @@ CREATE INDEX retry_due ON retry_queue(due_at);
 CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE);
 CREATE TABLE resource_locks (resource_id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES runs(id),attempt INTEGER NOT NULL,acquired_at TEXT NOT NULL);
 CREATE TABLE task_followups (id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES runs(id),text TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','coordinator_queued')),command_id TEXT NOT NULL REFERENCES commands(id),created_at TEXT NOT NULL,coordinator_run_id TEXT REFERENCES runs(id));
+CREATE TABLE skill_proposals (
+ id TEXT PRIMARY KEY, skill_id TEXT NOT NULL, proposal_revision INTEGER NOT NULL,
+ expected_skill_revision INTEGER NOT NULL, body_json TEXT NOT NULL CHECK(json_valid(body_json)),
+ provenance_json TEXT NOT NULL CHECK(json_valid(provenance_json)), status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected')),
+ executable_files_changed INTEGER NOT NULL CHECK(executable_files_changed IN (0,1)), actor_id TEXT NOT NULL,
+ command_id TEXT NOT NULL REFERENCES commands(id), reviewed_by TEXT, created_at TEXT NOT NULL, reviewed_at TEXT,
+ UNIQUE(skill_id,proposal_revision)
+);
+CREATE INDEX skill_proposals_status ON skill_proposals(status,created_at);
+CREATE TABLE skill_enablements (
+ skill_id TEXT NOT NULL REFERENCES objects(id), persona_id TEXT NOT NULL REFERENCES objects(id),
+ skill_revision INTEGER NOT NULL, enabled INTEGER NOT NULL CHECK(enabled IN (0,1)), updated_at TEXT NOT NULL,
+ PRIMARY KEY(skill_id,persona_id)
+);

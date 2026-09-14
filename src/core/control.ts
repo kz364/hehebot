@@ -3,6 +3,7 @@ import validateCommand from '../generated/validate-command.js';
 import { ControlError, requireThat, safeError } from './errors';
 import { Store } from './store';
 import { dueOccurrences, nextDue, preview, validateSchedule } from './schedule';
+import {SkillCatalog} from './skills';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject } from './types';
 export const DEFAULT_BOTS = [
  {id:'11111111-1111-4111-8111-111111111111',name:'Chief of Staff',instructions:'Coordinate the owner’s requests. Keep actions within explicit authorization.'},
@@ -49,7 +50,13 @@ export class ControlCore {
  }
  private apply(owner:string,commandId:string,command:Command):string {
   const now=this.now();
+  const skills=new SkillCatalog(this.store,()=>this.now(),this.options.uuid);
   switch(command.type){
+   case 'skill.propose':return skills.propose(owner,commandId,command.payload);
+   case 'skill.review':return skills.review(owner,commandId,command.payload);
+   case 'skill.enable':return skills.enable(owner,commandId,command.payload);
+   case 'skill.delete':return skills.remove(owner,commandId,command.payload);
+   case 'skill.restore':return skills.restore(owner,commandId,command.payload);
    case 'setup.adopt': {
     const p=command.payload;
     requireThat(createHash('sha256').update(JSON.stringify(p.commands)).digest('hex')===p.reviewed_hash,'REVISION_CONFLICT','The reviewed import changed.');
@@ -175,7 +182,7 @@ export class ControlCore {
   const memories=this.store.list<MemoryPut>('memory').filter(m=>(!m.body.expires_at||m.body.expires_at>now)&&(m.body.scope.kind==='global'||m.body.scope.kind==='persona'&&m.body.scope.id===personaId||m.body.scope.kind==='routine'&&m.body.scope.id===routineId));
   let contextEvents:ContextSnapshot['context_events']=[];
   if(roomId){const room=this.store.get<RoomPut>(roomId,'room');requireThat(room.body.member_ids.includes(personaId),'FORBIDDEN','Bot is not in this room.',403);const cursor=this.store.db.all<{consumed_sequence:number}>('SELECT consumed_sequence FROM consumer_cursors WHERE consumer_id=? AND conversation_id=?',personaId,roomId)[0]?.consumed_sequence??0;contextEvents=this.store.events(cursor,100,roomId).filter(e=>e.type==='room.context_update'&&(e.payload.recipient_ids as string[]).includes(personaId));}
-  return {schema_version:1,persona,routine,memories,scope_key:`${personaId}/${routineId?`routine/${routineId}`:roomId?`room/${roomId}`:'personal'}`,instruction,room_id:roomId,context_events:contextEvents,task_summaries:this.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>("SELECT id,title,status,updated_at FROM runs WHERE role='background' AND persona_id=? ORDER BY updated_at DESC LIMIT 30",personaId),authorization_policy_ids:routine?.body.action_policy_ids??[]};
+  return {schema_version:1,persona,routine,memories,skills:new SkillCatalog(this.store,()=>this.now(),this.options.uuid).enabled(personaId),scope_key:`${personaId}/${routineId?`routine/${routineId}`:roomId?`room/${roomId}`:'personal'}`,instruction,room_id:roomId,context_events:contextEvents,task_summaries:this.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>("SELECT id,title,status,updated_at FROM runs WHERE role='background' AND persona_id=? ORDER BY updated_at DESC LIMIT 30",personaId),authorization_policy_ids:routine?.body.action_policy_ids??[]};
  }
  enqueue(personaId:string,instruction:string,commandId:string|null,routineId:string|null,occurrenceId:string|null,roomId:string|null=null):string {
   const id=this.options.uuid(),now=this.now(),context=this.context(personaId,instruction,routineId,roomId);
@@ -227,7 +234,9 @@ export class ControlCore {
   if(after!==undefined){const first=this.store.db.all<{seq:number}>('SELECT MIN(sequence) AS seq FROM events')[0].seq;if(first&&after<first-1)throw new ControlError('HISTORY_GAP','Fetch a new snapshot.');}
   const page=after===undefined?[]:this.store.events(after,limit);
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
-   objects:after===undefined?(['persona','room','routine','memory'] as const).flatMap(kind=>this.store.list(kind)):undefined,
+   objects:after===undefined?(['persona','room','routine','memory','skill'] as const).flatMap(kind=>this.store.list(kind)):undefined,
+   skill_enablements:after===undefined?this.store.db.all<{skill_id:string;persona_id:string;skill_revision:number;enabled:number}>('SELECT skill_id,persona_id,skill_revision,enabled FROM skill_enablements ORDER BY skill_id,persona_id').map(row=>({...row,enabled:Boolean(row.enabled)})):undefined,
+   skill_proposals:after===undefined?this.store.db.all<{id:string;skill_id:string;proposal_revision:number;expected_skill_revision:number;body_json:string;provenance_json:string;status:string;executable_files_changed:number;created_at:string;reviewed_at:string|null}>("SELECT id,skill_id,proposal_revision,expected_skill_revision,body_json,provenance_json,status,executable_files_changed,created_at,reviewed_at FROM skill_proposals ORDER BY created_at,id").map(({body_json,provenance_json,executable_files_changed,...row})=>({...row,body:JSON.parse(body_json),provenance:JSON.parse(provenance_json),executable_files_changed:Boolean(executable_files_changed)})):undefined,
    runs:this.store.db.all<Run>('SELECT * FROM runs ORDER BY created_at DESC LIMIT 100').map(({context_json,checkpoint_json,...rest})=>rest),
    summary:{phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},
    timeline:after===undefined?this.store.events(Math.max(0,this.store.sequence()-100),100):undefined};

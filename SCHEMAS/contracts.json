@@ -2,7 +2,68 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://claw-personal.invalid/schemas/contracts.json",
   "title": "Owner command v1",
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid" },
+    "skillBody": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "when_to_use": { "type": "string", "minLength": 1, "maxLength": 4000 },
+        "inputs_access": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 500 }, "maxItems": 32 },
+        "steps": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 2000 }, "minItems": 1, "maxItems": 100 },
+        "decision_rules": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 1000 }, "maxItems": 50 },
+        "validation": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 1000 }, "minItems": 1, "maxItems": 50 },
+        "output": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "failure_handling": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 1000 }, "minItems": 1, "maxItems": 50 },
+        "approval_boundaries": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 1000 }, "minItems": 1, "maxItems": 50 },
+        "contains_private_facts": { "const": false }
+      },
+      "required": ["name","description","when_to_use","inputs_access","steps","decision_rules","validation","output","failure_handling","approval_boundaries","contains_private_facts"]
+    },
+    "skillPropose": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "schema_version": { "const": 1 }, "type": { "const": "skill.propose" },
+        "payload": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "proposal_id": { "$ref": "#/$defs/uuid" }, "skill_id": { "$ref": "#/$defs/uuid" },
+            "expected_skill_revision": { "type": "integer", "minimum": 0 }, "body": { "$ref": "#/$defs/skillBody" },
+            "provenance": { "type": "object", "additionalProperties": false, "properties": { "kind": { "enum": ["owner","task","notes","file","url","import","model"] }, "source_ref": { "type": "string", "minLength": 1, "maxLength": 1000 } }, "required": ["kind","source_ref"] },
+            "executable_files_changed": { "type": "boolean" }
+          },
+          "required": ["proposal_id","skill_id","expected_skill_revision","body","provenance","executable_files_changed"]
+        }
+      }, "required": ["schema_version","type","payload"]
+    },
+    "skillReview": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "schema_version": { "const": 1 }, "type": { "const": "skill.review" }, "payload": { "type": "object", "additionalProperties": false, "properties": { "proposal_id": { "$ref": "#/$defs/uuid" }, "expected_proposal_revision": { "type": "integer", "minimum": 1 }, "decision": { "enum": ["approve","reject"] } }, "required": ["proposal_id","expected_proposal_revision","decision"] } },
+      "required": ["schema_version","type","payload"]
+    },
+    "skillEnable": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "schema_version": { "const": 1 }, "type": { "const": "skill.enable" }, "payload": { "type": "object", "additionalProperties": false, "properties": { "skill_id": { "$ref": "#/$defs/uuid" }, "expected_skill_revision": { "type": "integer", "minimum": 1 }, "persona_id": { "$ref": "#/$defs/uuid" }, "enabled": { "type": "boolean" } }, "required": ["skill_id","expected_skill_revision","persona_id","enabled"] } },
+      "required": ["schema_version","type","payload"]
+    },
+    "skillDelete": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "schema_version": { "const": 1 }, "type": { "const": "skill.delete" }, "payload": { "type": "object", "additionalProperties": false, "properties": { "id": { "$ref": "#/$defs/uuid" }, "expected_revision": { "type": "integer", "minimum": 1 } }, "required": ["id","expected_revision"] } },
+      "required": ["schema_version","type","payload"]
+    },
+    "skillRestore": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "schema_version": { "const": 1 }, "type": { "const": "skill.restore" }, "payload": { "type": "object", "additionalProperties": false, "properties": { "proposal_id": { "$ref": "#/$defs/uuid" }, "skill_id": { "$ref": "#/$defs/uuid" }, "expected_skill_revision": { "type": "integer", "minimum": 1 }, "source_revision": { "type": "integer", "minimum": 1 } }, "required": ["proposal_id","skill_id","expected_skill_revision","source_revision"] } },
+      "required": ["schema_version","type","payload"]
+    }
+  },
   "oneOf": [
+    { "$ref": "#/$defs/skillPropose" },
+    { "$ref": "#/$defs/skillReview" },
+    { "$ref": "#/$defs/skillEnable" },
+    { "$ref": "#/$defs/skillDelete" },
+    { "$ref": "#/$defs/skillRestore" },
     {
       "type": "object",
       "additionalProperties": false,
