@@ -80,9 +80,24 @@ describe('model-facing agent command boundary',()=>{
   expect(()=>boundary.accept(request(overwrite))).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
  });
 
- it('admits the existing routine.put contract without adding lifecycle APIs',()=>{
+ it('admits the routine.put contract within the persona scope',()=>{
   admit([ROUTINE_MANAGE_POLICY],[action]);const payload:RoutinePut=routine({action_policy_ids:[action]});
   expect(boundary.accept(request({schema_version:1,type:'routine.put',payload})).status).toBe('applied');
   expect(f.store.get<RoutinePut>(payload.id,'routine').body.persona_id).toBe(bot);
+ });
+
+ it('run and delete preserve ownership, action limits, and deletion receipt dedupe',()=>{
+  admit([ROUTINE_MANAGE_POLICY]);
+  const owned=routine({enabled:false}),foreign=routine({persona_id:otherBot}),privileged=routine({action_policy_ids:[action]});
+  for(const payload of [owned,foreign,privileged])expect(f.accept({schema_version:1,type:'routine.put',payload}).status).toBe('applied');
+  for(const type of ['routine.run','routine.delete'] as const){
+   expect(()=>boundary.accept(request({schema_version:1,type,payload:{id:foreign.id,expected_revision:1}}))).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
+  }
+  expect(()=>boundary.accept(request({schema_version:1,type:'routine.run',payload:{id:privileged.id,expected_revision:1}}))).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
+  const run=boundary.accept(request({schema_version:1,type:'routine.run',payload:{id:owned.id,expected_revision:1}}));
+  expect(run.status).toBe('applied');expect(f.store.run(run.resource_id!).persona_id).toBe(bot);
+  const deletion=request({schema_version:1,type:'routine.delete',payload:{id:owned.id,expected_revision:1}});
+  const receipt=boundary.accept(deletion);expect(receipt.status).toBe('applied');expect(boundary.accept(deletion)).toEqual(receipt);
+  expect(f.store.run(run.resource_id!).status).toBe('cancelled');
  });
 });

@@ -59,6 +59,15 @@
     }
   },
   "oneOf": [
+    {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "schema_version": { "const": 1 }, "type": { "enum": ["routine.run", "routine.delete"] },
+        "payload": { "type": "object", "additionalProperties": false,
+          "properties": { "id": { "$ref": "#/$defs/uuid" }, "expected_revision": { "type": "integer", "minimum": 1 } },
+          "required": ["id", "expected_revision"] }
+      }, "required": ["schema_version", "type", "payload"]
+    },
     { "$ref": "#/$defs/skillPropose" },
     { "$ref": "#/$defs/skillReview" },
     { "$ref": "#/$defs/skillEnable" },

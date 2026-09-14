@@ -8,8 +8,8 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { ControlClient } from './control-client.mjs';
 
-export const AGENT_TOOL_NAMES = Object.freeze(['clawbot_propose_skill', 'clawbot_save_routine']);
-const COMMAND_TYPES = Object.freeze({ clawbot_propose_skill: 'skill.propose', clawbot_save_routine: 'routine.put' });
+export const AGENT_TOOL_NAMES = Object.freeze(['clawbot_propose_skill', 'clawbot_save_routine', 'clawbot_run_routine', 'clawbot_delete_routine']);
+const COMMAND_TYPES = Object.freeze({ clawbot_propose_skill: 'skill.propose', clawbot_save_routine: 'routine.put', clawbot_run_routine: 'routine.run', clawbot_delete_routine: 'routine.delete' });
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_OUTSTANDING = 16;
 const CONFIG_ENV = 'CLAWBOT_AGENT_TOOLS_CONFIG';
@@ -32,7 +32,7 @@ function commandSchema(contracts, type) {
   const candidates = [...Object.values(contracts.$defs ?? {}), ...(contracts.oneOf ?? [])];
   const found = candidates.find(item => {
     const schema = item?.$ref?.startsWith('#/$defs/') ? contracts.$defs[item.$ref.slice(8)] : item;
-    return schema?.properties?.type?.const === type;
+    return schema?.properties?.type?.const === type || schema?.properties?.type?.enum?.includes(type);
   });
   const schema = found?.$ref ? contracts.$defs[found.$ref.slice(8)] : found;
   if (!schema?.properties?.payload) throw new Error('INVALID_CONTRACT_SCHEMA');
@@ -51,6 +51,8 @@ export function buildToolDefinitions(contracts) {
   return Object.freeze([
     { name: AGENT_TOOL_NAMES[0], description: 'Propose a non-executable skill for later owner review.', inputSchema: wrap(skill) },
     { name: AGENT_TOOL_NAMES[1], description: 'Create or update a routine within the admitted persona policy.', inputSchema: wrap(routine) },
+    { name: AGENT_TOOL_NAMES[2], description: 'Run a routine once without changing its schedule. Rejects if unfinished work exists.', inputSchema: wrap(commandSchema(contracts, 'routine.run')) },
+    { name: AGENT_TOOL_NAMES[3], description: 'Delete future automation and queued work; already active tasks continue.', inputSchema: wrap(commandSchema(contracts, 'routine.delete')) },
   ]);
 }
 

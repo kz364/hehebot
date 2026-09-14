@@ -25,7 +25,7 @@
               "type": "object", "additionalProperties": false,
               "properties": {
                 "schema_version": { "const": 1 },
-                "type": { "enum": ["skill.propose", "routine.put"] },
+                "type": { "enum": ["skill.propose", "routine.put", "routine.run", "routine.delete"] },
                 "payload": { "type": "object", "maxProperties": 16 }
               },
               "required": ["schema_version", "type", "payload"]

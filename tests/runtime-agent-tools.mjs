@@ -36,7 +36,7 @@ test('initialize, ping, list and initialized notifications use JSON-RPC envelope
   const { handle } = fixture();
   assert.equal((await handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })).result.protocolVersion, '2024-11-05');
   assert.deepEqual(await handle({ jsonrpc: '2.0', id: 'p', method: 'ping' }), { jsonrpc: '2.0', id: 'p', result: {} });
-  assert.equal((await handle({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).result.tools.length, 2);
+  assert.deepEqual((await handle({ jsonrpc: '2.0', id: 2, method: 'tools/list' })).result.tools.map(x => x.name), AGENT_TOOL_NAMES);
   assert.equal(await handle({ jsonrpc: '2.0', method: 'notifications/initialized' }), undefined);
 });
 
@@ -67,6 +67,17 @@ test('routine uses canonical shape and backend is called exactly once without re
   assert.equal(attempts, 1); assert.equal(response.error.code, -32000);
   assert.equal(JSON.stringify(response).includes('token'), false);
   assert.match(response.error.message, /same idempotency key/);
+});
+
+test('run and delete tools preserve revision checks and cannot silently save a routine', async () => {
+  const { handle, calls } = fixture();
+  const payload = { id: uuid(4), expected_revision: 7 };
+  for (const [tool, type] of [['clawbot_run_routine', 'routine.run'], ['clawbot_delete_routine', 'routine.delete']]) {
+    await handle(call(1, tool, payload));
+    assert.deepEqual(calls.at(-1)[1].command, { schema_version: 1, type, payload });
+    assert.equal((await handle(call(2, tool, { id: uuid(4) }))).error.code, -32602);
+  }
+  assert.equal(calls.length, 2);
 });
 
 test('allowedTools is a host allowlist and cannot name owner-only commands', async () => {

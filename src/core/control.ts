@@ -99,6 +99,7 @@ export class ControlCore {
    }
    case 'routine.put': {
     const p=command.payload;this.activePersona(p.persona_id);
+    requireThat(!this.store.db.all('SELECT id FROM objects WHERE id=? AND deleted_at IS NOT NULL',p.id).length,'NOT_FOUND','That routine was deleted.',404);
     requireThat(p.action_policy_ids.every(x=>this.options.actionPolicyIds.includes(x)),'FORBIDDEN','A requested action policy is not authorized.',403);
     if(p.schedule)validateSchedule(p.schedule);
     if(p.trigger_source_id)this.store.get(p.trigger_source_id,'trigger');
@@ -110,6 +111,26 @@ export class ControlCore {
     const times=p.schedule?preview(p.schedule,now):[];
     if(p.enabled&&p.schedule)this.store.db.exec('INSERT INTO schedule_state(routine_id,routine_version,next_due_at) VALUES(?,?,?)',p.id,revision,times[0]);
     this.store.event(this.options.uuid(),p.persona_id,'routine.updated',owner,commandId,{id:p.id,revision,next_times:times,enabled:p.enabled},now);return p.id;
+   }
+   case 'routine.run': {
+    const p=command.payload,routine=this.store.get<RoutinePut>(p.id,'routine');
+    requireThat(routine.revision===p.expected_revision,'REVISION_CONFLICT','Reload the routine before running it.');
+    requireThat(routine.body.action_policy_ids.every(id=>this.options.actionPolicyIds.includes(id)),'FORBIDDEN','A routine action policy is no longer authorized.',403);
+    // An explicit one-off may run a paused routine, but never changes its schedule
+    // or silently duplicates queued, cancelling or uncertain work.
+    requireThat(!this.store.db.all("SELECT id FROM runs WHERE routine_id=? AND status NOT IN ('completed','failed','cancelled')",p.id).length,'RESOURCE_BUSY','This routine already has unfinished work.');
+    return this.enqueue(routine.body.persona_id,routine.body.instructions,commandId,p.id,null);
+   }
+   case 'routine.delete': {
+    const p=command.payload,routine=this.store.get<RoutinePut>(p.id,'routine');
+    requireThat(routine.revision===p.expected_revision,'REVISION_CONFLICT','Reload the routine before deleting it.');
+    this.store.db.exec('UPDATE objects SET deleted_at=?,updated_at=?,revision=revision+1 WHERE id=?',now,now,p.id);
+    this.store.db.exec('DELETE FROM schedule_state WHERE routine_id=?',p.id);
+    this.store.db.exec("UPDATE runs SET status='cancelled',error_code='ROUTINE_DELETED',updated_at=? WHERE routine_id=? AND status IN ('queued','waiting')",now,p.id);
+    this.store.db.exec("UPDATE occurrences SET status='superseded' WHERE routine_id=? AND status='queued'",p.id);
+    // Deleting future automation is not an implicit cancellation of admitted work.
+    this.store.event(this.options.uuid(),routine.body.persona_id,'routine.deleted',owner,commandId,{id:p.id,revision:routine.revision+1,active_tasks_unchanged:true},now);
+    return p.id;
    }
    case 'memory.put': {
     const p=command.payload;

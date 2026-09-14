@@ -67,7 +67,9 @@ function render(){
   if(nearBottom||!timeline.scrollTop)timeline.scrollTop=timeline.scrollHeight;
  }
  $('routines').replaceChildren();for(const r of items('routine').filter(x=>x.body.persona_id===selected)){
-  const card=node('div',undefined,'card');card.append(node('h4',r.body.name),node('span',r.body.enabled?'Scheduled':'Paused','status'),node('p',r.body.schedule?`${r.body.schedule.cron} · ${r.body.schedule.timezone}`:'Event-triggered'),node('p',r.body.instructions));const actions=node('div',undefined,'actions');actions.append(button('Edit',()=>editRoutine(r)),button(r.body.enabled?'Pause':'Enable',()=>act(()=>command('routine.put',{...r.body,expected_revision:r.revision,enabled:!r.body.enabled}))));card.append(actions);$('routines').append(card);
+  const card=node('div',undefined,'card');card.append(node('h4',r.body.name),node('span',r.body.enabled?'Scheduled':'Paused','status'),node('p',r.body.schedule?`${r.body.schedule.cron} · ${r.body.schedule.timezone}`:'Event-triggered'),node('p',r.body.instructions));const actions=node('div',undefined,'actions');actions.append(button('Edit',()=>editRoutine(r)),button(r.body.enabled?'Pause':'Enable',()=>act(()=>command('routine.put',{...r.body,expected_revision:r.revision,enabled:!r.body.enabled}))));
+  actions.append(button('Run now',()=>act(()=>command('routine.run',{id:r.id,expected_revision:r.revision}))),button('Delete',()=>{if(confirm(`Delete “${r.body.name}”? Future and queued work will stop. Already active tasks will continue.`))act(()=>command('routine.delete',{id:r.id,expected_revision:r.revision}));},'danger'));
+  card.append(actions);$('routines').append(card);
  }if(!$('routines').children.length)$('routines').append(node('p','No routines for this bot yet.','muted'));
  $('add-routine').disabled=object?.kind!=='persona';
  $('memories').replaceChildren();for(const m of items('memory').filter(x=>x.body.scope.kind==='global'||x.body.scope.kind==='persona'&&x.body.scope.id===selected)){
