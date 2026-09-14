@@ -7,17 +7,19 @@ import { createServer } from 'node:http';
 import { EventEmitter } from 'node:events';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, readlink, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Agent } from 'undici';
 import { createSpriteCodexService } from '../runtime/sprites-codex-service.mjs';
 import { ControlClient } from '../runtime/control-client.mjs';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
+import { inspectCodexRecovery } from '../runtime/codex-recovery-inspect.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const childMode = process.argv.includes('--child');
-assert.ok(process.argv.slice(2).every(arg => arg === '--child'), 'Unknown fixture option');
+const crashMode = process.argv.includes('--crash');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -58,6 +60,7 @@ const directory = await mkdtemp(join(tmpdir(), 'hehe-service-native-'));
 const report = { status: 'failed', modelRequests: 0, nativeReceipt: false, spriteHoldLive: false, assistantOperational: false };
 let worker, service, model, dispatcher, workerLogs = '', bound = false;
 let toolRequests = 0, childThreadId, childHeld = false, childClosed = false;
+let nativeTransport, nativeLaunches = 0, crashHeld = false, crashClosed = false;
 const interrupts = [], notifications = [];
 const errors = [], taskRequests = [];
 try {
@@ -147,6 +150,11 @@ try {
           res.once('close', () => { if (!res.writableEnded) childClosed = true; });
           return;
         }
+        if (crashMode) {
+          crashHeld = true;
+          res.once('close', () => { if (!res.writableEnded) crashClosed = true; });
+          return;
+        }
         send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
           content: [{ type: 'output_text', text: 'SERVICE_ASSEMBLY_OK', annotations: [] }] }]);
       }
@@ -176,9 +184,10 @@ try {
   const config = { disposableTest: true, stateDirectory, binary: join(root, '.local/codex-runtime/node_modules/.bin/codex'),
     portalOrigin: origin + '/', runtimeTokenFile, tlsCAFile: cert, installationId: 'service-fixture',
     personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model', allowedTools: ['hehebot_list_routines'] } } };
-  service = createSpriteCodexService(config, { spriteRequest, fetchImpl: trustedFetch,
+  const dependencies = { spriteRequest, fetchImpl: trustedFetch,
     launch: options => {
       const transport = spawnCodex(options), request = transport.request.bind(transport);
+      nativeTransport = transport; nativeLaunches++;
       transport.on('notification', notification => notifications.push(notification));
       transport.request = (method, params) => {
         if (method === 'turn/interrupt') interrupts.push(structuredClone(params));
@@ -186,10 +195,12 @@ try {
       };
       return transport;
     },
-    prepareNative: home => writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) });
+    prepareNative: home => writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) };
+  service = createSpriteCodexService(config, dependencies);
   const dispatched = await service.start(); bound = true;
   assert.equal(dispatched.phase, 'running'); assert.equal(dispatched.claim.run.id, queued.resource_id);
-  await wait(async () => (await service.observe())?.rootSettled, 'root completion');
+  if (crashMode) await wait(() => crashHeld, 'active root inference after verified MCP receipt');
+  else await wait(async () => (await service.observe())?.rootSettled, 'root completion');
   if (childMode) {
     await wait(() => childHeld, 'child inherited MCP receipt and open model request');
     await service.maintain();
@@ -235,6 +246,25 @@ try {
   assert.ok(operations.every(operation => operation.run_id === queued.resource_id && operation.deadline_at === dispatched.claim.deadline_at));
   await assert.rejects(service.supervisor.complete({ attemptId: dispatched.attemptId, nativeRunId: native.nativeRunId, rootSettled: true }), { code: 'NATIVE_SETTLEMENT_INCOMPLETE' });
   await assert.rejects(service.supervisor.drain({ state: 'fixture' }), { code: 'SLEEP_DENIED' });
+  if (crashMode) {
+    assert.equal(native.rootSettled, false); assert.equal(crashClosed, false);
+    assert.equal(operations.find(operation => operation.kind === 'inference').status, 'active');
+    // The npm launcher owns one native child. Target that binary, not the shim.
+    const launcherPid = nativeTransport.child.pid;
+    const nativePids = (await readFile(`/proc/${launcherPid}/task/${launcherPid}/children`, 'utf8')).trim().split(/\s+/).map(Number);
+    assert.equal(nativePids.length, 1); assert.ok(Number.isSafeInteger(nativePids[0]) && nativePids[0] > 1);
+    assert.match(await readlink(`/proc/${nativePids[0]}/exe`), /\/codex$/);
+    process.kill(nativePids[0], 'SIGKILL');
+    await wait(() => service.phase === 'recovery' && nativeTransport.child.signalCode === 'SIGKILL', 'native crash fences service');
+    await wait(() => crashClosed, 'crashed root HTTP closure');
+    assert.equal(notifications.some(n => n.method === 'turn/completed' && n.params.threadId === native.threadId && n.params.turn.id === native.nativeRunId), false);
+    await assert.rejects(service.maintain(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+    await assert.rejects(service.supervisor.dispatch(), { code: 'EXECUTOR_FENCED' });
+    await assert.rejects(service.supervisor.drain({ state: 'fixture' }), { code: 'EXECUTOR_FENCED' });
+    assert.deepEqual(await service.journal.get(dispatched.attemptId), native);
+    Object.assign(report, { activeNativeCrashFenced: true, rootHttpClosed: crashClosed, rootTerminalObserved: false,
+      unknownCoverage: 1, sleepDenied: true });
+  }
   if (childMode) {
     assert.equal(operations.find(operation => operation.kind === 'child').status, 'settled');
     const rejected = await trustedFetch(`${origin}/internal/complete`, { method: 'POST', headers: {
@@ -254,6 +284,23 @@ try {
   assert.deepEqual(taskRequests, ['PUT', 'GET']); assert.equal(report.modelRequests, childMode ? 4 : 2); assert.deepEqual(errors, []);
   await service.stop();
   assert.equal((await service.journal.get('service')).phase, 'recovery');
+  const diagnostic = await inspectCodexRecovery(join(stateDirectory, 'journal'));
+  assert.deepEqual(diagnostic.issues, []);
+  assert.equal(diagnostic.dispatch.runId, queued.resource_id);
+  assert.equal(diagnostic.dispatch.attemptId, dispatched.attemptId);
+  assert.equal(diagnostic.native.root.threadId, native.threadId);
+  assert.equal(diagnostic.native.root.turnId, native.nativeRunId);
+  assert.equal(diagnostic.native.root.observedTerminal, !crashMode);
+  assert.equal(diagnostic.resumeAllowed, false); assert.equal(diagnostic.sleepAllowed, false);
+  report.offlineRecoveryDiagnostic = true;
+  if (crashMode) {
+    const before = await service.journal.get(dispatched.attemptId);
+    await assert.rejects(createSpriteCodexService(config, dependencies).start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+    assert.equal(nativeLaunches, 1); assert.equal(report.modelRequests, 2);
+    assert.deepEqual(await service.journal.get(dispatched.attemptId), before);
+    assert.deepEqual(taskRequests, ['PUT', 'GET']);
+    Object.assign(report, { restartRefused: true, nativeLaunches, rootWorkerStatus: 'running' });
+  }
   report.status = 'passed';
 } catch (error) {
   report.error = error.code ?? error.message;

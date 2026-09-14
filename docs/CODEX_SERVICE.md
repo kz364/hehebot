@@ -14,6 +14,7 @@ After the normal `bash scripts/verify-codex.sh` prerequisites:
 node --test tests/runtime-file-journal.mjs tests/runtime-codex-service.mjs
 bash scripts/test-codex-service.sh
 bash scripts/test-codex-service.sh --child
+bash scripts/test-codex-service.sh --crash
 ```
 
 The second command builds `src/providers/sprites.ts` into the ignored
@@ -44,6 +45,16 @@ the child remains cancelling, and supervisor completion/sleep are denied. This i
 not recursive settlement, model judgment, active-work crash recovery, per-child
 effect authentication, or a live Sprite hold test. No service runtime is replaced
 with a stub; only Sprite requests and model decisions are synthetic.
+
+The Linux `--crash` mode holds the root's second scripted response after a verified
+MCP read. It identifies the npm launcher's exact native child through `/proc` and
+kills that binary with SIGKILL during the active turn. It observes process exit,
+HTTP closure and automatic service fencing, but no terminal root event. The
+journal remains unresolved; Worker remains running; maintenance, dispatch and
+sleep reject. After shutdown, reconstructing the service refuses the existing
+marker without launching another native process, replaying inference or releasing
+the hold. This proves active-crash **fencing and refusal**, not successful recovery,
+reconciliation of external effects, detached-process containment or safe resume.
 
 ## Composition contract
 

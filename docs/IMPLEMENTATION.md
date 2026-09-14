@@ -20,6 +20,11 @@ heartbeat to one exact interrupt, while completion/sleep remain denied. See
 verified hold create/read/renew/delete, not application drain or VM sleep; see
 [provider evidence](PROVIDERS.md).
 
+The active-native-crash fixture verifies fencing and restart refusal during an
+open root turn, not successful resume. The [offline recovery diagnostic](CODEX_RECOVERY.md)
+projects current task identities and observed obligations without credentials,
+network calls or state writes; unknown coverage remains a blocker.
+
 [Selected portable templates](PORTABLE_TEMPLATES.md) export configuration into
 disabled routines and pending skill proposals with grants removed. This is an
 offline review plan, not full backup/restore or automatic migration.
