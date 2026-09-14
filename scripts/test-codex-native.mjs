@@ -296,13 +296,24 @@ try {
   assert.equal(parentRow.childTurns[childKey], 'inProgress');
   assert.equal(heldClosed, 1);
   assert.equal(notifications.some(n => n.method === 'turn/completed' && n.params?.threadId === childThread && n.params.turn.id === childStarted.params.turn.id), false);
-  await transport.request('turn/interrupt', { threadId: childThread, turnId: childStarted.params.turn.id });
+  let childInterrupts = 0;
+  const childCancellation = new CodexAdapter({ cwd: workspace, journal: new FileJournal(journalPath), rpc: (method, params) => {
+    assert.equal(method, 'turn/interrupt');
+    assert.deepEqual(params, { threadId: childThread, turnId: childStarted.params.turn.id });
+    childInterrupts++;
+    return transport.request(method, params);
+  } });
+  const childTarget = { threadId: childThread, turnId: childStarted.params.turn.id };
+  assert.equal((await childCancellation.cancelChild('parent-proof', childTarget)).status, 'accepted');
+  assert.equal((await childCancellation.cancelChild('parent-proof', childTarget)).status, 'accepted');
+  assert.equal(childInterrupts, 1);
   assert.equal((await waitTurn(childStarted.params.turn.id)).status, 'interrupted');
   await waitFor(() => heldClosed === 2, 'child provider request closure');
   await router.flush();
   assert.equal((await recovery.requireRun('parent-proof')).childTurns[childKey], 'interrupted');
   assert.deepEqual(routerFailures, []); assert.equal(router.pending.length, 0);
   report.nativeChildTurnRouting = true;
+  report.durableChildCancellation = true;
   router.close();
   report.childOutlivesParent = true;
 

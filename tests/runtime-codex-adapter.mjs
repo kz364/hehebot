@@ -82,6 +82,30 @@ test('interrupt acknowledgement and root completion do not authorize sleep or co
   assert.equal(adapter.sleepReadiness().allowed, false);
 });
 
+test('child cancellation targets one observed turn after parent completion and survives lost acknowledgement', async t => {
+  const { adapter, calls, journal, cwd } = await fixture(t);
+  await adapter.submit(input);
+  await adapter.observe(input.attemptId, { method: 'item/completed', params: { threadId: 'thread-a', turnId: 'turn-b',
+    item: { id: 'spawn', type: 'collabAgentToolCall', tool: 'spawnAgent', senderThreadId: 'thread-a', status: 'completed', receiverThreadIds: ['child-a', 'child-b'] },
+  } });
+  for (const threadId of ['child-a', 'child-b']) await adapter.observe(input.attemptId, { method: 'turn/started', params: { threadId, turn: { id: 'same-turn', status: 'inProgress' } } });
+  await adapter.observe(input.attemptId, { method: 'turn/completed', params: { threadId: 'thread-a', turn: { id: 'turn-b', status: 'completed' } } });
+  const before = await journal.get(input.attemptId);
+  adapter.rpc = async (method, params) => { calls.push({ method, params }); throw new Error('lost private acknowledgement'); };
+  const target = { threadId: 'child-a', turnId: 'same-turn' };
+  const outcomes = await Promise.all([adapter.cancelChild(input.attemptId, target), adapter.cancelChild(input.attemptId, target)]);
+  assert.ok(outcomes.every(row => row.status === 'unknown'));
+  assert.deepEqual(calls.slice(2), [{ method: 'turn/interrupt', params: target }]);
+  assert.deepEqual(await journal.get(input.attemptId), before);
+  const restored = new CodexAdapter({ cwd, journal: new FileJournal(cwd), rpc: () => assert.fail('unknown interrupt must not replay') });
+  assert.equal((await restored.cancelChild(input.attemptId, target)).status, 'unknown');
+  for (const target of [{ threadId: 'child-a', turnId: 'unobserved' }, { threadId: 'unrelated', turnId: 'same-turn' }, { threadId: 'thread-a', turnId: 'turn-b' }])
+    await assert.rejects(restored.cancelChild(input.attemptId, target), { code: 'SETTLEMENT_IDENTITY_MISMATCH' });
+  await restored.observe(input.attemptId, { method: 'turn/completed', params: { threadId: 'child-b', turn: { id: 'same-turn', status: 'completed' } } });
+  assert.deepEqual(await restored.cancelChild(input.attemptId, { threadId: 'child-b', turnId: 'same-turn' }), { status: 'already_terminal', nativeOutcome: 'completed' });
+  assert.equal(restored.sleepReadiness().allowed, false);
+});
+
 test('reopened adapter recovers only the exact acknowledged turn without replay or sleep permission', async t => {
   const { adapter, cwd } = await fixture(t);
   await adapter.submit(input);

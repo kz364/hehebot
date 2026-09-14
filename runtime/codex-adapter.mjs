@@ -86,6 +86,30 @@ export class CodexAdapter {
       return this.journal.update(attemptId, { cancelAcknowledged: true });
     } catch { return this.journal.get(attemptId); }
   }
+
+  /** Host-authorized cancellation of one observed child turn. Never broadens to
+   * the parent, a sibling, or the latest turn; acceptance is not settlement.
+   */
+  async cancelChild(attemptId, target) {
+    if (!target || Object.keys(target).some(key => !['threadId', 'turnId'].includes(key)) ||
+        ![target.threadId, target.turnId].every(id => typeof id === 'string' && id.length > 0 && id.length <= 256)) fail('INVALID_CANCEL_TARGET');
+    const row = await this.requireRun(attemptId);
+    const { threadId, turnId } = target;
+    const turnKey = JSON.stringify([threadId, turnId]);
+    if (!Object.values(row.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(threadId)) ||
+        !Object.hasOwn(row.childTurns ?? {}, turnKey)) fail('SETTLEMENT_IDENTITY_MISMATCH');
+    const key = `cancel-child-${hash([attemptId, threadId, turnId])}`;
+    const prior = await this.journal.get(key);
+    if (prior) return prior;
+    if (row.childTurns[turnKey] !== 'inProgress') return { status: 'already_terminal', nativeOutcome: row.childTurns[turnKey] };
+    const existing = await this.journal.putIfAbsent(key, { threadId, turnId, status: 'unknown' });
+    if (existing) return existing;
+    try {
+      await this.rpc('turn/interrupt', { threadId, turnId });
+      return this.journal.update(key, { status: 'accepted' });
+    } catch { return this.journal.get(key); }
+  }
+
   observe(attemptId, notification) {
     const next = this.#observations.then(() => this.#observeOne(attemptId, notification));
     this.#observations = next.catch(() => {});
