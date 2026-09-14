@@ -39,8 +39,14 @@ pre-pruning responses. `node scripts/test-portal-history.mjs --retention` checks
 partial/empty history and stale responses in Chromium with synthetic read-only
 HTTP responses; default and `--error` modes cover cross-bot history races.
 
-Command payloads/receipts, captured task contexts, attempts/outbox results,
-follow-ups, revisions, native data and backups remain outside this cleanup.
+Schema v6 adds indexed, 100-row command-payload cleanup at 90 days from original
+acceptance for applied/rejected commands. Receipt identities, body hashes, keys,
+outcomes and foreign-key links remain intact; pending acceptance is not erased.
+Tests preserve same-key and webhook replay/conflict behavior after body removal.
+This does not claim dedupe-key reuse or deletion of receipt metadata at 90 days.
+
+Captured task contexts, attempts/outbox results, follow-ups, revisions, native
+data and backups remain outside this cleanup.
 Compact provenance/causal records currently have no expiry. These are explicit
 remaining retention gaps, not proof of full S30 or "forget everywhere". Existing
 publication digest semantics are preserved; full per-edge collaboration,

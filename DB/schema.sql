@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (5, '2026-09-14T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (6, '2026-09-14T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -22,6 +22,7 @@ CREATE TABLE commands (
  accepted_at TEXT NOT NULL, resource_id TEXT, error_json TEXT CHECK(error_json IS NULL OR json_valid(error_json)),
  UNIQUE(owner_id,idempotency_key)
 );
+CREATE INDEX commands_payload_expiry ON commands(accepted_at,id) WHERE payload_json!='{}' AND status IN ('applied','rejected');
 CREATE TABLE events (
  sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
  conversation_id TEXT, type TEXT NOT NULL, actor_id TEXT NOT NULL, cause_id TEXT,

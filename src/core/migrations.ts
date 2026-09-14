@@ -35,5 +35,10 @@ export function migrateApplication(db:Database,now:string):void {
   db.exec('CREATE TABLE context_retention (consumer_id TEXT NOT NULL,conversation_id TEXT NOT NULL,pruned_through INTEGER NOT NULL,PRIMARY KEY(consumer_id,conversation_id))');
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(5,?)',now);
  });
- requireThat([4,5].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===4)version=5;
+ if(version===5)db.transaction(()=>{
+  db.exec("CREATE INDEX commands_payload_expiry ON commands(accepted_at,id) WHERE payload_json!='{}' AND status IN ('applied','rejected')");
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(6,?)',now);
+ });
+ requireThat([5,6].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

@@ -202,6 +202,18 @@ export class ControlCore {
    return due.length;
   });
  }
+ nextCommandPayloadExpiry():string|null {
+  const first=this.store.db.all<{accepted_at:string}>("SELECT accepted_at FROM commands WHERE payload_json!='{}' AND status IN ('applied','rejected') ORDER BY accepted_at LIMIT 1")[0];
+  return first?new Date(Date.parse(first.accepted_at)+90*86400000).toISOString():null;
+ }
+ expireCommandPayloads():number {
+  return this.store.db.transaction(()=>{
+   const cutoff=new Date(this.options.now().getTime()-90*86400000).toISOString();
+   const due=this.store.db.all<{id:string}>("SELECT id FROM commands WHERE payload_json!='{}' AND status IN ('applied','rejected') AND accepted_at<=? ORDER BY accepted_at,id LIMIT 100",cutoff);
+   if(due.length)this.store.db.exec("UPDATE commands SET payload_json='{}' WHERE id IN (SELECT value FROM json_each(?))",JSON.stringify(due.map(command=>command.id)));
+   return due.length;
+  });
+ }
  flushFollowups(runId:string):void {
   const run=this.store.run(runId);
   if(!['completed','failed','cancelled'].includes(run.status))return;
