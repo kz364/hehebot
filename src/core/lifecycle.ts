@@ -152,7 +152,7 @@ export class LifecycleCore {
   if(this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled'",run.id).length)return;
   const due=new Date(this.core.options.now().getTime()+(run.current_attempt<=1?10000:60000)).toISOString();
   this.store.db.exec('INSERT INTO retry_queue(run_id,due_at,reason) VALUES(?,?,?) ON CONFLICT(run_id) DO NOTHING',run.id,due,reason);
-  this.store.db.exec("UPDATE runs SET status='waiting',error_code=?,checkpoint_json=?,updated_at=? WHERE id=?",reason,JSON.stringify({retry_at:due}),this.core.now(),run.id);
+  this.store.db.exec("UPDATE runs SET status='waiting',error_code=?,checkpoint_json=?,updated_at=? WHERE id=?",reason,run.checkpoint_json??JSON.stringify({retry_at:due}),this.core.now(),run.id);
  }
  retryDue():void {
   this.store.db.transaction(()=>{

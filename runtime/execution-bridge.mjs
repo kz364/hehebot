@@ -45,7 +45,8 @@ export class ExecutionBridge {
           id: skill.id, revision: skill.revision, name: skill.body.name,
           description: skill.body.description, when_to_use: skill.body.when_to_use,
           load_with: 'hehebot_read_skill',
-        })) }),
+        })), ...(claim.run.current_attempt > 1 && claim.run.checkpoint_json
+          ? { durable_checkpoint: JSON.parse(claim.run.checkpoint_json) } : {}) }),
       };
       await this.journal.update(this.cursor, { phase: 'submission_unknown', attemptId: input.attemptId });
       let submitted;

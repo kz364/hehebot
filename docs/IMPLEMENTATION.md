@@ -111,6 +111,15 @@ apply. Owner cancellation continues to suppress result text. SQLite/journal test
 exercise lost acknowledgments and reconstruction, not native restart readiness
 or family settlement.
 
+Retry scheduling preserves an existing run checkpoint rather than overwriting it
+with a retry timestamp; the retry queue still owns the deadline. The bridge passes
+that checkpoint as nested `durable_checkpoint` data to a later admitted attempt's
+fresh native thread, without merging it into authorization or another task's
+context. SQLite/journal/RPC tests cover owner and automatic retries. This is
+checkpoint delivery, not native session restoration, proof that a model uses the
+checkpoint correctly, or permission to replay an effect. Existing reconciliation
+and retry-admission restrictions still apply.
+
 Quiet-chat result messages retain the recorded event's outcome, error code and
 available task title even when no recent run record remains or the body is empty.
 Missing legacy status is unavailable, never inferred as success. These historical

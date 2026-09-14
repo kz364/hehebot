@@ -10,23 +10,24 @@ import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 
 let f: ReturnType<typeof fixture>, life: LifecycleCore, identity: Identity, directory: string;
-let nativeCalls: number, lose: string | undefined;
+let nativeCalls: number, lose: string | undefined, nativeMessages: any[];
 beforeEach(async () => {
   f = fixture(true); life = new LifecycleCore(f.store, f.core);
   f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
   identity = life.registerBoot(randomUUID()); life.ready(identity);
   directory = await mkdtemp(join(tmpdir(), 'hehebot-bridge-'));
-  nativeCalls = 0; lose = undefined;
+  nativeCalls = 0; lose = undefined; nativeMessages = [];
 });
 afterEach(async () => { f.close(); await rm(directory, { recursive: true, force: true }); });
 function enqueue() {
   return f.accept({ schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Synthetic bridge request' } }).resource_id!;
 }
 function bridge(testMode = true, journal = new FileJournal(join(directory, 'bridge'))) {
-  const native = new CodexAdapter({ cwd: directory, testMode, journal: new FileJournal(join(directory, 'native')), rpc: async (method: string) => {
+  const native = new CodexAdapter({ cwd: directory, testMode, journal: new FileJournal(join(directory, 'native')), rpc: async (method: string, params: any) => {
     if (method === 'thread/start') return { thread: { id: 'native-bridge-thread' } };
     if (method === 'turn/start') {
       nativeCalls++;
+      nativeMessages.push(JSON.parse(params.input[0].text));
       if (lose === 'native') throw new Error('lost native admission response');
       return { turn: { id: 'native-bridge-result' } };
     }
@@ -135,6 +136,25 @@ it.each(['completed', 'waiting', 'retryable_failure'] as const)('lost %s complet
   expect(nativeCalls).toBe(1);
   expect(f.db.all("SELECT id FROM events WHERE type='run.result'")).toHaveLength(1);
   await expect(bridge().complete({ ...observation, result: { ...observation.result, text: 'Different reply' } })).rejects.toMatchObject({ code: 'RESULT_CONFLICT' });
+});
+
+it.each(['owner', 'automatic'] as const)('%s retry passes the saved checkpoint as data without leaking it into another task or authority', async mode => {
+  const id = enqueue(), executor = bridge(), first = await executor.claimNext();
+  const checkpoint = { cursor: 43, completed_step_ids: ['step-19'], authorization_policy_ids: ['ungranted'] };
+  await executor.complete({ ...settled(first), result: { status: mode === 'owner' ? 'waiting' : 'failed', text: 'Paused', checkpoint,
+    ...(mode === 'automatic' ? { error_code: 'TEMPORARY_UNAVAILABLE' } : {}) } });
+  expect(JSON.parse(f.store.run(id).checkpoint_json!)).toEqual(checkpoint);
+  if (mode === 'owner') expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: id, expected_attempt: 1 } }).status).toBe('applied');
+  else { f.setNow('2026-09-10T00:00:11.000Z'); life.retryDue(); }
+  const restored = bridge(), next = await restored.claimNext();
+  expect(next.claim.run.id).toBe(id); expect(next.claim.run.current_attempt).toBe(2);
+  expect(nativeMessages[0]).not.toHaveProperty('durable_checkpoint');
+  expect(nativeMessages[1].durable_checkpoint).toEqual(checkpoint);
+  expect(nativeMessages[1].authorization_policy_ids).toEqual([]);
+  expect(JSON.parse(next.claim.run.context_json)).not.toHaveProperty('durable_checkpoint');
+  await restored.complete(settled(next)); const other = enqueue();
+  expect((await bridge().claimNext()).claim.run.id).toBe(other);
+  expect(nativeMessages[2]).not.toHaveProperty('durable_checkpoint'); expect(nativeCalls).toBe(3);
 });
 
 it('root completion cannot bypass child/tool/effect/output settlement or exact identity', async () => {
