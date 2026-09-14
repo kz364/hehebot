@@ -20,6 +20,14 @@ locks, requesting inference or waking the runtime. This is not full retention or
 "forget everywhere": source events, terminal task snapshots, native transcripts
 and backups may still contain copies.
 
+Schema v4 separates new room-publication identities/digests from timeline text.
+Duplicate suppression and the existing three-action-request causal limit survive
+loss of those new timeline rows. Legacy events remain part of both checks and
+must be backfilled before pruning. No event retention job runs yet; compact
+causal records have no expiry until cause-admission/expiry rules are defined.
+This preserves the existing publication digest semantics, not the full per-edge
+collaboration, shared-deadline or yielding requirements.
+
 Disposable service assembly now composes supervisor, bridge, native transport/router,
 per-root inherited MCP grants, child controls and conservative operation accounting.
 Its native child fixture exercises public owner cancellation through real Worker

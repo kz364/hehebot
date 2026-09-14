@@ -24,9 +24,11 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM commands')).toEqual(commands);expect(db.all('SELECT * FROM objects')).toEqual(objects);
    expect(db.all('SELECT * FROM runs')).toEqual([{id:'run-1',status:'waiting',context_json:'{"synthetic":"preserve context"}',command_id:'command-1',role:'coordinator',parent_run_id:null,title:null}]);
    expect(db.all("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('native_task_links','resource_locks','task_followups','skill_proposals','skill_enablements')")).toHaveLength(5);
-   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(3);
+   expect(db.all('SELECT * FROM room_publications')).toEqual([]);
+   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(4);
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=2')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=3')[0].applied_at).toBe('2026-09-10T00:00:00Z');
+   expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=4')[0].applied_at).toBe('2026-09-10T00:00:00Z');
   }finally{sqlite.close();}
  });
  it('rolls back partial ALTER changes if a later migration statement fails',()=>{
@@ -36,6 +38,20 @@ describe('application v1 migration',()=>{
    expect(db.all<{name:string}>('PRAGMA table_info(runs)').some(c=>c.name==='role')).toBe(false);
    expect(db.all("SELECT name FROM sqlite_master WHERE name='native_task_links'")).toHaveLength(0);
    expect(db.all('SELECT * FROM runs')).toHaveLength(1);expect(db.all('SELECT version FROM schema_versions')).toEqual([{version:1}]);
+  }finally{sqlite.close();}
+ });
+ it('rolls back publication migration on index conflict and preserves the v3 checkpoint',()=>{
+  const {db,sqlite}=legacy();try{
+   migrateApplication(db,'2026-09-10T00:00:00Z');
+   sqlite.exec('DROP TABLE room_publications; DELETE FROM schema_versions WHERE version=4; CREATE INDEX room_publications_cause ON objects(id)');
+   const before=db.all('SELECT * FROM runs');
+   expect(()=>migrateApplication(db,'2026-09-11T00:00:00Z')).toThrow();
+   expect(db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='room_publications'")).toEqual([]);
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:3}]);
+   expect(db.all('SELECT * FROM runs')).toEqual(before);
+   sqlite.exec('DROP INDEX room_publications_cause');
+   migrateApplication(db,'2026-09-12T00:00:00Z');
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:4}]);
   }finally{sqlite.close();}
  });
  it('rejects unknown future schema without changing application data',()=>{

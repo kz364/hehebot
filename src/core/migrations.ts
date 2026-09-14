@@ -21,5 +21,11 @@ export function migrateApplication(db:Database,now:string):void {
   db.exec("CREATE TABLE skill_enablements (skill_id TEXT NOT NULL REFERENCES objects(id),persona_id TEXT NOT NULL REFERENCES objects(id),skill_revision INTEGER NOT NULL,enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),updated_at TEXT NOT NULL,PRIMARY KEY(skill_id,persona_id))");
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(3,?)',now);
  });
- requireThat([1,2,3].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===2)version=3;
+ if(version===3)db.transaction(()=>{
+  db.exec('CREATE TABLE room_publications (event_id TEXT PRIMARY KEY,room_id TEXT NOT NULL,actor_id TEXT NOT NULL,cause_id TEXT NOT NULL,payload_digest TEXT NOT NULL,kind TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(room_id,actor_id,cause_id,payload_digest))');
+  db.exec('CREATE INDEX room_publications_cause ON room_publications(cause_id,kind)');
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(4,?)',now);
+ });
+ requireThat([3,4].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

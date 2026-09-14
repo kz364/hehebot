@@ -234,12 +234,15 @@ export class ControlCore {
   const room=this.store.get<RoomPut>(p.room_id,'room');
   requireThat(p.recipient_ids.every(id=>room.body.member_ids.includes(id)),'FORBIDDEN','Recipients must be room members.',403);
   for(const reference of p.references){const object=this.store.get(reference.id);requireThat(object.kind===reference.kind,'INVALID_INPUT','The referenced object kind does not match.',422);requireThat(object.revision===reference.revision,'REVISION_CONFLICT','A referenced item changed.');if(object.kind==='memory'){const m=object.body as unknown as MemoryPut;requireThat(m.scope.kind==='global'||m.scope.kind==='persona'&&p.recipient_ids.every(id=>id===m.scope.id),'FORBIDDEN','Private memory cannot be shared through this room update.',403);}}
-  const prior=this.store.db.all<{id:string}>('SELECT id FROM events WHERE conversation_id=? AND actor_id=? AND cause_id=? AND payload_json=?',p.room_id,owner,p.cause_id,JSON.stringify(p))[0];if(prior)return prior.id;
+  const payload=JSON.stringify(p),digest=createHash('sha256').update(payload).digest('hex');
+  const prior=this.store.db.all<{id:string}>('SELECT event_id AS id FROM room_publications WHERE room_id=? AND actor_id=? AND cause_id=? AND payload_digest=?',p.room_id,owner,p.cause_id,digest)[0]
+   ??this.store.db.all<{id:string}>('SELECT id FROM events WHERE conversation_id=? AND actor_id=? AND cause_id=? AND payload_json=?',p.room_id,owner,p.cause_id,payload)[0];if(prior)return prior.id;
+  this.store.db.exec('INSERT INTO room_publications(event_id,room_id,actor_id,cause_id,payload_digest,kind,created_at) VALUES(?,?,?,?,?,?,?)',commandId,p.room_id,owner,p.cause_id,digest,p.kind,this.now());
   const sequence=this.store.event(commandId,p.room_id,`room.${p.kind}`,owner,p.cause_id,p as unknown as Record<string,unknown>,this.now());
   for(const recipient of p.recipient_ids)this.store.db.exec('INSERT INTO consumer_cursors(consumer_id,conversation_id,delivered_sequence,consumed_sequence) VALUES(?,?,?,0) ON CONFLICT(consumer_id,conversation_id) DO UPDATE SET delivered_sequence=excluded.delivered_sequence',recipient,p.room_id,sequence);
   if(p.kind==='action_request'){
    requireThat(p.recipient_ids.length<=2,'INVALID_INPUT','At most two bots may be requested at once.',422);
-   const causalCount=this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM events WHERE cause_id=? AND type='room.action_request'",p.cause_id)[0].n;
+   const causalCount=this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM (SELECT id FROM events WHERE cause_id=? AND type='room.action_request' UNION SELECT event_id FROM room_publications WHERE cause_id=? AND kind='action_request')",p.cause_id,p.cause_id)[0].n;
    requireThat(causalCount<=3,'DEADLINE_EXCEEDED','The bot collaboration budget is exhausted.');
    for(const recipient of p.recipient_ids)this.enqueue(recipient,p.text,commandId,null,null,p.room_id);
   }

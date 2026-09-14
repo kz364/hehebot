@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (3, '2026-09-14T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (4, '2026-09-14T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -28,6 +28,13 @@ CREATE TABLE events (
  payload_json TEXT NOT NULL CHECK(json_valid(payload_json)), created_at TEXT NOT NULL
 );
 CREATE INDEX events_conversation_sequence ON events(conversation_id,sequence);
+-- Content-free publication identity survives timeline retention; not a full causal scheduler.
+CREATE TABLE room_publications (
+ event_id TEXT PRIMARY KEY, room_id TEXT NOT NULL, actor_id TEXT NOT NULL, cause_id TEXT NOT NULL,
+ payload_digest TEXT NOT NULL, kind TEXT NOT NULL, created_at TEXT NOT NULL,
+ UNIQUE(room_id,actor_id,cause_id,payload_digest)
+);
+CREATE INDEX room_publications_cause ON room_publications(cause_id,kind);
 CREATE TABLE consumer_cursors (
  consumer_id TEXT NOT NULL, conversation_id TEXT NOT NULL,
  delivered_sequence INTEGER NOT NULL DEFAULT 0, consumed_sequence INTEGER NOT NULL DEFAULT 0,
