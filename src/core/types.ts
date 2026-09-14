@@ -15,6 +15,7 @@ export type SkillProvenance = { kind:'owner'|'task'|'notes'|'file'|'url'|'import
 export type SkillProposal = { proposal_id:string; skill_id:string; expected_skill_revision:number; body:SkillBody; provenance:SkillProvenance; executable_files_changed:boolean };
 export type RoomPublish = { room_id: string; kind: 'context_update' | 'action_request' | 'message'; recipient_ids: string[]; text: string; references: { kind: string; id: string; revision: number }[]; cause_id: string };
 export type PayloadMap = {
+ 'effect.reconcile':{run_id:string;expected_attempt:number;effect_id:string;expected_request_digest:string;outcome:'confirmed'|'failed';evidence_ref:string};
  'budget.set':BudgetPolicy;
  'budget.override':{run_id:string;expected_revision:number};
  'run.steer':{run_id:string;expected_attempt:number;text:string};

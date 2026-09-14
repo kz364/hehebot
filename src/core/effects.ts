@@ -1,9 +1,26 @@
 import { Store } from './store';
 import { requireThat } from './errors';
-import type { ContextSnapshot } from './types';
+import type { ContextSnapshot, PayloadMap } from './types';
 export type EffectIntent={id:string;run_id:string;attempt:number;action_key:string;classification:'read_only'|'idempotent'|'mutation';authorization_ref:string;request_digest:string;provider_idempotency_key:string|null};
 export class EffectLedger {
  constructor(private store:Store,private now:()=>string){}
+ reconcileStopped(owner:string,commandId:string,input:PayloadMap['effect.reconcile']):string {
+  return this.store.db.transaction(()=>{
+   const run=this.store.run(input.run_id);
+   requireThat(run.current_attempt===input.expected_attempt,'REVISION_CONFLICT','The attempt has changed.');
+   const attempt=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,input.expected_attempt)[0];
+   requireThat(attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before an owner effect decision.');
+   requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length,'CANCEL_UNCONFIRMED','The old execution has not settled.');
+   const effect=this.store.db.all<{run_id:string;request_digest:string;status:string;receipt_json:string|null}>('SELECT run_id,request_digest,status,receipt_json FROM effects WHERE id=?',input.effect_id)[0];
+   requireThat(effect?.run_id===run.id,'NOT_FOUND','Effect unavailable.',404);
+   requireThat(effect.request_digest===input.expected_request_digest,'REVISION_CONFLICT','Review the exact effect before recording its outcome.');
+   const previous=effect.receipt_json?JSON.parse(effect.receipt_json):null;
+   if(effect.status===input.outcome&&previous?.kind==='owner_reconciliation'&&previous.owner_id===owner&&previous.evidence_ref===input.evidence_ref)return input.effect_id;
+   requireThat(effect.status==='outcome_unknown','REVISION_CONFLICT','Only an unresolved stopped effect accepts an owner decision.');
+   this.transition(input.effect_id,run.id,input.outcome,{kind:'owner_reconciliation',owner_id:owner,command_id:commandId,evidence_ref:input.evidence_ref,attempt:input.expected_attempt});
+   return input.effect_id;
+  });
+ }
  intent(input:EffectIntent):{id:string;status:string}{return this.store.db.transaction(()=>{
   const run=this.store.run(input.run_id);
   requireThat(run.current_attempt===input.attempt&&run.status==='running','REVISION_CONFLICT','Effect is not associated with a running attempt.');

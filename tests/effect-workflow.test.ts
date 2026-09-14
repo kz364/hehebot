@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { ControlCore } from '../src/core/control';
+import { ControlCore, parseCommand } from '../src/core/control';
 import { Store } from '../src/core/store';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { EffectLedger, type EffectIntent } from '../src/core/effects';
@@ -69,6 +69,38 @@ it.each(['intent', 'dispatched'] as const)('never replays a %s mutation after lo
   expect(f.store.run(run).status).toBe('recovery_required');
   expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0); expect(f.db.all('SELECT * FROM outbox')).toHaveLength(0);
   expect(destinationWrites).toEqual(crashAt === 'dispatched' ? ['synthetic-mail-17 restored'] : []);
+});
+
+it.each(['confirmed','failed'] as const)('records an explicit owner %s decision only after confirmed termination, without releasing locks or retrying', outcome => {
+  const run = activeRoutine(), input = intent(run);
+  const locks = new ResourceLedger(f.store, () => f.core.now()); locks.acquire(run, 1, ['mail:17']);
+  effects.intent(input); effects.transition(input.id, run, 'dispatched', null);
+  const payload = { run_id:run, expected_attempt:1, effect_id:input.id, expected_request_digest:input.request_digest, outcome, evidence_ref:'manual-check:receipt-103' };
+  const command = { schema_version:1 as const, type:'effect.reconcile' as const, payload };
+  expect(parseCommand(command)).toEqual(command);
+  effects.transition(input.id, run, 'outcome_unknown', null);
+  expect(f.accept(command)).toMatchObject({ status:'rejected', error:{code:'CANCEL_UNCONFIRMED'} });
+  f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
+  expect(f.accept(command)).toMatchObject({ status:'rejected', error:{code:'CANCEL_UNCONFIRMED'} });
+  life.observeStopped({ phase:'stopped', executionStopped:true, persistentState:'retained', observedAt:Date.now() });
+  f.core.options.executionEnabled = false;
+  const beforeLocks = f.db.all('SELECT * FROM resource_locks'), beforeRun = f.store.run(run);
+  for(const changed of [{ expected_attempt:2 },{ expected_request_digest:'wrong-request' },{ effect_id:randomUUID() }]) {
+    expect(f.accept({ ...command, payload:{...payload,...changed} }).status).toBe('rejected');
+    expect(f.db.all('SELECT status FROM effects')).toEqual([{status:'outcome_unknown'}]);
+  }
+  const key = randomUUID(), receipt = f.accept(command,key);
+  expect(receipt.status).toBe('applied'); expect(f.accept(command,key)).toEqual(receipt);
+  const saved = f.db.all<{receipt_json:string}>('SELECT receipt_json FROM effects')[0].receipt_json;
+  expect(JSON.parse(saved)).toEqual({kind:'owner_reconciliation',owner_id:'owner',command_id:receipt.id,evidence_ref:payload.evidence_ref,attempt:1});
+  expect(f.accept(command).status).toBe('applied');
+  expect(f.accept({...command,payload:{...payload,outcome:outcome==='confirmed'?'failed':'confirmed'}}).status).toBe('rejected');
+  expect(f.accept({...command,payload:{...payload,evidence_ref:'different-reference'}}).status).toBe('rejected');
+  expect(f.db.all('SELECT status,receipt_json FROM effects')).toEqual([{status:outcome,receipt_json:saved}]);
+  expect(f.db.all('SELECT * FROM resource_locks')).toEqual(beforeLocks); expect(f.store.run(run)).toEqual(beforeRun);
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+  expect(f.db.all('SELECT * FROM outbox')).toEqual([]);
+  expect(() => life.authorizeAttempt(identity,run,1)).toThrowError(expect.objectContaining({code:'STALE_EPOCH'}));
 });
 
 // Real core admission/auth/effect/flight SQL, with synthetic structured mail and

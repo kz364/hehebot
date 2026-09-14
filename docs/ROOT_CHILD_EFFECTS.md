@@ -124,6 +124,31 @@ affected run remain held conservatively. Receipt-backed reconciliation permits
 subsequent explicit release; it does not release locks itself. Recovery must
 preserve those records and cannot blindly replay the action.
 
+## Owner decisions after confirmed executor termination
+
+The owner-only `/v1/commands` variant `effect.reconcile` records a manual decision
+for an `outcome_unknown` effect after its run's current attempt is `terminated`.
+That attempt state comes from confirmed executor-stop observation, not a supplied
+shutdown boolean, expired lease, Sprite hibernation or root completion. Live
+operation records still reject the decision. Execution may remain disabled.
+
+Its strict payload is `{run_id, expected_attempt, effect_id,
+expected_request_digest, outcome, evidence_ref}`. `outcome` is `confirmed` or
+`failed`; `evidence_ref` is a 1–128 character ASCII reference using letters,
+digits, colon, dot, underscore or hyphen—not a URL, free-text explanation or
+credential. The digest must match the complete stored digest, including a
+root/child envelope when present. Check the external destination before deciding.
+
+The durable receipt is explicitly marked `kind: owner_reconciliation`, with the
+owner, original command, attempt and evidence reference. It is an **owner
+decision, not independently verified provider evidence**. Same decision replay
+preserves the original receipt; conflicting outcome/reference is rejected. Model
+agent commands cannot call this owner operation. It sends no connector request,
+releases no lock, changes no run/attempt, enqueues no retry and grants no sleep.
+Post-stop lock release and task recovery remain separate work; the old runtime
+identity stays revoked. Synthetic tests exercise both outcomes and rejection
+before stop, stale identity/digest, replay, closed execution and model exclusion.
+
 ## Verification and limits
 
 `npx vitest run tests/root-child-effects.test.ts` uses real SQLite and existing

@@ -62,6 +62,24 @@
     {
       "type":"object","additionalProperties":false,
       "properties": {
+        "schema_version":{"const":1},"type":{"const":"effect.reconcile"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "run_id":{"$ref":"#/$defs/uuid"},"effect_id":{"$ref":"#/$defs/uuid"},
+            "expected_attempt":{"type":"integer","minimum":1},
+            "expected_request_digest":{"type":"string","minLength":1,"maxLength":256},
+            "outcome":{"enum":["confirmed","failed"]},
+            "evidence_ref":{"type":"string","pattern":"^[A-Za-z0-9:._-]{1,128}$"}
+          },
+          "required":["run_id","expected_attempt","effect_id","expected_request_digest","outcome","evidence_ref"]
+        }
+      },
+      "required":["schema_version","type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
         "schema_version":{"const":1},"type":{"const":"run.steer"},
         "payload": {
           "type":"object","additionalProperties":false,

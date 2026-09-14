@@ -8,6 +8,7 @@ import {BudgetLedger} from './budget';
 import {controlMonitoring} from './monitoring';
 import {TaskSteering} from './task-steering';
 import {nativeDescendantsSettledSql} from './native-tasks';
+import {EffectLedger} from './effects';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
@@ -61,6 +62,11 @@ export class ControlCore {
   const now=this.now();
   const skills=new SkillCatalog(this.store,()=>this.now(),this.options.uuid);
   switch(command.type){
+   case 'effect.reconcile':{
+    const p=command.payload,id=new EffectLedger(this.store,()=>this.now()).reconcileStopped(owner,commandId,p);
+    this.store.event(this.options.uuid(),this.store.run(p.run_id).persona_id,'effect.owner_reconciled',owner,commandId,
+     {run_id:p.run_id,effect_id:id,attempt:p.expected_attempt,outcome:p.outcome},now);return id;
+   }
    case 'budget.set':{
     const id=this.budget.set(owner,commandId,command.payload);this.reconcileBudget();return id;
    }

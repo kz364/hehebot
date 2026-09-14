@@ -87,6 +87,9 @@ describe('model-facing agent command boundary',()=>{
   expect(()=>boundary.accept(request(proposal()))).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
   const review:Command={schema_version:1,type:'skill.review',payload:{proposal_id:randomUUID(),expected_proposal_revision:1,decision:'approve'}};
   expect(()=>boundary.accept(request(review))).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
+  const reconcile:Command={schema_version:1,type:'effect.reconcile',payload:{run_id:runId,expected_attempt:1,effect_id:randomUUID(),expected_request_digest:'digest',outcome:'confirmed',evidence_ref:'owner-claim'}};
+  expect(()=>boundary.accept(request(reconcile))).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
+  expect(f.db.all('SELECT id FROM commands')).toEqual([]);
  });
 
  it('bounds routine ownership and action grants to the admitted snapshot',()=>{

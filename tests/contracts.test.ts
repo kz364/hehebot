@@ -6,6 +6,16 @@ describe('versioned command schema', () => {
   it('contains all 10 valid command variants and 4 rejection fixtures', () => { expect(vectors.valid).toHaveLength(10); expect(vectors.invalid).toHaveLength(4); });
   it.each(vectors.valid)('accepts $type fixture', (command) => { expect(parseCommand(command)).toEqual(command); });
   it.each(vectors.invalid)('rejects invalid contract %#', ({ command, expected_error }) => { expect(() => parseCommand(command)).toThrowError(expect.objectContaining({ code: expected_error })); });
+  it('requires an exact stopped-effect decision and bounded reference, without accepting release or shutdown assertions', () => {
+    const payload = {run_id:bot,effect_id:bot,expected_attempt:1,expected_request_digest:'digest-19',outcome:'confirmed',evidence_ref:'receipt:43'};
+    const command = (payload:unknown) => ({schema_version:1,type:'effect.reconcile',payload});
+    expect(parseCommand(command(payload))).toEqual(command(payload));
+    for(const change of [{expected_attempt:0},{outcome:'dispatched'},{evidence_ref:''},{evidence_ref:'https://example.invalid/private'},
+      {evidence_ref:'x'.repeat(129)},{expected_request_digest:''},{expected_request_digest:'x'.repeat(257)},
+      {resources:['mail:17']},{executionStopped:true},{effect_id:'not-a-uuid'}]) {
+      expect(() => parseCommand(command({...payload,...change}))).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
+    }
+  });
   it('bounds owner budget policies and requires a revision for one-run overrides', () => {
     const policy = { expected_revision: 0, enabled: true, monthly_cap_cents: 500, optional_routine_ids: [bot] };
     const set = (payload: unknown) => ({ schema_version: 1, type: 'budget.set', payload });
