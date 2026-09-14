@@ -7,6 +7,7 @@ import { fixture, bot } from './helpers';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { NativeTaskLedger } from '../src/core/native-tasks';
 import { TaskSteering } from '../src/core/task-steering';
+import { OutputPreviews } from '../src/core/output-preview';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { CodexTaskControl } from '../runtime/codex-tasks.mjs';
@@ -32,6 +33,13 @@ function mapper(parent = { runId: parentId, personaId: bot, attempt: 1 }) {
     assertLease: () => { if (!leased) throw Object.assign(new Error('fenced'), { code: 'EXECUTOR_FENCED' }); },
     control: { request: async (method: string, p: any) => {
       const steering = new TaskSteering(f.store, () => f.core.now());
+      if (method === 'output-preview') {
+        const {identity: caller,...preview}=p;
+        try { new OutputPreviews(f.store,()=>f.core.now()).record(caller,preview,life); }
+        catch(error:any) { if(error.code==='OUTPUT_FENCED')return {accepted:false,reason:'OUTPUT_FENCED'};throw error; }
+        if(lostAck){lostAck=false;throw new Error('lost acknowledgement');}
+        return {accepted:true};
+      }
       if (method === 'steer-pending') return steering.pending(p.identity, p.targets, life);
       if (method === 'steer-result') { steering.result(p.identity, p, p.command_id, p.status, life); return { ok: true }; }
       expect(method).toBe('native-child'); expect(p.started).toBe(true); registrations.push(p.child);
@@ -46,6 +54,25 @@ async function spawn(thread: string, receiver: string) {
     item: { id: `spawn-${receiver}`, type: 'collabAgentToolCall', tool: 'spawnAgent', senderThreadId: thread, status: 'completed', receiverThreadIds: [receiver] } } });
   await adapter.observe('native', { method: 'turn/started', params: { threadId: receiver, turn: { id: 'turn', status: 'inProgress' } } });
 }
+
+it('publishes exact root/child messages with lost-ack replay and cancellation fencing, never settling work',async()=>{
+ life.submitted(identity,parentId,1,'turn');
+ await spawn('root','child-a');await spawn('root','child-b');const tasks=mapper(),mapped=await tasks.sync();
+ const message=(threadId:string,text:string,id='message-31')=>adapter.observe('native',{method:'item/completed',params:{threadId,turnId:'turn',item:{type:'agentMessage',id,text,phase:'final_answer'}}});
+ await message('root','Root provisional');await message('child-a','Child provisional');await message('child-b','Sibling provisional');
+ const before=f.db.all('SELECT * FROM attempts');
+ lostAck=true;await expect(tasks.publishOutputs()).rejects.toThrow('lost acknowledgement');
+ await mapper().publishOutputs();
+ expect(f.core.state().output_previews).toHaveLength(3);
+ const preview=new OutputPreviews(f.store,()=>f.core.now()),child=mapped['["child-a","turn"]'].runId,sibling=mapped['["child-b","turn"]'].runId;
+ expect(preview.read(child,1)?.text).toBe('Child provisional');expect(preview.read(sibling,1)?.text).toBe('Sibling provisional');
+ expect(f.db.all('SELECT * FROM attempts')).toEqual(before);expect(interrupts).toEqual([]);
+ f.accept({schema_version:1,type:'run.cancel',payload:{run_id:child,reason:'Stop child'}});
+ await message('child-a','Too late','message-43');await message('child-b','Sibling continues','message-43');
+ await mapper().publishOutputs();expect(preview.read(child,1)).toBeNull();expect(preview.read(sibling,1)?.text).toBe('Sibling continues');
+ leased=false;await expect(tasks.publishOutputs()).rejects.toMatchObject({code:'EXECUTOR_FENCED'});
+ expect(adapter.sleepReadiness().allowed).toBe(false);
+});
 
 it('reconciles lost registration acknowledgements with identical receipts and preserves nested task identity', async () => {
   await spawn('root', 'child-a'); await spawn('root', 'child-b'); await spawn('child-a', 'grandchild');

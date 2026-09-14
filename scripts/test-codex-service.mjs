@@ -138,7 +138,9 @@ try {
       if (toolRequests === 1) {
         const tool = body.tools.find(tool => tool.name?.includes('hehebot_list_routines')) ?? body.tools.find(tool => tool.name === 'mcp__hehebot');
         assert.ok(tool);
-        send(res, [{ id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
+        send(res, [...(childMode ? [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant', phase: 'commentary',
+          content: [{ type: 'output_text', text: 'SERVICE_CHILD_PROGRESS', annotations: [] }] }] : []),
+          { id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
           ...(tool.name === 'mcp__hehebot' ? { namespace: 'mcp__hehebot', name: 'hehebot_list_routines' } : { name: tool.name }), arguments: '{}' }]);
       } else {
         assert.equal(toolRequests, 2);
@@ -217,6 +219,11 @@ try {
     const children = registered.runs.filter(run => run.parent_run_id === queued.resource_id);
     assert.equal(children.length, 1);
     const child = children[0];
+    assert.equal(registered.output_previews.find(preview => preview.run_id === queued.resource_id)?.text, 'SERVICE_PARENT_DONE');
+    assert.equal(registered.output_previews.find(preview => preview.run_id === child.id)?.text, 'SERVICE_CHILD_PROGRESS');
+    assert.equal(registered.output_previews.length, 2);
+    assert.equal(observed.effectsSettled, undefined);
+    report.nativeChildProvisionalOutput = true;
     const mappingFiles = (await readdir(join(stateDirectory, 'journal'))).filter(name => name.startsWith('native-tasks-'));
     assert.equal(mappingFiles.length, 1);
     const mapping = JSON.parse(await readFile(join(stateDirectory, 'journal', mappingFiles[0]), 'utf8'));
@@ -336,6 +343,11 @@ try {
   }
   const final = await (await trustedFetch(`${origin}/v1/state`)).json();
   assert.equal(final.runs.find(run => run.id === queued.resource_id).status, 'running');
+  if (!crashMode) {
+    assert.deepEqual(final.output_previews, [{ run_id: queued.resource_id, attempt: dispatched.claim.run.current_attempt,
+      version: 1, text: childMode ? 'SERVICE_PARENT_DONE' : 'SERVICE_ASSEMBLY_OK', truncated: false }]);
+    report.nativeProvisionalOutputWithoutSettlement = true;
+  }
   if (childMode) {
     assert.equal(final.runs.find(run => run.parent_run_id === queued.resource_id).status, 'cancelling');
     assert.equal(interrupts.length, 1);

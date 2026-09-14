@@ -79,6 +79,30 @@ export class CodexTaskControl {
     });
   }
 
+  publishOutputs() {
+    return this.serial(async () => {
+      this.assertLease();
+      const native = await this.adapter.requireRun(this.attemptId);
+      let mapped = await this.mapping();
+      const targets = [{ run_id: this.parent.runId, attempt: this.parent.attempt,
+        native_ref: native.nativeRunId, preview: native.outputPreview }];
+      for (const [key, child] of Object.entries(mapped.children)) if (child.runId && child.started) {
+        targets.push({ run_id: child.runId, attempt: 1, native_ref: child.receipt.native_run_ref,
+          preview: native.childObligations?.[key]?.outputPreview });
+      }
+      for (const { preview, ...target } of targets) {
+        if (!preview || (mapped.outputVersions?.[target.run_id] ?? 0) >= preview.version) continue;
+        this.assertLease();
+        const reply = await this.control.request('output-preview', { identity: this.identity, ...target, ...preview });
+        this.assertLease();
+        if (reply?.accepted !== true && !(reply?.accepted === false && reply.reason === 'OUTPUT_FENCED')) fail('INVALID_OUTPUT_RECEIPT');
+        // Exact version is safe to replay after a lost ack. A fenced display is
+        // discarded, not task cancellation or an inference/effect retry.
+        mapped = await this.journal.update(this.key, { outputVersions: { ...mapped.outputVersions, [target.run_id]: preview.version } });
+      }
+    });
+  }
+
   cancel(runIds) {
     return this.serial(async () => {
       this.assertLease();

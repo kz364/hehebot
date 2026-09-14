@@ -51,6 +51,27 @@ async function overdue() {
 }
 const message = () => ({ schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Independent work' } });
 
+it('authenticates provisional output, rejects malformed/old custody and acknowledges cancelled display without resurrection',async()=>{
+ await initialize(true);await control.accept('owner',randomUUID(),'message',message());
+ const run=db.all<{id:string}>('SELECT id FROM runs')[0].id,identity={epoch:1,boot_id:randomUUID()};
+ db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
+ for(const [type,payload] of [['boot',{boot_id:identity.boot_id}],['ready',{identity}],['claim',{identity}],['submitted',{identity,run_id:run,attempt:1,native_ref:'native-43'}]])
+  expect(await control.runtime({type,payload})).toMatchObject({ok:true});
+ const env={RUNTIME_TOKEN:'synthetic-token',INSTALLATION_ID:'local-only',CONTROL:{getByName:()=>control}} as unknown as Env;
+ const payload={identity,run_id:run,attempt:1,native_ref:'native-43',version:1,text:'Provisional only',truncated:false};
+ const post=(body:unknown,token='synthetic-token')=>worker.fetch(new Request('https://control.invalid/internal/output-preview',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)}),env);
+ expect((await post(payload,'wrong')).status).toBe(401);
+ expect((await post({...payload,unexpected:true})).status).toBe(422);
+ expect((await post({...payload,identity:{...identity,epoch:2}})).status).toBe(409);
+ expect(await (await post(payload)).json()).toEqual({accepted:true});
+ expect(await (await post(payload)).json()).toEqual({accepted:true});
+ expect(await control.getState('owner')).toMatchObject({ok:true,value:{output_previews:[{run_id:run,text:'Provisional only'}]}});
+ await control.accept('owner',randomUUID(),'cancel',{schema_version:1,type:'run.cancel',payload:{run_id:run,reason:'Stop'}});
+ expect(await (await post({...payload,version:2,text:'Late output'})).json()).toEqual({accepted:false,reason:'OUTPUT_FENCED'});
+ expect(await control.getState('owner')).toMatchObject({ok:true,value:{output_previews:[]}});
+ expect(db.all('SELECT status FROM runs WHERE id=?',run)).toEqual([{status:'cancelling'}]);
+});
+
 it.each(['message', 'receipt', 'timeline', 'state', 'trigger'] as const)('%s ingress recovers a missed alarm without a state poll or inference', async endpoint => {
   const { routine: r, receiptId } = await overdue();
   if (endpoint === 'message') await control.accept('owner', randomUUID(), 'synthetic', message());

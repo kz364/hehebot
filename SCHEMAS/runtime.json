@@ -25,6 +25,26 @@
     {
       "type":"object","additionalProperties":false,
       "properties": {
+        "type":{"const":"output-preview"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "identity":{"$ref":"#/$defs/runtimeIdentity"},
+            "run_id":{"type":"string","format":"uuid"},
+            "attempt":{"type":"integer","minimum":1},
+            "native_ref":{"type":"string","minLength":1,"maxLength":256},
+            "version":{"type":"integer","minimum":1,"maximum":9007199254740991},
+            "text":{"type":"string","maxLength":8192},
+            "truncated":{"type":"boolean"}
+          },
+          "required":["identity","run_id","attempt","native_ref","version","text","truncated"]
+        }
+      },
+      "required":["type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
         "type":{"const":"steer-pending"},
         "payload": {
           "type":"object","additionalProperties":false,

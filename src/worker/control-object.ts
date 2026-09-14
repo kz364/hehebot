@@ -14,6 +14,7 @@ import { LifecycleCore } from '../core/lifecycle';
 import { EffectLedger } from '../core/effects';
 import { RootChildEffects } from '../core/root-child-effects';
 import { TaskSteering } from '../core/task-steering';
+import { OutputPreviews } from '../core/output-preview';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { createProvider, type ProviderConfig, type RuntimeRef } from '../providers';
 import validateRuntime from '../generated/validate-runtime.js';
@@ -83,6 +84,7 @@ export class PersonalControl extends DurableObject<Env> {
  private reconcile(){
   this.core.expireMemories();this.core.expireCommandPayloads();this.core.expireFollowups();this.core.expireQueuedContexts();this.retention.prune();this.resultRetention.prune();this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();this.core.reconcileBudget();
   new TaskSteering(this.store,()=>this.core.now()).prune();
+  new OutputPreviews(this.store,()=>this.core.now()).prune();
  }
  async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{await this.beforeRequest(owner+':write',60);const result=this.core.accept(owner,key,hash,input);await this.arm();return result;});}
  getReceipt(owner:string,id:string){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receipt(id);});}
@@ -120,6 +122,17 @@ export class PersonalControl extends DurableObject<Env> {
   requireThat(this.core.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified.');
   let result:unknown={ok:true};
   switch(command.type){
+   case 'output-preview':{
+    const {identity,...preview}=command.payload;
+    try {
+     new OutputPreviews(this.store,()=>this.core.now()).record(identity,preview,this.lifecycle);
+     result={accepted:true};
+    } catch(error) {
+     if(!(error instanceof ControlError)||error.code!=='OUTPUT_FENCED')throw error;
+     result={accepted:false,reason:'OUTPUT_FENCED'};
+    }
+    break;
+   }
    case 'steer-pending':{
     const p=command.payload;result=new TaskSteering(this.store,()=>this.core.now()).pending(p.identity,p.targets,this.lifecycle);break;
    }
@@ -170,6 +183,7 @@ export class PersonalControl extends DurableObject<Env> {
   const budgetDue=this.core.nextBudgetMaintenance();if(budgetDue)times.push(Date.parse(budgetDue));
   const retentionDue=this.retention.nextDue();if(retentionDue)times.push(Date.parse(retentionDue));
   const resultDue=this.resultRetention.nextDue();if(resultDue)times.push(Date.parse(resultDue));
+  const previewDue=new OutputPreviews(this.store,()=>this.core.now()).nextDue();if(previewDue)times.push(Date.parse(previewDue));
   const steeringDue=new TaskSteering(this.store,()=>this.core.now()).nextExpiry();if(steeringDue)times.push(Date.parse(steeringDue));
   const commandExpiry=this.core.nextCommandPayloadExpiry();if(commandExpiry)times.push(Date.parse(commandExpiry));
   const followupExpiry=this.core.nextFollowupExpiry();if(followupExpiry)times.push(Date.parse(followupExpiry));

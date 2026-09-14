@@ -7,6 +7,14 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
 const observationOwners = row => [row, ...Object.values(row.childObligations ?? {})];
 const hasReceiver = (row, threadId) => observationOwners(row).some(owner => Object.values(owner.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(threadId)));
 
+/** Trusted router projection, not a native receipt or settlement assertion. */
+export function projectOutputMessage(item) {
+  if (typeof item.text !== 'string' || ![undefined, null, 'commentary', 'final_answer'].includes(item.phase)) fail('CODEX_PROTOCOL_ERROR');
+  let text = item.text.slice(0, 8192);
+  if (text.length < item.text.length && /[\uD800-\uDBFF]$/.test(text)) text = text.slice(0, -1);
+  return { text, truncated: text.length < item.text.length, outputDigest: hash([item.text, item.phase ?? null]) };
+}
+
 /** Supported app-server calls only. One durable native thread per admitted attempt.
  * Production admission awaits real authentication and whole-operation settlement tests.
  */
@@ -165,6 +173,24 @@ export class CodexAdapter {
     const owner = childItem ? row.childObligations?.[childKey] ?? {} : row;
     const save = patch => this.journal.update(attemptId, childItem
       ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, ...patch } } } : patch);
+    if (notification?.method === 'item/completed' && params?.item?.type === 'agentMessage') {
+      if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      const { id } = params.item;
+      if (typeof id !== 'string' || !id || id.length > 256) fail('CODEX_PROTOCOL_ERROR');
+      const message = Object.hasOwn(params.item, 'outputDigest') ? params.item : projectOutputMessage(params.item);
+      if (typeof message.text !== 'string' || message.text.length > 8192 || typeof message.truncated !== 'boolean' ||
+          !/^[0-9a-f]{64}$/.test(message.outputDigest)) fail('CODEX_PROTOCOL_ERROR');
+      const seen = owner.outputItems ?? {}, prior = Object.hasOwn(seen, id) ? seen[id] : null;
+      if (prior) {
+        if (prior !== message.outputDigest) fail('OUTPUT_MESSAGE_CONFLICT');
+        return row; // Old item replay cannot replace the latest display snapshot.
+      }
+      if (observationOwners(row).reduce((n, value) => n + Object.keys(value.outputItems ?? {}).length, 0) >= 1024 ||
+          !owner.outputPreview && observationOwners(row).filter(value => value.outputPreview).length >= 101) fail('OUTPUT_TRACKING_LIMIT');
+      return save({ outputItems: { ...seen, [id]: message.outputDigest }, outputPreview: {
+        version: (owner.outputPreview?.version ?? 0) + 1, text: message.text, truncated: message.truncated,
+      } });
+    }
     if (['turn/started', 'turn/completed'].includes(notification?.method) && params?.threadId !== row.threadId) {
       if (!hasReceiver(row, params?.threadId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const id = params?.turn?.id, status = params?.turn?.status;

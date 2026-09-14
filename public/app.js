@@ -64,7 +64,8 @@ function render(){
  const conversation=view?[]:events.filter(x=>x.conversation_id===selected);const runs=view?(view.page?.runs??[]):snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
  const steering=(snapshot.steering??[]).filter(x=>runs.some(run=>run.id===x.run_id));
  const recovery=(view?(view.page?.recovery??[]):snapshot.recovery??[]).filter(x=>runs.some(run=>run.id===x.run_id));
- const signature=JSON.stringify([selected,conversation,runs,steering,recovery,Boolean(view),view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
+ const previews=(snapshot.output_previews??[]).filter(x=>runs.some(run=>run.id===x.run_id&&run.current_attempt===x.attempt&&['running','finishing','recovery_required'].includes(run.status)&&!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code)));
+ const signature=JSON.stringify([selected,conversation,runs,steering,recovery,previews,Boolean(view),view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;const expanded=new Set([...timeline.querySelectorAll('.task-card[open]')].map(card=>card.dataset.runId));timeline.replaceChildren();
   if(view){
    timeline.append(node('h2','Recovery tasks'),node('p','All retained recovery tasks in this conversation, paged by stable task ID. Restart from the first page to include newly arrived tasks. Reviewing does not retry or release anything.','hint'));
@@ -100,10 +101,18 @@ function render(){
     const e=node('div',undefined,'event');e.setAttribute('role','status');e.append(node('span','Request expired','status'),node('span','A queued request expired after 90 days without starting. Send a fresh request if it is still needed.'));timeline.append(e);
    }else if(event.type.startsWith('room.')){const e=node('div',undefined,'event');e.append(node('span',event.type==='room.context_update'?'Context update':'Room update'),node('span',event.payload.text??''));timeline.append(e);}
   }
-  for(const run of runs.filter(x=>x.role==='background'||['running','recovery_required'].includes(x.status)||steering.some(receipt=>receipt.run_id===x.id))){
+  for(const run of runs.filter(x=>x.role==='background'||['running','finishing','recovery_required'].includes(x.status)||steering.some(receipt=>receipt.run_id===x.id))){
    const title=run.title??(run.role==='background'?'Background task':'Conversation task');
    const card=node('details',undefined,'task-card');card.dataset.runId=run.id;card.open=expanded.has(run.id);card.append(node('summary',`${title} · ${statuses[run.status]??run.status}`));
    card.append(node('p',`Task ${run.id}`,'hint'));
+   const preview=previews.find(item=>item.run_id===run.id);
+   if(preview){
+    card.querySelector('summary').append(node('span',' · Provisional output','status'));
+    const section=node('section',undefined,'output-preview');section.setAttribute('aria-label','Provisional task output');
+    section.append(node('p','Latest native message — provisional. This is not a completed result; children, tools or effects may still be unresolved.','hint'),node('div',preview.text,'message-body'));
+    if(preview.truncated)section.append(node('p','Preview shortened. This is not the complete native message.','hint'));
+    card.append(section);
+   }
    const recovering=recovery.find(item=>item.run_id===run.id&&item.attempt===run.current_attempt);
    if(recovering)renderRecovery(card,run,recovering,title);
    const receipts=steering.filter(x=>x.run_id===run.id&&x.attempt===run.current_attempt);

@@ -1,4 +1,4 @@
-import { OBSERVED_COLLAB_TOOLS } from './codex-adapter.mjs';
+import { OBSERVED_COLLAB_TOOLS, projectOutputMessage } from './codex-adapter.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 
@@ -33,8 +33,9 @@ export class CodexEventRouter {
     const collab = params?.item?.type === 'collabAgentToolCall' && OBSERVED_COLLAB_TOOLS.includes(params.item.tool);
     const boundaryOnly = ['webSearch', 'sleep', 'contextCompaction', 'imageGeneration'].includes(params?.item?.type);
     const turn = ['turn/started', 'turn/completed'].includes(method);
+    const message = method === 'item/completed' && params?.item?.type === 'agentMessage';
     if (!turn &&
-        !(['item/started', 'item/completed'].includes(method) && (spawn || collab || boundaryOnly || ['commandExecution', 'mcpToolCall', 'fileChange', 'dynamicToolCall'].includes(params?.item?.type)))) return null;
+        !message && !(['item/started', 'item/completed'].includes(method) && (spawn || collab || boundaryOnly || ['commandExecution', 'mcpToolCall', 'fileChange', 'dynamicToolCall'].includes(params?.item?.type)))) return null;
     const threadId = params?.threadId, turnId = turn ? params?.turn?.id : params?.turnId;
     if (![threadId, turnId].every(id => typeof id === 'string' && id.length > 0 && id.length <= 256)) fail('INVALID_EVENT_IDENTITY');
     if (turn) {
@@ -43,20 +44,22 @@ export class CodexEventRouter {
       const terminal = ['commandExecution', 'fileChange'].includes(params.item.type) ? ['completed', 'failed', 'declined']
         : spawn || collab ? ['completed', 'failed', 'interrupted'] : ['completed', 'failed'];
       if (typeof params.item.id !== 'string' || !params.item.id || params.item.id.length > 256 ||
-          !boundaryOnly && !(method === 'item/started' ? ['inProgress'] : terminal).includes(params.item.status)) fail('INVALID_EVENT_ITEM');
+          !message && !boundaryOnly && !(method === 'item/started' ? ['inProgress'] : terminal).includes(params.item.status)) fail('INVALID_EVENT_ITEM');
       if (collab && params.item.senderThreadId !== threadId) fail('INVALID_EVENT_IDENTITY');
       if (spawn && (params.item.senderThreadId !== threadId || !Array.isArray(params.item.receiverThreadIds) ||
           params.item.receiverThreadIds.length > 100 ||
           !params.item.receiverThreadIds.every(id => typeof id === 'string' && id.length > 0 && id.length <= 256 && id !== threadId) ||
           new Set(params.item.receiverThreadIds).size !== params.item.receiverThreadIds.length)) fail('INVALID_SPAWN_IDENTITY');
     }
-    // Do not buffer command output, credentials, message text, or unrelated payloads.
+    // Only explicit user-visible agent messages retain bounded display text.
+    // Command/tool payloads and reasoning are never projected into previews.
     const notification = turn
       ? { method, params: { threadId, turn: { id: turnId, status: params.turn.status } } }
       : { method, params: { threadId, turnId, item: { id: params.item.id, type: params.item.type,
         ...(boundaryOnly ? {} : { status: params.item.status }) } } };
     if (spawn) Object.assign(notification.params.item, { tool: 'spawnAgent', senderThreadId: threadId, receiverThreadIds: [...params.item.receiverThreadIds] });
     if (collab) Object.assign(notification.params.item, { tool: params.item.tool, senderThreadId: threadId });
+    if (message) notification.params.item = { id: params.item.id, type: 'agentMessage', ...projectOutputMessage(params.item) };
     return { key: JSON.stringify([threadId, turnId]), notification };
   }
 

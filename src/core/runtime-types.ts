@@ -6,9 +6,11 @@ import type {AgentCommandRequest,AgentRoutineQuery,AgentSkillQuery} from './agen
 import type {RootChildEffectIntent,RootChildEffectResult} from './root-child-effects';
 import type {BudgetReport} from './budget';
 import type {SteeringTarget,SteeringOutcome} from './task-steering';
+import type {OutputPreview} from './output-preview';
 type Base={identity:Identity};type Attempt={run_id:string;attempt:number};
 export type RuntimePayloads={
  status:Record<string,never>;
+ 'output-preview':Base & OutputPreview;
  'steer-pending':Base & {targets:SteeringTarget[]};
  'steer-result':Base & SteeringTarget & {command_id:string;status:SteeringOutcome};
  'budget-report':Base & Attempt & {report:BudgetReport};

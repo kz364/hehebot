@@ -10,6 +10,7 @@ import {TaskSteering} from './task-steering';
 import {nativeDescendantsSettledSql} from './native-tasks';
 import {EffectLedger} from './effects';
 import {ResourceLedger} from './resources';
+import {OutputPreviews} from './output-preview';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
@@ -274,7 +275,10 @@ export class ControlCore {
   this.store.db.exec("UPDATE object_revisions SET body_json='{}' WHERE object_id IN (SELECT value FROM json_each(?))",keys);
   this.store.db.exec("UPDATE commands SET payload_json='{}' WHERE type='memory.put' AND json_extract(payload_json,'$.id') IN (SELECT value FROM json_each(?))",keys);
   const runs=this.store.db.all<Run>("SELECT * FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')");
-  for(const run of runs){const context=JSON.parse(run.context_json) as ContextSnapshot;if(context.memories?.some(x=>selected.has(x.id)))this.store.db.exec("UPDATE runs SET status=?,error_code='CONTEXT_INVALIDATED',context_json=?,updated_at=? WHERE id=?",run.status==='recovery_required'?'recovery_required':['claimed','running','finishing','cancelling'].includes(run.status)?'cancelling':'cancelled',JSON.stringify({...context,memories:context.memories.filter(x=>!selected.has(x.id))}),now,run.id);}
+  for(const run of runs){const context=JSON.parse(run.context_json) as ContextSnapshot;if(context.memories?.some(x=>selected.has(x.id))){
+   this.store.db.exec("UPDATE runs SET status=?,error_code='CONTEXT_INVALIDATED',context_json=?,updated_at=? WHERE id=?",run.status==='recovery_required'?'recovery_required':['claimed','running','finishing','cancelling'].includes(run.status)?'cancelling':'cancelled',JSON.stringify({...context,memories:context.memories.filter(x=>!selected.has(x.id))}),now,run.id);
+   new OutputPreviews(this.store,()=>now).discard(run.id);
+  }}
   for(const id of ids)this.store.event(this.options.uuid(),null,'memory.deleted',owner,commandId,{id,transcript_cleanup_requested:purgeTranscripts,transcript_cleanup_status:purgeTranscripts?'requires_runtime_verification':'not_requested'},now);
  }
  nextMemoryExpiry():string|null {
@@ -441,6 +445,7 @@ export class ControlCore {
   const page=after===undefined?[]:this.store.events(after,limit,now);
   const runs=this.store.db.all<Run>('SELECT * FROM runs ORDER BY created_at DESC LIMIT 100');
   const steering=new TaskSteering(this.store,()=>now);
+  const previews=new OutputPreviews(this.store,()=>now);
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
    budget:this.budget.summary(),
    monitoring:controlMonitoring(this.store,now,this.budget,this.options.executionEnabled),
@@ -448,6 +453,7 @@ export class ControlCore {
    skill_enablements:after===undefined?this.store.db.all<{skill_id:string;persona_id:string;skill_revision:number;enabled:number}>('SELECT skill_id,persona_id,skill_revision,enabled FROM skill_enablements ORDER BY skill_id,persona_id').map(row=>({...row,enabled:Boolean(row.enabled)})):undefined,
    skill_proposals:after===undefined?this.store.db.all<{id:string;skill_id:string;proposal_revision:number;expected_skill_revision:number;body_json:string;provenance_json:string;status:string;executable_files_changed:number;created_at:string;reviewed_at:string|null}>("SELECT id,skill_id,proposal_revision,expected_skill_revision,body_json,provenance_json,status,executable_files_changed,created_at,reviewed_at FROM skill_proposals ORDER BY created_at,id").map(({body_json,provenance_json,executable_files_changed,...row})=>({...row,body:JSON.parse(body_json),provenance:JSON.parse(provenance_json),executable_files_changed:Boolean(executable_files_changed)})):undefined,
    steering:runs.flatMap(run=>steering.receipts({run_id:run.id,attempt:run.current_attempt})),
+   output_previews:runs.flatMap(run=>{const value=previews.read(run.id,run.current_attempt);return value?[value]:[];}),
    recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run)),
    runs:runs.map(({context_json,checkpoint_json,...rest})=>rest),
    summary:{phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},

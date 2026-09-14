@@ -125,6 +125,32 @@ separate application boundaries. Native acceptance is not model understanding or
 consumption, natural-language intent resolution, multi-root Worker admission,
 successful crash recovery, full O03 or production/sleep readiness.
 
+Provisional output now has a separate display path: completed native
+`agentMessage` items (not deltas, reasoning, command output or tool payloads) feed
+the exact root/child attempt's latest preview. Full-message digest and native item
+identity prevent replay from replacing newer text; conflicts fence observation.
+The router retains at most 8192 UTF-16 units without cutting a surrogate pair;
+the journal permits 1024 observed message identities and 101 display owners per
+admitted family. This is bounded message snapshots, not token streaming or a
+complete transcript. Native `final_answer` is not application settlement.
+
+Service maintenance publishes serially through the authenticated runtime route,
+with exact native reference, lease, epoch, boot, attempt and deadline checks.
+An identical version can replay after a lost acknowledgement without new native
+work. Cancellation/context invalidation rejects late display publication; stale
+executor authority still fails rather than becoming a display acknowledgement.
+The Worker stores one preview per run, hides terminal/old-attempt/cancelled output,
+and expires it 90 days after its first preview without extending expiry on updates.
+Memory invalidation discards affected active previews. Native journals and backups
+remain separate retention obligations; this is not deletion everywhere.
+
+The portal labels previews provisional and renders text literally, preserving
+task expansion through polling and distinguishing recovery from completion.
+`node scripts/test-portal-output.mjs` covers root/child, shortened text, injection,
+recovery, narrow layout and terminal/cancelled/old-attempt hiding without mutations.
+SQLite, Worker HTTP and native service fixtures cover publication separately from
+settlement; authenticated inference/model judgment remain unverified.
+
 Trusted [root/descendant effect bookkeeping](ROOT_CHILD_EFFECTS.md) now connects
 strict runtime routes to the existing effect/resource ledgers. It validates exact
 lease, attempts, native ancestry and original same-task policy/scope, records

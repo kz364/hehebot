@@ -12,6 +12,8 @@ const command = (threadId, turnId, id, status = 'inProgress') => ({ method: stat
   threadId, turnId, item: { id, type: 'commandExecution', status, aggregatedOutput: 'PRIVATE_OUTPUT_NOT_FOR_ROUTER' },
 } });
 const root = (threadId, id) => ({ method: 'turn/completed', params: { threadId, turn: { id, status: 'completed' } } });
+const message = (threadId, turnId, id, text) => ({ method: 'item/completed', params: { threadId, turnId,
+  item: { type: 'agentMessage', id, text, phase: 'final_answer', ignored: 'PRIVATE_EXTRA' } } });
 async function fixture(t, limits = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'hehebot-event-router-'));
   const journal = new FileJournal(directory), transport = new EventEmitter(), recoveries = [], calls = [];
@@ -21,6 +23,43 @@ async function fixture(t, limits = {}) {
   const admit = (attempt, threadId, nativeRunId) => journal.putIfAbsent(attempt, { threadId, nativeRunId, status: 'running', rootSettled: false });
   return { journal, transport, recoveries, calls, adapter, router, admit };
 }
+
+test('completed user-visible messages are bounded, exact-turn attributed and independently replay-safe', async t => {
+  const f=await fixture(t);await f.admit('a','parent','turn');await f.router.bind('a');
+  f.transport.emit('notification',spawn('completed',['child']));
+  f.transport.emit('notification',{method:'turn/started',params:{threadId:'child',turn:{id:'child-turn',status:'inProgress'}}});
+  const first=message('parent','turn','same-id','Root only');
+  f.transport.emit('notification',first);
+  f.transport.emit('notification',root('parent','turn'));
+  f.transport.emit('notification',message('child','child-turn','same-id','x'.repeat(8191)+'😀tail'));
+  await f.router.flush();
+  let row=await f.journal.get('a');
+  assert.deepEqual(row.outputPreview,{version:1,text:'Root only',truncated:false});
+  assert.deepEqual(row.childObligations['["child","child-turn"]'].outputPreview,{version:1,text:'x'.repeat(8191),truncated:true});
+  assert.equal(row.childTurns['["child","child-turn"]'],'inProgress');
+  assert.doesNotMatch(JSON.stringify(row),/PRIVATE_EXTRA|effectsSettled/);
+  f.transport.emit('notification',message('parent','turn','next','Later message'));await f.router.flush();
+  row=await f.journal.get('a');f.transport.emit('notification',first);await f.router.flush();
+  assert.deepEqual(await f.journal.get('a'),row);assert.equal(row.outputPreview.version,2);
+  assert.equal(f.router.project({...first,method:'item/agentMessage/delta'}),null);
+  assert.equal(f.router.project({...first,method:'item/started'}),null);
+  assert.equal(f.adapter.sleepReadiness().allowed,false);assert.deepEqual(f.calls,[]);
+  f.transport.emit('notification',message('child','child-turn','same-id','x'.repeat(8191)+'😀different suffix'));
+  await f.router.flush();assert.deepEqual(f.recoveries,['NATIVE_EVENT_RECONCILIATION_FAILED']);
+  assert.deepEqual(await f.journal.get('a'),row);
+});
+
+test('message limits and invalid identities never overwrite observed text',async t=>{
+ const f=await fixture(t);await f.admit('a','parent','turn');
+ await assert.rejects(f.adapter.observe('a',message('parent','wrong','id','Wrong turn')),{code:'SETTLEMENT_IDENTITY_MISMATCH'});
+ await assert.rejects(f.adapter.observe('a',message('stranger','turn','id','Wrong child')),{code:'SETTLEMENT_IDENTITY_MISMATCH'});
+ await f.journal.update('a',{outputItems:Object.fromEntries(Array.from({length:1024},(_,i)=>[`item-${i}`,'a'.repeat(64)]))});
+ const before=await f.journal.get('a');
+ await assert.rejects(f.adapter.observe('a',message('parent','turn','new','Too many')),{code:'OUTPUT_TRACKING_LIMIT'});
+ assert.deepEqual(await f.journal.get('a'),before);
+ f.transport.emit('notification',message('parent','turn','invalid',{}));
+ assert.deepEqual(f.recoveries,['NATIVE_EVENT_INVALID']);assert.equal(f.router.pending.length,0);
+});
 
 test('early observations wait for acknowledged exact pairs and retain commands after root completion', async t => {
   const f = await fixture(t);
