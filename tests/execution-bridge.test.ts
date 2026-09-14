@@ -22,7 +22,7 @@ afterEach(async () => { f.close(); await rm(directory, { recursive: true, force:
 function enqueue() {
   return f.accept({ schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Synthetic bridge request' } }).resource_id!;
 }
-function bridge(testMode = true) {
+function bridge(testMode = true, journal = new FileJournal(join(directory, 'bridge'))) {
   const native = new CodexAdapter({ cwd: directory, testMode, journal: new FileJournal(join(directory, 'native')), rpc: async (method: string) => {
     if (method === 'thread/start') return { thread: { id: 'native-bridge-thread' } };
     if (method === 'turn/start') {
@@ -41,7 +41,7 @@ function bridge(testMode = true) {
     if (lose === type) throw new Error('lost acknowledgment after durable mutation');
     return result;
   } };
-  return new ExecutionBridge({ control, native, journal: new FileJournal(join(directory, 'bridge')), identity,
+  return new ExecutionBridge({ control, native, journal, identity,
     installationId: 'synthetic-installation', personas: { [bot]: { agentId: 'chief-of-staff', model: 'gpt-5.5' } } });
 }
 function settled(row: any) {
@@ -86,6 +86,26 @@ it('real SQLite claim → native adapter/journal → completion publishes exactl
   expect(nativeCalls).toBe(1);
   expect(f.store.run(id).status).toBe('completed');
   expect(f.store.conversationEvents(bot, undefined, 100).filter(e => e.type === 'run.result').map(e => e.payload.text)).toEqual(['Durably returned to the portal']);
+});
+
+it('clears the prior native attempt before publishing custody of another claimed run', async () => {
+  const journal = new FileJournal(join(directory, 'bridge'));
+  enqueue(); const executor = bridge(true, journal), first = await executor.claimNext();
+  await executor.complete(settled(first));
+  const nextId = enqueue(), snapshots: any[] = [];
+  const update = journal.update.bind(journal);
+  journal.update = async (key: string, patch: any) => {
+    const row = await update(key, patch);
+    if (key === executor.cursor && ['claim_unknown', 'claimed'].includes(row.phase)) snapshots.push(structuredClone(row));
+    return row;
+  };
+  const next = await executor.claimNext();
+  expect(snapshots.map(row => row.phase)).toEqual(['claim_unknown', 'claimed']);
+  expect(snapshots.map(row => row.attemptId)).toEqual([null, null]);
+  expect(snapshots.map(row => row.nativeRunId)).toEqual([null, null]);
+  expect(snapshots[1].claim.run.id).toBe(nextId);
+  expect(next.attemptId).not.toBe(first.attemptId);
+  expect(nativeCalls).toBe(2);
 });
 
 it.each(['claim', 'native', 'submitted'])('lost %s acknowledgment survives journal reconstruction without resubmission', async loss => {

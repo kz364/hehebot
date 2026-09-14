@@ -24,7 +24,7 @@ export class ExecutionBridge {
       const prior = await this.journal.get(this.cursor);
       if (prior && prior.phase !== 'complete') return prior;
       // An unanswered claim can already own work. Never issue another claim after restart.
-      if (prior) await this.journal.update(this.cursor, { phase: 'claim_unknown', claim: null, nativeRunId: null, result: null });
+      if (prior) await this.journal.update(this.cursor, { phase: 'claim_unknown', claim: null, attemptId: null, nativeRunId: null, result: null });
       else await this.journal.putIfAbsent(this.cursor, { phase: 'claim_unknown', identity: this.identity });
       let claim;
       try { claim = await this.control.request('claim', { identity: this.identity }); }
