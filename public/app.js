@@ -74,6 +74,8 @@ function render(){
     if(['failed','cancelled','recovery_required','waiting'].includes(run.status)&&snapshot.summary.execution_enabled)e.append(button('Retry',()=>act(()=>command('run.retry',{run_id:run.id,expected_attempt:run.current_attempt}))));timeline.append(e);
    }else if(event.type==='task.followup_expired'){
     const e=node('div',undefined,'event');e.setAttribute('role','status');e.append(node('span','Follow-up expired','status'),node('span','A deferred follow-up expired after 90 days without delivery. Send a fresh follow-up on the task if it is still needed.'));timeline.append(e);
+   }else if(event.type==='run.input_expired'){
+    const e=node('div',undefined,'event');e.setAttribute('role','status');e.append(node('span','Request expired','status'),node('span','A queued request expired after 90 days without starting. Send a fresh request if it is still needed.'));timeline.append(e);
    }else if(event.type.startsWith('room.')){const e=node('div',undefined,'event');e.append(node('span',event.type==='room.context_update'?'Context update':'Room update'),node('span',event.payload.text??''));timeline.append(e);}
   }
   for(const run of runs.filter(x=>x.role==='background')){

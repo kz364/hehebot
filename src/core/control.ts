@@ -5,6 +5,10 @@ import { Store } from './store';
 import { dueOccurrences, nextDue, preview, validateSchedule } from './schedule';
 import {SkillCatalog} from './skills';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject, TimelineEvent } from './types';
+// Copied followups retain their original command age, not their later queue time.
+const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
+ THEN MIN(strftime('%Y-%m-%dT%H:%M:%fZ',r.created_at,'+30 days'),strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(c.accepted_at,r.created_at),'+90 days'))
+ ELSE strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(c.accepted_at,r.created_at),'+90 days') END`;
 export const DEFAULT_BOTS = [
  {id:'11111111-1111-4111-8111-111111111111',name:'Chief of Staff',instructions:'Coordinate the owner’s requests. Keep actions within explicit authorization.'},
  {id:'22222222-2222-4222-8222-222222222222',name:'Inbox Triage',instructions:'Review and organize information. Draft outgoing messages unless sending is explicitly authorized.'},
@@ -157,6 +161,10 @@ export class ControlCore {
     const run=this.store.run(command.payload.run_id);
     requireThat(run.current_attempt===command.payload.expected_attempt,'REVISION_CONFLICT','The attempt has changed.');
     requireThat(['failed','waiting','cancelled','recovery_required'].includes(run.status),'INVALID_INPUT','This run is not eligible for retry.',422);
+    if(run.current_attempt===0){
+     const received=run.command_id?this.store.db.all<{accepted_at:string}>('SELECT accepted_at FROM commands WHERE id=?',run.command_id)[0].accepted_at:run.created_at;
+     requireThat(Date.parse(received)+90*86400000>this.options.now().getTime(),'MESSAGE_EXPIRED','This unstarted instruction expired. Send a fresh request.');
+    }
     requireThat(run.current_attempt<3,'DEADLINE_EXCEEDED','This run has reached its retry limit.');
     const unsettledAttempt=this.store.db.all("SELECT run_id FROM attempts WHERE run_id=? AND status IN ('claimed','running')",run.id);
     requireThat(!unsettledAttempt.length,'CANCEL_UNCONFIRMED','The native attempt must settle before retrying.');
@@ -215,17 +223,22 @@ export class ControlCore {
   });
  }
  nextQueuedContextExpiry():string|null {
-  const first=this.store.db.all<{created_at:string}>("SELECT created_at FROM runs WHERE current_attempt=0 AND status IN ('queued','waiting') AND json_type(context_json,'$.persona') IS NOT NULL ORDER BY created_at,id LIMIT 1")[0];
-  return first?new Date(Date.parse(first.created_at)+30*86400000).toISOString():null;
+  return this.store.db.all<{due:string|null}>(`SELECT MIN(${queuedContextDueSql}) AS due FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.current_attempt=0 AND r.status IN ('queued','waiting')`)[0].due;
  }
  expireQueuedContexts():number {
   return this.store.db.transaction(()=>{
-   const cutoff=new Date(this.options.now().getTime()-30*86400000).toISOString();
-   const due=this.store.db.all<{id:string;context_json:string}>("SELECT id,context_json FROM runs WHERE current_attempt=0 AND status IN ('queued','waiting') AND json_type(context_json,'$.persona') IS NOT NULL AND created_at<=? ORDER BY created_at,id LIMIT 100",cutoff);
+   const now=this.now();
+   const due=this.store.db.all<Run&{instruction_created_at:string}>(`SELECT r.*,COALESCE(c.accepted_at,r.created_at) AS instruction_created_at FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.current_attempt=0 AND r.status IN ('queued','waiting') AND (${queuedContextDueSql})<=? ORDER BY (${queuedContextDueSql}),r.id LIMIT 100`,now);
    for(const run of due){
-    const {instruction,room_id}=JSON.parse(run.context_json) as ContextSnapshot;
-    // Not an admitted authorization snapshot. Claim rebuilds all derived fields.
-    this.store.db.exec('UPDATE runs SET context_json=? WHERE id=?',JSON.stringify({schema_version:1,instruction,room_id}),run.id);
+    if(Date.parse(run.instruction_created_at)+90*86400000<=Date.parse(now)){
+     this.store.db.exec("UPDATE runs SET context_json='{}',status='failed',error_code='MESSAGE_EXPIRED',updated_at=? WHERE id=?",now,run.id);
+     if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='skipped' WHERE id=? AND status='queued'",run.occurrence_id);
+     this.store.event(this.options.uuid(),run.persona_id,'run.input_expired','system:expiry',run.command_id,{run_id:run.id,reason:'MESSAGE_EXPIRED',requires_fresh_request:true},now);
+    }else{
+     const {instruction,room_id}=JSON.parse(run.context_json) as ContextSnapshot;
+     // Not an admitted authorization snapshot. Claim rebuilds all derived fields.
+     this.store.db.exec('UPDATE runs SET context_json=? WHERE id=?',JSON.stringify({schema_version:1,instruction,room_id}),run.id);
+    }
    }
    return due.length;
   });

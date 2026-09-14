@@ -12,6 +12,10 @@ export class LifecycleCore {
  get():Lifecycle{return this.store.db.all<Lifecycle>('SELECT * FROM lifecycle WHERE singleton=1')[0];}
  initialize(ref:RuntimeRef|Record<string,never>):void{this.store.db.exec("INSERT OR IGNORE INTO lifecycle(singleton,provider_ref_json,epoch,phase,desired_state,queue_sequence,wake_after_stop) VALUES(1,?,0,'STOPPED','STOP',0,0)",JSON.stringify(ref));}
  private active():boolean{return this.store.db.all("SELECT resource_id FROM resource_locks LIMIT 1").length>0 || this.store.db.all("SELECT id FROM runs WHERE status IN ('queued','claimed','running','finishing','cancelling','recovery_required') LIMIT 1").length>0 || this.store.db.all("SELECT id FROM operations WHERE status!='settled' LIMIT 1").length>0 || this.store.db.all("SELECT e.id FROM effects e JOIN runs r ON r.id=e.run_id WHERE e.status IN ('intent','dispatched') OR (e.status='outcome_unknown' AND r.status IN ('claimed','running','finishing','cancelling')) LIMIT 1").length>0;}
+ private nextClaimableRun():Run|undefined {
+  const cutoff=new Date(this.core.options.now().getTime()-90*86400000).toISOString();
+  return this.store.db.all<Run>("SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) ORDER BY r.created_at,r.id LIMIT 1",cutoff)[0];
+ }
  private touch():void{this.store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('last_activity',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(this.core.now()));}
  private identity(identity:Identity,allowBoot=false):Lifecycle {
   const state=this.get();
@@ -63,7 +67,7 @@ export class LifecycleCore {
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
    if(this.store.db.all("SELECT id FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling') LIMIT 1").length)return null;
-   const run=this.store.db.all<Run>("SELECT * FROM runs WHERE role='coordinator' AND status='queued' ORDER BY created_at,id LIMIT 1")[0];if(!run)return null;
+   const run=this.nextClaimableRun();if(!run)return null;
    const prior=JSON.parse(run.context_json) as Pick<ContextSnapshot,'instruction'|'room_id'>;
    const context=this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id);
    const attempt=run.current_attempt+1,submissionKey=`${run.id}:${attempt}`,deadline=new Date(this.core.options.now().getTime()+20*60000).toISOString();
@@ -189,20 +193,20 @@ export class LifecycleCore {
   if(this.options.idleMode){
    requireThat(provider.capabilities.stopMode==='provider-idle','CAPABILITY_UNAVAILABLE','Provider idle mode does not match the configured lifecycle.');
    requireThat(!['RECOVERY_REQUIRED','STOPPING','STOP_COMMITTED'].includes(state.phase),'CAPABILITY_UNAVAILABLE','Unsettled work needs explicit recovery; provider idle cannot prove termination.');
-   const queued=this.store.db.all("SELECT id FROM runs WHERE status='queued' LIMIT 1").length>0;
+   const queued=Boolean(this.nextClaimableRun());
    if(!queued||!['STOPPED','IDLE_PERMITTED'].includes(state.phase))return;
    requireThat(state.phase==='IDLE_PERMITTED'||state.epoch===0,'CAPABILITY_UNAVAILABLE','Existing ownership requires a clean idle handoff.');
    requireThat(!this.store.db.all("SELECT id FROM runs WHERE status IN ('claimed','running','finishing','cancelling') LIMIT 1").length&&!this.store.db.all("SELECT id FROM operations WHERE status!='settled' LIMIT 1").length,'CAPABILITY_UNAVAILABLE','Live work prevents idle admission.');
    const idleObservation=await provider.observe(ref);state=this.get();
    // Observation is an await boundary. A different alarm/boot may have won.
-   if(!['STOPPED','IDLE_PERMITTED'].includes(state.phase))return;
+   if(!['STOPPED','IDLE_PERMITTED'].includes(state.phase)||!this.nextClaimableRun())return;
    requireThat(provider.capabilities.explicitWake&&idleObservation.persistentState==='retained'&&(idleObservation.phase==='running'||idleObservation.executionPaused===true),'CAPABILITY_UNAVAILABLE','The same persistent runtime is not confirmed available.');
    await this.requestWake(provider,ref,state);return;
   }
   const observation=await provider.observe(ref);
   state=this.get();
   if(observation.executionStopped&&['STOPPING','STOP_COMMITTED','RECOVERY_REQUIRED'].includes(state.phase)){this.observeStopped(observation);state=this.get();}
-  if(state.phase==='STOPPED'&&this.store.db.all("SELECT id FROM runs WHERE status='queued' LIMIT 1").length){
+  if(state.phase==='STOPPED'&&this.nextClaimableRun()){
    requireThat(provider.capabilities.explicitWake&&provider.capabilities.explicitStop&&provider.capabilities.confirmedStop,'CAPABILITY_UNAVAILABLE','This provider needs a verified lifecycle bridge before execution.');
    requireThat(observation.executionStopped&&observation.persistentState==='retained','CAPABILITY_UNAVAILABLE','Existing runtime ownership is uncertain.');
    await this.requestWake(provider,ref,state);

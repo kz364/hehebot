@@ -76,10 +76,18 @@ Never-claimed queued/waiting tasks also lose unused derived context after 30 day
 from enqueue, in batches of 100. Only the instruction and room identity remain;
 claim rebuilds the full authorized snapshot from current canonical data. Cleanup
 does not advance cursors, change run status/timestamps, create events or wake the
-runtime. Admitted/recoverable contexts and retained queued instructions are not
-erased by this boundary; physical cleanup can lag the cutoff.
+runtime at this 30-day boundary. At 90 days, never-started instructions are erased
+and marked `failed/MESSAGE_EXPIRED`, with a content-free notice asking for fresh
+input. Original command receipt age survives forwarding; commandless scheduled
+work uses its enqueue time and retains a skipped occurrence identity. Claim and
+retry enforce this cutoff before bounded physical cleanup reaches the row, so
+an overdue backlog cannot execute, wake a provider or starve fresh requests.
+Wake rechecks after provider observation, including expiry across that await.
+Admitted/recoverable
+attempts remain untouched. `node scripts/test-portal-history.mjs --input-expiry`
+checks the desktop/narrow expiry notice and absence of expired text.
 
-Admitted/terminal task contexts, retained instructions, protected results, non-portal outbox payloads,
+Admitted/terminal task contexts, protected results, non-portal outbox payloads,
 revisions, native data and backups remain outside this cleanup.
 Compact provenance/causal records currently have no expiry. These are explicit
 remaining retention gaps, not proof of full S30 or "forget everywhere". Existing

@@ -144,9 +144,9 @@ it('expired command text leaves linked webhook replay and its original receipt u
   expect(await control.getReceipt('owner', accepted.value.id)).toEqual(accepted);
   expect(await control.trigger(source, 'delivery-43', 'hash-71', 'mail', {})).toEqual(accepted);
   expect(await control.trigger(source, 'delivery-43', 'changed-hash', 'mail', {})).toMatchObject({ ok: false, error: { code: 'IDEMPOTENCY_CONFLICT' } });
-  expect(db.all('SELECT * FROM runs')).toEqual(runs.map(run=>({...run,context_json:JSON.stringify({schema_version:1,instruction:'Independent work',room_id:null})}))); expect(db.all('SELECT * FROM webhook_receipts')).toEqual(receipts);
+  expect(db.all('SELECT * FROM runs')).toEqual(runs.map(run=>({...run,context_json:'{}',status:'failed',error_code:'MESSAGE_EXPIRED',updated_at:'2026-12-09T00:00:00.000Z'}))); expect(db.all('SELECT * FROM webhook_receipts')).toEqual(receipts);
   expect(db.all('SELECT * FROM controller_operations')).toEqual([]);
-  expect(deleteAlarm).toHaveBeenCalled();
+  expect(setAlarm).toHaveBeenLastCalledWith(Date.parse('2027-01-08T00:00:00.000Z')); // Content-free expiry notice audit.
 });
 
 it('timeline reads hide overdue backlog immediately and keep the history floor scoped to its conversation', async () => {
