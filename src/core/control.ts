@@ -214,6 +214,22 @@ export class ControlCore {
    return due.length;
   });
  }
+ nextQueuedContextExpiry():string|null {
+  const first=this.store.db.all<{created_at:string}>("SELECT created_at FROM runs WHERE current_attempt=0 AND status IN ('queued','waiting') AND json_type(context_json,'$.persona') IS NOT NULL ORDER BY created_at,id LIMIT 1")[0];
+  return first?new Date(Date.parse(first.created_at)+30*86400000).toISOString():null;
+ }
+ expireQueuedContexts():number {
+  return this.store.db.transaction(()=>{
+   const cutoff=new Date(this.options.now().getTime()-30*86400000).toISOString();
+   const due=this.store.db.all<{id:string;context_json:string}>("SELECT id,context_json FROM runs WHERE current_attempt=0 AND status IN ('queued','waiting') AND json_type(context_json,'$.persona') IS NOT NULL AND created_at<=? ORDER BY created_at,id LIMIT 100",cutoff);
+   for(const run of due){
+    const {instruction,room_id}=JSON.parse(run.context_json) as ContextSnapshot;
+    // Not an admitted authorization snapshot. Claim rebuilds all derived fields.
+    this.store.db.exec('UPDATE runs SET context_json=? WHERE id=?',JSON.stringify({schema_version:1,instruction,room_id}),run.id);
+   }
+   return due.length;
+  });
+ }
  nextFollowupExpiry():string|null {
   const first=this.store.db.all<{created_at:string}>("SELECT created_at FROM task_followups WHERE text!='' ORDER BY created_at,id LIMIT 1")[0];
   return first?new Date(Date.parse(first.created_at)+90*86400000).toISOString():null;

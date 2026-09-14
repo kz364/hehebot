@@ -72,7 +72,14 @@ transactionally. `node scripts/test-portal-history.mjs --followup` checks the
 accessible notice, cross-bot separation and zero mutations in real Chromium;
 desktop/narrow screenshots are synthetic read-only UI evidence, not phone tests.
 
-Captured task contexts, protected results, non-portal outbox payloads,
+Never-claimed queued/waiting tasks also lose unused derived context after 30 days
+from enqueue, in batches of 100. Only the instruction and room identity remain;
+claim rebuilds the full authorized snapshot from current canonical data. Cleanup
+does not advance cursors, change run status/timestamps, create events or wake the
+runtime. Admitted/recoverable contexts and retained queued instructions are not
+erased by this boundary; physical cleanup can lag the cutoff.
+
+Admitted/terminal task contexts, retained instructions, protected results, non-portal outbox payloads,
 revisions, native data and backups remain outside this cleanup.
 Compact provenance/causal records currently have no expiry. These are explicit
 remaining retention gaps, not proof of full S30 or "forget everywhere". Existing

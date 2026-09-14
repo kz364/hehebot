@@ -138,13 +138,13 @@ it('expired command text leaves linked webhook replay and its original receipt u
   const source = randomUUID(), store = new Store(db);
   store.put(source, 'trigger', { routine_id: randomUUID(), event_types: ['mail'] }, 0, 'operator', new Date().toISOString());
   db.exec('INSERT INTO webhook_receipts(source_id,event_id,body_hash,command_id,received_at) VALUES(?,?,?,?,?)', source, 'delivery-43', 'hash-71', accepted.value.id, new Date().toISOString());
-  const runs = db.all('SELECT * FROM runs'), receipts = db.all('SELECT * FROM webhook_receipts');
+  const runs = db.all<Record<string,unknown>>('SELECT * FROM runs'), receipts = db.all('SELECT * FROM webhook_receipts');
   vi.setSystemTime(new Date('2026-12-09T00:00:00.000Z')); await control.alarm();
   expect(db.all('SELECT payload_json FROM commands WHERE id=?', accepted.value.id)).toEqual([{ payload_json: '{}' }]);
   expect(await control.getReceipt('owner', accepted.value.id)).toEqual(accepted);
   expect(await control.trigger(source, 'delivery-43', 'hash-71', 'mail', {})).toEqual(accepted);
   expect(await control.trigger(source, 'delivery-43', 'changed-hash', 'mail', {})).toMatchObject({ ok: false, error: { code: 'IDEMPOTENCY_CONFLICT' } });
-  expect(db.all('SELECT * FROM runs')).toEqual(runs); expect(db.all('SELECT * FROM webhook_receipts')).toEqual(receipts);
+  expect(db.all('SELECT * FROM runs')).toEqual(runs.map(run=>({...run,context_json:JSON.stringify({schema_version:1,instruction:'Independent work',room_id:null})}))); expect(db.all('SELECT * FROM webhook_receipts')).toEqual(receipts);
   expect(db.all('SELECT * FROM controller_operations')).toEqual([]);
   expect(deleteAlarm).toHaveBeenCalled();
 });
