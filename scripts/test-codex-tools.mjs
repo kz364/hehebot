@@ -1,0 +1,161 @@
+#!/usr/bin/env node
+// Credential-free acceptance: pristine Codex -> stdio MCP -> HTTPS Worker -> SQLite.
+import assert from 'node:assert/strict';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { createServer } from 'node:http';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
+import { appendFile, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { Agent } from 'undici';
+import { spawnCodex } from '../runtime/codex-transport.mjs';
+import { ControlClient } from '../runtime/control-client.mjs';
+
+const root = resolve(import.meta.dirname, '..');
+const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
+const SKILL_POLICY = '46b2cbdd-d227-4f54-bffa-33148aad0134';
+const sleep = ms => new Promise(ok => setTimeout(ok, ms));
+const report = { label: 'codex-agent-tools-native-acceptance', status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
+const check = (name, fn) => { fn(); report.assertions.push(name); };
+let directory, worker, fixture, transport, dispatcher, workerLogs = '';
+const notifications = [], nativeErrors = [], fixtureErrors = [];
+
+async function freePort() {
+  const server = createServer();
+  await new Promise((ok, fail) => server.once('error', fail).listen(0, '127.0.0.1', ok));
+  const port = server.address().port;
+  await new Promise(ok => server.close(ok));
+  return port;
+}
+async function waitFor(fn, label, timeout = 20_000) {
+  const end = Date.now() + timeout;
+  while (Date.now() < end) { const value = await fn(); if (value) return value; await sleep(40); }
+  throw new Error(`timed out waiting for ${label}`);
+}
+async function stop(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  const exited = new Promise(ok => child.once('exit', ok)); child.kill('SIGTERM');
+  if (await Promise.race([exited.then(() => true), sleep(5000).then(() => false)])) return;
+  child.kill('SIGKILL');
+  if (!await Promise.race([exited.then(() => true), sleep(2000).then(() => false)])) throw new Error('process shutdown was not confirmed');
+}
+async function jsonBody(req) { const chunks = []; for await (const chunk of req) chunks.push(chunk); return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+function findType(value, type) { if (!value || typeof value !== 'object') return undefined; if (value.type === type) return value; for (const item of Object.values(value)) { const found = findType(item, type); if (found) return found; } }
+function collectTypes(value, found = new Set()) { if (!value || typeof value !== 'object') return found; if (typeof value.type === 'string') found.add(value.type); for (const item of Object.values(value)) collectTypes(item, found); return found; }
+function response(id, output) { return { id, object: 'response', created_at: 1, status: 'completed', error: null, incomplete_details: null, instructions: null, model: 'fixture-model', output, parallel_tool_calls: true, temperature: null, tool_choice: 'auto', tools: [], top_p: null, background: false, max_output_tokens: null, max_tool_calls: null, previous_response_id: null, prompt: null, reasoning: { effort: null, summary: null }, service_tier: 'default', store: false, text: { format: { type: 'text' } }, truncation: 'disabled', usage: { input_tokens: 1, input_tokens_details: { cached_tokens: 0 }, output_tokens: 1, output_tokens_details: { reasoning_tokens: 0 }, total_tokens: 2 }, user: null, metadata: {} }; }
+function sendEvents(res, output) {
+  const completed = response(`resp_${randomUUID().replaceAll('-', '')}`, output);
+  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+  const send = (type, data) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`);
+  send('response.created', { response: { ...completed, status: 'in_progress', output: [] } });
+  output.forEach((item, output_index) => {
+    send('response.output_item.added', { output_index, item: { ...item, ...(item.type === 'function_call' ? { arguments: '' } : item.type === 'custom_tool_call' ? { input: '' } : { content: [] }) } });
+    if (item.type === 'function_call') send('response.function_call_arguments.done', { output_index, item_id: item.id, arguments: item.arguments });
+    else if (item.type === 'custom_tool_call') send('response.custom_tool_call_input.done', { output_index, item_id: item.id, input: item.input });
+    else {
+      const text = item.content[0].text;
+      send('response.content_part.added', { item_id: item.id, output_index, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } });
+      send('response.output_text.delta', { item_id: item.id, output_index, content_index: 0, delta: text });
+      send('response.output_text.done', { item_id: item.id, output_index, content_index: 0, text });
+      send('response.content_part.done', { item_id: item.id, output_index, content_index: 0, part: item.content[0] });
+    }
+    send('response.output_item.done', { output_index, item });
+  });
+  send('response.completed', { response: completed }); res.end('data: [DONE]\n\n');
+}
+const message = text => [{ id: `msg_${randomUUID().replaceAll('-', '')}`, type: 'message', status: 'completed', role: 'assistant', content: [{ type: 'output_text', text, annotations: [], logprobs: [] }] }];
+
+try {
+  const version = await promisify(execFile)(binary, ['--version'], { timeout: 10_000 });
+  check('exact unmodified Codex version', () => assert.equal(version.stdout.trim(), 'codex-cli 0.154.0'));
+  directory = await mkdtemp(join(tmpdir(), 'clawbot-codex-tools-')); await chmod(directory, 0o700);
+  const [workerPort, fixturePort] = await Promise.all([freePort(), freePort()]);
+  const keyPath = join(directory, 'tls.key'), certPath = join(directory, 'tls.crt');
+  const openssl = join(directory, 'openssl.cnf');
+  await writeFile(openssl, '[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=v3\n[dn]\nCN=127.0.0.1\n[v3]\nsubjectAltName=IP:127.0.0.1\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,digitalSignature\n', { mode: 0o600 });
+  await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-config', openssl, '-keyout', keyPath, '-out', certPath], { timeout: 10_000 });
+  const token = randomBytes(32).toString('hex');
+  worker = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--env', 'local', '--ip', '127.0.0.1', '--port', String(workerPort), '--persist-to', join(directory, 'worker-state'), '--local-protocol', 'https', '--https-key-path', keyPath, '--https-cert-path', certPath, '--var', 'EXECUTION_ENABLED:true', '--var', 'NATIVE_VERIFIED:true', '--var', `RUNTIME_TOKEN:${token}`, '--var', `TOOL_POLICY_IDS:${JSON.stringify([SKILL_POLICY])}`, '--var', `PROVIDER_CONFIG:${JSON.stringify({ provider: 'fake', ref: { provider: 'fake', id: 'codex-tools-fixture' } })}`], { cwd: root, env: { ...process.env, WRANGLER_LOG_PATH: join(directory, 'wrangler-logs'), WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  worker.stdout.on('data', x => { workerLogs += x; }); worker.stderr.on('data', x => { workerLogs += x; });
+  await waitFor(() => workerLogs.replace(/\u001b\[[0-9;]*m/g, '').includes(`Ready on https://127.0.0.1:${workerPort}`), 'HTTPS Worker readiness', 45_000);
+  const origin = `https://127.0.0.1:${workerPort}`;
+  dispatcher = new Agent({ connect: { ca: await readFile(certPath) } });
+  const trustedFetch = (url, init = {}) => fetch(url, { ...init, dispatcher });
+  const ownerFetch = (path, init = {}) => trustedFetch(origin + path, init);
+  const stateResponse = await ownerFetch('/v1/state'); assert.equal(stateResponse.status, 200); let state = await stateResponse.json();
+  const persona = state.objects.find(x => x.kind === 'persona');
+  const ownerCommand = async (type, payload) => { const r = await ownerFetch('/v1/commands', { method: 'POST', headers: { 'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID() }, body: JSON.stringify({ schema_version: 1, type, payload }) }); return { status: r.status, value: await r.json() }; };
+  const adopted = await ownerCommand('persona.put', { ...persona.body, id: persona.id, expected_revision: persona.revision, tool_policy_ids: [SKILL_POLICY] });
+  check('owner explicitly adopted persona tool policy', () => { assert.equal(adopted.status, 202); assert.equal(adopted.value.status, 'applied'); });
+  const queued = await ownerCommand('message.send', { conversation_id: persona.id, text: 'Stage the synthetic skill proposal using the admitted tool.' });
+  assert.equal(queued.value.status, 'applied');
+  const control = new ControlClient({ origin: origin + '/', token, fetchImpl: trustedFetch });
+  await waitFor(async () => (await control.request('status', {})).phase === 'BOOTING', 'FakeProvider boot');
+  const identity = await control.request('boot', { boot_id: randomUUID() }); await control.request('ready', { identity });
+  const claim = await control.request('claim', { identity }); const runId = claim.run.id, attempt = claim.run.current_attempt;
+  check('real SQLite run claimed with fenced identity', () => { assert.equal(runId, queued.value.resource_id); assert.equal(attempt, 1); assert.equal(claim.run.persona_id, persona.id); });
+
+  const tokenPath = join(directory, 'runtime.token'), grantPath = join(directory, 'agent-tools.json'), home = join(directory, 'codex-home'), workspace = join(directory, 'workspace');
+  await Promise.all([mkdir(home, { mode: 0o700 }), mkdir(workspace, { mode: 0o700 })]);
+  await writeFile(tokenPath, token, { mode: 0o600 });
+  await writeFile(grantPath, JSON.stringify({ origin: origin + '/', tokenFile: tokenPath, identity, runId, attempt, allowedTools: ['clawbot_propose_skill'] }), { mode: 0o600 });
+  const proposalId = randomUUID(), skillId = randomUUID(), idempotencyKey = randomUUID();
+  const toolArgs = { idempotency_key: idempotencyKey, payload: { proposal_id: proposalId, skill_id: skillId, expected_skill_revision: 0, body: { name: 'Synthetic native method', description: 'A bounded native MCP acceptance proposal.', when_to_use: 'Only in this synthetic acceptance.', inputs_access: [], steps: ['Record the staged proposal.'], decision_rules: [], validation: ['Verify pending persisted state.'], output: 'A pending proposal.', failure_handling: ['Stop without effects.'], approval_boundaries: ['Owner review is required.'], contains_private_facts: false }, executable_files_changed: false } };
+  fixture = createServer(async (req, res) => { try {
+    if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
+    if (report.modelCalls >= 4) { res.writeHead(400); res.end(); return; }
+    report.modelCalls++; const body = await jsonBody(req);
+    if (report.modelCalls === 2) report.continuationTypes = [...collectTypes(body.input)];
+    const continuation = findType(body.input, 'function_call_output') ?? findType(body.input, 'custom_tool_call_output');
+    if (continuation) {
+      const raw = typeof continuation.output === 'string' ? continuation.output : JSON.stringify(continuation.output);
+      await writeFile(join(directory, 'mcp-output.json'), raw, { mode: 0o600 });
+      const output = JSON.parse(raw);
+      const content = Array.isArray(output) ? JSON.parse(output.at(-1).text) : output;
+      const receipt = content.content ? JSON.parse(content.content.find(x => x.type === 'text').text) : content;
+      assert.equal(receipt.status, 'applied'); assert.equal(receipt.resource_id, proposalId); sendEvents(res, message('MCP_PROPOSAL_STAGED')); return;
+    }
+    const advertised = (body.tools ?? []).find(x => x?.name?.includes('clawbot_propose_skill')) ?? (body.tools ?? []).find(x => x?.name === 'mcp__clawbot');
+    assert.ok(advertised, `clawbot MCP dispatcher not advertised: ${(body.tools ?? []).map(x => x.name).join(',')}`);
+    const callId = `call_${randomUUID().replaceAll('-', '')}`;
+    // Codex 0.154.0 ResponseItem::FunctionCall keeps namespace separate from name.
+    sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: callId,
+      ...(advertised.name === 'mcp__clawbot' ? { namespace: 'mcp__clawbot', name: 'clawbot_propose_skill' } : { name: advertised.name }),
+      arguments: JSON.stringify(toolArgs) }]);
+  } catch (error) { fixtureErrors.push(error.stack ?? String(error)); if (!res.headersSent) sendEvents(res, message('FIXTURE_ASSERTION_FAILED')); else res.end(); } });
+  await new Promise((ok, fail) => fixture.once('error', fail).listen(fixturePort, '127.0.0.1', ok));
+  const q = value => JSON.stringify(value);
+  await writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\napproval_policy = "never"\nsandbox_mode = "read-only"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback fixture"\nbase_url = "http://127.0.0.1:${fixturePort}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n[mcp_servers.clawbot]\ncommand = ${q(process.execPath)}\nargs = [${q(join(root, 'runtime/agent-tools.mjs'))}]\nstartup_timeout_sec = 10\n[mcp_servers.clawbot.env]\nCLAWBOT_AGENT_TOOLS_CONFIG = ${q(grantPath)}\nNODE_EXTRA_CA_CERTS = ${q(certPath)}\n`, { mode: 0o600 });
+  // Explicitly authorize only this disposable staged-proposal tool. This is the
+  // supported per-tool policy, not an annotation-based or global approval bypass.
+  await appendFile(join(home, 'config.toml'), '\n[mcp_servers.clawbot.tools.clawbot_propose_skill]\napproval_mode = "approve"\n');
+  transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 15_000 });
+  transport.child.stderr.on('data', x => nativeErrors.push(x.toString())); transport.on('notification', x => notifications.push(x));
+  await transport.initialize();
+  const threadId = (await transport.request('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture', approvalPolicy: 'never', sandbox: 'read-only' })).thread.id;
+  const turnId = (await transport.request('turn/start', { threadId, input: [{ type: 'text', text: 'Use the admitted clawbot proposal tool exactly once.' }] })).turn.id;
+  const completed = await waitFor(() => notifications.find(n => n.method === 'turn/completed' && n.params?.turn?.id === turnId), 'native MCP continuation', 25_000);
+  check('native turn completed after MCP continuation', () => assert.equal(completed.params.turn.status, 'completed'));
+  const read = await transport.request('thread/read', { threadId, includeTurns: true }); const transcript = JSON.stringify(read.thread);
+  check('native receipt and final continuation persisted', () => { assert.match(transcript, /MCP_PROPOSAL_STAGED/); assert.match(transcript, /clawbot_propose_skill/); assert.match(transcript, new RegExp(proposalId)); });
+  state = await (await ownerFetch('/v1/state')).json(); const proposal = state.skill_proposals.find(x => x.id === proposalId);
+  check('actual control state has pending model/run provenance', () => { assert.equal(proposal.status, 'pending'); assert.equal(proposal.skill_id, skillId); assert.deepEqual(proposal.provenance, { kind: 'model', source_ref: runId }); assert.equal(proposal.executable_files_changed, false); });
+  check('proposal did not auto-create or approve a skill', () => { assert.equal(state.objects.some(x => x.kind === 'skill' && x.id === skillId), false); assert.equal(state.skill_proposals.filter(x => x.id === proposalId).length, 1); });
+  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, 2); assert.deepEqual(fixtureErrors, []); });
+  report.status = 'passed'; report.runId = runId; report.attempt = attempt; report.proposalId = proposalId; report.nativeReceiptObserved = true;
+} catch (error) {
+  report.error = error?.stack ?? String(error); if (fixtureErrors.length) report.fixtureErrors = fixtureErrors;
+  // Worker startup output can include the disposable runtime bearer. Keep it private.
+  if (directory) await writeFile(join(directory, 'diagnostics.log'), workerLogs + nativeErrors.join(''), { mode: 0o600 });
+  process.exitCode = 1;
+} finally {
+  transport?.close(); if (transport) await stop(transport.child).catch(error => { report.status = 'failed'; report.error = error.message; process.exitCode = 1; });
+  await stop(worker).catch(error => { report.status = 'failed'; report.error = error.message; process.exitCode = 1; });
+  if (fixture) { fixture.closeAllConnections(); await new Promise(ok => fixture.close(ok)); }
+  await dispatcher?.close();
+  report.externalModelCalls = 0;
+  report.note = 'Execution/native flags, FakeProvider, TLS CA, runtime token, MCP grant, Codex home, model fixture, and SQLite are disposable process-local test state; production configuration is untouched.';
+  if (report.status === 'passed' && directory) await rm(directory, { recursive: true, force: true });
+  process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+}

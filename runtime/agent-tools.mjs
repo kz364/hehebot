@@ -1,0 +1,152 @@
+#!/usr/bin/env node
+import { readFile, lstat } from 'node:fs/promises';
+import { once } from 'node:events';
+import process from 'node:process';
+import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
+import Ajv from 'ajv';
+import addFormats from 'ajv-formats';
+import { ControlClient } from './control-client.mjs';
+
+export const AGENT_TOOL_NAMES = Object.freeze(['clawbot_propose_skill', 'clawbot_save_routine']);
+const COMMAND_TYPES = Object.freeze({ clawbot_propose_skill: 'skill.propose', clawbot_save_routine: 'routine.put' });
+const MAX_FRAME_BYTES = 1024 * 1024;
+const MAX_OUTSTANDING = 16;
+const CONFIG_ENV = 'CLAWBOT_AGENT_TOOLS_CONFIG';
+
+const clone = value => structuredClone(value);
+const rpcError = (id, code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
+
+function resolveRefs(value, root, seen = new Set()) {
+  if (Array.isArray(value)) return value.map(item => resolveRefs(item, root, seen));
+  if (!value || typeof value !== 'object') return value;
+  if (typeof value.$ref === 'string' && value.$ref.startsWith('#/$defs/')) {
+    const key = value.$ref.slice('#/$defs/'.length);
+    if (!root.$defs?.[key] || seen.has(key)) throw new Error('INVALID_CONTRACT_SCHEMA');
+    return resolveRefs(root.$defs[key], root, new Set([...seen, key]));
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveRefs(item, root, seen)]));
+}
+
+function commandSchema(contracts, type) {
+  const candidates = [...Object.values(contracts.$defs ?? {}), ...(contracts.oneOf ?? [])];
+  const found = candidates.find(item => {
+    const schema = item?.$ref?.startsWith('#/$defs/') ? contracts.$defs[item.$ref.slice(8)] : item;
+    return schema?.properties?.type?.const === type;
+  });
+  const schema = found?.$ref ? contracts.$defs[found.$ref.slice(8)] : found;
+  if (!schema?.properties?.payload) throw new Error('INVALID_CONTRACT_SCHEMA');
+  return resolveRefs(schema.properties.payload, contracts);
+}
+
+export function buildToolDefinitions(contracts) {
+  const skill = commandSchema(contracts, 'skill.propose');
+  // Provenance is assigned at the trusted Worker boundary, never accepted from the model.
+  delete skill.properties.provenance;
+  skill.required = skill.required.filter(name => name !== 'provenance');
+  const routine = commandSchema(contracts, 'routine.put');
+  const wrap = payload => ({ type: 'object', additionalProperties: false, properties: {
+    idempotency_key: resolveRefs(contracts.$defs.uuid, contracts), payload,
+  }, required: ['idempotency_key', 'payload'] });
+  return Object.freeze([
+    { name: AGENT_TOOL_NAMES[0], description: 'Propose a non-executable skill for later owner review.', inputSchema: wrap(skill) },
+    { name: AGENT_TOOL_NAMES[1], description: 'Create or update a routine within the admitted persona policy.', inputSchema: wrap(routine) },
+  ]);
+}
+
+export function createAgentToolsHandler({ controlClient, config, contracts }) {
+  if (!controlClient || typeof controlClient.request !== 'function' || !validGrant(config)) throw new Error('INVALID_CONFIGURATION');
+  config = clone(config);
+  const tools = buildToolDefinitions(contracts);
+  const allowed = new Set(config.allowedTools);
+  if ([...allowed].some(name => !AGENT_TOOL_NAMES.includes(name))) throw new Error('INVALID_CONFIGURATION');
+  const visible = tools.filter(tool => allowed.has(tool.name));
+  const ajv = new Ajv({ strict: true, allErrors: false }); addFormats(ajv);
+  const validators = new Map(visible.map(tool => [tool.name, ajv.compile(tool.inputSchema)]));
+
+  return async function handle(message) {
+    if (!message || typeof message !== 'object' || Array.isArray(message) || message.jsonrpc !== '2.0' || typeof message.method !== 'string')
+      return rpcError(message?.id, -32600, 'Invalid Request');
+    const notification = !Object.hasOwn(message, 'id');
+    if (message.method === 'notifications/initialized' || message.method === 'initialized') return notification ? undefined : rpcError(message.id, -32600, 'Invalid Request');
+    if (notification) return undefined;
+    if (message.method === 'initialize') return { jsonrpc: '2.0', id: message.id, result: {
+      protocolVersion: '2024-11-05', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'clawbot-agent-tools', version: '0.1.0' },
+    } };
+    if (message.method === 'ping') return { jsonrpc: '2.0', id: message.id, result: {} };
+    if (message.method === 'tools/list') return { jsonrpc: '2.0', id: message.id, result: { tools: clone(visible) } };
+    if (message.method !== 'tools/call') return rpcError(message.id, -32601, 'Method not found');
+    const name = message.params?.name;
+    const args = message.params?.arguments;
+    const validate = validators.get(name);
+    if (!validate) return rpcError(message.id, -32602, 'Invalid tool name or arguments');
+    if (!validate(args)) return rpcError(message.id, -32602, 'Invalid tool name or arguments');
+    const type = COMMAND_TYPES[name];
+    const payload = clone(args.payload);
+    if (type === 'skill.propose') payload.provenance = { kind: 'model', source_ref: config.runId };
+    try {
+      const result = await controlClient.request('agent-command', {
+        identity: clone(config.identity), run_id: config.runId, attempt: config.attempt,
+        idempotency_key: args.idempotency_key, command: { schema_version: 1, type, payload },
+      });
+      if (!result || !['applied', 'rejected', 'pending'].includes(result.status)) throw new Error('INVALID_COMMAND_RECEIPT');
+      return { jsonrpc: '2.0', id: message.id, result: { isError: result.status === 'rejected', content: [{ type: 'text', text: JSON.stringify(result) }] } };
+    } catch {
+      return rpcError(message.id, -32000, 'Agent command failed; outcome may be unknown. Reuse the same idempotency key when reconciling.');
+    }
+  };
+}
+
+function validGrant(config) {
+  const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  return config && typeof config === 'object' && !Array.isArray(config) &&
+    config.identity && Number.isSafeInteger(config.identity.epoch) && config.identity.epoch >= 1 &&
+    Object.keys(config.identity).every(key => ['epoch', 'boot_id'].includes(key)) &&
+    uuid(config.identity.boot_id) && uuid(config.runId) &&
+    Number.isSafeInteger(config.attempt) && config.attempt >= 1 &&
+    Array.isArray(config.allowedTools) && new Set(config.allowedTools).size === config.allowedTools.length &&
+    config.allowedTools.every(name => AGENT_TOOL_NAMES.includes(name));
+}
+
+async function readPrivate(path, limit) {
+  if (typeof path !== 'string' || !path.startsWith('/')) throw new Error('INVALID_CONFIGURATION');
+  const info = await lstat(path);
+  if (!info.isFile() || info.uid !== process.getuid() || (info.mode & 0o077) !== 0 || info.size < 1 || info.size > limit) throw new Error('INVALID_CONFIGURATION');
+  return readFile(path, 'utf8');
+}
+
+export async function runAgentToolsCli() {
+  const path = process.env[CONFIG_ENV];
+  let config;
+  try { config = JSON.parse(await readPrivate(path, 65536)); } catch { throw new Error('INVALID_CONFIGURATION'); }
+  if (!validGrant(config) || Object.keys(config).some(key => !['origin','tokenFile','identity','runId','attempt','allowedTools'].includes(key))) throw new Error('INVALID_CONFIGURATION');
+  const token = (await readPrivate(config.tokenFile, 16384)).trim();
+  const contracts = JSON.parse(await readFile(new URL('../SCHEMAS/contracts.json', import.meta.url), 'utf8'));
+  const handler = createAgentToolsHandler({ controlClient: new ControlClient({ origin: config.origin, token }), config, contracts });
+  const pending = new Set();
+  const write = async response => {
+    if (!process.stdout.write(JSON.stringify(response) + '\n')) await once(process.stdout, 'drain');
+  };
+  let buffered = Buffer.alloc(0);
+  for await (const chunk of process.stdin) {
+   buffered = Buffer.concat([buffered, chunk]);
+   let newline;
+   while ((newline = buffered.indexOf(10)) !== -1) {
+    if (newline > MAX_FRAME_BYTES) throw new Error('FRAME_LIMIT');
+    const line = buffered.subarray(0, newline).toString('utf8');
+    buffered = buffered.subarray(newline + 1);
+    let message; try { message = JSON.parse(line); } catch { await write(rpcError(null, -32700, 'Parse error')); continue; }
+    if (pending.size >= MAX_OUTSTANDING) { if (Object.hasOwn(message ?? {}, 'id')) await write(rpcError(message.id, -32001, 'Server busy')); continue; }
+    const task = Promise.resolve(handler(message)).then(async response => { if (response) await write(response); }).catch(async () => {
+      await write(rpcError(message?.id, -32603, 'Internal error'));
+    }).finally(() => pending.delete(task));
+    pending.add(task);
+   }
+   if (buffered.length > MAX_FRAME_BYTES) throw new Error('FRAME_LIMIT');
+  }
+  await Promise.allSettled(pending);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  runAgentToolsCli().catch(() => { process.stderr.write('clawbot-agent-tools: startup failed\n'); process.exitCode = 1; });
+}

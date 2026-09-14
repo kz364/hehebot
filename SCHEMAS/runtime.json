@@ -5,6 +5,41 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "type": { "const": "agent-command" },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "object", "additionalProperties": false,
+              "properties": {
+                "epoch": { "type": "integer", "minimum": 1 },
+                "boot_id": { "type": "string", "format": "uuid" }
+              },
+              "required": ["epoch", "boot_id"]
+            },
+            "run_id": { "type": "string", "format": "uuid" },
+            "attempt": { "type": "integer", "minimum": 1 },
+            "idempotency_key": { "type": "string", "minLength": 16, "maxLength": 128 },
+            "command": {
+              "type": "object", "additionalProperties": false,
+              "properties": {
+                "schema_version": { "const": 1 },
+                "type": { "enum": ["skill.propose", "routine.put"] },
+                "payload": { "type": "object", "maxProperties": 16 }
+              },
+              "required": ["schema_version", "type", "payload"]
+            }
+          },
+          "required": ["identity", "run_id", "attempt", "idempotency_key", "command"]
+        }
+      },
+      "required": ["type", "payload"]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
         "type": {
           "const": "boot"
         },

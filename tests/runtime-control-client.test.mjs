@@ -19,7 +19,8 @@ test('endpoint allowlist matches the TypeScript runtime type keys', async () => 
   const { readFile } = await import('node:fs/promises');
   const source = await readFile(new URL('../src/core/runtime-types.ts', import.meta.url), 'utf8');
   for (const key of RUNTIME_ENDPOINT_TYPES) assert.ok(source.includes(`${key}:`) || source.includes(`'${key}':`));
-  assert.equal(RUNTIME_ENDPOINT_TYPES.length, 17);
+  const schema = JSON.parse(await readFile(new URL('../SCHEMAS/runtime.json', import.meta.url), 'utf8'));
+  assert.deepEqual([...RUNTIME_ENDPOINT_TYPES].sort(), schema.oneOf.map(entry => entry.properties.type.const).sort());
 });
 test('rejects insecure/configurable path origins and partial Access credentials', () => {
   for (const origin of ['http://portal.example', 'https://user:pass@portal.example', 'https://portal.example/other', 'https://portal.example/?q=1', 'https://portal.example/#x']) assert.throws(() => new ControlClient({ ...settings, origin }), ControlClientError);

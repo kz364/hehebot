@@ -14,6 +14,7 @@ import { createProvider, type ProviderConfig, type RuntimeRef } from '../provide
 import validateRuntime from '../generated/validate-runtime.js';
 import type { RuntimeCommand } from '../core/runtime-types';
 import type { RoutinePut } from '../core/types';
+import {AgentCommandBoundary} from '../core/agent-commands';
 export type TriggerPolicy={routine_id:string;event_types:string[]};
 function stringList(value:string):string[]{const parsed:unknown=JSON.parse(value);if(!Array.isArray(parsed)||!parsed.every(x=>typeof x==='string'))throw new Error('Invalid policy configuration');return parsed;}
 function delegationMap(value:string):Record<string,string[]>{
@@ -124,6 +125,7 @@ export class PersonalControl extends DurableObject<Env> {
     const p=command.payload;this.lifecycle.authorizeAttempt(p.identity,p.run_id,p.attempt);
     new EffectLedger(this.store,()=>this.core.now()).transition(p.effect_id,p.run_id,p.status,p.receipt);break;
    }
+   case 'agent-command':result=new AgentCommandBoundary(this.core,this.lifecycle).accept(command.payload);break;
   }
   await this.arm();return result;
  });}
