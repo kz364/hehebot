@@ -1,0 +1,125 @@
+import { DatabaseSync } from 'node:sqlite';
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdtemp, writeFile, readFile, readdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { beforeEach, afterEach, it, expect } from 'vitest';
+import { snapshotControl, verifyControl } from '../scripts/backup-control.mjs';
+import { inspectControlRestore } from '../scripts/inspect-control-restore.mjs';
+
+const schema = await readFile(process.env.HEHEBOT_RESTORE_TEST_SCHEMA ?? new URL('../DB/schema.sql', import.meta.url), 'utf8');
+let directory: string, source: string, snapshot: string, db: DatabaseSync;
+const canary = 'PRIVATE_RESTORE_CANARY_793';
+function run(id: string, parent: string | null, attempt = 1, status = 'completed', persona = 'persona-a') {
+  const context = { schema_version: 1, persona: { id: persona }, routine: null, room_id: null, scope_key: `${persona}/personal`, instruction: canary };
+  db.prepare('INSERT INTO runs(id,persona_id,context_json,role,parent_run_id,status,current_attempt,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
+    .run(id, persona, JSON.stringify(context), parent ? 'background' : 'coordinator', parent, status, attempt, 't1', 't9');
+  for (let n = 1; n <= attempt; n++) db.prepare('INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,native_run_ref,status,deadline_at,settled_at) VALUES(?,?,?,?,?,?,?,?,?)')
+    .run(id, n, `${id}/${n}`, n, `boot-${n}`, `${id}-native-${n}`, 'completed', 't9', 't8');
+  if (parent) db.prepare('INSERT INTO native_task_links VALUES(?,?,?,?,?)').run(id, parent, 1, `${id}-native-${attempt}`, `${id}-thread`);
+}
+async function inspect() { await snapshotControl(source, snapshot); await verifyControl(snapshot); return inspectControlRestore(snapshot); }
+async function fingerprint() {
+  const paths = [source, ...((await readdir(snapshot)).sort().map(name => join(snapshot, name)))];
+  return Promise.all(paths.map(async path => createHash('sha256').update(await readFile(path)).digest('hex')));
+}
+beforeEach(async () => {
+  directory = await mkdtemp(join(tmpdir(), 'hehe-restore-inspect-'));
+  source = join(directory, 'source.sqlite'); snapshot = join(directory, 'snapshot');
+  await writeFile(source, '', { mode: 0o600 }); db = new DatabaseSync(source); db.exec(schema);
+  db.exec("INSERT INTO objects VALUES('persona-a','persona',1,'{}',NULL,'t1','t1'); INSERT INTO objects VALUES('persona-b','persona',2,'{}',NULL,'t1','t1')");
+  run('root-19', null, 2); run('child-73', 'root-19'); run('grandchild-41', 'child-73'); run('sibling-89', 'root-19', 1, 'completed', 'persona-b');
+});
+afterEach(async () => { db.close(); await rm(directory, { recursive: true, force: true }); });
+
+it('accepts settled nested historical lineage across a newer root attempt without claiming readiness', async () => {
+  const report = await inspect();
+  expect(report).toMatchObject({ snapshot_verified: true, semantic_status: 'no_detected_inconsistency', inconsistencies: {}, blockers: {}, external_readiness: 'unverified', coordinated_restore_ready: false });
+  const before = await fingerprint(); expect(await inspectControlRestore(snapshot)).toEqual(report);
+  expect(await fingerprint()).toEqual(before); expect(await readdir(snapshot)).toEqual(expect.arrayContaining(['control.sqlite', 'manifest.json']));
+  expect((await readdir(snapshot)).length).toBe(2);
+});
+
+it('reports preserved recovery locks/effects/operations without declaring corruption or settlement', async () => {
+  db.exec("UPDATE runs SET status='recovery_required' WHERE id='child-73'; UPDATE attempts SET status='terminated' WHERE run_id='child-73'; INSERT INTO resource_locks VALUES('secret-resource','child-73',1,'t1'); INSERT INTO effects VALUES('effect-53','child-73','action-secret','mutation','outcome_unknown','secret-policy','secret-digest',NULL,NULL,'t1'); INSERT INTO operations VALUES('op-43','child-73',1,'tool','unknown','t1','t9','t3')");
+  const report = await inspect();
+  expect(report.inconsistencies).toEqual({});
+  expect(report.blockers).toMatchObject({ RECOVERY_RUN: 1, RETAINED_LOCK: 1, UNRESOLVED_EFFECT: 1, UNRESOLVED_OPERATION: 1, STALE_NATIVE_CUSTODY: 1 });
+  const before = await fingerprint();
+  const cli = new URL('../scripts/inspect-control-restore.mjs', import.meta.url).pathname;
+  const result = spawnSync(process.execPath, [cli, snapshot], { encoding: 'utf8' });
+  expect(result.status).toBe(2); expect(JSON.parse(result.stdout)).toEqual(report);
+  for (const value of [canary, 'secret-resource', 'secret-policy', 'secret-digest', 'child-73']) expect(result.stdout + result.stderr).not.toContain(value);
+  expect(await fingerprint()).toEqual(before);
+});
+
+it('keeps obligations on terminal runs and historical lock owners explicitly blocked', async () => {
+  db.exec("INSERT INTO resource_locks VALUES('resource-secret','root-19',1,'t1'); INSERT INTO effects VALUES('effect-53','root-19','action','mutation','dispatched','policy','digest',NULL,NULL,'t1'); INSERT INTO outbox VALUES('delivery','root-19','secret-destination','{}','outcome_unknown','t1','t1')");
+  const report = await inspect();
+  expect(report.inconsistencies).toEqual({});
+  expect(report.blockers).toMatchObject({ HISTORICAL_LOCK_OWNER: 1, RETAINED_LOCK: 1, UNRESOLVED_EFFECT: 1, UNRESOLVED_DELIVERY: 1 });
+});
+
+it.each([
+  ["UPDATE runs SET current_attempt=7 WHERE id='child-73'", 'CURRENT_ATTEMPT_MISSING'],
+  ["UPDATE native_task_links SET parent_run_id='sibling-89' WHERE run_id='grandchild-41'", 'PARENT_ROLE_LINK_MISMATCH'],
+  ["UPDATE native_task_links SET parent_attempt=47 WHERE run_id='child-73'", 'PARENT_ATTEMPT_MISSING'],
+  ["UPDATE native_task_links SET native_run_ref='wrong-native-ref' WHERE run_id='child-73'", 'CHILD_NATIVE_REFERENCE_MISMATCH'],
+  ["UPDATE attempts SET boot_id='wrong-boot' WHERE run_id='grandchild-41'", 'NATIVE_ATTEMPT_LEASE_MISMATCH'],
+  ["INSERT INTO resource_locks VALUES('resource','child-73',93,'t1')", 'LOCK_ATTEMPT_MISSING'],
+  ["UPDATE runs SET context_json='{\"persona\":{\"id\":\"persona-b\"}}' WHERE id='child-73'", 'CONTEXT_IDENTITY_MISMATCH'],
+  ["UPDATE runs SET context_json='[]' WHERE id='child-73'", 'CONTEXT_IDENTITY_MISMATCH'],
+  ["UPDATE runs SET context_json='{}' WHERE id='child-73'", 'ADMITTED_CONTEXT_IDENTITY_MISSING'],
+  ["UPDATE runs SET context_json=json_set(context_json,'$.scope_key','persona-a/room/wrong') WHERE id='child-73'", 'CONTEXT_IDENTITY_MISMATCH'],
+  ["INSERT INTO effects VALUES('bad-receipt','root-19','action','mutation','confirmed','policy','digest',NULL,'{}','t1')", 'TERMINAL_EFFECT_RECEIPT_INVALID'],
+])('finds semantic defects after genuine SQLite/hash verification: %s', async (sql, code) => {
+  db.exec(sql);
+  expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+  const report = await inspect(); expect(report.snapshot_verified).toBe(true);
+  expect(report.semantic_status).toBe('inconsistent'); expect(report.inconsistencies[code]).toBe(1);
+});
+
+it('detects a cyclic child/grandchild lineage even when both parent link tables agree', async () => {
+  db.exec("UPDATE runs SET parent_run_id='grandchild-41' WHERE id='child-73'; UPDATE native_task_links SET parent_run_id='grandchild-41' WHERE run_id='child-73'");
+  const report = await inspect(); expect(report.inconsistencies).toEqual({ LINEAGE_CYCLE: 1 });
+});
+
+it('accepts unstarted retention-reduced contexts but requires admitted identity', async () => {
+  run('expired-71', null, 0, 'failed'); run('waiting-57', null, 0, 'waiting');
+  db.exec("UPDATE runs SET context_json='{}',error_code='MESSAGE_EXPIRED' WHERE id='expired-71'; UPDATE runs SET context_json='{\"schema_version\":1,\"instruction\":\"redacted\",\"room_id\":null}' WHERE id='waiting-57'");
+  const report = await inspect(); expect(report.inconsistencies).toEqual({}); expect(report.blockers).toEqual({ PENDING_RUN: 1 });
+});
+
+it('reports actual active work separately from structural validity', async () => {
+  db.exec("UPDATE runs SET status='running' WHERE id='root-19'; UPDATE attempts SET status='running',settled_at=NULL WHERE run_id='root-19' AND attempt=2");
+  const report = await inspect(); expect(report.inconsistencies).toEqual({});
+  expect(report.blockers).toEqual({ ACTIVE_RUN: 1, UNSETTLED_ATTEMPT: 1 });
+});
+
+it('propagates a stale ancestor through a completed parent to an active grandchild', async () => {
+  db.exec("UPDATE runs SET status='running' WHERE id='grandchild-41'; UPDATE attempts SET status='running',settled_at=NULL WHERE run_id='grandchild-41'");
+  const report = await inspect(); expect(report.inconsistencies).toEqual({});
+  expect(report.blockers).toEqual({ ACTIVE_RUN: 1, STALE_NATIVE_CUSTODY: 1, UNSETTLED_ATTEMPT: 1 });
+});
+
+it('fails closed beyond the semantic row budget after snapshot verification', async () => {
+  db.exec('BEGIN');
+  for (let n = 0; n < 10000; n++) run(`queued-${n}`, null, 0, 'queued');
+  db.exec('COMMIT');
+  await snapshotControl(source, snapshot); await verifyControl(snapshot);
+  await expect(inspectControlRestore(snapshot)).rejects.toThrow('CONTROL_RESTORE_INSPECTION_FAILED');
+});
+
+it('redacts CLI diagnostics and keeps failed verification separate from semantics', async () => {
+  await inspect();
+  const cli = new URL('../scripts/inspect-control-restore.mjs', import.meta.url).pathname;
+  const good = spawnSync(process.execPath, [cli, snapshot], { encoding: 'utf8' });
+  expect(good.status).toBe(0); expect(JSON.parse(good.stdout).coordinated_restore_ready).toBe(false);
+  for (const value of [canary, 'root-19', 'child-73', 'boot-1', 'persona-a', directory]) expect(good.stdout + good.stderr).not.toContain(value);
+  await writeFile(join(snapshot, 'manifest.json'), canary, { mode: 0o600 });
+  const bad = spawnSync(process.execPath, [cli, snapshot], { encoding: 'utf8' });
+  expect(bad.status).toBe(1); expect(bad.stdout).toBe(''); expect(bad.stderr).toContain('CONTROL_RESTORE_INSPECTION_FAILED');
+  expect(bad.stderr).not.toContain(canary); expect(bad.stderr).not.toContain(directory);
+  await expect(inspectControlRestore(snapshot)).rejects.toThrow('CONTROL_RESTORE_INSPECTION_FAILED');
+});
