@@ -9,12 +9,15 @@ node --input-type=module -e '
   import { readFileSync } from "node:fs";
   const minimum = JSON.parse(readFileSync("package.json", "utf8")).engines.node;
   const [major, minor] = process.versions.node.split(".").map(Number);
-  if (major < 22 || (major === 22 && minor < 13)) {
+  if (major < 22 || (major === 22 && minor < 16)) {
     throw new Error(`Node ${minimum} is required; found ${process.version}`);
   }
   console.log(`Node ${process.version}`);
 '
 npm --version
+
+echo "Installing checksum-pinned age for offline backup contracts"
+time bash scripts/setup-age.sh
 
 # The measured warm install takes about three seconds. Use npm's cache rather
 # than a custom fingerprint that could silently preserve incomplete dependencies.

@@ -132,6 +132,16 @@ locks and identities. This is unencrypted local staging, not live DO extraction,
 coordinated native backup, restore admission or complete retention. SQLite may
 update shared-memory reader markers even though source DB/WAL bytes remain intact.
 
+[Encrypted snapshot packaging](ENCRYPTED_CONTROL_BACKUP.md) now uses checksum-pinned
+upstream age v1.3.2 and explicit recipient/identity references. Decryption waits
+for whole-stream authentication and schema/hash verification before publishing a
+new private staging directory. Real age tests cover wrong keys, late tampering,
+bounded containers, path restrictions and no overwrite. Orb setup and combined
+verification install only the reviewed Linux x86_64 release and retain its license.
+This remains local staging: no off-host custody/durability, live DO export,
+coordinated shutdown, restore admission or secure-erasure claim. These setup
+changes are local until pushed to the project's default branch.
+
 [Optional-routine budget admission](BUDGET.md) now connects owner-reviewed caps
 and optional routine selections to a trusted infrastructure projection ledger.
 Missing/stale reports or projections at cap park only unstarted selected scheduled

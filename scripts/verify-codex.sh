@@ -9,6 +9,7 @@ export WRANGLER_SEND_METRICS=false
 npm ci --no-audit --no-fund
 npm run types
 bash scripts/setup-codex.sh
+bash scripts/setup-age.sh
 node --test tests/setup-codex.test.mjs
 node scripts/probe-codex.mjs
 npm test
