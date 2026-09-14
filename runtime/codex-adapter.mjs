@@ -91,7 +91,28 @@ export class CodexAdapter {
     const params = notification.params;
     if (params?.threadId !== row.threadId || params?.turn?.id !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');
     if (!['completed', 'interrupted', 'failed'].includes(params.turn.status)) fail('CODEX_PROTOCOL_ERROR');
+    if (row.rootSettled) {
+      if (row.nativeOutcome !== params.turn.status) fail('SETTLEMENT_CONFLICT');
+      return row;
+    }
     // A terminal root is deliberately not a complete receipt or permission to sleep.
     return this.journal.update(attemptId, { rootSettled: true, status: 'finishing', nativeOutcome: params.turn.status });
+  }
+
+  /** Read-only recovery for a durably acknowledged turn. Never infer a missing turn
+   * ID from position, a matching prompt, or the most recent turn in a thread.
+   */
+  async reconcile(attemptId) {
+    const row = await this.requireRun(attemptId);
+    const reply = await this.rpc('thread/read', { threadId: row.threadId, includeTurns: true });
+    if (reply?.thread?.id !== row.threadId || !Array.isArray(reply.thread.turns)) fail('CODEX_PROTOCOL_ERROR');
+    const matches = reply.thread.turns.filter(turn => turn?.id === row.nativeRunId);
+    if (matches.length !== 1) fail('RECONCILIATION_INCOMPLETE');
+    const turn = matches[0];
+    if (turn.status === 'inProgress') {
+      if (row.rootSettled) fail('SETTLEMENT_CONFLICT');
+      return row;
+    }
+    return this.observe(attemptId, { method: 'turn/completed', params: { threadId: row.threadId, turn } });
   }
 }

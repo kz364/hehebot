@@ -81,3 +81,38 @@ test('interrupt acknowledgement and root completion do not authorize sleep or co
   assert.equal(settled.status, 'finishing'); assert.equal(settled.rootSettled, true);
   assert.equal(adapter.sleepReadiness().allowed, false);
 });
+
+test('reopened adapter recovers only the exact acknowledged turn without replay or sleep permission', async t => {
+  const { adapter, cwd } = await fixture(t);
+  await adapter.submit(input);
+  const calls = [];
+  let turns = [{ id: 'unrelated-newer', status: 'failed' }, { id: 'turn-b', status: 'completed' }];
+  const restored = new CodexAdapter({ cwd, journal: new FileJournal(cwd), rpc: async (method, params) => {
+    calls.push(method); assert.equal(method, 'thread/read');
+    assert.deepEqual(params, { threadId: 'thread-a', includeTurns: true });
+    return { thread: { id: 'thread-a', turns } };
+  } });
+  const recovered = await restored.reconcile(input.attemptId);
+  assert.equal(recovered.rootSettled, true); assert.equal(recovered.nativeOutcome, 'completed');
+  assert.equal(recovered.status, 'finishing'); assert.equal(restored.sleepReadiness().allowed, false);
+  assert.deepEqual(await restored.reconcile(input.attemptId), recovered);
+  turns = [{ id: 'turn-b', status: 'interrupted' }];
+  await assert.rejects(restored.reconcile(input.attemptId), { code: 'SETTLEMENT_CONFLICT' });
+  turns = [{ id: 'turn-b', status: 'inProgress' }];
+  await assert.rejects(restored.reconcile(input.attemptId), { code: 'SETTLEMENT_CONFLICT' });
+  assert.equal(calls.length, 4);
+});
+
+test('missing or duplicate history and lost submission acknowledgment cannot be guessed', async t => {
+  const { adapter, journal } = await fixture(t);
+  await adapter.submit(input);
+  for (const turns of [[], [{ id: 'other', status: 'completed' }],
+    [{ id: 'turn-b', status: 'completed' }, { id: 'turn-b', status: 'completed' }]]) {
+    adapter.rpc = async method => { assert.equal(method, 'thread/read'); return { thread: { id: 'thread-a', turns } }; };
+    await assert.rejects(adapter.reconcile(input.attemptId), { code: 'RECONCILIATION_INCOMPLETE' });
+    assert.equal((await journal.get(input.attemptId)).rootSettled, false);
+  }
+  await journal.update(input.attemptId, { nativeRunId: null, status: 'recovery_required' });
+  adapter.rpc = () => assert.fail('Do not guess an unacknowledged turn from history');
+  await assert.rejects(adapter.reconcile(input.attemptId), { code: 'SUBMISSION_OUTCOME_UNKNOWN' });
+});

@@ -9,6 +9,8 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
+import { CodexAdapter } from '../runtime/codex-adapter.mjs';
+import { FileJournal } from '../runtime/file-journal.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
@@ -149,6 +151,19 @@ try {
   const persistedItems = read.thread.turns.flatMap(savedTurn => savedTurn.items);
   assert.ok(persistedItems.some(item => item.type === 'agentMessage' && item.text === `${marker}:${payload}`));
   assert.match(transcript(read.thread), /commandExecution/);
+
+  // Reconstruct our journal/adapter without consuming the terminal notification.
+  // The acknowledged native IDs are the only permitted recovery targets.
+  const journalPath = join(home, 'executor-journal');
+  await new FileJournal(journalPath).putIfAbsent('recovery-proof', {
+    threadId, nativeRunId: turn.turn.id, status: 'running', rootSettled: false,
+  });
+  const recovery = new CodexAdapter({ cwd: workspace, journal: new FileJournal(journalPath),
+    rpc: (method, params) => { assert.equal(method, 'thread/read'); return transport.request(method, params); } });
+  const recovered = await recovery.reconcile('recovery-proof');
+  assert.equal(recovered.rootSettled, true); assert.equal(recovered.nativeOutcome, 'completed');
+  assert.equal(recovery.sleepReadiness().allowed, false);
+  report.readOnlyRootRecovery = true;
 
   const heldThread = (await transport.request('thread/start', { cwd: workspace, modelProvider: 'fixture' })).thread.id;
   const heldTurn = (await transport.request('turn/start', { threadId: heldThread, input: [{ type: 'text', text: 'HOLD_NATIVE_TURN' }] })).turn.id;
