@@ -4,9 +4,10 @@ import { spawn } from 'node:child_process';
 
 /** Codex 0.154.0's supported stdio protocol. Never retries a request. */
 export class CodexTransport extends EventEmitter {
-  constructor(child, { timeoutMs = 30000, maxFrameBytes = 8 * 1024 * 1024, maxPending = 64, onToolCall = null } = {}) {
+  constructor(child, { timeoutMs = 30000, maxFrameBytes = 8 * 1024 * 1024, maxPending = 64, onToolCall = null, onUserInput = null } = {}) {
     super();
     if (onToolCall !== null && typeof onToolCall !== 'function') throw new Error('INVALID_TOOL_HANDLER');
+    if (onUserInput !== null && typeof onUserInput !== 'function') throw new Error('INVALID_USER_INPUT_HANDLER');
     this.child = child;
     this.timeoutMs = timeoutMs;
     this.maxFrameBytes = maxFrameBytes;
@@ -14,6 +15,7 @@ export class CodexTransport extends EventEmitter {
     this.backpressured = false;
     this.pending = new Map();
     this.onToolCall = onToolCall;
+    this.onUserInput = onUserInput;
     this.serverCalls = new Map();
     this.seenServerCalls = new Set();
     this.sequence = 0;
@@ -61,14 +63,27 @@ export class CodexTransport extends EventEmitter {
     if (!message || typeof message !== 'object' || Array.isArray(message)) throw new Error('INVALID');
     if (typeof message.method === 'string') {
       if (Object.hasOwn(message, 'id')) {
-        if (message.method === 'item/tool/call' && this.onToolCall) {
-          this.handleToolCall(message);
+        if (message.method === 'item/tool/call' && this.onToolCall ||
+            message.method === 'item/tool/requestUserInput' && this.onUserInput) {
+          this.handleServerCall(message);
           return;
         }
         // No remote tool request gains authority merely by arriving on this pipe.
         this.write({ id: message.id, error: { code: -32601, message: 'Client capability not enabled' } });
         this.emit('deniedRequest', { method: message.method });
-      } else this.emit('notification', message);
+      } else {
+        if (message.method === 'serverRequest/resolved') {
+          const call = this.serverCalls.get(message.params?.requestId);
+          if (call?.questionThreadId && call.questionThreadId === message.params?.threadId) {
+            clearTimeout(call.timer);
+            this.serverCalls.delete(message.params.requestId);
+            // Resolution also occurs on interruption. Suppress late answers,
+            // without claiming that any answer was accepted or work settled.
+            call.controller.abort({ code: 'CODEX_USER_INPUT_RESOLVED' });
+          }
+        }
+        this.emit('notification', message);
+      }
       return;
     }
     if (!Object.hasOwn(message, 'id') || (Object.hasOwn(message, 'result') === Object.hasOwn(message, 'error'))) {
@@ -84,29 +99,47 @@ export class CodexTransport extends EventEmitter {
     else entry.resolve(message.result);
   }
 
-  handleToolCall(message) {
+  handleServerCall(message) {
     const id = message.id;
+    const userInput = message.method === 'item/tool/requestUserInput';
+    const prefix = userInput ? 'CODEX_USER_INPUT' : 'CODEX_TOOL';
     if (!(Number.isSafeInteger(id) || typeof id === 'string' && id.length > 0 && id.length <= 256) ||
-        this.seenServerCalls.has(id)) return this.fail('CODEX_TOOL_REQUEST_CONFLICT');
-    if (this.serverCalls.size >= this.maxPending || this.seenServerCalls.size >= 4096) return this.fail('CODEX_TOOL_REQUEST_LIMIT');
+        this.seenServerCalls.has(id)) return this.fail(`${prefix}_REQUEST_CONFLICT`);
+    if (this.serverCalls.size >= this.maxPending || this.seenServerCalls.size >= 4096) return this.fail(`${prefix}_REQUEST_LIMIT`);
+    const questionIds = userInput && Array.isArray(message.params?.questions) ? message.params.questions.map(q => q?.id) : null;
+    if (userInput && (!questionIds?.length || !questionIds.every(q => typeof q === 'string' && q.length > 0) ||
+        new Set(questionIds).size !== questionIds.length || typeof message.params.isBlocking !== 'boolean' ||
+        !['threadId', 'turnId', 'itemId'].every(key => typeof message.params[key] === 'string' && message.params[key].length > 0))) return this.fail('CODEX_USER_INPUT_INVALID_REQUEST');
     this.seenServerCalls.add(id);
     const controller = new AbortController();
-    const timer = setTimeout(() => this.fail('CODEX_TOOL_OUTCOME_UNKNOWN'), this.timeoutMs);
-    this.serverCalls.set(id, { controller, timer });
+    const timer = setTimeout(() => this.fail(`${prefix}_OUTCOME_UNKNOWN`), this.timeoutMs);
+    this.serverCalls.set(id, { controller, timer, questionThreadId: userInput ? message.params.threadId : null });
     // Handler owns exact native identity/grant validation. Merely installing it
-    // grants no command, file, network or approval capability.
+    // grants no command, file, network or approval capability. User-input handlers
+    // also own owner authorization, durable custody and question/answer policy.
     void Promise.resolve().then(() => {
-      if (this.closed) return;
-      return this.onToolCall(message.params, { signal: controller.signal });
+      if (this.closed || controller.signal.aborted) return;
+      const handler = userInput ? this.onUserInput : this.onToolCall;
+      return handler.call(this, message.params, { signal: controller.signal, ...(userInput ? { requestId: id } : {}) });
     }).then(result => {
-      if (this.closed) return;
+      if (this.closed || controller.signal.aborted) return;
+      if (userInput) {
+        const answers = result?.answers;
+        if (!answers || typeof answers !== 'object' || Array.isArray(answers) ||
+            Object.keys(answers).length !== questionIds.length || !questionIds.every(q => Object.hasOwn(answers, q) &&
+              Array.isArray(answers[q]?.answers) && answers[q].answers.every(answer => typeof answer === 'string'))) throw new Error('INVALID_USER_INPUT_RESPONSE');
+        // Only the advertised answer shape leaves this transport. Writing it is
+        // not acknowledgment of receipt, model consumption or task completion.
+        this.write({ id, result: { answers: Object.fromEntries(questionIds.map(q => [q, { answers: answers[q].answers }])) } });
+        return;
+      }
       if (!result || typeof result.success !== 'boolean' || !Array.isArray(result.contentItems) ||
           !result.contentItems.every(item => item && typeof item === 'object' &&
             (item.type === 'inputText' && typeof item.text === 'string' ||
              item.type === 'inputImage' && typeof item.imageUrl === 'string' ||
              item.type === 'inputAudio' && typeof item.audioUrl === 'string'))) throw new Error('INVALID_TOOL_RESPONSE');
       this.write({ id, result: { success: result.success, contentItems: result.contentItems } });
-    }).catch(() => this.fail('CODEX_TOOL_OUTCOME_UNKNOWN')).finally(() => {
+    }).catch(() => { if (!controller.signal.aborted) this.fail(`${prefix}_OUTCOME_UNKNOWN`); }).finally(() => {
       clearTimeout(timer); this.serverCalls.delete(id);
     });
   }
@@ -151,7 +184,7 @@ export class CodexTransport extends EventEmitter {
 }
 
 /** Dedicated customer-owned home; never inherit provider keys or Amp auth. */
-export function spawnCodex({ binary, home, cwd, timeoutMs, onToolCall = null }) {
+export function spawnCodex({ binary, home, cwd, timeoutMs, onToolCall = null, onUserInput = null }) {
   if (!binary?.startsWith('/') || !home?.startsWith('/') || !cwd?.startsWith('/')) throw new Error('ABSOLUTE_PATHS_REQUIRED');
   const env = Object.fromEntries(['PATH', 'LANG']
     .filter(key => process.env[key]).map(key => [key, process.env[key]]));
@@ -159,5 +192,5 @@ export function spawnCodex({ binary, home, cwd, timeoutMs, onToolCall = null }) 
   env.CODEX_HOME = home;
   return new CodexTransport(spawn(binary, ['app-server', '--listen', 'stdio://'], {
     cwd, env, stdio: ['pipe', 'pipe', 'pipe'],
-  }), { timeoutMs, onToolCall });
+  }), { timeoutMs, onToolCall, onUserInput });
 }

@@ -93,7 +93,29 @@ The native fixture also verifies supported `thread/backgroundTerminals/list`: it
 
 ## Shared task tools and dynamic-tool limitations
 
-Host `thread/start.dynamicTools` requires explicit experimental API opt-in. The optional transport callback handles only `item/tool/call`; other approvals remain denied. [Dynamic tool parameters](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/schema/typescript/v2/DynamicToolCallParams.ts) carry exact thread, turn and call identity. Duplicate RPC IDs, concurrency, timeouts and handler failures are bounded/fenced; cooperative abort is not proof that side effects stopped.
+Host `thread/start.dynamicTools` requires explicit experimental API opt-in. The optional `onToolCall` transport callback handles only `item/tool/call`; approvals remain denied. [Dynamic tool parameters](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/schema/typescript/v2/DynamicToolCallParams.ts) carry exact thread, turn and call identity. Duplicate RPC IDs, concurrency, timeouts and handler failures are bounded/fenced; cooperative abort is not proof that side effects stopped.
+
+The separate opt-in `onUserInput(params, {signal, requestId})` callback handles only
+experimental `item/tool/requestUserInput`, returning
+`{answers:{[questionId]:{answers:string[]}}}`. Transport checks native identity
+presence, unique question IDs and the exact original answer key set. It shares
+RPC identity, concurrency, frame and `timeoutMs` bounds (default30s) with dynamic
+calls, strips extra response fields and suppresses late answers after closure.
+`requestId` is the original connection-scoped RPC identity, not a question/item
+ID or a durable cross-restart receipt.
+An exact `serverRequest/resolved` request/thread match aborts only that question
+callback with `CODEX_USER_INPUT_RESOLVED` and suppresses its late response. The
+notification is still emitted to observers. Resolution also occurs after native
+interruption without an answer, so it cannot establish acceptance or consumption.
+The handler still owns full question/answer validation, owner authorization,
+durable custody and exact task binding. A response write is not an acknowledged
+delivery or model-consumption receipt. The callback does not enable any native
+mode/feature or approval capability, and no production service installs it.
+Worker persistence, owner response UI, human-wait policy and restart recovery
+remain separate integration work; default requests continue to fail closed.
+[Native question evidence](CODEX_QUESTIONS.md) verifies root-only, mode-gated
+availability and exact callback delivery against the pinned binary. An advertised
+tool is not necessarily callable; native descendants reject these questions.
 
 `runtime/codex-tools.mjs` validates the admitted host grant, acknowledged running root and call fingerprint before dispatch through the existing Worker control handler. Successful duplicates return cached responses; changed arguments/grants conflict; unknown outcomes do not replay. Children cannot choose a parent grant or inject authority fields.
 
