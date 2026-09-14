@@ -10,13 +10,15 @@ import { randomUUID } from 'node:crypto';
 const alpha = '11111111-1111-4111-8111-111111111111', beta = '22222222-2222-4222-8222-222222222222';
 const failureMode = process.argv.includes('--error');
 const retentionMode = process.argv.includes('--retention');
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--error', '--retention'].includes(arg)));
+const followupMode = process.argv.includes('--followup');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--error', '--retention', '--followup'].includes(arg)));
 const session = `history-${randomUUID().slice(0, 8)}`;
 const browser = (...args) => promisify(execFile)('agent-browser', ['--session', session, ...args], { timeout: 30000 });
 const message = (conversation_id, sequence, text) => ({ conversation_id, sequence, id: String(sequence),
   type: 'message.user', payload: { text }, created_at: '2026-09-14T01:00:00.000Z' });
 const recent = Array.from({ length: 100 }, (_, i) => message(alpha, i + 101, `Alpha recent ${i + 101}`));
 const betaEvents = [message(beta, 301, 'Beta retained 71 versus 103')];
+if (followupMode) betaEvents.push({...message(beta, 302, 'Expired body must not render'),type:'task.followup_expired'});
 const state = { objects: [[alpha, 'Alpha'], [beta, 'Beta']].map(([id, name]) => ({ id, kind: 'persona', revision: 1, body: { name } })),
   timeline: [], runs: [], summary: { phase: 'STOPPED', execution_enabled: false, queued_runs: 0, blocked_runs: 0 } };
 let release, historyRequested, mutations = 0, expired = 0;
@@ -60,12 +62,26 @@ try {
   const visible = await browser('eval', 'JSON.stringify({name: document.querySelector("#conversation-name").textContent, messages: Array.from(document.querySelectorAll(".message-body"), e => e.textContent)})');
   assert.match(visible.stdout, /Beta retained 71 versus 103/);
   assert.doesNotMatch(visible.stdout, /Alpha older|Alpha recent/);
+  if (followupMode) {
+    const notice = (await browser('get', 'text', '#timeline [role="status"]')).stdout;
+    assert.match(notice, /Follow-up expired/); assert.match(notice, /90 days without delivery/); assert.match(notice, /Send a fresh follow-up/);
+    assert.doesNotMatch((await browser('get', 'text', '#timeline')).stdout, /Expired body must not render/);
+    const artifacts = new URL('../.amp/in/artifacts/', import.meta.url); await mkdir(artifacts, {recursive:true});
+    await browser('screenshot', new URL('portal-followup-expiry.png', artifacts).pathname);
+    await browser('set', 'viewport', '390', '844', '2');
+    await browser('eval', 'new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
+    assert.equal((await browser('eval', 'document.documentElement.scrollWidth <= innerWidth')).stdout.trim(), 'true');
+    await browser('screenshot', new URL('portal-followup-expiry-narrow.png', artifacts).pathname);
+    await browser('set', 'viewport', '1280', '720', '2');
+    console.log('PASS: expired followup has a content-free accessible notice with fresh-input guidance; desktop and narrow Chromium captures.');
+  }
   const error = await browser('eval', 'document.querySelector("#error").hidden');
   assert.equal(error.stdout.trim(), 'true');
   await browser('eval', 'Array.from(document.querySelectorAll("#bots button")).find(b => b.textContent.endsWith("Alpha")).click()');
   await browser('wait', '--fn', `Array.from(document.querySelectorAll(".message-body")).some(e => e.textContent === ${JSON.stringify(failureMode ? 'Alpha recent 101' : 'Alpha older 19 versus 43')})`);
   const restored = await browser('eval', 'Array.from(document.querySelectorAll(".message-body"), e => e.textContent)');
   assert.doesNotMatch(restored.stdout, /Beta retained/);
+  if (followupMode) assert.doesNotMatch((await browser('get', 'text', '#timeline')).stdout, /Follow-up expired/);
   const count = await browser('get', 'count', '.message-body');
   assert.equal(Number(count.stdout.trim()), failureMode ? 100 : 101);
   if (retentionMode) {

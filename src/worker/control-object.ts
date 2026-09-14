@@ -78,7 +78,7 @@ export class PersonalControl extends DurableObject<Env> {
   try{this.reconcile();}finally{await this.arm();}
  }
  private reconcile(){
-  this.core.expireMemories();this.core.expireCommandPayloads();this.retention.prune();this.resultRetention.prune();this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();
+  this.core.expireMemories();this.core.expireCommandPayloads();this.core.expireFollowups();this.retention.prune();this.resultRetention.prune();this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();
  }
  async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{await this.beforeRequest(owner+':write',60);const result=this.core.accept(owner,key,hash,input);await this.arm();return result;});}
  getReceipt(owner:string,id:string){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receipt(id);});}
@@ -150,6 +150,7 @@ export class PersonalControl extends DurableObject<Env> {
   const retentionDue=this.retention.nextDue();if(retentionDue)times.push(Date.parse(retentionDue));
   const resultDue=this.resultRetention.nextDue();if(resultDue)times.push(Date.parse(resultDue));
   const commandExpiry=this.core.nextCommandPayloadExpiry();if(commandExpiry)times.push(Date.parse(commandExpiry));
+  const followupExpiry=this.core.nextFollowupExpiry();if(followupExpiry)times.push(Date.parse(followupExpiry));
   const memoryExpiry=this.core.nextMemoryExpiry();if(memoryExpiry)times.push(Date.parse(memoryExpiry));
   const flightDue=this.flights.nextDue();if(flightDue)times.push(Date.parse(flightDue));
   const due=this.store.db.all<{next_due_at:string}>('SELECT next_due_at FROM schedule_state ORDER BY next_due_at LIMIT 1')[0];

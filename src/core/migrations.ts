@@ -45,5 +45,14 @@ export function migrateApplication(db:Database,now:string):void {
   db.exec("CREATE INDEX attempts_result_expiry ON attempts(settled_at,run_id,attempt) WHERE result_json IS NOT NULL AND settled_at IS NOT NULL AND status IN ('completed','failed','cancelled')");
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(7,?)',now);
  });
- requireThat([6,7].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===6)version=7;
+ if(version===7)db.transaction(()=>{
+  db.exec("CREATE TABLE task_followups_retained (id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES runs(id),text TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','coordinator_queued','expired')),command_id TEXT NOT NULL REFERENCES commands(id),created_at TEXT NOT NULL,coordinator_run_id TEXT REFERENCES runs(id))");
+  db.exec('INSERT INTO task_followups_retained SELECT id,run_id,text,status,command_id,created_at,coordinator_run_id FROM task_followups');
+  db.exec('DROP TABLE task_followups');
+  db.exec('ALTER TABLE task_followups_retained RENAME TO task_followups');
+  db.exec("CREATE INDEX task_followups_expiry ON task_followups(created_at,id) WHERE text!=''");
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(8,?)',now);
+ });
+ requireThat([7,8].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

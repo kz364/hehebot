@@ -62,7 +62,17 @@ checkpoints are preserved; expiry is never evidence of native settlement or slee
 The Worker schedules cleanup even with execution disabled. Physical purge may lag
 the cutoff; these stored result copies have no current retrieval endpoint.
 
-Captured task contexts, protected results, non-portal outbox payloads, follow-ups,
+Schema v8 expires undelivered deferred follow-ups at 90 days from receipt, erases
+their text and records a content-free expiry notice requiring fresh owner input.
+The target task is unchanged. Dispatch enforces the cutoff even before a bounded
+100-row cleanup batch reaches that message. Already-dispatched follow-up copies
+lose their redundant text but retain their coordinator link/status; captured work
+is not silently cancelled or erased. Migration preserves rows and foreign keys
+transactionally. `node scripts/test-portal-history.mjs --followup` checks the
+accessible notice, cross-bot separation and zero mutations in real Chromium;
+desktop/narrow screenshots are synthetic read-only UI evidence, not phone tests.
+
+Captured task contexts, protected results, non-portal outbox payloads,
 revisions, native data and backups remain outside this cleanup.
 Compact provenance/causal records currently have no expiry. These are explicit
 remaining retention gaps, not proof of full S30 or "forget everywhere". Existing

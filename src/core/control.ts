@@ -214,10 +214,27 @@ export class ControlCore {
    return due.length;
   });
  }
+ nextFollowupExpiry():string|null {
+  const first=this.store.db.all<{created_at:string}>("SELECT created_at FROM task_followups WHERE text!='' ORDER BY created_at,id LIMIT 1")[0];
+  return first?new Date(Date.parse(first.created_at)+90*86400000).toISOString():null;
+ }
+ expireFollowups():number {
+  return this.store.db.transaction(()=>{
+   const now=this.now(),cutoff=new Date(this.options.now().getTime()-90*86400000).toISOString();
+   const due=this.store.db.all<{id:string;run_id:string;status:string;command_id:string}>("SELECT id,run_id,status,command_id FROM task_followups WHERE text!='' AND created_at<=? ORDER BY created_at,id LIMIT 100",cutoff);
+   for(const followup of due){
+    this.store.db.exec("UPDATE task_followups SET text='',status=CASE WHEN status='pending' THEN 'expired' ELSE status END WHERE id=?",followup.id);
+    if(followup.status==='pending')this.store.event(this.options.uuid(),this.store.run(followup.run_id).persona_id,'task.followup_expired','system:expiry',followup.command_id,{run_id:followup.run_id,followup_id:followup.id,reason:'MESSAGE_EXPIRED',requires_fresh_followup:true},now);
+   }
+   return due.length;
+  });
+ }
  flushFollowups(runId:string):void {
   const run=this.store.run(runId);
   if(!['completed','failed','cancelled'].includes(run.status))return;
-  for(const followup of this.store.db.all<{id:string;text:string;command_id:string}>("SELECT id,text,command_id FROM task_followups WHERE run_id=? AND status='pending' ORDER BY created_at,id",runId)){
+  const cutoff=new Date(this.options.now().getTime()-90*86400000).toISOString();
+  // Enforce the cutoff even when bounded physical cleanup has a backlog.
+  for(const followup of this.store.db.all<{id:string;text:string;command_id:string}>("SELECT id,text,command_id FROM task_followups WHERE run_id=? AND status='pending' AND created_at>? ORDER BY created_at,id",runId,cutoff)){
    const coordinator=this.enqueue(run.persona_id,`Owner follow-up explicitly targets task ${run.id} (${run.title??'Task'}). The previous native execution is settled. Decide the next authorized action; do not resume any other task.\n\n${followup.text}`,followup.command_id,null,null);
    this.store.db.exec("UPDATE task_followups SET status='coordinator_queued',coordinator_run_id=? WHERE id=?",coordinator,followup.id);
   }

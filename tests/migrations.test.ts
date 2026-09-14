@@ -27,7 +27,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual([{id:'run-1',status:'waiting',context_json:'{"synthetic":"preserve context"}',command_id:'command-1',role:'coordinator',parent_run_id:null,title:null}]);
    expect(db.all("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('native_task_links','resource_locks','task_followups','skill_proposals','skill_enablements')")).toHaveLength(5);
    expect(db.all('SELECT * FROM room_publications')).toEqual([]);
-   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(7);
+   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(8);
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=2')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=3')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=4')[0].applied_at).toBe('2026-09-10T00:00:00Z');
@@ -55,7 +55,24 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual(before);
    sqlite.exec('DROP INDEX room_publications_cause');
    migrateApplication(db,'2026-09-12T00:00:00Z');
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:8}]);
+  }finally{sqlite.close();}
+ });
+ it('preserves v7 followups and foreign keys, and rolls back a failed table replacement',()=>{
+  const {db,sqlite}=legacy();try{
+   migrateApplication(db,'2026-09-10T00:00:00Z');
+   sqlite.exec("DELETE FROM schema_versions WHERE version=8; DROP TABLE task_followups; CREATE TABLE task_followups (id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES runs(id),text TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','coordinator_queued')),command_id TEXT NOT NULL REFERENCES commands(id),created_at TEXT NOT NULL,coordinator_run_id TEXT REFERENCES runs(id)); INSERT INTO task_followups VALUES('pending-19','run-1','Keep pending 43','pending','command-1','2026-09-01T00:00:00.000Z',NULL),('queued-71','run-1','Keep queued 103','coordinator_queued','command-1','2026-09-02T00:00:00.000Z','run-1'); CREATE INDEX task_followups_expiry ON objects(id)");
+   const before=db.all('SELECT * FROM task_followups ORDER BY id');
+   expect(()=>migrateApplication(db,'2026-09-11T00:00:00Z')).toThrow();
+   expect(db.all('SELECT * FROM task_followups ORDER BY id')).toEqual(before);
    expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:7}]);
+   expect(()=>db.exec("UPDATE task_followups SET status='expired'")).toThrow();
+   sqlite.exec('DROP INDEX task_followups_expiry'); migrateApplication(db,'2026-09-12T00:00:00Z');
+   expect(db.all('SELECT * FROM task_followups ORDER BY id')).toEqual(before);
+   expect(()=>db.exec("UPDATE task_followups SET command_id='missing'")).toThrow();
+   db.exec("UPDATE task_followups SET status='expired',text='' WHERE id='pending-19'");
+   migrateApplication(db,'2026-09-13T00:00:00Z');
+   expect(db.all("SELECT status,text FROM task_followups WHERE id='pending-19'")).toEqual([{status:'expired',text:''}]);
   }finally{sqlite.close();}
  });
  it('rejects unknown future schema without changing application data',()=>{
