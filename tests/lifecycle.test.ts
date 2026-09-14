@@ -172,6 +172,31 @@ describe('executor leases and attempts', () => {
     expect(JSON.stringify(recovery)).not.toContain('private-provider-key');
     expect(f.db.all('SELECT * FROM effects ORDER BY id')).toEqual(before);
   });
+  it('pages old recovery tasks independently of recent runs and retained events, without crossing conversations', () => {
+    const room=randomUUID();
+    f.store.put(room,'room',{name:'Recovery room',member_ids:[bot],default_responder_id:bot},0,'owner',f.core.now());
+    const old=Array.from({length:23},()=>f.core.enqueue(bot,'private-recovery-context',null,null,null)).sort();
+    for(const id of old)f.db.exec("UPDATE runs SET status='recovery_required',context_json=json_set(context_json,'$.room_id',?) WHERE id=?",room,id);
+    f.setNow('2026-09-10T00:01:00.000Z');
+    for(let i=0;i<137;i++)f.core.enqueue(bot,'newer task',null,null,null);
+    expect(f.core.state().recovery).toEqual([]);
+    const before=f.db.all('SELECT * FROM runs ORDER BY id'),first=f.core.recoveryPage(bot);
+    expect(first.runs.map(run=>run.id)).toEqual(old.slice(0,20));
+    expect(first.next_cursor).toBe(old[19]);
+    expect(first.recovery).toHaveLength(20);
+    expect(JSON.stringify(first)).not.toContain('private-recovery-context');
+    const last=f.core.recoveryPage(bot,first.next_cursor!);
+    expect(last.runs.map(run=>run.id)).toEqual(old.slice(20));expect(last.next_cursor).toBeNull();
+    expect(f.core.recoveryPage(room,undefined,100).runs.map(run=>run.id)).toEqual(old);
+    expect(f.core.recoveryPage('22222222-2222-4222-8222-222222222222').runs).toEqual([]);
+    expect(f.db.all('SELECT * FROM runs ORDER BY id')).toEqual(before);
+    // Removing the cursor row cannot shift or repeat the next page.
+    f.db.exec("UPDATE runs SET status='failed' WHERE id=?",old[19]);
+    expect(f.core.recoveryPage(bot,first.next_cursor!).runs.map(run=>run.id)).toEqual(old.slice(20));
+    for(const cursor of ['', 'private-text', "' OR 1=1--"])
+      expect(()=>f.core.recoveryPage(bot,cursor)).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
+    for(const limit of [0,101,1.5,NaN])expect(()=>f.core.recoveryPage(bot,undefined,limit)).toThrow();
+  });
   it('owner recovery closes stopped descendants bottom-up only after effect decisions and never retries them', () => {
     const root = claimed().run.id;
     life.submitted(identity,root,1,'recover-root');

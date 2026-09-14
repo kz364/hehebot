@@ -2,6 +2,7 @@ import { installImportSetup } from './import-setup.js';
 const $=id=>document.getElementById(id);
 const olderEvents=new Map();
 const historyFloors=new Map();
+let recoveryView=null;
 let snapshot=null,selected=localStorage.getItem('personal.selected'),events=[],loading=false,lastSignature='',editing=null;
 const names={IDLE_PERMITTED:'Idle — hibernation permitted',STOPPED:'Sleeping',START_REQUESTED:'Waking',BOOTING:'Starting',READY:'Awake',DRAINING:'Finishing up',STOP_COMMITTED:'Stopping',STOPPING:'Stopping',RECOVERY_REQUIRED:'Recovery needed'};
 const statuses={queued:'Queued',claimed:'Starting',running:'Working',finishing:'Saving result',completed:'Completed',waiting:'Waiting',failed:'Failed',cancelling:'Cancelling',cancelled:'Cancelled',recovery_required:'Needs recovery'};
@@ -31,11 +32,18 @@ async function refresh(force=false){
  try{const value=await api('/v1/state');snapshot=value;
   if(!selected||selected!=='skills'&&!value.objects.some(x=>x.id===selected))selected=items('persona').find(x=>!x.body.archived)?.id;
   const conversationId=selected;if(conversationId!=='skills'){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId&&acceptHistory(conversationId,history)){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
+  const view=recoveryView;if(view){const request=++view.request,page=await api(recoveryUrl(view));if(recoveryView===view&&selected===view.conversationId&&view.request===request)view.page=page;}
   $('connection').textContent='Connected';$('connection-dot').classList.add('online');render();
  }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);}
  finally{loading=false;}
 }
-function choose(id){selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
+function choose(id){recoveryView=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
+function recoveryUrl(view){return '/v1/conversations/'+view.conversationId+'/recovery'+(view.cursor?'?after='+encodeURIComponent(view.cursor):'');}
+async function loadRecovery(cursor=null,previous=[]){
+ const view={conversationId:selected,cursor,previous,page:null,request:1};recoveryView=view;report('');render();
+ try{const page=await api(recoveryUrl(view));if(recoveryView===view&&selected===view.conversationId&&view.request===1){view.page=page;render();}}
+ catch(e){if(recoveryView===view&&view.request===1){recoveryView=null;report(e.message);render();}}
+}
 function render(){
  if(!snapshot)return;
  renderBudget();renderMonitoring();
@@ -52,12 +60,20 @@ function render(){
  $('runtime-state').textContent=names[snapshot.summary.phase]??snapshot.summary.phase;$('runtime-provider').textContent=snapshot.provider?.id??'Unconfigured';$('runtime-queued').textContent=snapshot.summary.queued_runs;$('runtime-waiting').textContent=snapshot.summary.blocked_runs;
  $('runtime-banner').hidden=snapshot.summary.execution_enabled;
  $('runtime-banner').textContent='Your messages and routines are saved. The assistant is waiting for its runtime connection and sign-in before it can work.';
- const conversation=events.filter(x=>x.conversation_id===selected);const runs=snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
+ const view=recoveryView?.conversationId===selected?recoveryView:null;
+ const conversation=view?[]:events.filter(x=>x.conversation_id===selected);const runs=view?(view.page?.runs??[]):snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
  const steering=(snapshot.steering??[]).filter(x=>runs.some(run=>run.id===x.run_id));
- const recovery=(snapshot.recovery??[]).filter(x=>runs.some(run=>run.id===x.run_id));
- const signature=JSON.stringify([selected,conversation,runs,steering,recovery,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
+ const recovery=(view?(view.page?.recovery??[]):snapshot.recovery??[]).filter(x=>runs.some(run=>run.id===x.run_id));
+ const signature=JSON.stringify([selected,conversation,runs,steering,recovery,Boolean(view),view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;const expanded=new Set([...timeline.querySelectorAll('.task-card[open]')].map(card=>card.dataset.runId));timeline.replaceChildren();
-  if(historyFloors.get(selected)){const notice=node('p','Earlier history has expired under the retention policy. Only retained messages and updates are shown.','hint');notice.setAttribute('role','status');timeline.append(notice);}
+  if(view){
+   timeline.append(node('h2','Recovery tasks'),node('p','All retained recovery tasks in this conversation, paged by stable task ID. Restart from the first page to include newly arrived tasks. Reviewing does not retry or release anything.','hint'));
+   const controls=node('div',undefined,'actions');controls.append(button('Back to messages',()=>{recoveryView=null;render();},'quiet'),button('First recovery page',()=>loadRecovery(),'quiet'));
+   if(view.previous.length)controls.append(button('Previous recovery page',()=>loadRecovery(view.previous.at(-1),view.previous.slice(0,-1)),'quiet'));
+   if(view.page?.next_cursor)controls.append(button('Next recovery page',()=>loadRecovery(view.page.next_cursor,[...view.previous,view.cursor]),'quiet'));
+   timeline.append(controls);if(!runs.length){const notice=node('p',view.page?'No recovery tasks on this page.':'Loading recovery tasks…','hint');notice.setAttribute('role','status');timeline.append(notice);}
+  }else timeline.append(button('Review recovery tasks',()=>loadRecovery(),'quiet'));
+  if(!view&&historyFloors.get(selected)){const notice=node('p','Earlier history has expired under the retention policy. Only retained messages and updates are shown.','hint');notice.setAttribute('role','status');timeline.append(notice);}
   if(conversation.length>=100){const conversationId=selected;timeline.append(button('Load earlier messages',async()=>{try{
    const history=await api('/v1/conversations/'+conversationId+'/events?before='+conversation[0].sequence);
    if(!acceptHistory(conversationId,history))return;
@@ -66,7 +82,7 @@ function render(){
    if(selected!==conversationId)return;
    events=olderEvents.get(conversationId);lastSignature='';render();
   }catch(e){if(selected===conversationId)report(e.message);}},'quiet'));}
-  if(!conversation.length){const empty=node('div',undefined,'empty');empty.append(node('h2',`A place to work with ${object?.body.name??'your assistant'}`),node('p','Ask for help, share an update, or describe something you’d like done on a schedule.'));timeline.append(empty);}
+  if(!view&&!conversation.length){const empty=node('div',undefined,'empty');empty.append(node('h2',`A place to work with ${object?.body.name??'your assistant'}`),node('p','Ask for help, share an update, or describe something you’d like done on a schedule.'));timeline.append(empty);}
   for(const event of conversation){
    if(event.type==='message.user'||event.type==='run.result'){
     const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot'));const h=node('div',undefined,'message-head');h.append(node('strong',event.type==='message.user'?'You':event.payload.role==='background'?`${object?.body.name??'Assistant'} · ${event.payload.title??'Task result'}`:object?.body.name??'Assistant'),node('time',time(event.created_at)));m.append(h,node('div',event.payload.text??'','message-body'));timeline.append(m);
@@ -104,7 +120,7 @@ function render(){
    if(['queued','claimed','running','finishing','waiting'].includes(run.status))actions.append(button('Cancel this task',()=>act(()=>command('run.cancel',{run_id:run.id,reason:'Owner selected this task for cancellation.'})),'quiet danger'));
    card.append(actions);timeline.append(card);
   }
-  if(nearBottom||!timeline.scrollTop)timeline.scrollTop=timeline.scrollHeight;
+  if(!view&&(nearBottom||!timeline.scrollTop))timeline.scrollTop=timeline.scrollHeight;
  }
  $('routines').replaceChildren();for(const r of items('routine').filter(x=>x.body.persona_id===selected)){
   const card=node('div',undefined,'card');card.append(node('h4',r.body.name),node('span',r.body.enabled?'Scheduled':'Paused','status'),node('p',r.body.schedule?`${r.body.schedule.cron} · ${r.body.schedule.timezone}`:'Event-triggered'),node('p',r.body.instructions));const actions=node('div',undefined,'actions');actions.append(button('Edit',()=>editRoutine(r)),button(r.body.enabled?'Pause':'Enable',()=>act(()=>command('routine.put',{...r.body,expected_revision:r.revision,enabled:!r.body.enabled}))));

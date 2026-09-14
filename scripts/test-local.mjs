@@ -19,6 +19,8 @@ try{
  const html=await fetch(base);assert.equal(html.status,200);assert.match(await html.text(),/Hehebot — your assistants/);assert.match(html.headers.get('Content-Security-Policy'),/frame-ancestors 'none'/);checks++;
  const initial=await get('/v1/state');assert.equal(initial.objects.filter(x=>x.kind==='persona').length,3);assert.equal(initial.summary.execution_enabled,false);
  const bot=initial.objects.find(x=>x.kind==='persona').id;
+ const recovery=await get(`/v1/conversations/${bot}/recovery`);assert.deepEqual(recovery,{runs:[],recovery:[],next_cursor:null});
+ for(const query of ['after=invalid','limit=101','limit=0']){const response=await fetch(base+`/v1/conversations/${bot}/recovery?${query}`);assert.equal(response.status,422);assert.equal((await response.json()).error.code,'INVALID_INPUT');checks++;}
  const key=crypto.randomUUID(),payload={conversation_id:bot,text:'Please remember: prefer a concise morning briefing.'};
  const sent=await send('message.send',payload,key);assert.equal(sent.status,202);assert.equal(sent.value.status,'applied');checks++;
  const duplicate=await send('message.send',payload,key);assert.equal(duplicate.value.id,sent.value.id);checks++;

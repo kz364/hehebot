@@ -13,6 +13,8 @@ const recovery={run_id:a,attempt:3,executor_terminated:true,unresolved_operation
 const state={objects:[{id:bot,kind:'persona',body:{name:'Travel'}}],runs:[{id:a,title:'Calendar request',persona_id:bot,role:'coordinator',status:'recovery_required',current_attempt:3},{id:b,title:'Unconfirmed sibling',persona_id:bot,role:'background',status:'recovery_required',current_attempt:1}],
  recovery:[recovery,{...recovery,run_id:b,attempt:1,executor_terminated:false,can_decide_effects:false,effects:[{...effect,id:randomUUID()}]}],summary:{phase:'STOPPED',execution_enabled:false,queued_runs:0,blocked_runs:2}};
 const commands=[],events=[];
+const oldA={...state.runs[1],id:'66666666-6666-4666-8666-666666666666',title:'Older retained task'},oldB={...oldA,id:'77777777-7777-4777-8777-777777777777',title:'Last recovery page'};
+let emptyRecovery=false,holdRecovery=false,heldRecovery=null,failRecovery=false;
 const server=createServer(async(req,res)=>{
  const json=value=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(value));};
  try{
@@ -31,6 +33,13 @@ const server=createServer(async(req,res)=>{
   }
   assert.equal(req.method,'GET');
   if(path==='/v1/state')return json(state);
+  if(path===`/v1/conversations/${bot}/recovery`){
+   if(failRecovery){res.writeHead(503,{'content-type':'application/json'});res.end(JSON.stringify({error:{message:'Recovery listing unavailable.'}}));return;}
+   const after=new URL(req.url,'http://fixture').searchParams.get('after'),run=after?oldB:oldA;
+   assert.ok(after===null||after===oldA.id);
+   const page={runs:emptyRecovery?[]:[run],recovery:emptyRecovery?[]:[{...state.recovery[1],run_id:run.id}],next_cursor:emptyRecovery||after?null:oldA.id};
+   if(holdRecovery){heldRecovery=()=>json(page);return;}return json(page);
+  }
   if(path.startsWith('/v1/conversations/'))return json({events,has_more:false,pruned_through:0});
   const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
   if(!file){res.writeHead(404);res.end();return;}
@@ -44,6 +53,42 @@ const click=async selector=>{await browser('eval',`document.querySelector(${JSON
 try{
  await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');
  await browser('wait','--fn','document.querySelector("#connection").textContent==="Connected"');
+ await browser('find','role','button','click','--name','Review recovery tasks','--exact');
+ await browser('wait','--fn',`document.querySelector('${card(oldA.id)}')!==null`);
+ assert.equal((await browser('eval',`document.querySelector('${card(a)}')===null`)).stdout.trim(),'true');
+ await browser('screenshot',new URL('portal-recovery-page.png',artifacts).pathname);
+ await click(`${card(oldA.id)} summary`);
+ assert.equal(await enabled(`${card(oldA.id)} [data-action="run-recover"]`),false);
+ assert.equal((await browser('eval','document.querySelector("#timeline").getBoundingClientRect().bottom<=document.querySelector("#composer").getBoundingClientRect().top')).stdout.trim(),'true');
+ await browser('find','role','button','click','--name','Next recovery page','--exact');
+ await browser('wait','--fn',`document.querySelector('${card(oldB.id)}')!==null`);
+ assert.equal((await browser('eval',`document.querySelector('${card(oldA.id)}')===null`)).stdout.trim(),'true');
+ await browser('set','viewport','390','844','2');await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+ assert.equal((await browser('eval','document.documentElement.scrollWidth<=innerWidth')).stdout.trim(),'true');
+ await browser('screenshot',new URL('portal-recovery-page-narrow.png',artifacts).pathname);
+ await browser('find','role','button','click','--name','Previous recovery page','--exact');
+ await browser('wait','--fn',`document.querySelector('${card(oldA.id)}')!==null`);
+ emptyRecovery=true;await browser('find','role','button','click','--name','First recovery page','--exact');
+ await browser('wait','--fn','document.querySelector("#timeline").textContent.includes("No recovery tasks on this page")');
+ await browser('screenshot',new URL('portal-recovery-empty-narrow.png',artifacts).pathname);
+ await browser('find','role','button','click','--name','Back to messages','--exact');
+ emptyRecovery=false;holdRecovery=true;
+ await browser('find','role','button','click','--name','Review recovery tasks','--exact');
+ await browser('wait','--fn','document.querySelector("#timeline").textContent.includes("Loading recovery tasks")');
+ await browser('screenshot',new URL('portal-recovery-loading-narrow.png',artifacts).pathname);
+ await browser('find','role','button','click','--name','Back to messages','--exact');
+ holdRecovery=false;assert.ok(heldRecovery);heldRecovery();
+ await browser('wait','--fn',`document.querySelector('${card(a)}')!==null`);
+ assert.equal((await browser('eval',`document.querySelector('${card(oldA.id)}')===null`)).stdout.trim(),'true');
+ failRecovery=true;await browser('find','role','button','click','--name','Review recovery tasks','--exact');
+ await browser('wait','--fn','document.querySelector("#error").textContent==="Recovery listing unavailable."');
+ assert.equal((await browser('eval',`document.querySelector('${card(oldA.id)}')===null`)).stdout.trim(),'true');
+ await browser('screenshot',new URL('portal-recovery-error-narrow.png',artifacts).pathname);
+ assert.equal(commands.length,0);failRecovery=false;
+ await browser('find','role','button','click','--name','Review recovery tasks','--exact');
+ await browser('wait','--fn',`document.querySelector('${card(oldA.id)}')!==null`);
+ await browser('find','role','button','click','--name','Back to messages','--exact');
+ await browser('set','viewport','1280','900','2');
  await click(`${card(a)} summary`);await click(`${card(b)} summary`);
  assert.equal(await enabled(`${card(a)} [data-action="effect-reconcile"]`),true);
  assert.equal(await enabled(`${card(a)} [data-action="run-recover"]`),false);
@@ -59,6 +104,7 @@ try{
  await browser('screenshot',new URL('portal-recovery-decision.png',artifacts).pathname);
  await browser('click','#editor-form button[type="submit"]');await browser('wait','--fn','!document.querySelector("#editor").open');
  assert.deepEqual(commands[0],{schema_version:1,type:'effect.reconcile',payload:{run_id:a,expected_attempt:3,effect_id:effectId,expected_request_digest:effect.request_digest,outcome:'failed',evidence_ref:'manual-check:103'}});
+ await browser('wait','--fn',`document.querySelector('${card(a)} [data-action="run-recover"]')?.disabled===false`);
  assert.equal(await enabled(`${card(a)} [data-action="run-recover"]`),true);
  assert.equal(await enabled(`${card(b)} [data-action="run-recover"]`),false);
  await click(`${card(b)} summary`);
@@ -75,5 +121,5 @@ try{
  await browser('wait','--fn','document.querySelector("#timeline").textContent.includes("Recovery closed as failed")');
  assert.deepEqual(commands[1],{schema_version:1,type:'run.recover',payload:{run_id:a,expected_attempt:3,release_resources:true}});
  assert.equal(commands.length,2);assert.equal(await enabled(`${card(b)} [data-action="run-recover"]`),false);
- console.log('PASS: exact effect decision and separate recovery; required outcome/reference/consent; unconfirmed sibling blocked; execution disabled; narrow layout; two synthetic commands.');
+ console.log('PASS: independent recovery pagination, empty/error/late-response states and zero navigation mutations; exact effect decision and separate recovery; required consent; unconfirmed sibling blocked; execution disabled; narrow layout; two synthetic commands.');
 }finally{await browser('close');server.closeAllConnections();await new Promise(ok=>server.close(ok));}

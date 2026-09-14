@@ -226,3 +226,17 @@ it('alarms expire only settled steering audit with execution disabled and no pro
   expect(db.all("SELECT key FROM runtime_metadata WHERE key GLOB 'steer:*'")).toEqual([{key:`steer:${run}:1:pending`}]);
   expect(db.all('SELECT * FROM controller_operations')).toEqual([]);expect(deleteAlarm).toHaveBeenCalled();
 });
+
+it('serves validated recovery pages through owner RPC without starting runtime work',async()=>{
+  const ids=[randomUUID(),randomUUID()].sort(),now=new Date().toISOString();
+  for(const id of ids)db.exec("INSERT INTO runs(id,persona_id,context_json,status,current_attempt,created_at,updated_at) VALUES(?,?,'{}','recovery_required',1,?,?)",id,bot,now,now);
+  const before=db.all('SELECT * FROM runs ORDER BY id');
+  const first=await control.getRecovery('owner',bot,undefined,1);
+  expect(first).toMatchObject({ok:true,value:{runs:[{id:ids[0]}],recovery:[{run_id:ids[0],can_recover:false}],next_cursor:ids[0]}});
+  expect(await control.getRecovery('owner',bot,ids[0],1)).toMatchObject({ok:true,value:{runs:[{id:ids[1]}],next_cursor:null}});
+  expect(await control.getRecovery('owner',otherBot)).toMatchObject({ok:true,value:{runs:[],recovery:[],next_cursor:null}});
+  expect(await control.getRecovery('owner',bot,'invalid')).toMatchObject({ok:false,error:{code:'INVALID_INPUT'}});
+  expect(await control.getRecovery('owner',bot,undefined,101)).toMatchObject({ok:false,error:{code:'INVALID_INPUT'}});
+  expect(db.all('SELECT * FROM runs ORDER BY id')).toEqual(before);
+  expect(db.all('SELECT * FROM controller_operations')).toEqual([]);expect(db.all('SELECT * FROM attempts')).toEqual([]);
+});

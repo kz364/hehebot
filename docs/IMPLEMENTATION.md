@@ -138,6 +138,19 @@ open root turn, not successful resume. The [offline recovery diagnostic](CODEX_R
 projects current task identities and observed obligations without credentials,
 network calls or state writes; unknown coverage remains a blocker.
 
+The owner recovery view now pages independently of the newest-100-run snapshot
+and retained conversation events. `GET /v1/conversations/:id/recovery` returns
+20 tasks by default (maximum 100), bounded effect metadata, and an exclusive
+`after`/`next_cursor` task-ID cursor. Persona ownership or the captured room
+identity scopes each page. Tasks leaving recovery do not shift subsequent pages;
+restart from the first page for concurrent arrivals before the cursor. Reads do
+not authorize retry, effect dispatch, lock release or native settlement. Existing
+ingress maintenance still runs. Context/checkpoint bodies and provider receipt
+payloads are excluded. SQLite, owner RPC, local HTTP and Chromium fixtures cover
+pagination, scope, malformed input, empty/error/loading states and late responses.
+The portal retains separate explicit effect-decision and recovery-close consent.
+This closes the recovery listing window gap, not full restore or native census.
+
 [Selected portable templates](PORTABLE_TEMPLATES.md) export configuration into
 disabled routines and pending skill proposals with grants removed. This is an
 offline review plan, not full backup/restore or automatic migration.
