@@ -85,6 +85,20 @@ it('CLI snapshots and verifies without logging paths or application content', ()
   expect(bad.status).toBe(1); expect(bad.stderr).not.toContain('PRIVATE_PATH_CANARY');
 });
 
+it('settles a multi-batch backup in an otherwise idle process and exits without a leaked timer', () => {
+  const content = 'asymmetric-large-backup-731:'.repeat(50000);
+  db.prepare("UPDATE objects SET body_json=? WHERE id='persona-a'").run(JSON.stringify({ content }));
+  expect(Number(db.prepare('PRAGMA page_count').get()!.page_count)).toBeGreaterThan(100);
+  const result = spawnSync(process.execPath, [cli, 'snapshot', source, destination], { encoding: 'utf8', timeout: 10000 });
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(0);
+  expect(JSON.parse(result.stdout).status).toBe('ok');
+  const copy = new DatabaseSync(join(destination, 'control.sqlite'), { readOnly: true });
+  try {
+    expect(JSON.parse(String(copy.prepare("SELECT body_json FROM objects WHERE id='persona-a'").get()!.body_json))).toEqual({ content });
+  } finally { copy.close(); }
+});
+
 it('pins one transaction when another connection commits paired changes after snapshot acquisition', async () => {
   db.exec('PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0');
   let finished = false;

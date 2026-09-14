@@ -76,7 +76,10 @@ export async function snapshotControl(source, destination) {
     await mkdir(destination, { mode: 0o700 }); created = true;
     const path = join(destination, 'control.sqlite');
     await privateWrite(path);
-    await backup(db, path);
+    // Node 26.5.1 can omit the microtask checkpoint after native backup completion.
+    // Keep a JS callback alive only while awaiting it; never alter SQLite's snapshot.
+    const completionTick = setInterval(() => {}, 10);
+    try { await backup(db, path); } finally { clearInterval(completionTick); }
     // Normalize only the copy, making the delivered database self-contained (no WAL dependency).
     const copy = new DatabaseSync(path, { allowExtension: false });
     let metadata;

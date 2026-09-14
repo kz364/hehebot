@@ -29,6 +29,8 @@ The source connection issues no SQL writes and does not checkpoint its WAL. Test
 
 ## Executed evidence
 
+Node 26.5.1 intermittently delayed the backup promise continuation until Vitest's 30-second fixture timeout. A scoped 10ms JavaScript timer around the native backup supplies callback checkpoints and is cleared on success or failure; it does not change the read transaction, backup pages or integrity checks. This matches the upstream [backup callback-scope fix](https://github.com/nodejs/node/commit/6e7818e4f6d2d0429a2ebd441868af19bf7333d2). A multi-batch subprocess regression checks exact copied content, completion and process exit (no leaked timer); the paired encrypted/unencrypted suites also exercise the formerly failing fixture.
+
 ```sh
 npx vitest run tests/backup-control.test.ts
 npm run typecheck
