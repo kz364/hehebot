@@ -7,11 +7,35 @@ export type SteeringOutcome='accepted'|'outcome_unknown'|'not_delivered';
 type SteeringRecord=SteeringTarget & {command_id:string;epoch:number;boot_id:string;native_ref:string;status:'pending'|SteeringOutcome;created_at:string};
 const key=(target:SteeringTarget,commandId:string)=>`steer:${target.run_id}:${target.attempt}:${commandId}`;
 
+// Settled delivery metadata is audit (30d); unresolved delivery is recovery state.
+// Never turn pending/unknown into not_delivered merely because time passed.
+const expiredCandidates=`FROM runtime_metadata m
+ JOIN runs r ON r.id=json_extract(m.value_json,'$.run_id')
+ JOIN attempts a ON a.run_id=r.id AND a.attempt=json_extract(m.value_json,'$.attempt')
+ WHERE m.key GLOB 'steer:*' AND json_extract(m.value_json,'$.status') IN ('accepted','not_delivered')
+ AND r.status IN ('completed','failed','cancelled') AND a.status IN ('completed','failed','cancelled') AND a.settled_at IS NOT NULL
+ AND NOT EXISTS(SELECT 1 FROM retry_queue q WHERE q.run_id=r.id)
+ AND NOT EXISTS(SELECT 1 FROM operations o WHERE o.run_id=r.id AND o.status!='settled')
+ AND NOT EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=r.id)
+ AND NOT EXISTS(SELECT 1 FROM effects e WHERE e.run_id=r.id AND e.status IN ('intent','dispatched','outcome_unknown'))`;
+
 /** Owner intent and delivery receipt only. Text stays in the original command;
  * native acceptance is neither consumption nor task/effect settlement.
  */
 export class TaskSteering {
  constructor(private store:Store,private now:()=>string){}
+ nextExpiry():string|null {
+  return this.store.db.all<{due:string|null}>(`SELECT strftime('%Y-%m-%dT%H:%M:%fZ',MIN(json_extract(m.value_json,'$.created_at')),'+30 days') AS due ${expiredCandidates}`)[0].due;
+ }
+ prune():number {
+  return this.store.db.transaction(()=>{
+   const cutoff=new Date(Date.parse(this.now())-30*86400000).toISOString();
+   const rows=this.store.db.all<{key:string}>(`SELECT m.key ${expiredCandidates}
+    AND json_extract(m.value_json,'$.created_at')<=? ORDER BY json_extract(m.value_json,'$.created_at'),m.key LIMIT 100`,cutoff);
+   for(const row of rows)this.store.db.exec('DELETE FROM runtime_metadata WHERE key=?',row.key);
+   return rows.length;
+  });
+ }
  private current(target:SteeringTarget){
   const run=this.store.run(target.run_id);
   requireThat(run.current_attempt===target.attempt,'REVISION_CONFLICT','The selected task attempt changed.');

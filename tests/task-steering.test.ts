@@ -123,3 +123,46 @@ it('bounds worst-case escaped delivery bytes and exposes content-free receipts w
  expect(projected.every(row=>Object.keys(row).sort().join(',')==='attempt,command_id,created_at,run_id,status')).toBe(true);
  expect(JSON.stringify(projected)).not.toContain('native-');
 });
+
+it('expires settled steering audit exactly at 30 days without deleting the original owner receipt or input',()=>{
+ const receipt=f.accept(command());ledger.result(identity,target(),receipt.id,'accepted',life);
+ expect(ledger.nextExpiry()).toBeNull();
+ life.complete(identity,a,1,{status:'completed',text:'Done'});
+ const commands=f.db.all('SELECT * FROM commands'),runs=f.db.all('SELECT * FROM runs'),attempts=f.db.all('SELECT * FROM attempts');
+ expect(ledger.nextExpiry()).toBe('2026-10-10T00:00:00.000Z');
+ f.setNow('2026-10-09T23:59:59.999Z');expect(ledger.prune()).toBe(0);
+ f.setNow('2026-10-10T00:00:00.000Z');expect(ledger.prune()).toBe(1);
+ expect(ledger.receipts(target())).toEqual([]);expect(ledger.nextExpiry()).toBeNull();expect(ledger.prune()).toBe(0);
+ expect(f.db.all('SELECT * FROM commands')).toEqual(commands);expect(f.core.receipt(receipt.id)).toEqual(receipt);
+ expect(f.db.all('SELECT * FROM runs')).toEqual(runs);expect(f.db.all('SELECT * FROM attempts')).toEqual(attempts);
+});
+
+it.each(['pending','outcome_unknown','effect','operation','lock','retry','recovery'] as const)('retains %s steering custody instead of manufacturing a terminal delivery',obstacle=>{
+ const receipt=f.accept(command());
+ if(obstacle!=='pending')ledger.result(identity,target(),receipt.id,obstacle==='outcome_unknown'?'outcome_unknown':'accepted',life);
+ life.complete(identity,a,1,{status:'completed',text:'Only a native result'});
+ if(obstacle==='effect')f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES('uncertain',?,'key','mutation','outcome_unknown','policy','digest',?)",a,f.core.now());
+ if(obstacle==='operation')f.db.exec("INSERT INTO operations VALUES('op',?,1,'tool','unknown',?,?,?)",a,f.core.now(),f.core.now(),f.core.now());
+ if(obstacle==='lock')f.db.exec("INSERT INTO resource_locks VALUES('browser:held',?,1,?)",a,f.core.now());
+ if(obstacle==='retry')f.db.exec("INSERT INTO retry_queue VALUES(?,?,'synthetic')",a,f.core.now());
+ if(obstacle==='recovery')f.db.exec("UPDATE runs SET status='recovery_required' WHERE id=?",a);
+ const before=f.db.all('SELECT * FROM runtime_metadata');
+ f.setNow('2027-01-01T00:00:00.000Z');expect(ledger.nextExpiry()).toBeNull();expect(ledger.prune()).toBe(0);
+ expect(f.db.all('SELECT * FROM runtime_metadata')).toEqual(before);
+});
+
+it('bounds steering cleanup and rolls back partial deletion, leaving unrelated metadata intact',()=>{
+ const receipt=f.accept(command());ledger.result(identity,target(),receipt.id,'not_delivered',life);
+ life.complete(identity,a,1,{status:'completed',text:'Done'});
+ const stored=f.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key GLOB 'steer:*'")[0];
+ for(let i=0;i<100;i++){
+  const id=randomUUID();f.db.exec('INSERT INTO runtime_metadata VALUES(?,?)',`steer:${a}:1:${id}`,JSON.stringify({...JSON.parse(stored.value_json),command_id:id}));
+ }
+ f.db.exec("INSERT INTO runtime_metadata VALUES('unrelated','{\"keep\":73}')");
+ f.setNow('2026-10-10T00:00:00.000Z');
+ f.db.sqlite.exec("CREATE TRIGGER deny_steer_prune BEFORE DELETE ON runtime_metadata WHEN (SELECT COUNT(*) FROM runtime_metadata WHERE key GLOB 'steer:*')<101 BEGIN SELECT RAISE(ABORT,'synthetic prune failure'); END");
+ expect(()=>ledger.prune()).toThrow('synthetic prune failure');expect(f.db.all("SELECT key FROM runtime_metadata WHERE key GLOB 'steer:*'")).toHaveLength(101);
+ f.db.sqlite.exec('DROP TRIGGER deny_steer_prune');
+ expect(ledger.prune()).toBe(100);expect(ledger.nextExpiry()).toBe(f.core.now());expect(ledger.prune()).toBe(1);
+ expect(ledger.nextExpiry()).toBeNull();expect(f.db.all("SELECT value_json FROM runtime_metadata WHERE key='unrelated'")).toEqual([{value_json:'{"keep":73}'}]);
+});

@@ -70,8 +70,15 @@ prioritizing unresolved receipts. The portal separates “Steer this task now”
 disables resends for pending/unknown delivery, and never calls accepted “consumed.”
 An expired or no-longer-running task may retain pending acknowledgement when no
 native delivery evidence arrived; it is not automatically labeled undelivered.
-Command payload retention remains 90 days; compact receipts currently have no
-expiry and old-attempt receipt browsing/reconciliation remains unfinished.
+Command payload retention remains 90 days. Content-free accepted/not-delivered
+metadata is audit: eligible at 30 days from original creation, never polling or
+acknowledgement time, only after both run and exact attempt are terminal with
+settlement recorded and no retry, unsettled operation, lock or unresolved effect.
+Worker alarms prune at most 100 per transaction even with execution disabled.
+Pending/unknown records remain recovery state, with no manufactured delivery
+verdict or immediate repeated expiry alarm. Original command receipts, input age,
+attempts and effects remain unchanged. Old-attempt receipt browsing/reconciliation
+remains unfinished; retaining unresolved content-free metadata is not recovery proof.
 
 Verification: `tests/task-steering.test.ts` uses SQLite for custody, asymmetric
 task isolation, expiry boundaries, command redaction, receipt conflicts and batch

@@ -213,3 +213,16 @@ it('schedules budget freshness maintenance even with execution disabled',async()
   expect(await control.getState('owner')).toMatchObject({ok:true,value:{budget:{freshness:'stale',status:'BUDGET_UNKNOWN'},summary:{execution_enabled:false}}});
   expect(db.all('SELECT * FROM controller_operations')).toEqual([]);expect(db.all('SELECT * FROM attempts')).toEqual([]);
 });
+
+it('alarms expire only settled steering audit with execution disabled and no provider work',async()=>{
+  const run=randomUUID(),command=randomUUID();
+  db.exec("INSERT INTO runs(id,persona_id,context_json,status,current_attempt,created_at,updated_at) VALUES(?,?,'{}','completed',1,?,?)",run,bot,new Date().toISOString(),new Date().toISOString());
+  db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,settled_at) VALUES(?,1,?,1,'boot','completed',?,?)",run,randomUUID(),new Date().toISOString(),new Date().toISOString());
+  const row={run_id:run,attempt:1,command_id:command,status:'accepted',created_at:new Date().toISOString()};
+  db.exec('INSERT INTO runtime_metadata VALUES(?,?)',`steer:${run}:1:${command}`,JSON.stringify(row));
+  db.exec('INSERT INTO runtime_metadata VALUES(?,?)',`steer:${run}:1:pending`,JSON.stringify({...row,status:'pending'}));
+  await control.getState('owner');expect(setAlarm).toHaveBeenLastCalledWith(Date.parse('2026-10-10T00:00:00.000Z'));
+  vi.setSystemTime(new Date('2026-10-10T00:00:00.000Z'));await control.alarm();
+  expect(db.all("SELECT key FROM runtime_metadata WHERE key GLOB 'steer:*'")).toEqual([{key:`steer:${run}:1:pending`}]);
+  expect(db.all('SELECT * FROM controller_operations')).toEqual([]);expect(deleteAlarm).toHaveBeenCalled();
+});

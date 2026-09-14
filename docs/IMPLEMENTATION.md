@@ -112,7 +112,8 @@ service effect fixture no longer needs a manual child submission call.
 attempt to Worker pending/receipt contracts and disposable service maintenance.
 The portal separates immediate steering from after-settlement follow-ups, shows
 truthful delivery states and disables uncertain resends. Existing command payload
-retention applies; compact receipt metadata currently has no expiry. No context,
+retention applies; known delivery metadata expires after 30 days once the task is
+terminal with clear custody, while pending/unknown recovery records remain. No context,
 policy, effect, lock or completion is rewritten. Ordinary messages still enqueue
 independent work rather than implicitly steering a background task.
 
