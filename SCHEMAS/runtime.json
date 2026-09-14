@@ -1,5 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "effectIntent": {
+      "type":"object","additionalProperties":false,
+      "properties": {
+        "id":{"type":"string","format":"uuid"},
+        "run_id":{"type":"string","format":"uuid"},
+        "attempt":{"type":"integer","minimum":1},
+        "action_key":{"type":"string","minLength":1,"maxLength":256},
+        "classification":{"enum":["read_only","idempotent","mutation"]},
+        "authorization_ref":{"type":"string","minLength":1,"maxLength":256},
+        "request_digest":{"type":"string","minLength":1,"maxLength":256},
+        "provider_idempotency_key":{"anyOf":[{"type":"string","minLength":1,"maxLength":256},{"type":"null"}]}
+      },
+      "required":["id","run_id","attempt","action_key","classification","authorization_ref","request_digest","provider_idempotency_key"]
+    }
+  },
   "oneOf": [
     {
       "type":"object", "additionalProperties":false,
@@ -535,68 +551,7 @@
                 "boot_id"
               ]
             },
-            "effect": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "id": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "run_id": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "attempt": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "action_key": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 256
-                },
-                "classification": {
-                  "enum": [
-                    "read_only",
-                    "idempotent",
-                    "mutation"
-                  ]
-                },
-                "authorization_ref": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 256
-                },
-                "request_digest": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 256
-                },
-                "provider_idempotency_key": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 256
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              },
-              "required": [
-                "id",
-                "run_id",
-                "attempt",
-                "action_key",
-                "classification",
-                "authorization_ref",
-                "request_digest",
-                "provider_idempotency_key"
-              ]
-            }
+            "effect": { "$ref": "#/$defs/effectIntent" }
           },
           "required": [
             "identity",
