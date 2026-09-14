@@ -111,6 +111,14 @@ apply. Owner cancellation continues to suppress result text. SQLite/journal test
 exercise lost acknowledgments and reconstruction, not native restart readiness
 or family settlement.
 
+Quiet-chat result messages retain the recorded event's outcome, error code and
+available task title even when no recent run record remains or the body is empty.
+Missing legacy status is unavailable, never inferred as success. These historical
+labels do not replace current task attention or prove family settlement. The
+`test-portal-results.mjs` Chromium fixture covers refresh/reload, conversation
+isolation, empty failures/cancellations, unknown status and narrow wrapping with
+no mutation requests; native approval/question integration remains incomplete.
+
 Observed native child starts are now acknowledged by the service atomically with
 Worker registration. Exact receipt replay recovers a lost acknowledgement without
 resubmitting inference or resurrecting a cancelling/terminal task. Legacy journal

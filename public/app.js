@@ -92,7 +92,16 @@ function render(){
   if(!view&&!conversation.length){const empty=node('div',undefined,'empty');empty.append(node('h2',`A place to work with ${object?.body.name??'your assistant'}`),node('p','Ask for help, share an update, or describe something you’d like done on a schedule.'));timeline.append(empty);}
   for(const event of conversation){
    if(event.type==='message.user'||event.type==='run.result'){
-    const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot'));const h=node('div',undefined,'message-head');h.append(node('strong',event.type==='message.user'?'You':event.payload.role==='background'?`${object?.body.name??'Assistant'} · ${event.payload.title??'Task result'}`:object?.body.name??'Assistant'),node('time',time(event.created_at)));m.append(h,node('div',event.payload.text??'','message-body'));timeline.append(m);
+    const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot'));const h=node('div',undefined,'message-head');h.append(node('strong',event.type==='message.user'?'You':object?.body.name??'Assistant'),node('time',time(event.created_at)));m.append(h);
+    if(event.type==='run.result'){
+     const outcome=['completed','failed','cancelled','waiting'].includes(event.payload.status)?statuses[event.payload.status]:'Unavailable';
+     const label=node('p',`Recorded outcome: ${outcome}${event.payload.error_code?` · ${event.payload.error_code}`:''}`,'hint result-outcome');
+     label.style.overflowWrap='anywhere';
+     if(event.payload.title)label.append(node('span',` · ${event.payload.title}`));
+     else if(event.payload.role==='background')label.append(node('span',' · Background task'));
+     m.append(label);
+    }
+    m.append(node('div',event.payload.text??'','message-body'));timeline.append(m);
    }else if(['run.accepted','run.cancellation_requested'].includes(event.type)){
     const run=runs.find(x=>x.id===event.payload.run_id);if(!run)continue;const e=node('div',undefined,'event');e.append(node('span',statuses[run.status]??run.status,'status'));
     if(run.status==='waiting')e.append(node('span',run.error_code==='CAPABILITY_UNAVAILABLE'?'Runtime connection required':run.error_code??'Input required'));
