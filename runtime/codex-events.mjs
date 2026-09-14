@@ -28,9 +28,10 @@ export class CodexEventRouter {
   project(value) {
     const method = value?.method, params = value?.params;
     const spawn = params?.item?.type === 'collabAgentToolCall' && params.item.tool === 'spawnAgent';
+    const statusless = ['webSearch', 'sleep', 'contextCompaction'].includes(params?.item?.type);
     const turn = ['turn/started', 'turn/completed'].includes(method);
     if (!turn &&
-        !(['item/started', 'item/completed'].includes(method) && (spawn || ['commandExecution', 'mcpToolCall', 'fileChange', 'dynamicToolCall'].includes(params?.item?.type)))) return null;
+        !(['item/started', 'item/completed'].includes(method) && (spawn || statusless || ['commandExecution', 'mcpToolCall', 'fileChange', 'dynamicToolCall'].includes(params?.item?.type)))) return null;
     const threadId = params?.threadId, turnId = turn ? params?.turn?.id : params?.turnId;
     if (![threadId, turnId].every(id => typeof id === 'string' && id.length > 0 && id.length <= 256)) fail('INVALID_EVENT_IDENTITY');
     if (turn) {
@@ -38,7 +39,7 @@ export class CodexEventRouter {
     } else {
       const terminal = ['commandExecution', 'fileChange'].includes(params.item.type) ? ['completed', 'failed', 'declined'] : ['completed', 'failed'];
       if (typeof params.item.id !== 'string' || !params.item.id || params.item.id.length > 256 ||
-          !(method === 'item/started' ? ['inProgress'] : terminal).includes(params.item.status)) fail('INVALID_EVENT_ITEM');
+          !statusless && !(method === 'item/started' ? ['inProgress'] : terminal).includes(params.item.status)) fail('INVALID_EVENT_ITEM');
       if (spawn && (params.item.senderThreadId !== threadId || !Array.isArray(params.item.receiverThreadIds) ||
           params.item.receiverThreadIds.length > 100 ||
           !params.item.receiverThreadIds.every(id => typeof id === 'string' && id.length > 0 && id.length <= 256 && id !== threadId) ||
@@ -47,7 +48,8 @@ export class CodexEventRouter {
     // Do not buffer command output, credentials, message text, or unrelated payloads.
     const notification = turn
       ? { method, params: { threadId, turn: { id: turnId, status: params.turn.status } } }
-      : { method, params: { threadId, turnId, item: { id: params.item.id, type: params.item.type, status: params.item.status } } };
+      : { method, params: { threadId, turnId, item: { id: params.item.id, type: params.item.type,
+        ...(statusless ? {} : { status: params.item.status }) } } };
     if (spawn) Object.assign(notification.params.item, { tool: 'spawnAgent', senderThreadId: threadId, receiverThreadIds: [...params.item.receiverThreadIds] });
     return { key: JSON.stringify([threadId, turnId]), notification };
   }

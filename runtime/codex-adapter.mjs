@@ -204,10 +204,16 @@ export class CodexAdapter {
       return save({ spawns });
     }
     const field = params?.item?.type === 'commandExecution' ? 'commands' : params?.item?.type === 'mcpToolCall' ? 'mcpCalls'
-      : params?.item?.type === 'fileChange' ? 'fileChanges' : params?.item?.type === 'dynamicToolCall' ? 'dynamicCalls' : null;
+      : params?.item?.type === 'fileChange' ? 'fileChanges' : params?.item?.type === 'dynamicToolCall' ? 'dynamicCalls'
+      : params?.item?.type === 'webSearch' ? 'webSearches' : params?.item?.type === 'sleep' ? 'sleeps'
+      : params?.item?.type === 'contextCompaction' ? 'compactions' : null;
     if (['item/started', 'item/completed'].includes(notification?.method) && field) {
       if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
-      const { id, status } = params.item;
+      const { id } = params.item;
+      // These variants have no native success/failure status. Track lifecycle
+      // termination only; never trust a payload-supplied status for them.
+      const status = ['webSearches', 'sleeps', 'compactions'].includes(field)
+        ? notification.method === 'item/started' ? 'inProgress' : 'completed' : params.item.status;
       const terminal = ['commands', 'fileChanges'].includes(field) ? ['completed', 'failed', 'declined'] : ['completed', 'failed'];
       if (typeof id !== 'string' || !id || id.length > 256 ||
           !(notification.method === 'item/started' ? ['inProgress'] : terminal).includes(status)) fail('CODEX_PROTOCOL_ERROR');

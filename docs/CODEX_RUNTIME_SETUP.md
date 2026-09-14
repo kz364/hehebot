@@ -54,6 +54,15 @@ Native evidence includes a real FIFO command still `inProgress` after root compl
 
 File-change and dynamic-tool item status follows the pinned [ThreadItem contract](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/schema/typescript/v2/ThreadItem.ts): both start in progress, file changes also allow terminal `declined`, and neither grants effect authority. Native `test-codex-tools.mjs --dynamic` now verifies all six actual dynamic invocations in the durable journal. File-change routing is covered with synthetic root/child events, not a live filesystem mutation proof. Other operational item variants remain outside this accounting subset; unknown coverage stays mandatory.
 
+Statusless `webSearch`, `sleep` (the native clock tool, not provider sleep), and
+`contextCompaction` are also tracked. Their journal `completed` value means only
+that `item/completed` arrived, not successful search, uninterrupted waiting or
+correct compaction. The router retains IDs/types only and the adapter derives
+lifetime from the notification method, ignoring fabricated payload status.
+Synthetic event tests cover root termination with these operations still open,
+content omission and conflicting replay. These tests do not perform live search
+or establish exhaustive operation coverage; the coverage blocker remains unknown.
+
 Spawn receipts preserve receiver IDs and attribute direct-child turn observations, including early events. A child can outlive its parent. `cancelChild` requires an observed exact child thread/turn under that parent, journals intent before interrupt and deduplicates repeated/concurrent requests. Lost acknowledgment is retained without replay. Accepted cancellation is separate from observed interruption and provider request closure.
 
 Nested spawn receipts extend the same routing to observed descendants; each spawn belongs to its exact sender thread/turn. An existing receiver cannot gain a second origin or form an ancestry cycle. Per-descendant tool maps remain distinct even when item/turn IDs repeat across threads. Router reconstruction restores these durable links and `cancelChild` accepts an exactly observed grandchild without interrupting ancestors. This is observation-driven accounting, not discovery of unseen work.

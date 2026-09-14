@@ -131,6 +131,24 @@ const spawn = (status, receiverThreadIds, extra = {}) => ({ method: status === '
     senderThreadId: 'parent', status, receiverThreadIds, prompt: 'PRIVATE_TASK', agentsStates: { private: 'PRIVATE_RESULT' }, ...extra },
 } });
 
+for (const [type, field] of [['webSearch', 'webSearches'], ['sleep', 'sleeps'], ['contextCompaction', 'compactions']])
+test(`${type} derives lifetime from notifications, not a fabricated success status`, async t => {
+  const f = await fixture(t); await f.admit('a', 'thread', 'turn'); await f.router.bind('a');
+  const event = method => ({ method, params: { threadId: 'thread', turnId: 'turn', item: {
+    id: 'operation', type, status: 'completed', query: 'PRIVATE_QUERY', results: ['PRIVATE_RESULTS'], durationMs: 9000,
+  } } });
+  const projected = f.router.project(event('item/started'));
+  assert.deepEqual(projected.notification.params.item, { id: 'operation', type });
+  f.transport.emit('notification', event('item/started')); f.transport.emit('notification', root('thread', 'turn'));
+  await f.router.flush(); assert.equal((await f.journal.get('a'))[field].operation, 'inProgress');
+  f.transport.emit('notification', event('item/completed')); await f.router.flush();
+  const row = await f.journal.get('a'); assert.equal(row[field].operation, 'completed');
+  assert.doesNotMatch(JSON.stringify(row), /PRIVATE_|durationMs|effectsSettled/);
+  assert.equal(f.adapter.sleepReadiness().allowed, false);
+  f.transport.emit('notification', event('item/started')); await f.router.flush();
+  assert.deepEqual(f.recoveries, ['NATIVE_EVENT_RECONCILIATION_FAILED']);
+});
+
 test('spawn receipts retain exact receivers after parent completion without settling children', async t => {
   const f = await fixture(t);
   f.transport.emit('notification', spawn('inProgress', []));
