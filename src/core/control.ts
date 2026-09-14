@@ -143,13 +143,7 @@ export class ControlCore {
    case 'memory.delete': {
     const p=command.payload;const memory=this.store.get<MemoryPut>(p.id,'memory');
     requireThat(memory.revision===p.expected_revision,'REVISION_CONFLICT','Reload memory before deleting.');
-    // Purge current and prior canonical text immediately; retain only tombstone identity.
-    this.store.db.exec("UPDATE objects SET body_json='{}',deleted_at=?,updated_at=?,revision=revision+1 WHERE id=?",now,now,p.id);
-    this.store.db.exec("UPDATE object_revisions SET body_json='{}' WHERE object_id=?",p.id);
-    this.store.db.exec("UPDATE commands SET payload_json='{}' WHERE type='memory.put' AND json_extract(payload_json,'$.id')=?",p.id);
-    const runs=this.store.db.all<Run>("SELECT * FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')");
-    for(const run of runs){const context=JSON.parse(run.context_json) as ContextSnapshot;if(context.memories?.some(x=>x.id===p.id))this.store.db.exec("UPDATE runs SET status=?,error_code='CONTEXT_INVALIDATED',context_json=?,updated_at=? WHERE id=?",['claimed','running','finishing','cancelling'].includes(run.status)?'cancelling':'cancelled',JSON.stringify({...context,memories:context.memories.filter(x=>x.id!==p.id)}),now,run.id);}
-    this.store.event(this.options.uuid(),null,'memory.deleted',owner,commandId,{id:p.id,transcript_cleanup_requested:p.purge_transcripts,transcript_cleanup_status:p.purge_transcripts?'requires_runtime_verification':'not_requested'},now);return p.id;
+    this.purgeMemory(p.id,owner,commandId,p.purge_transcripts,now);return p.id;
    }
    case 'room.publish': return this.publishRoom(owner,commandId,command.payload);
    case 'run.cancel': {
@@ -186,6 +180,15 @@ export class ControlCore {
     if(p.decision==='approve'&&this.options.executionEnabled)this.noteRunnable();return a.id;
    }
   }
+ }
+ private purgeMemory(id:string,owner:string,commandId:string|null,purgeTranscripts:boolean,now:string):void {
+  // Purge current and prior canonical text immediately; retain only tombstone identity.
+  this.store.db.exec("UPDATE objects SET body_json='{}',deleted_at=?,updated_at=?,revision=revision+1 WHERE id=?",now,now,id);
+  this.store.db.exec("UPDATE object_revisions SET body_json='{}' WHERE object_id=?",id);
+  this.store.db.exec("UPDATE commands SET payload_json='{}' WHERE type='memory.put' AND json_extract(payload_json,'$.id')=?",id);
+  const runs=this.store.db.all<Run>("SELECT * FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')");
+  for(const run of runs){const context=JSON.parse(run.context_json) as ContextSnapshot;if(context.memories?.some(x=>x.id===id))this.store.db.exec("UPDATE runs SET status=?,error_code='CONTEXT_INVALIDATED',context_json=?,updated_at=? WHERE id=?",['claimed','running','finishing','cancelling'].includes(run.status)?'cancelling':'cancelled',JSON.stringify({...context,memories:context.memories.filter(x=>x.id!==id)}),now,run.id);}
+  this.store.event(this.options.uuid(),null,'memory.deleted',owner,commandId,{id,transcript_cleanup_requested:purgeTranscripts,transcript_cleanup_status:purgeTranscripts?'requires_runtime_verification':'not_requested'},now);
  }
  flushFollowups(runId:string):void {
   const run=this.store.run(runId);
