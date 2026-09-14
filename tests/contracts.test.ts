@@ -3,6 +3,12 @@ import vectors from '../TEST_VECTORS/commands.json';
 import { parseCommand } from '../src/core/control';
 import { bot } from './helpers';
 describe('versioned command schema', () => {
+  it('accepts optional bounded profile role while rejecting account state',()=>{
+    const payload={id:bot,expected_revision:0,name:'Minimal',instructions:'Read only.',tool_policy_ids:[],archived:false};
+    const command=(extra:unknown)=>({schema_version:1,type:'persona.put',payload:{...payload,...extra as object}});
+    expect(()=>parseCommand(command({}))).not.toThrow();expect(()=>parseCommand(command({role:'🧭'.repeat(200)}))).not.toThrow();
+    for(const extra of [{role:'x'.repeat(201)},{role:{}},{credentials:'not-a-real-key'},{connector_authority:[bot]},{native_thread_id:bot}])expect(()=>parseCommand(command(extra))).toThrow();
+  });
   it('contains all 10 valid command variants and 4 rejection fixtures', () => { expect(vectors.valid).toHaveLength(10); expect(vectors.invalid).toHaveLength(4); });
   it.each(vectors.valid)('accepts $type fixture', (command) => { expect(parseCommand(command)).toEqual(command); });
   it.each(vectors.invalid)('rejects invalid contract %#', ({ command, expected_error }) => { expect(() => parseCommand(command)).toThrowError(expect.objectContaining({ code: expected_error })); });

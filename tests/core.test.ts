@@ -18,6 +18,16 @@ function memory(scope: MemoryPut['scope'], text = 'Synthetic memory') {
   return payload;
 }
 describe('durable control transactions', () => {
+  it('creates an independent minimal role profile without copying source work, memory or authority',()=>{
+    const run=f.accept(message()).resource_id!,r=routine();f.accept({schema_version:1,type:'routine.put',payload:r});memory({kind:'persona',id:bot},'Source-private preference');
+    const tables=['runs','attempts','effects','resource_locks','lifecycle','schedule_state','skill_enablements','task_followups','runtime_metadata'],before=tables.map(table=>f.db.all(`SELECT * FROM ${table}`));
+    const id=randomUUID(),key=randomUUID(),payload={id,expected_revision:0,name:'Independent copy',role:'Travel researcher',instructions:'Only public information.',tool_policy_ids:[],archived:false};
+    const command:Command={schema_version:1,type:'persona.put',payload};const receipt=f.accept(command,key);expect(receipt.status).toBe('applied');expect(f.accept(command,key)).toEqual(receipt);
+    expect(f.store.get(id).body).toMatchObject({role:'Travel researcher',tool_policy_ids:[]});
+    expect(f.core.context(id,'Read',null,null).memories).toEqual([]);expect(f.core.context(id,'Read',null,null).skills).toEqual([]);
+    expect(f.store.run(run).persona_id).toBe(bot);expect(tables.map(table=>f.db.all(`SELECT * FROM ${table}`))).toEqual(before);
+    expect(f.accept({schema_version:1,type:'persona.put',payload:{...payload,id:randomUUID(),tool_policy_ids:[randomUUID()]}})).toMatchObject({status:'rejected',error:{code:'FORBIDDEN'}});
+  });
   it('accepts blocked work visibly while runtime is unverified', () => {
     const receipt = f.accept(message()); expect(receipt.status).toBe('applied');
     expect(f.store.run(receipt.resource_id!)).toMatchObject({ status: 'waiting', error_code: 'CAPABILITY_UNAVAILABLE' });

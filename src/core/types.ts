@@ -2,7 +2,7 @@ import type { BudgetPolicy } from './budget';
 import type { RosterLayout } from './roster';
 export type Scope = { kind: 'global' | 'persona' | 'routine' | 'skill'; id: string | null };
 export type BasePut = { id: string; expected_revision: number };
-export type PersonaPut = BasePut & { name: string; instructions: string; tool_policy_ids: string[]; archived: boolean };
+export type PersonaPut = BasePut & { name: string; role?: string; instructions: string; tool_policy_ids: string[]; archived: boolean };
 export type RoomPut = BasePut & { name: string; member_ids: string[]; default_responder_id: string };
 export type RoutinePut = BasePut & {
   persona_id: string; name: string; instructions: string; schedule: { cron: string; timezone: string } | null;

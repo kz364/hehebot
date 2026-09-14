@@ -195,6 +195,17 @@ remain reachable during search, and disclose stale observations. SQLite/Worker
 and inspected Chromium fixtures cover local behavior. Full native approval and
 question coverage remains unverified; roster edits cannot enable execution.
 
+Bot profiles expose name, optional role and instructions with Advanced disclosure.
+Duplication creates a new identity without tool grants, skills, routines, memories
+or active work; source role/instructions copy only after explicit review consent.
+Profile edits retain existing archive state rather than silently unarchiving.
+The optional role is bounded descriptive text, not a capability grant. SQLite
+tests verify isolated creation and unauthorized-policy rejection; Chromium proves
+minimal creation, copy consent, source preservation and same-ID/key retry after
+a lost acknowledgment. Per-editor retry identity does not survive closing the
+editor or reloading; inspect existing profiles before starting a replacement.
+No generated introduction, account connection or model call is added.
+
 Routine editing now starts with frequency/time/day controls and an explicit
 timezone; numeric cron remains available under Advanced. The owner-only,
 rate-limited `/v1/schedules/preview` calls the same scheduler used for saving and

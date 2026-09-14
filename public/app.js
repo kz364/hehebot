@@ -315,9 +315,22 @@ $('edit-budget').onclick=()=>{
 };
 function closeEditor(){$('editor').close();$('editor').classList.remove('roster-editor');editing=null;}
 $('close-editor').onclick=closeEditor;$('cancel-editor').onclick=closeEditor;
-$('editor').addEventListener('close',()=>$('editor').classList.remove('roster-editor'));
+$('editor').addEventListener('close',()=>{if(!$('editor').open)$('editor').classList.remove('roster-editor');});
 $('editor-form').onsubmit=async e=>{e.preventDefault();if(!editing)return;const b=e.submitter;b.disabled=true;try{await editing(new FormData(e.target));closeEditor();await refresh(true);}catch(error){$('editor-error').textContent=error.message;$('editor-error').hidden=false;}finally{b.disabled=false;}};
-function editBot(object){openEditor(object?'Bot instructions':'New bot',[field('Name','name',object?.body.name??''),field('Instructions','instructions',object?.body.instructions??'','textarea')],form=>command('persona.put',{id:object?.id??crypto.randomUUID(),expected_revision:object?.revision??0,name:form.get('name'),instructions:form.get('instructions'),tool_policy_ids:object?.body.tool_policy_ids??[],archived:false}));}
+function editBot(object,duplicate=false){
+ const source=object?.body,existing=object&&!duplicate,id=existing?object.id:crypto.randomUUID(),key=crypto.randomUUID();
+ const name=field('Name','name',duplicate?[...(source.name+' copy')].slice(0,80).join(''):source?.name??''),role=field('Role (optional)','role',existing?source.role??'':''),instructions=field('Instructions','instructions',existing?source.instructions:'','textarea');
+ name.querySelector('input').maxLength=80;role.querySelector('input').required=false;role.querySelector('input').maxLength=200;instructions.querySelector('textarea').maxLength=16000;
+ const advanced=node('details'),fields=[name,role,instructions];advanced.append(node('summary','Advanced'),node('p','Model sign-in belongs to the installation runtime. This form does not connect accounts or grant connector/device permissions.','hint'),node('p',existing?`${source.tool_policy_ids.length} existing tool policy reference(s) retained. Manage skills separately; profile editing does not enable them.`:'Minimal profile: no tool policies or optional skills are bundled. Add capabilities separately through authorized setup.','hint'));
+ if(duplicate){
+  const review=node('details');review.append(node('summary','Review source role and instructions'),node('p',source.role??'No role','hint'),node('div',source.instructions,'message-body'));
+  const consent=node('label',undefined,'check'),check=node('input');check.type='checkbox';check.onchange=()=>{role.querySelector('input').value=check.checked?source.role??'':'';instructions.querySelector('textarea').value=check.checked?source.instructions:'';};consent.append(check,document.createTextNode('Copy reviewed source role and instructions'));
+  fields.push(node('p','This is a new bot identity. Memories, conversations, tasks, routines, skills, tool policies, credentials and connector authority are not copied. Review instructions for private facts before copying them.','review-notice'),review,consent);
+ }
+ fields.push(advanced,node('p','Saving this profile makes no model call or wake request. No introduction is generated.','hint'));
+ if(existing)fields.push(button('Duplicate as new bot',()=>{closeEditor();editBot(object,true);},'quiet'));
+ $('editor').classList.add('roster-editor');openEditor(duplicate?'Duplicate bot':existing?'Bot instructions':'New bot',fields,form=>command('persona.put',{id,expected_revision:existing?object.revision:0,name:form.get('name'),role:form.get('role'),instructions:form.get('instructions'),tool_policy_ids:existing?source.tool_policy_ids:[],archived:existing?source.archived:false},key));
+}
 function editRoutine(object){
  const routine=object?.body,persona=routine?.persona_id??selected,id=object?.id??crypto.randomUUID(),key=crypto.randomUUID();
  const picker=routine?.trigger_source_id?null:routineSchedulePicker(routine?.schedule,snapshot.settings?.timezone??'Asia/Jakarta');
