@@ -182,3 +182,25 @@ it('validates optional native-start acknowledgement and preserves cancellation o
  expect(db.all('SELECT run_id FROM native_task_links WHERE native_run_ref=?', receipt.native_run_ref))
   .toEqual([{ run_id: registered.id }]);
 });
+
+it('routes owner steering and exact native receipts while denying model commands, bad auth and closed gates', async () => {
+ const before = db.all('SELECT * FROM runs ORDER BY id');
+ const command:Command = { schema_version:1,type:'run.steer',payload:{run_id:child,expected_attempt:1,text:'Use tomorrow for this child'} };
+ const receipt = await owner(command);
+ expect(receipt.status).toBe('applied');
+ const query = { identity, targets:[{run_id:child,attempt:1},{run_id:sibling,attempt:1}] };
+ expect(await http('steer-pending',query)).toMatchObject({status:200,body:[{command_id:receipt.id,run_id:child,attempt:1,text:command.payload.text}]});
+ const outcome = {identity,run_id:child,attempt:1,command_id:receipt.id,status:'accepted'};
+ expect((await http('steer-pending',query,'incorrect-token')).status).toBe(401);
+ expect((await http('steer-result',outcome,'incorrect-token')).status).toBe(401);
+ expect((await http('steer-result',{...outcome,status:'consumed'})).status).toBe(422);
+ expect((await http('agent-command',{identity,run_id:root,attempt:1,idempotency_key:randomUUID(),command})).status).toBe(422);
+ expect(await http('steer-result',outcome)).toEqual({status:200,body:{ok:true}});
+ expect(await http('steer-pending',query)).toEqual({status:200,body:[]});
+ expect(db.all('SELECT * FROM runs ORDER BY id')).toEqual(before);expect(effects()).toEqual([]);expect(locks()).toEqual([]);
+ env.EXECUTION_ENABLED='false';env.NATIVE_VERIFIED='false';
+ control=new PersonalControl((control as unknown as {ctx:DurableObjectState}).ctx,env);
+ expect((await http('steer-pending',query)).body).toMatchObject({error:{code:'CAPABILITY_UNAVAILABLE'}});
+ expect((await http('steer-result',outcome)).body).toMatchObject({error:{code:'CAPABILITY_UNAVAILABLE'}});
+ expect((await owner({...command,payload:{...command.payload,run_id:sibling}})).error?.code).toBe('CAPABILITY_UNAVAILABLE');
+});

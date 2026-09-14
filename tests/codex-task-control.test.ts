@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { fixture, bot } from './helpers';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { NativeTaskLedger } from '../src/core/native-tasks';
+import { TaskSteering } from '../src/core/task-steering';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { CodexTaskControl } from '../runtime/codex-tasks.mjs';
@@ -30,6 +31,9 @@ function mapper(parent = { runId: parentId, personaId: bot, attempt: 1 }) {
   return new CodexTaskControl({ adapter, journal: new FileJournal(directory), identity, attemptId: 'native', parent,
     assertLease: () => { if (!leased) throw Object.assign(new Error('fenced'), { code: 'EXECUTOR_FENCED' }); },
     control: { request: async (method: string, p: any) => {
+      const steering = new TaskSteering(f.store, () => f.core.now());
+      if (method === 'steer-pending') return steering.pending(p.identity, p.targets, life);
+      if (method === 'steer-result') { steering.result(p.identity, p, p.command_id, p.status, life); return { ok: true }; }
       expect(method).toBe('native-child'); expect(p.started).toBe(true); registrations.push(p.child);
       const run = tasks.register(p.identity, p.child, p.started);
       if (lostAck) { lostAck = false; throw new Error('lost acknowledgement'); }
@@ -152,4 +156,50 @@ it('reconciliation cannot replace a persisted Worker child or accept a metadata-
     expect(f.store.run(child.runId).status).toBe('running');
   }
   expect(interrupts).toEqual([]);
+});
+
+it('delivers exact root and child owner steering with durable replay after lost Worker receipt, leaving siblings unchanged', async () => {
+  life.submitted(identity, parentId, 1, 'turn');
+  await spawn('root', 'child-a'); await spawn('root', 'child-b');
+  adapter = new CodexAdapter({ journal, cwd: directory,
+    rpc: async (method: string, params: any) => { interrupts.push({ method, params }); return { turnId: params.expectedTurnId }; } });
+  const tasks = mapper(), mapped = await tasks.sync(), child = mapped['["child-a","turn"]'], sibling = mapped['["child-b","turn"]'];
+  const before = f.store.run(sibling.runId);
+  const steer = (run_id: string, text: string) => f.accept({ schema_version: 1, type: 'run.steer', payload: { run_id, expected_attempt: 1, text } });
+  const rootCommand = steer(parentId, 'Root instruction');
+  expect(await tasks.steer()).toEqual([{ command_id: rootCommand.id, status: 'accepted' }]);
+  const childCommand = steer(child.runId, 'Use tomorrow for child A');
+  const original = tasks.control.request;
+  tasks.control.request = async (method: string, p: any) => {
+    if (method === 'steer-result') throw new Error('Worker request lost');
+    return original(method, p);
+  };
+  await expect(tasks.steer()).rejects.toThrow('Worker request lost');
+  expect(await mapper().steer()).toEqual([{ command_id: childCommand.id, status: 'accepted' }]);
+  expect(await mapper().steer()).toEqual([]);
+  expect(interrupts).toEqual([
+    { method: 'turn/steer', params: { threadId: 'root', expectedTurnId: 'turn', input: [{ type: 'text', text: 'Root instruction' }], clientUserMessageId: rootCommand.id } },
+    { method: 'turn/steer', params: { threadId: 'child-a', expectedTurnId: 'turn', input: [{ type: 'text', text: 'Use tomorrow for child A' }], clientUserMessageId: childCommand.id } },
+  ]);
+  expect(f.store.run(sibling.runId)).toEqual(before); expect(f.store.run(parentId).status).toBe('running');
+  expect(adapter.sleepReadiness().allowed).toBe(false);
+});
+
+it('keeps native steering uncertainty durable and rejects foreign or lease-expired deliveries before native RPC', async () => {
+  await spawn('root', 'child-a');
+  const tasks = mapper(), child = (await tasks.sync())['["child-a","turn"]'];
+  const receipt = f.accept({ schema_version: 1, type: 'run.steer', payload: { run_id: child.runId, expected_attempt: 1, text: 'A instruction' } });
+  const original = tasks.control.request;
+  tasks.control.request = async (method: string, p: any) => {
+    const result = await original(method, p);
+    return method === 'steer-pending' ? result.map((row: any) => ({ ...row, native_ref: 'foreign' })) : result;
+  };
+  await expect(tasks.steer()).rejects.toMatchObject({ code: 'INVALID_STEERING_RECEIPT' });expect(interrupts).toEqual([]);
+  tasks.control.request = async (method: string, p: any) => { const result = await original(method, p); leased = false; return result; };
+  await expect(tasks.steer()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });expect(interrupts).toEqual([]);
+  leased = true;
+  // Fixture returns an invalid native ACK. This is uncertainty, not non-delivery.
+  expect(await mapper().steer()).toEqual([{ command_id: receipt.id, status: 'outcome_unknown' }]);
+  expect(await mapper().steer()).toEqual([]);expect(interrupts).toHaveLength(1);
+  expect(f.accept({ schema_version: 1, type: 'run.steer', payload: { run_id: child.runId, expected_attempt: 1, text: 'Unsafe retry' } }).error?.code).toBe('RESOURCE_BUSY');
 });

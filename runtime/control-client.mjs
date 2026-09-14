@@ -1,4 +1,4 @@
-const TYPES = Object.freeze(['agent-command', 'agent-routines', 'agent-skill', 'budget-report', 'flight-register', 'flight-confirm', 'flight-reconcile', 'native-child', 'resource-acquire', 'resource-release', 'status', 'boot', 'ready', 'claim', 'heartbeat', 'submitted', 'complete', 'prepare-sleep', 'commit-sleep', 'effect-intent', 'effect-result', 'root-child-effect-intent', 'root-child-effect-result']);
+const TYPES = Object.freeze(['agent-command', 'agent-routines', 'agent-skill', 'steer-pending', 'steer-result', 'budget-report', 'flight-register', 'flight-confirm', 'flight-reconcile', 'native-child', 'resource-acquire', 'resource-release', 'status', 'boot', 'ready', 'claim', 'heartbeat', 'submitted', 'complete', 'prepare-sleep', 'commit-sleep', 'effect-intent', 'effect-result', 'root-child-effect-intent', 'root-child-effect-result']);
 export const RUNTIME_ENDPOINT_TYPES = TYPES;
 export class ControlClientError extends Error {
   constructor(code, outcomeUnknown = false, status) {
@@ -55,7 +55,9 @@ export class ControlClient {
         text += decoder.decode();
       } catch (error) { if (error instanceof ControlClientError) throw error; throw fail('INVALID_CONTROL_RESPONSE', true); }
       let parsed; try { parsed = JSON.parse(text); } catch { throw fail('INVALID_CONTROL_RESPONSE', true); }
-      if (parsed !== null && (typeof parsed !== 'object' || Array.isArray(parsed))) throw fail('INVALID_CONTROL_RESPONSE', true);
+      if (type === 'steer-pending') {
+        if (!Array.isArray(parsed) || parsed.length > 4) throw fail('INVALID_CONTROL_RESPONSE', true);
+      } else if (parsed !== null && (typeof parsed !== 'object' || Array.isArray(parsed))) throw fail('INVALID_CONTROL_RESPONSE', true);
       // null is the documented empty claim result. Shape-specific checks belong to the supervisor.
       return parsed;
     })();

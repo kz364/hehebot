@@ -6,6 +6,7 @@ import { dueOccurrences, nextDue, preview, validateSchedule } from './schedule';
 import {SkillCatalog} from './skills';
 import {BudgetLedger} from './budget';
 import {controlMonitoring} from './monitoring';
+import {TaskSteering} from './task-steering';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
@@ -19,7 +20,7 @@ export const DEFAULT_BOTS = [
 export function parseCommand(value:unknown):Command {
  requireThat(validateCommand(value),'INVALID_INPUT','The command contains invalid or missing fields.',422);
  const command=value as Command;
- if(command.type==='message.send') requireThat(new TextEncoder().encode(command.payload.text).length<=32768,'PAYLOAD_TOO_LARGE','Message exceeds 32768 bytes.',413);
+ if(command.type==='message.send'||command.type==='run.steer') requireThat(new TextEncoder().encode(command.payload.text).length<=32768,'PAYLOAD_TOO_LARGE','Message exceeds 32768 bytes.',413);
  return command;
 }
 export class ControlCore {
@@ -81,6 +82,12 @@ export class ControlCore {
      this.apply(owner,commandId,item);
     }
     this.store.event(this.options.uuid(),null,'setup.adopted',owner,commandId,{count:p.commands.length,reviewed_hash:p.reviewed_hash,monitoring_timezone:p.monitoring_timezone,enabled:false},now);return commandId;
+   }
+   case 'run.steer': {
+    requireThat(this.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified.');
+    const p=command.payload;
+    requireThat(p.text.trim().length>0,'INVALID_INPUT','Enter a steering instruction.',422);
+    return new TaskSteering(this.store,()=>this.now()).queue(commandId,{run_id:p.run_id,attempt:p.expected_attempt});
    }
    case 'run.followup': {
     const p=command.payload,run=this.store.run(p.run_id);
@@ -397,13 +404,16 @@ export class ControlCore {
   const now=this.now();
   if(after!==undefined){const first=this.store.db.all<{seq:number}>('SELECT MIN(sequence) AS seq FROM events')[0].seq;if(after<this.store.retentionFloor(now)||first&&after<first-1)throw new ControlError('HISTORY_GAP','Fetch a new snapshot.');}
   const page=after===undefined?[]:this.store.events(after,limit,now);
+  const runs=this.store.db.all<Run>('SELECT * FROM runs ORDER BY created_at DESC LIMIT 100');
+  const steering=new TaskSteering(this.store,()=>now);
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
    budget:this.budget.summary(),
    monitoring:controlMonitoring(this.store,now,this.budget,this.options.executionEnabled),
    objects:after===undefined?(['persona','room','routine','memory','skill'] as const).flatMap(kind=>this.store.list(kind)):undefined,
    skill_enablements:after===undefined?this.store.db.all<{skill_id:string;persona_id:string;skill_revision:number;enabled:number}>('SELECT skill_id,persona_id,skill_revision,enabled FROM skill_enablements ORDER BY skill_id,persona_id').map(row=>({...row,enabled:Boolean(row.enabled)})):undefined,
    skill_proposals:after===undefined?this.store.db.all<{id:string;skill_id:string;proposal_revision:number;expected_skill_revision:number;body_json:string;provenance_json:string;status:string;executable_files_changed:number;created_at:string;reviewed_at:string|null}>("SELECT id,skill_id,proposal_revision,expected_skill_revision,body_json,provenance_json,status,executable_files_changed,created_at,reviewed_at FROM skill_proposals ORDER BY created_at,id").map(({body_json,provenance_json,executable_files_changed,...row})=>({...row,body:JSON.parse(body_json),provenance:JSON.parse(provenance_json),executable_files_changed:Boolean(executable_files_changed)})):undefined,
-   runs:this.store.db.all<Run>('SELECT * FROM runs ORDER BY created_at DESC LIMIT 100').map(({context_json,checkpoint_json,...rest})=>rest),
+   steering:runs.flatMap(run=>steering.receipts({run_id:run.id,attempt:run.current_attempt})),
+   runs:runs.map(({context_json,checkpoint_json,...rest})=>rest),
    summary:{phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},
    timeline:after===undefined?this.store.latestEvents(now):undefined};
  }

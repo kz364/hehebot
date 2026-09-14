@@ -18,6 +18,7 @@ npm run test:e2e
 node scripts/test-codex-native.mjs
 node scripts/test-codex-capacity.mjs
 node scripts/test-codex-permissions.mjs
+node scripts/test-codex-steering.mjs
 node scripts/test-codex-tools.mjs
 node scripts/test-codex-tools.mjs --child
 node scripts/test-codex-tools.mjs --grandchild

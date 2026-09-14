@@ -12,6 +12,7 @@ import { ResultRetention } from '../core/result-retention';
 import { LifecycleCore } from '../core/lifecycle';
 import { EffectLedger } from '../core/effects';
 import { RootChildEffects } from '../core/root-child-effects';
+import { TaskSteering } from '../core/task-steering';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { createProvider, type ProviderConfig, type RuntimeRef } from '../providers';
 import validateRuntime from '../generated/validate-runtime.js';
@@ -115,6 +116,12 @@ export class PersonalControl extends DurableObject<Env> {
   requireThat(this.core.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified.');
   let result:unknown={ok:true};
   switch(command.type){
+   case 'steer-pending':{
+    const p=command.payload;result=new TaskSteering(this.store,()=>this.core.now()).pending(p.identity,p.targets,this.lifecycle);break;
+   }
+   case 'steer-result':{
+    const p=command.payload;new TaskSteering(this.store,()=>this.core.now()).result(p.identity,p,p.command_id,p.status,this.lifecycle);break;
+   }
    case 'budget-report':{
     this.store.db.transaction(()=>{
      const p=command.payload;this.lifecycle.authorizeAttempt(p.identity,p.run_id,p.attempt);

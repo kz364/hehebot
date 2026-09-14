@@ -102,4 +102,50 @@ export class CodexTaskControl {
       return outcomes;
     });
   }
+
+  steer() {
+    return this.serial(async () => {
+      this.assertLease();
+      const mapped = await this.mapping(), native = await this.adapter.requireRun(this.attemptId);
+      const targets = [{ run_id: this.parent.runId, attempt: this.parent.attempt }];
+      const known = new Map([[this.parent.runId, { attempt: this.parent.attempt, nativeRef: native.nativeRunId, target: null }]]);
+      for (const [key, child] of Object.entries(mapped.children)) if (child.runId && child.started) {
+        if (known.has(child.runId)) fail('TASK_GRANT_CONFLICT');
+        const [threadId, turnId] = JSON.parse(key);
+        known.set(child.runId, { attempt: 1, nativeRef: child.receipt.native_run_ref, target: { threadId, turnId } });
+        targets.push({ run_id: child.runId, attempt: 1 });
+      }
+      if (targets.length > 101) fail('CHILD_TASK_TRACKING_LIMIT');
+      this.assertLease();
+      const pending = await this.control.request('steer-pending', { identity: this.identity, targets });
+      this.assertLease();
+      if (!Array.isArray(pending) || pending.length > 4 || new Set(pending.map(row => row?.command_id)).size !== pending.length ||
+          pending.some(row => !row || !/^[0-9a-f-]{36}$/i.test(row.command_id ?? '') ||
+            typeof row.text !== 'string' || !row.text.trim() || Buffer.byteLength(row.text) > 32768 ||
+            !known.has(row.run_id) || known.get(row.run_id).attempt !== row.attempt || known.get(row.run_id).nativeRef !== row.native_ref)) fail('INVALID_STEERING_RECEIPT');
+      const outcomes = [];
+      for (const row of pending) {
+        const selected = known.get(row.run_id), instruction = { commandId: row.command_id, text: row.text };
+        let status;
+        this.assertLease();
+        try {
+          const receipt = selected.target ? await this.adapter.steerChild(this.attemptId, selected.target, instruction)
+            : await this.adapter.steer(this.attemptId, instruction);
+          if (!['accepted', 'unknown'].includes(receipt?.status)) fail('INVALID_STEERING_RECEIPT');
+          status = receipt.status === 'accepted' ? 'accepted' : 'outcome_unknown';
+        } catch (error) {
+          // This adapter error occurs before recording or sending new intent.
+          // All transport/protocol uncertainty remains an unknown journal receipt.
+          if (error.code !== 'TASK_NOT_RUNNING') throw error;
+          status = 'not_delivered';
+        }
+        this.assertLease();
+        await this.control.request('steer-result', { identity: this.identity, run_id: row.run_id,
+          attempt: row.attempt, command_id: row.command_id, status });
+        this.assertLease();
+        outcomes.push({ command_id: row.command_id, status });
+      }
+      return outcomes;
+    });
+  }
 }

@@ -37,6 +37,16 @@ test('rejects endpoint injection and oversize payload before fetch', async () =>
 test('accepts null empty claim response', async () => {
   assert.equal(await new ControlClient({ ...settings, fetchImpl: async () => response(null) }).request('claim', { identity: {} }), null);
 });
+test('accepts only bounded arrays for steering polling without widening other response contracts', async () => {
+  for (const rows of [[], [{ command_id: 'synthetic' }], [{}, {}, {}, {}]]) {
+    const client = new ControlClient({ ...settings, fetchImpl: async () => response(rows) });
+    assert.deepEqual(await client.request('steer-pending', {}), rows);
+    await assert.rejects(client.request('claim', {}), { code: 'INVALID_CONTROL_RESPONSE' });
+  }
+  for (const invalid of [null, {}, 'text', [{}, {}, {}, {}, {}]]) {
+    await assert.rejects(new ControlClient({ ...settings, fetchImpl: async () => response(invalid) }).request('steer-pending', {}), { code: 'INVALID_CONTROL_RESPONSE' });
+  }
+});
 test('mutation network failures are sanitized unknown outcomes and never retried', async () => {
   let calls = 0;
   const client = new ControlClient({ ...settings, fetchImpl: async () => { calls++; throw new Error('runtime-secret access-secret'); } });

@@ -25,6 +25,43 @@
     {
       "type":"object","additionalProperties":false,
       "properties": {
+        "type":{"const":"steer-pending"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "identity":{"$ref":"#/$defs/runtimeIdentity"},
+            "targets":{"type":"array","minItems":1,"maxItems":101,"uniqueItems":true,"items":{
+              "type":"object","additionalProperties":false,
+              "properties":{"run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1}},
+              "required":["run_id","attempt"]
+            }}
+          },
+          "required":["identity","targets"]
+        }
+      },
+      "required":["type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
+        "type":{"const":"steer-result"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "identity":{"$ref":"#/$defs/runtimeIdentity"},
+            "run_id":{"type":"string","format":"uuid"},
+            "attempt":{"type":"integer","minimum":1},
+            "command_id":{"type":"string","format":"uuid"},
+            "status":{"enum":["accepted","outcome_unknown","not_delivered"]}
+          },
+          "required":["identity","run_id","attempt","command_id","status"]
+        }
+      },
+      "required":["type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
         "type":{"const":"budget-report"},
         "payload": {
           "type":"object","additionalProperties":false,

@@ -9,7 +9,7 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
 export class ExecutionSupervisor {
   constructor({ control, native, journal, identity, installationId, personas, activity,
     operations, events = /** @type {{bind: (attemptId: string) => Promise<void>} | null} */ (null),
-    children = /** @type {{sync: () => Promise<unknown>, cancel: (runIds: string[]) => Promise<unknown>} | null} */ (null),
+    children = /** @type {{sync: () => Promise<unknown>, cancel: (runIds: string[]) => Promise<unknown>, steer?: () => Promise<unknown>} | null} */ (null),
     now = Date.now, intervalMs = 20000, onRecovery = () => {} }) {
     if (!activity?.ensure || !activity?.releaseAfterDrain || typeof operations !== 'function' ||
         (events && typeof events.bind !== 'function') ||
@@ -105,6 +105,9 @@ export class ExecutionSupervisor {
           this.assertLease();
           await this.native.cancel(row.attemptId);
         }
+        this.assertLease();
+        await this.children?.steer?.();
+        this.assertLease();
       } catch (error) { this.recover('MAINTENANCE_FAILED'); throw error; }
     })().finally(() => { this.maintenance = null; });
     return this.maintenance;

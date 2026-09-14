@@ -17,6 +17,7 @@ export type RoomPublish = { room_id: string; kind: 'context_update' | 'action_re
 export type PayloadMap = {
  'budget.set':BudgetPolicy;
  'budget.override':{run_id:string;expected_revision:number};
+ 'run.steer':{run_id:string;expected_attempt:number;text:string};
  'run.followup':{run_id:string;text:string};
  'setup.adopt':{commands:Array<{schema_version:1;type:'persona.put';payload:PersonaPut}|{schema_version:1;type:'routine.put';payload:RoutinePut}>;monitoring_timezone:'Asia/Singapore'|'Asia/Jakarta';reviewed_hash:string};
  'message.send': { conversation_id: string; text: string };

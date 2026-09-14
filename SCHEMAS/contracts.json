@@ -62,6 +62,22 @@
     {
       "type":"object","additionalProperties":false,
       "properties": {
+        "schema_version":{"const":1},"type":{"const":"run.steer"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "run_id":{"$ref":"#/$defs/uuid"},
+            "expected_attempt":{"type":"integer","minimum":1},
+            "text":{"type":"string","minLength":1,"maxLength":32768}
+          },
+          "required":["run_id","expected_attempt","text"]
+        }
+      },
+      "required":["schema_version","type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
         "schema_version":{"const":1},"type":{"const":"budget.set"},
         "payload": {
           "type":"object","additionalProperties":false,

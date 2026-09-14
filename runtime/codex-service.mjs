@@ -143,7 +143,8 @@ export function createCodexService(config, dependencies) {
         };
         supervisor = new ExecutionSupervisor({ control, native, journal, identity, installationId: config.installationId,
           personas: config.personas, events: router, activity, operations, now, onRecovery: recover,
-          children: { sync: async () => (await taskController())?.sync(), cancel: async ids => (await taskController())?.cancel(ids) } });
+          children: { sync: async () => (await taskController())?.sync(), cancel: async ids => (await taskController())?.cancel(ids),
+            steer: async () => (await taskController())?.steer() } });
         await starting(control.request('ready', { identity }));
         const dispatched = await starting(supervisor.start());
         if (supervisor.phase !== 'running') fail('SERVICE_RECOVERY_REQUIRED');

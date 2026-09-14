@@ -53,8 +53,9 @@ function render(){
  $('runtime-banner').hidden=snapshot.summary.execution_enabled;
  $('runtime-banner').textContent='Your messages and routines are saved. The assistant is waiting for its runtime connection and sign-in before it can work.';
  const conversation=events.filter(x=>x.conversation_id===selected);const runs=snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
- const signature=JSON.stringify([selected,conversation,runs,historyFloors.get(selected)]);
- if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;timeline.replaceChildren();
+ const steering=(snapshot.steering??[]).filter(x=>runs.some(run=>run.id===x.run_id));
+ const signature=JSON.stringify([selected,conversation,runs,steering,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
+ if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;const expanded=new Set([...timeline.querySelectorAll('.task-card[open]')].map(card=>card.dataset.runId));timeline.replaceChildren();
   if(historyFloors.get(selected)){const notice=node('p','Earlier history has expired under the retention policy. Only retained messages and updates are shown.','hint');notice.setAttribute('role','status');timeline.append(notice);}
   if(conversation.length>=100){const conversationId=selected;timeline.append(button('Load earlier messages',async()=>{try{
    const history=await api('/v1/conversations/'+conversationId+'/events?before='+conversation[0].sequence);
@@ -79,11 +80,21 @@ function render(){
     const e=node('div',undefined,'event');e.setAttribute('role','status');e.append(node('span','Request expired','status'),node('span','A queued request expired after 90 days without starting. Send a fresh request if it is still needed.'));timeline.append(e);
    }else if(event.type.startsWith('room.')){const e=node('div',undefined,'event');e.append(node('span',event.type==='room.context_update'?'Context update':'Room update'),node('span',event.payload.text??''));timeline.append(e);}
   }
-  for(const run of runs.filter(x=>x.role==='background')){
-   const card=node('details',undefined,'task-card');card.append(node('summary',`${run.title??'Background task'} · ${statuses[run.status]??run.status}`));
+  for(const run of runs.filter(x=>x.role==='background'||x.status==='running'||steering.some(receipt=>receipt.run_id===x.id))){
+   const title=run.title??(run.role==='background'?'Background task':'Conversation task');
+   const card=node('details',undefined,'task-card');card.dataset.runId=run.id;card.open=expanded.has(run.id);card.append(node('summary',`${title} · ${statuses[run.status]??run.status}`));
    card.append(node('p',`Task ${run.id}`,'hint'));
+   const receipts=steering.filter(x=>x.run_id===run.id&&x.attempt===run.current_attempt);
+   for(const receipt of receipts){
+    const labels={pending:'Steering awaits native acknowledgement. Do not resend while delivery is unresolved.',accepted:'Steering accepted by the native task. Understanding and completion are not yet verified.',outcome_unknown:'Steering delivery is uncertain. Do not resend; reconciliation is required.',not_delivered:'Steering was not delivered because the native task was no longer accepting it.'};
+    card.append(node('p',labels[receipt.status]??'Steering receipt unavailable.','hint'));
+   }
    const actions=node('div',undefined,'actions');
-   actions.append(button('Follow up on this task',()=>{const key=crypto.randomUUID();openEditor(`Follow up: ${run.title??'Task'}`,[node('p','This message targets only the selected task. While it is active, the follow-up waits for native settlement.','hint'),field('Follow-up','text','','textarea')],form=>command('run.followup',{run_id:run.id,text:form.get('text')},key));},'quiet'));
+   if(run.status==='running'&&snapshot.summary.execution_enabled){
+    const steer=button('Steer this task now',()=>{const key=crypto.randomUUID(),instruction=field('Instruction','text','','textarea');instruction.querySelector('textarea').maxLength=32768;openEditor(`Steer: ${title}`,[node('p','This changes only the selected task’s remaining work at its next native message boundary. It does not undo effects, cancel tools, grant new permissions, or prove the instruction was obeyed.','hint'),instruction],form=>command('run.steer',{run_id:run.id,expected_attempt:run.current_attempt,text:form.get('text')},key));},'quiet');
+    steer.dataset.action='steer';steer.disabled=receipts.some(receipt=>['pending','outcome_unknown'].includes(receipt.status));actions.append(steer);
+   }
+   if(run.role==='background')actions.append(button('Follow up after settlement',()=>{const key=crypto.randomUUID();openEditor(`Follow up: ${title}`,[node('p','This message targets only the selected task. While it is active, the follow-up waits for native settlement.','hint'),field('Follow-up','text','','textarea')],form=>command('run.followup',{run_id:run.id,text:form.get('text')},key));},'quiet'));
    if(['queued','claimed','running','finishing','waiting'].includes(run.status))actions.append(button('Cancel this task',()=>act(()=>command('run.cancel',{run_id:run.id,reason:'Owner selected this task for cancellation.'})),'quiet danger'));
    card.append(actions);timeline.append(card);
   }

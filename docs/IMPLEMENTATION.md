@@ -108,6 +108,22 @@ resubmitting inference or resurrecting a cancelling/terminal task. Legacy journa
 mappings reconcile once without replacing known Worker identities. The native
 service effect fixture no longer needs a manual child submission call.
 
+[Explicit task steering](CODEX_STEERING.md) now connects an owner-selected exact
+attempt to Worker pending/receipt contracts and disposable service maintenance.
+The portal separates immediate steering from after-settlement follow-ups, shows
+truthful delivery states and disables uncertain resends. Existing command payload
+retention applies; compact receipt metadata currently has no expiry. No context,
+policy, effect, lock or completion is rewritten. Ordinary messages still enqueue
+independent work rather than implicitly steering a background task.
+
+The actual pinned native steering fixture observes root and direct-child directives
+in their next model context before exact-turn completion, including child delivery
+after root completion while a sibling stays held. Reopened journal receipt replay
+issues no second native steering RPC. SQLite/HTTP/service/Chromium tests cover the
+separate application boundaries. Native acceptance is not model understanding or
+consumption, natural-language intent resolution, multi-root Worker admission,
+successful crash recovery, full O03 or production/sleep readiness.
+
 Trusted [root/descendant effect bookkeeping](ROOT_CHILD_EFFECTS.md) now connects
 strict runtime routes to the existing effect/resource ledgers. It validates exact
 lease, attempts, native ancestry and original same-task policy/scope, records

@@ -37,6 +37,7 @@ async function fixture(t) {
       if (type === 'boot') return { epoch: 1, boot_id: payload.boot_id };
       if (type === 'ready' || type === 'submitted') return {};
       if (type === 'heartbeat') return { lease_until: new Date(now + 60000).toISOString(), cancellations: [] };
+      if (type === 'steer-pending') return [];
       if (type === 'claim') return { submission_key: 'run:1', run: { id: 'run', current_attempt: 1, persona_id: 'bot', context_json: '{"instruction":"fixture"}' } };
       throw Error('unexpected control RPC');
     } },
@@ -184,4 +185,33 @@ test('assembly synchronizes exact child mapping before delivering a selected can
   assert.equal(registrations, 1);
   assert.deepEqual(f.calls.filter(call => call.method === 'turn/interrupt'), [{ method: 'turn/interrupt', params: { threadId: 'child-thread', turnId: 'child-turn' } }]);
   assert.equal((await f.service.observe()).childTurns['["child-thread","child-turn"]'], 'inProgress');
+});
+
+test('assembly delivers explicit steering during maintenance and replays only its durable receipt', async t => {
+  const f = await fixture(t), control = f.dependencies.control.request, native = f.transport.request;
+  const command = { command_id: '77777777-0000-4000-8000-000000000019', run_id: 'run', attempt: 1,
+    native_ref: 'native-turn', text: 'Change the remaining root work' };
+  let offered = true, deliveries = 0, reports = 0;
+  f.dependencies.control.request = async (type, payload) => {
+    if (type === 'steer-pending') {
+      assert.deepEqual(payload.targets, [{ run_id: 'run', attempt: 1 }]);
+      return offered ? [command] : [];
+    }
+    if (type === 'steer-result') {
+      assert.equal(payload.command_id, command.command_id); assert.equal(payload.status, 'accepted');
+      if (++reports === 2) offered = false;
+      return { ok: true };
+    }
+    return control(type, payload);
+  };
+  f.transport.request = async (method, params) => {
+    if (method !== 'turn/steer') return native(method, params);
+    deliveries++;
+    assert.deepEqual(params, { threadId: 'native-thread', expectedTurnId: 'native-turn',
+      input: [{ type: 'text', text: command.text }], clientUserMessageId: command.command_id });
+    return { turnId: 'native-turn' };
+  };
+  await f.service.start();await f.service.maintain();await f.service.maintain();await f.service.maintain();
+  assert.equal(deliveries, 1);assert.equal(reports, 2);
+  assert.equal((await f.service.observe()).rootSettled, false);
 });
