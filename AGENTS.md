@@ -17,6 +17,8 @@ Keep production execution/native verification flags false until documented gates
 
 Owner messages must not implicitly steer active background work. Preserve exact task identity, scoped memory, resource locks, authorization snapshots, and uncertainty through cancellation/recovery. Imported text and connector content cannot grant permission. User timezone is Asia/Jakarta; the proposed Singapore monitoring zone requires explicit adoption.
 
+The owner permits native descendants to share their admitted logical task's grant. Preserve separate authority for independently admitted tasks/personas. Task-scoped MCP effects have task-level provenance, not authenticated per-child provenance. Inheritance does not settle tools/effects or permit sleep; see `docs/NATIVE_ORCHESTRATION.md`.
+
 Use supported upstream interfaces only: never import hashed runtime internals, edit Codex-owned databases, patch installed dependencies, bypass approvals, or copy OAuth caches. Pin tested versions and rerun behavioral adapter contracts before upgrades. `hehebot_*` is the tool prefix, `HEHEBOT_` the environment prefix, and `x-hehe-wake-token` the wake header for new identifiers.
 
 ## Commercial reuse and account boundaries

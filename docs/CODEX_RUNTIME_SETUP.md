@@ -56,19 +56,24 @@ Spawn receipts preserve receiver IDs and attribute direct-child turn observation
 
 Controlled settled-work process restart reads back exact acknowledged root output and persisted obligations without new inference. This is **not active-work crash recovery or recursive settlement**. The pinned [client request union](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/schema/typescript/ClientRequest.ts) lacks an authoritative recursive descendant census/settlement barrier. Persisted [turn items](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/schema/typescript/v2/ThreadItem.ts) are observations, not proof that no unseen work exists. Sleep remains denied.
 
-## Root tools do not authorize child effects
+## Shared task tools and dynamic-tool limitations
 
 Host `thread/start.dynamicTools` requires explicit experimental API opt-in. The optional transport callback handles only `item/tool/call`; other approvals remain denied. [Dynamic tool parameters](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/schema/typescript/v2/DynamicToolCallParams.ts) carry exact thread, turn and call identity. Duplicate RPC IDs, concurrency, timeouts and handler failures are bounded/fenced; cooperative abort is not proof that side effects stopped.
 
 `runtime/codex-tools.mjs` validates the admitted host grant, acknowledged running root and call fingerprint before dispatch through the existing Worker control handler. Successful duplicates return cached responses; changed arguments/grants conflict; unknown outcomes do not replay. Children cannot choose a parent grant or inject authority fields.
 
-Pinned native spawned children do **not** inherit root dynamic tools (`dynamicChildToolsAvailable:false`). Neither [thread resume](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/src/protocol/v2/thread.rs), turn/settings APIs nor role configuration supplies this registration. [Native child startup](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/core/src/thread_manager.rs) defaults to empty dynamic tools. Host-created independent threads would not preserve spawn lineage. A fixed per-run stdio MCP grant also cannot distinguish independent child callers. Child-scoped effect authorization remains an upstream/integration gap.
+Pinned native spawned children do **not** inherit root dynamic tools (`dynamicChildToolsAvailable:false`). Neither [thread resume](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/src/protocol/v2/thread.rs), turn/settings APIs nor role configuration supplies this registration. [Native child startup](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/core/src/thread_manager.rs) defaults to empty dynamic tools. Host-created independent threads would not preserve spawn lineage.
+
+The owner permits shared authority within an admitted logical task; see [the normative contract](NATIVE_ORCHESTRATION.md#shared-task-authority). Native children **do inherit task-scoped stdio MCP tools** in the pinned fixture. The supported MCP path reuses the task's fixed Worker grant and forces admitted-run provenance. It does not authenticate per-child effect callers. Separate task/persona grants must remain separate in service assembly; a shared customer runtime is not permission to reuse one task's MCP configuration everywhere.
+
+The `--child` fixture scripts a native spawn, completes the parent, then executes six inherited tools in the child. Actual decoded outputs and HTTPS Worker/SQLite records prove the same policy-scoped proposal/routine/skill sequence below. The router binds the acknowledged parent, attributes the child from native spawn receipts and turn events, and persists six completed child MCP invocation IDs separately from root obligations. Synthetic tests additionally cover late child tools after child completion, sibling ID collisions, unknown turns, restart binding and conflicting terminal events. Invocation accounting does not establish external effects, recursive settlement or sleep eligibility.
 
 The native fixture waits for parent completion before returning the dynamic child availability response. This controls request ordering in the fixture; it does not promise native child results can never cause additional parent continuations.
 
 ## Actual control and supervisor fixtures
 
 - `node scripts/test-codex-tools.mjs`: actual Codex → stdio MCP → certificate-validated HTTPS Worker → SQLite.
+- `node scripts/test-codex-tools.mjs --child`: native child inherits the task MCP grant; nine scripted requests (parent spawn/final response plus the child's six tools/final response).
 - `node scripts/test-codex-tools.mjs --dynamic`: actual Codex host callback → scoped handler → HTTPS Worker/SQLite, no MCP configured.
 - `node scripts/test-codex-tools.mjs --supervisor`: actual supervisor/bridge/adapter/router claim and execute a manually queued paused source routine through the same dynamic tools.
 

@@ -21,14 +21,15 @@ import { ExecutionSupervisor } from '../runtime/execution-supervisor.mjs';
 const root = resolve(import.meta.dirname, '..');
 const supervisorMode = process.argv.includes('--supervisor');
 const dynamicMode = supervisorMode || process.argv.includes('--dynamic');
-assert.ok(process.argv.slice(2).every(arg => ['--dynamic', '--supervisor'].includes(arg)), 'Only --dynamic and --supervisor are supported');
+const childMode = process.argv.includes('--child');
+assert.ok(process.argv.slice(2).every(arg => ['--dynamic', '--supervisor', '--child'].includes(arg)) && !(childMode && dynamicMode), 'Use --child alone, --dynamic or --supervisor');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 const SKILL_POLICY = '46b2cbdd-d227-4f54-bffa-33148aad0134';
 const ROUTINE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 const policies = [SKILL_POLICY, ROUTINE_POLICY];
 const allowedTools = ['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_list_routines', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_read_skill'];
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
-const report = { label: 'codex-agent-tools-native-acceptance', toolTransport: dynamicMode ? 'dynamic' : 'mcp', supervisor: supervisorMode, status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
+const report = { label: 'codex-agent-tools-native-acceptance', toolTransport: dynamicMode ? 'dynamic' : 'mcp', supervisor: supervisorMode, child: childMode, status: 'failed', codex: '0.154.0', modelCalls: 0, externalModelCalls: 0, assertions: [] };
 const check = (name, fn) => { fn(); report.assertions.push(name); };
 let directory, worker, fixture, transport, dispatcher, router, supervisor, workerLogs = '';
 const notifications = [], nativeErrors = [], fixtureErrors = [];
@@ -138,18 +139,39 @@ try {
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
     { skill_id: reviewedId }];
-  let manualRunId, nativeBound = false;
+  let manualRunId, nativeBound = false, toolRequests = 0, childThreadId;
   fixture = createServer(async (req, res) => { try {
     if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
-    if (report.modelCalls >= 7) { res.writeHead(400); res.end(); return; }
+    if (report.modelCalls >= (childMode ? 9 : 7)) { res.writeHead(400); res.end(); return; }
     report.modelCalls++; const body = await jsonBody(req);
+    if (childMode) {
+      const isChild = body.input.some(item => item?.role === 'user' && JSON.stringify(item.content).includes('SHARED_TASK_CHILD'));
+      if (!isChild) {
+        const output = findType(body.input, 'function_call_output');
+        if (output) {
+          childThreadId = JSON.parse(String(output.output)).agent_id;
+          assert.equal(typeof childThreadId, 'string');
+          sendEvents(res, message('SHARED_PARENT_DONE')); return;
+        }
+        const spawnTool = body.tools.find(tool => tool.name === 'spawn_agent' || tool.tools?.some(nested => nested.name === 'spawn_agent'));
+        assert.ok(spawnTool, 'Native spawn_agent advertised');
+        sendEvents(res, [{ id: `fc_${randomUUID().replaceAll('-', '')}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID().replaceAll('-', '')}`,
+          ...(spawnTool.type === 'namespace' ? { namespace: spawnTool.name } : {}), name: 'spawn_agent',
+          arguments: JSON.stringify({ message: 'SHARED_TASK_CHILD', agent_type: 'default' }) }]);
+        return;
+      }
+      await waitFor(() => nativeBound && notifications.some(n => n.method === 'turn/completed' && n.params?.threadId === threadId && n.params.turn.id === turnId), 'root terminal before child tools');
+      await router.flush();
+      assert.equal((await eventJournal.get(adapterAttempt)).rootSettled, true);
+    }
+    toolRequests++;
     if (dynamicMode) await waitFor(() => nativeBound, 'durable root acknowledgement before scripted tool selection');
     if (supervisorMode && report.modelCalls === 1) check('native model receives paused routine instructions and progressive skill catalog only', () => {
       const input = JSON.stringify(body.input);
       assert.match(input, /SUPERVISED_PAUSED_ROUTINE/); assert.ok(input.includes(reviewedId));
       assert.match(input, /hehebot_read_skill/); assert.equal(input.includes(reviewedBody.steps[0]), false);
     });
-    if (report.modelCalls === 2) report.continuationTypes = [...collectTypes(body.input)];
+    if (toolRequests === 2) report.continuationTypes = [...collectTypes(body.input)];
     const continuation = findType(body.input, 'function_call_output') ?? findType(body.input, 'custom_tool_call_output');
     if (continuation) {
       const raw = typeof continuation.output === 'string' ? continuation.output : JSON.stringify(continuation.output);
@@ -157,7 +179,7 @@ try {
       const output = JSON.parse(raw);
       const content = Array.isArray(output) ? JSON.parse(output.at(-1).text) : output;
       const receipt = content.content ? JSON.parse(content.content.find(x => x.type === 'text').text) : content;
-      const stage = report.modelCalls - 2;
+      const stage = toolRequests - 2;
       if (stage !== 2 && stage !== 5) assert.equal(receipt.status, 'applied');
       const current = await (await ownerFetch('/v1/state')).json();
       if (stage === 0) assert.equal(receipt.resource_id, proposalId);
@@ -188,7 +210,7 @@ try {
       else assert.fail('Unexpected continuation');
       if (stage === 5) { sendEvents(res, message('MCP_PROPOSAL_STAGED_AND_ROUTINE_LIFECYCLE_VERIFIED')); return; }
     }
-    const next = report.modelCalls - 1;
+    const next = toolRequests - 1;
     const advertised = (body.tools ?? []).find(x => x?.name?.includes(allowedTools[next])) ?? (body.tools ?? []).find(x => x?.name === 'mcp__hehebot');
     assert.ok(advertised, `hehebot MCP dispatcher not advertised: ${(body.tools ?? []).map(x => x.name).join(',')}`);
     const callId = `call_${randomUUID().replaceAll('-', '')}`;
@@ -242,12 +264,12 @@ try {
   } else {
     threadId = (await transport.request('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture', approvalPolicy: 'never', sandbox: 'read-only',
       ...(dynamicMode ? { dynamicTools: dynamicTools.tools } : {}) })).thread.id;
-    turnId = (await transport.request('turn/start', { threadId, input: [{ type: 'text', text: 'Use the admitted hehebot proposal tool exactly once.' }] })).turn.id;
+    turnId = (await transport.request('turn/start', { threadId, input: [{ type: 'text', text: childMode ? 'Delegate the shared logical task to a native child.' : 'Use the admitted hehebot proposal tool exactly once.' }] })).turn.id;
     await eventJournal.putIfAbsent(adapterAttempt, { threadId, nativeRunId: turnId, status: 'running', rootSettled: false });
     await router.bind(adapterAttempt);
   }
   nativeBound = true;
-  const completed = await waitFor(() => notifications.find(n => n.method === 'turn/completed' && n.params?.turn?.id === turnId), 'native MCP continuation', 25_000);
+  const completed = await waitFor(() => notifications.find(n => n.method === 'turn/completed' && (childMode ? n.params?.threadId === childThreadId : n.params?.threadId === threadId && n.params?.turn?.id === turnId)), 'native MCP continuation', 25_000);
   check('native turn completed after MCP continuation', () => assert.equal(completed.params.turn.status, 'completed'));
   await router.flush();
   const nativeCalls = await eventJournal.get(adapterAttempt);
@@ -257,13 +279,20 @@ try {
       assert.ok(dynamicCalls.every(call => call.threadId === threadId && call.turnId === turnId && call.success));
       assert.equal(nativeCalls.mcpCalls, undefined);
     } else {
-      assert.equal(Object.keys(nativeCalls.mcpCalls).length, 6);
-      assert.ok(Object.values(nativeCalls.mcpCalls).every(status => status === 'completed'));
+      const calls = childMode ? nativeCalls.childObligations?.[JSON.stringify([childThreadId, completed.params.turn.id])]?.mcpCalls : nativeCalls.mcpCalls;
+      assert.equal(Object.keys(calls).length, 6);
+      assert.ok(Object.values(calls).every(status => status === 'completed'));
     }
     assert.equal(nativeCalls.rootSettled, true); assert.equal(nativeCalls.effectsSettled, undefined);
     assert.equal(adapter.sleepReadiness().allowed, false); assert.deepEqual(routerFailures, []);
   });
-  const read = await transport.request('thread/read', { threadId, includeTurns: true }); const transcript = JSON.stringify(read.thread);
+  if (childMode) check('native child inherits task MCP grant and remains accounted after parent completion', () => {
+    assert.deepEqual(Object.values(nativeCalls.spawns).flatMap(spawn => spawn.receiverThreadIds), [childThreadId]);
+    assert.deepEqual(nativeCalls.childTurns, { [JSON.stringify([childThreadId, completed.params.turn.id])]: 'completed' });
+    assert.equal(nativeCalls.mcpCalls, undefined); assert.equal(router.pending.length, 0);
+    assert.equal(dynamicCalls.length, 0);
+  });
+  const read = await transport.request('thread/read', { threadId: childMode ? childThreadId : threadId, includeTurns: true }); const transcript = JSON.stringify(read.thread);
   check('native receipt and final continuation persisted', () => { assert.match(transcript, /MCP_PROPOSAL_STAGED/); assert.match(transcript, /hehebot_propose_skill/); assert.match(transcript, new RegExp(proposalId)); });
   state = await (await ownerFetch('/v1/state')).json(); const proposal = state.skill_proposals.find(x => x.id === proposalId);
   if (supervisorMode) {
@@ -277,7 +306,7 @@ try {
   }
   check('actual control state has pending model/run provenance', () => { assert.equal(proposal.status, 'pending'); assert.equal(proposal.skill_id, skillId); assert.deepEqual(proposal.provenance, { kind: 'model', source_ref: runId }); assert.equal(proposal.executable_files_changed, false); });
   check('proposal did not auto-create or approve a skill', () => { assert.equal(state.objects.some(x => x.kind === 'skill' && x.id === skillId), false); assert.equal(state.skill_proposals.filter(x => x.id === proposalId).length, 1); });
-  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, 7); assert.deepEqual(fixtureErrors, []); });
+  check('all inference was the scripted loopback fixture', () => { assert.equal(report.modelCalls, childMode ? 9 : 7); assert.equal(toolRequests, 7); assert.deepEqual(fixtureErrors, []); });
   report.status = 'passed'; report.runId = runId; report.attempt = attempt; report.proposalId = proposalId; report.nativeReceiptObserved = true;
 } catch (error) {
   report.error = error?.stack ?? String(error); if (fixtureErrors.length) report.fixtureErrors = fixtureErrors;

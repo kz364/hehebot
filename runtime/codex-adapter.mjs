@@ -121,6 +121,11 @@ export class CodexAdapter {
   async #observeOne(attemptId, notification) {
     const row = await this.requireRun(attemptId);
     const params = notification?.params;
+    const childKey = JSON.stringify([params?.threadId, params?.turnId]);
+    const childItem = params?.threadId !== row.threadId && Object.hasOwn(row.childTurns ?? {}, childKey);
+    const owner = childItem ? row.childObligations?.[childKey] ?? {} : row;
+    const save = patch => this.journal.update(attemptId, childItem
+      ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, ...patch } } } : patch);
     if (['turn/started', 'turn/completed'].includes(notification?.method) && params?.threadId !== row.threadId) {
       if (!Object.values(row.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(params?.threadId))) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const id = params?.turn?.id, status = params?.turn?.status;
@@ -157,12 +162,12 @@ export class CodexAdapter {
     }
     const field = params?.item?.type === 'commandExecution' ? 'commands' : params?.item?.type === 'mcpToolCall' ? 'mcpCalls' : null;
     if (['item/started', 'item/completed'].includes(notification?.method) && field) {
-      if (params.threadId !== row.threadId || params.turnId !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const { id, status } = params.item;
       const terminal = field === 'commands' ? ['completed', 'failed', 'declined'] : ['completed', 'failed'];
       if (typeof id !== 'string' || !id || id.length > 256 ||
           !(notification.method === 'item/started' ? ['inProgress'] : terminal).includes(status)) fail('CODEX_PROTOCOL_ERROR');
-      const obligations = { ...row[field] };
+      const obligations = { ...owner[field] };
       const prior = Object.hasOwn(obligations, id) ? obligations[id] : undefined;
       if (prior && prior !== 'inProgress') {
         if (prior !== status) fail('SETTLEMENT_CONFLICT');
@@ -173,7 +178,7 @@ export class CodexAdapter {
       // remove these obligations; only a matching native terminal event can.
       Object.defineProperty(obligations, id, { value: status, enumerable: true, writable: true, configurable: true });
       // An MCP terminal response settles only the invocation, not external effects.
-      return this.journal.update(attemptId, { [field]: obligations });
+      return save({ [field]: obligations });
     }
     if (notification?.method !== 'turn/completed') return row;
     if (params?.threadId !== row.threadId || params?.turn?.id !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');

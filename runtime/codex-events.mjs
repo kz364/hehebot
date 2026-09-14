@@ -11,7 +11,7 @@ export class CodexEventRouter {
         !Number.isSafeInteger(maxBindings) || maxBindings < 1 || maxBindings > 1000) fail('INVALID_EVENT_ROUTER');
     Object.assign(this, { transport, adapter, onRecovery, maxPending, maxBindings });
     this.bindings = new Map(); this.pending = []; this.tail = Promise.resolve(); this.closed = false;
-    this.childOwners = new Map();
+    this.childOwners = new Map(); this.childBindings = new Map();
     this.notification = value => {
       try {
         const event = this.project(value);
@@ -74,6 +74,10 @@ export class CodexEventRouter {
       if (!prior && this.childOwners.size >= this.maxBindings) fail('NATIVE_BINDING_LIMIT');
       this.childOwners.set(threadId, attemptId);
     }
+    for (const key of Object.keys(row.childTurns ?? {})) {
+      if (this.childOwners.get(JSON.parse(key)[0]) !== attemptId) fail('NATIVE_IDENTITY_CONFLICT');
+      this.childBindings.set(key, attemptId);
+    }
   }
 
   flush() {
@@ -82,7 +86,7 @@ export class CodexEventRouter {
       for (let index = 0; index < this.pending.length;) {
         const event = this.pending[index];
         const isTurn = ['turn/started', 'turn/completed'].includes(event.notification.method);
-        const attemptId = this.bindings.get(event.key) ?? (isTurn ? this.childOwners.get(event.notification.params.threadId) : undefined);
+        const attemptId = this.bindings.get(event.key) ?? (isTurn ? this.childOwners.get(event.notification.params.threadId) : this.childBindings.get(event.key));
         if (!attemptId) { index++; continue; }
         const row = await this.adapter.observe(attemptId, event.notification);
         this.bindChildren(attemptId, row);

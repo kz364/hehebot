@@ -16,7 +16,7 @@ try{
  let checks=0;
  async function get(path){const r=await fetch(base+path);const value=await r.json();assert.equal(r.status,200,JSON.stringify(value));checks++;return value;}
  async function send(type,payload,key=crypto.randomUUID(),origin=base){const r=await fetch(base+'/v1/commands',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key,'Origin':origin},body:JSON.stringify({schema_version:1,type,payload})});return {status:r.status,value:await r.json()};}
- const html=await fetch(base);assert.equal(html.status,200);assert.match(await html.text(),/Personal — your assistants/);assert.match(html.headers.get('Content-Security-Policy'),/frame-ancestors 'none'/);checks++;
+ const html=await fetch(base);assert.equal(html.status,200);assert.match(await html.text(),/Hehebot — your assistants/);assert.match(html.headers.get('Content-Security-Policy'),/frame-ancestors 'none'/);checks++;
  const initial=await get('/v1/state');assert.equal(initial.objects.filter(x=>x.kind==='persona').length,3);assert.equal(initial.summary.execution_enabled,false);
  const bot=initial.objects.find(x=>x.kind==='persona').id;
  const key=crypto.randomUUID(),payload={conversation_id:bot,text:'Please remember: prefer a concise morning briefing.'};

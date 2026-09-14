@@ -160,6 +160,51 @@ test('router restart restores only durable child attribution and rejects adoptio
   assert.equal((await f.journal.get('b')).rootSettled, false);
 });
 
+test('child tools require observed exact turns and survive root and child completion without sibling collisions', async t => {
+  const f = await fixture(t);
+  const mcp = (thread, status) => {
+    const event = command(thread, 'same-turn', 'same-item', status);
+    event.params.item.type = 'mcpToolCall';
+    return event;
+  };
+  f.transport.emit('notification', mcp('child-a', 'inProgress'));
+  f.transport.emit('notification', spawn('completed', ['child-a', 'child-b']));
+  await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
+  assert.equal(f.router.pending.length, 1); // A receiver alone is not an exact turn.
+  assert.equal((await f.journal.get('a')).childObligations, undefined);
+  for (const threadId of ['child-a', 'child-b']) f.transport.emit('notification', {
+    method: 'turn/started', params: { threadId, turn: { id: 'same-turn', status: 'inProgress' } },
+  });
+  f.transport.emit('notification', mcp('child-b', 'inProgress'));
+  f.transport.emit('notification', command('child-a', 'same-turn', 'same-item'));
+  f.transport.emit('notification', root('parent', 'turn'));
+  f.transport.emit('notification', root('child-a', 'same-turn'));
+  await f.router.flush();
+  const a = '["child-a","same-turn"]', b = '["child-b","same-turn"]';
+  let row = await f.journal.get('a');
+  assert.deepEqual(row.childObligations, {
+    [a]: { mcpCalls: { 'same-item': 'inProgress' }, commands: { 'same-item': 'inProgress' } },
+    [b]: { mcpCalls: { 'same-item': 'inProgress' } },
+  });
+  assert.equal(row.rootSettled, true); assert.equal(row.childTurns[a], 'completed');
+  f.router.close();
+  const restarted = new CodexEventRouter({ transport: f.transport, adapter: f.adapter,
+    onRecovery: value => f.recoveries.push(value.code) });
+  // Rebind from persisted state, not the old router's in-memory child map.
+  t.after(() => restarted.close()); await restarted.bind('a');
+  f.transport.emit('notification', mcp('child-a', 'failed')); await restarted.flush();
+  row = await f.journal.get('a');
+  assert.deepEqual(row.childObligations[a], { mcpCalls: { 'same-item': 'failed' }, commands: { 'same-item': 'inProgress' } });
+  assert.deepEqual(row.childObligations[b], { mcpCalls: { 'same-item': 'inProgress' } });
+  assert.equal(row.mcpCalls, undefined); assert.equal(row.effectsSettled, undefined);
+  assert.doesNotMatch(JSON.stringify(row), /PRIVATE_OUTPUT/);
+  assert.equal(restarted.pending.length, 0); assert.deepEqual(f.recoveries, []);
+  assert.equal(f.adapter.sleepReadiness().allowed, false);
+  f.transport.emit('notification', mcp('child-a', 'completed')); await restarted.flush();
+  assert.deepEqual(f.recoveries, ['NATIVE_EVENT_RECONCILIATION_FAILED']);
+  assert.deepEqual(await f.journal.get('a'), row);
+});
+
 test('binding limits allow repeats but missing acknowledgements never consume early events', async t => {
   const f = await fixture(t, { maxBindings: 1 });
   await f.admit('lost', 'thread-lost', null);

@@ -16,6 +16,7 @@ npm run test:runtime
 npm run test:e2e
 node scripts/test-codex-native.mjs
 node scripts/test-codex-tools.mjs
+node scripts/test-codex-tools.mjs --child
 node scripts/test-codex-tools.mjs --dynamic
 node scripts/test-codex-tools.mjs --supervisor
 npm run build

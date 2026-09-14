@@ -9,8 +9,16 @@ Codex app-server **0.154.0** is the sole execution harness. The application owns
 - Classify messages as status, independent work, exact-task steering, deferred follow-up, or cancel/pause. Ambiguity asks for clarification without changing active work.
 - Acknowledged submission/steering/cancellation is not settlement. A completed root is not a descendant/tool/effect barrier.
 - Unknown submissions or effects remain parked and are never retried under a fresh identity.
-- Host tools require the exact admitted run, pinned persona/policy/context revision, stable call fingerprint, and durable result. Child authority must not be inferred from root authority.
+- Host tools require the admitted run, pinned persona/policy/context revision, stable call fingerprint, and durable result. The owner permits the root and native descendants of one admitted logical task to share that task's grant. This does not grant access to another task or persona.
 - Waiting parents yield scarce model capacity. Shared browser/account/entity mutations use narrow resource locks and effect receipts.
+
+## Shared task authority
+
+The owner selected shared parent/child authority on 2026-09-14. Native children may inherit the task's approved tools, policy snapshot, scoped memory and resource access without a separate per-child approval. Inheritance cannot widen the task grant, bypass an effect policy, or create separate authority from model-supplied identity fields. Independently admitted tasks retain separate grants, even on the same customer runtime.
+
+Codex 0.154.0 does not inherit root dynamic-tool registrations. Use a supported task-scoped MCP configuration where inheritance is verified; attribute its commands and receipts to the admitted logical task. A fixed stdio MCP grant does not authenticate which descendant called it, so do not claim per-child effect provenance from that transport. Native event IDs can track invocation activity separately. Do not share one task's MCP configuration across independently admitted tasks; production assembly must enforce that boundary.
+
+Shared permission is not shared completion. Track every observed descendant turn, command, tool and effect after root completion. Cancellation acceptance does not settle children or authorize releasing locks or sleep holds.
 
 ## Settlement and sleep
 
