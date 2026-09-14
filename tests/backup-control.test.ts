@@ -51,7 +51,7 @@ it('includes committed WAL rows, excludes an uncommitted writer, preserves exact
   const before = await Promise.all(['', '-wal'].map(s => readFile(source + s)));
   db.exec("BEGIN IMMEDIATE; UPDATE objects SET revision=99 WHERE id='persona-a'");
   const manifest = await snapshotControl(source, destination);
-  expect(manifest.schemaVersions).toEqual([8]);
+  expect(manifest.schemaVersions).toEqual([9]);
   expect(manifest.counts).toMatchObject({ objects: 2, object_revisions: 2, runs: 2, attempts: 2, effects: 1, resource_locks: 1, webhook_receipts: 1 });
   // SQLite's shared-memory reader marks are coordination state, not immutable database pages.
   expect(await Promise.all(['', '-wal'].map(async s => digest(await readFile(source + s))))).toEqual(before.map(digest));
@@ -75,6 +75,30 @@ it('includes committed WAL rows, excludes an uncommitted writer, preserves exact
   expect((await lstat(destination)).mode & 0o777).toBe(0o700);
   for (const file of ['control.sqlite', 'manifest.json']) expect((await lstat(join(destination, file))).mode & 0o777).toBe(0o600);
   expect(JSON.stringify(manifest)).not.toMatch(/PRIVATE_CONTENT|persona-a|receipt-97|boot-37/);
+});
+
+it('verifies legacy schema8 without migrating the source or snapshot', async () => {
+  db.exec('DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=9');
+  const before = digest(await readFile(source));
+  const manifest = await snapshotControl(source, destination);
+  expect(manifest.schemaVersions).toEqual([8]);
+  expect(manifest.schemaSha256).toBe('99b9fa6597785da358b9b0adfbef41a09802648ece96da2792956405de55e619');
+  expect(await verifyControl(destination)).toEqual(manifest);
+  expect(digest(await readFile(source))).toBe(before);
+});
+
+it('preserves schema9 flight obligations and original migration history', async () => {
+  db.exec("INSERT INTO schema_versions VALUES(8,'2026-08-17T01:23:45.678Z'); INSERT INTO flight_restore_deadlines VALUES('leg-83',2,'2026-09-20T21:00:00.000Z','Asia/Jakarta','2026-09-19T21:00:00.000Z','routine-29','source-43','outcome_unknown','child-z','{\"receipt\":73}')");
+  const manifest = await snapshotControl(source, destination);
+  expect(manifest.schemaVersions).toEqual([8, 9]);
+  expect(manifest.counts).toMatchObject({ flight_restore_deadlines: 1 });
+  const copy = new DatabaseSync(join(destination, 'control.sqlite'), { readOnly: true });
+  try {
+    for (const table of ['schema_versions', 'flight_restore_deadlines']) {
+      expect(copy.prepare(`SELECT * FROM ${table}`).all()).toEqual(db.prepare(`SELECT * FROM ${table}`).all());
+    }
+  } finally { copy.close(); }
+  expect(await verifyControl(destination)).toEqual(manifest);
 });
 
 it('CLI snapshots and verifies without logging paths or application content', () => {
@@ -126,7 +150,7 @@ it('pins one transaction when another connection commits paired changes after sn
 it('rejects unsupported versions, schema drift and native-like databases without leaving backups', async () => {
   db.exec('UPDATE schema_versions SET version=99');
   await expect(snapshotControl(source, destination)).rejects.toThrow('UNSUPPORTED_SCHEMA');
-  db.exec('UPDATE schema_versions SET version=8; CREATE TABLE sqliteXauth(secret TEXT)');
+  db.exec('UPDATE schema_versions SET version=9; CREATE TABLE sqliteXauth(secret TEXT)');
   await expect(snapshotControl(source, destination)).rejects.toThrow('UNSUPPORTED_SCHEMA');
   await expect(lstat(destination)).rejects.toMatchObject({ code: 'ENOENT' });
 });

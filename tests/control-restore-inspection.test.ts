@@ -41,6 +41,35 @@ it('accepts settled nested historical lineage across a newer root attempt withou
   expect((await readdir(snapshot)).length).toBe(2);
 });
 
+it('keeps exact schema8 history inspectable without flight tables', async () => {
+  db.exec('DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=9');
+  const report = await inspect();
+  expect(report.schema_version).toBe(8);
+  expect(report.blockers).toEqual({});
+  expect(report.coordinated_restore_ready).toBe(false);
+});
+
+it('counts pending and unknown flight restoration independently of terminal runs', async () => {
+  const insert = db.prepare('INSERT INTO flight_restore_deadlines VALUES(?,?,?,?,?,?,?,?,?,?)');
+  for (const [index, status] of ['pending', 'enqueued', 'outcome_unknown', 'confirmed', 'superseded'].entries()) {
+    insert.run(canary, index + 1, '2026-09-20T21:00:00.000Z', 'Asia/Jakarta', '2026-09-19T21:00:00.000Z', 'routine', 'source', status, 'root-19', '{}');
+  }
+  const report = await inspect();
+  expect(report.schema_version).toBe(9);
+  expect(report.inconsistencies).toEqual({});
+  expect(report.blockers).toEqual({ UNRESOLVED_FLIGHT_RESTORE: 3 });
+  expect(JSON.stringify(report)).not.toContain(canary);
+  expect(report.coordinated_restore_ready).toBe(false);
+});
+
+it('includes flight history in the combined semantic row limit', async () => {
+  db.exec('BEGIN');
+  const insert = db.prepare("INSERT INTO flight_restore_deadlines VALUES('leg',?,'departure','Asia/Jakarta','restore','routine','source','superseded',NULL,NULL)");
+  for (let n = 0; n < 10000; n++) insert.run(n);
+  db.exec('COMMIT');
+  await expect(inspect()).rejects.toThrow('CONTROL_RESTORE_INSPECTION_FAILED');
+});
+
 it('reports preserved recovery locks/effects/operations without declaring corruption or settlement', async () => {
   db.exec("UPDATE runs SET status='recovery_required' WHERE id='child-73'; UPDATE attempts SET status='terminated' WHERE run_id='child-73'; INSERT INTO resource_locks VALUES('secret-resource','child-73',1,'t1'); INSERT INTO effects VALUES('effect-53','child-73','action-secret','mutation','outcome_unknown','secret-policy','secret-digest',NULL,NULL,'t1'); INSERT INTO operations VALUES('op-43','child-73',1,'tool','unknown','t1','t9','t3')");
   const report = await inspect();

@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (8, '2026-09-14T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (9, '2026-09-14T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -149,4 +149,10 @@ CREATE TABLE skill_enablements (
  skill_id TEXT NOT NULL REFERENCES objects(id), persona_id TEXT NOT NULL REFERENCES objects(id),
  skill_revision INTEGER NOT NULL, enabled INTEGER NOT NULL CHECK(enabled IN (0,1)), updated_at TEXT NOT NULL,
  PRIMARY KEY(skill_id,persona_id)
+);
+CREATE TABLE flight_restore_deadlines (
+ leg_id TEXT NOT NULL, revision INTEGER NOT NULL, departure_at TEXT NOT NULL, departure_zone TEXT NOT NULL,
+ restore_at TEXT NOT NULL, routine_id TEXT NOT NULL, source_ref TEXT NOT NULL,
+ status TEXT NOT NULL CHECK(status IN ('pending','enqueued','confirmed','superseded','outcome_unknown')),
+ run_id TEXT, receipt_json TEXT, PRIMARY KEY(leg_id,revision)
 );

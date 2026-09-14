@@ -7,6 +7,7 @@ import { rpcResult } from './rpc';
 import schema from '../../DB/schema.sql';
 import { Store, type Database, type SqlValue } from '../core/store';
 import { ControlCore } from '../core/control';
+import { exportControl } from '../core/control-export';
 import { TimelineRetention } from '../core/timeline-retention';
 import { ResultRetention } from '../core/result-retention';
 import { LifecycleCore } from '../core/lifecycle';
@@ -87,6 +88,7 @@ export class PersonalControl extends DurableObject<Env> {
  getReceipt(owner:string,id:string){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receipt(id);});}
  async getState(owner:string,after?:number,limit=100){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return {...this.core.state(after,limit),provider:this.providerSummary()};});}
  getRecovery(owner:string,id:string,after?:string,limit=20){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.recoveryPage(id,after,limit);});}
+ getControlExport(owner:string){return rpcResult(()=>{this.rate(owner+':export',2);return new Blob([exportControl(this.store.db,this.core.now())]).stream();});}
  getTimeline(owner:string,id:string,before?:number){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);const object=this.store.get(id);requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);const now=this.core.now();const events=this.store.conversationEvents(id,now,before,100);const prunedThrough=this.store.retentionFloor(now,id);return {events,before_cursor:events[0]?.sequence??null,has_more:events.length===100,history_gap:prunedThrough>0,pruned_through:prunedThrough};});}
  private providerSummary(){
   try{const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);return {id:provider.id,capabilities:provider.capabilities,live_verified:false};}

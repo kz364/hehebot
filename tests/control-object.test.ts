@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { TestDatabase, bot, otherBot, routine } from './helpers';
 import { PersonalControl } from '../src/worker/control-object';
+import worker from '../src/worker/index';
 import { Store } from '../src/core/store';
 import { BudgetLedger } from '../src/core/budget';
 
@@ -68,6 +69,42 @@ it.each(['message', 'receipt', 'timeline', 'state', 'trigger'] as const)('%s ing
   expect(setAlarm).toHaveBeenLastCalledWith(Date.parse('2026-09-10T00:45:00.000Z'));
   expect(db.all('SELECT status,error_code FROM runs WHERE routine_id=?', r.id)).toEqual([{ status: 'waiting', error_code: 'CAPABILITY_UNAVAILABLE' }]);
   expect(db.all('SELECT phase,desired_state FROM lifecycle')).toEqual([{ phase: 'STOPPED', desired_state: 'STOP' }]);
+});
+
+it('owner export enforces HTTP authentication before reading or spending its rate allowance', async () => {
+  const env = { AUTH_MODE: 'access', ACCESS_ISSUER: 'https://synthetic.cloudflareaccess.com', ACCESS_AUD: 'portal', OWNER_SUB: 'owner',
+    INSTALLATION_ID: 'local-only', CONTROL: { getByName: () => control } } as unknown as Env;
+  const exportSpy = vi.spyOn(control, 'getControlExport');
+  const denied = await worker.fetch(new Request('https://control.invalid/v1/export/control', {
+    headers: { Authorization: 'Bearer synthetic-runtime-token', 'Cf-Access-Authenticated-User-Email': 'owner@example.com' },
+  }), env);
+  expect(denied.status).toBe(401); expect(exportSpy).not.toHaveBeenCalled();
+  expect(db.all("SELECT * FROM rate_limits WHERE subject LIKE '%:export'")).toEqual([]);
+  const local = { ...env, AUTH_MODE: 'local' };
+  expect((await worker.fetch(new Request('https://control.invalid/v1/export/control'), local)).status).toBe(401);
+  const response = await worker.fetch(new Request('http://127.0.0.1/v1/export/control'), local);
+  expect(response.status).toBe(200);
+  expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+  expect(response.headers.get('Content-Disposition')).toContain('attachment');
+  expect((await response.json() as { format: string }).format).toBe('hehebot-control-export');
+  expect(exportSpy).toHaveBeenCalledExactlyOnceWith('local-owner');
+  exportSpy.mockRestore();
+});
+
+it('export rate window is bounded without missed-alarm maintenance or runtime wake', async () => {
+  await overdue(); deleteAlarm.mockClear();
+  const before = db.all('SELECT * FROM schedule_state');
+  for (let n = 0; n < 2; n++) {
+    const result = await control.getControlExport('owner');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect((await new Response(result.value).json() as { schemaVersions: number[] }).schemaVersions).toEqual([9]);
+  }
+  expect(await control.getControlExport('owner')).toMatchObject({ ok: false, status: 429 });
+  expect(db.all('SELECT * FROM schedule_state')).toEqual(before);
+  expect(db.all('SELECT * FROM occurrences')).toEqual([]);
+  expect(setAlarm).not.toHaveBeenCalled(); expect(deleteAlarm).not.toHaveBeenCalled();
+  vi.setSystemTime(new Date('2026-09-10T00:32:00.000Z'));
+  expect(await control.getControlExport('owner')).toMatchObject({ ok: true });
 });
 
 it('concurrent chat and receipt requests reconcile one occurrence and deduplicate the chat', async () => {

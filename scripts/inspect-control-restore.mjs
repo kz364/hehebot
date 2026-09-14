@@ -14,7 +14,9 @@ const fail = () => { throw new Error('CONTROL_RESTORE_INSPECTION_FAILED'); };
 export async function inspectControlRestore(directory) {
   try {
     const manifest = await verifyControl(directory);
-    if (manifest.bytes > MAX_SEMANTIC_BYTES || tables.reduce((sum, table) => sum + manifest.counts[table], 0) > MAX_SEMANTIC_ROWS) fail();
+    const schemaVersion = manifest.schemaVersions.at(-1);
+    const inspectedTables = schemaVersion >= 9 ? [...tables, 'flight_restore_deadlines'] : tables;
+    if (manifest.bytes > MAX_SEMANTIC_BYTES || inspectedTables.reduce((sum, table) => sum + manifest.counts[table], 0) > MAX_SEMANTIC_ROWS) fail();
     const db = new DatabaseSync(join(directory, 'control.sqlite'), { readOnly: true, allowExtension: false });
     const issues = {}, blockers = {};
     const count = (group, code, sql) => {
@@ -82,6 +84,8 @@ export async function inspectControlRestore(directory) {
       count(blockers, 'RETAINED_LOCK', 'SELECT resource_id FROM resource_locks');
       count(blockers, 'HISTORICAL_LOCK_OWNER', 'SELECT l.resource_id FROM resource_locks l JOIN runs r ON r.id=l.run_id WHERE l.attempt!=r.current_attempt');
       count(blockers, 'UNRESOLVED_DELIVERY', "SELECT id FROM outbox WHERE status IN ('pending','outcome_unknown')");
+      if (schemaVersion >= 9) count(blockers, 'UNRESOLVED_FLIGHT_RESTORE',
+        "SELECT leg_id FROM flight_restore_deadlines WHERE status IN ('pending','enqueued','outcome_unknown')");
       // Preserve healthy historical trees, but carry stale custody through every ancestor.
       const stale = new Set(db.prepare(`SELECT n.run_id FROM native_task_links n JOIN runs r ON r.id=n.run_id
         JOIN runs p ON p.id=n.parent_run_id WHERE
@@ -110,7 +114,7 @@ export async function inspectControlRestore(directory) {
     const after = await verifyControl(directory);
     if (JSON.stringify(after) !== JSON.stringify(manifest)) fail();
     const sorted = group => Object.fromEntries(Object.entries(group).sort(([a], [b]) => a.localeCompare(b)));
-    return { version: 1, snapshot_verified: true, schema_version: 8,
+    return { version: 1, snapshot_verified: true, schema_version: schemaVersion,
       semantic_status: Object.keys(issues).length ? 'inconsistent' : 'no_detected_inconsistency',
       inconsistencies: sorted(issues), blockers: sorted(blockers),
       external_readiness: 'unverified', coordinated_restore_ready: false };

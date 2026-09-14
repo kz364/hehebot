@@ -168,9 +168,19 @@ for whole-stream authentication and schema/hash verification before publishing a
 new private staging directory. Real age tests cover wrong keys, late tampering,
 bounded containers, path restrictions and no overwrite. Orb setup and combined
 verification install only the reviewed Linux x86_64 release and retain its license.
-This remains local staging: no off-host custody/durability, live DO export,
+This remains local staging: no off-host custody/durability, authenticated hosted export,
 coordinated shutdown, restore admission or secure-erasure claim. These setup
 changes are local until pushed to the project's default branch.
+
+[Application logical export and reconstruction](CONTROL_EXPORT_IMPORT.md) now
+roundtrip the actual local Durable Object through owner HTTP and supported SQL,
+including streamed exports larger than1MiB. Schema9 adopts the existing flight
+deadline table without dropping revisions, receipts or migration history. Exact
+typed rows, int64 values and event sequence high-water marks survive offline
+reconstruction into a new private snapshot. The backup verifier retains schema8
+compatibility; semantic inspection includes schema9 flight obligations and never
+authorizes activation. Hosted authorization, off-host custody, native checkpoint
+coordination and restore admission remain unverified.
 
 [Optional-routine budget admission](BUDGET.md) now connects owner-reviewed caps
 and optional routine selections to a trusted infrastructure projection ledger.

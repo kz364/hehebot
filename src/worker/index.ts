@@ -38,6 +38,7 @@ export default {
     requireThat(Number.isInteger(limit)&&limit>=1&&limit<=100,'INVALID_INPUT','Limit must be 1–100.',422);
     return json(unwrap(await control.getState(owner,after===null?undefined:Number(after),limit)));
    }
+   if(path==='/v1/export/control'&&request.method==='GET')return new Response(unwrap(await control.getControlExport(owner)),{headers:{'Content-Type':'application/json','Content-Disposition':'attachment; filename="hehebot-control-export.json"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
    const conversation=path.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/events$/i);
    if(conversation&&request.method==='GET'){const before=url.searchParams.get('before');requireThat(before===null||/^\d+$/.test(before)&&Number.isSafeInteger(Number(before)),'INVALID_INPUT','Invalid history cursor.',422);return json(unwrap(await control.getTimeline(owner,conversation[1],before===null?undefined:Number(before))));}
    const recovery=path.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/recovery$/i);

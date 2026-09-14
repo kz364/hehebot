@@ -7,8 +7,11 @@ import { lstat, mkdir, open, readFile, readdir, rm } from 'node:fs/promises';
 import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Exact parent-provided application schema v8; upgrades require explicit review.
-const schemaSha256 = '99b9fa6597785da358b9b0adfbef41a09802648ece96da2792956405de55e619';
+// Exact reviewed application schemas; old snapshots remain verifiable.
+const schemaPins = {
+  8: '99b9fa6597785da358b9b0adfbef41a09802648ece96da2792956405de55e619',
+  9: '15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c',
+};
 const maxManifest = 65536;
 const fail = code => { throw new Error(code); };
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -36,8 +39,11 @@ function schema(db) {
 
 function inspect(db) {
   const rows = schema(db);
-  if (hash(JSON.stringify(rows)) !== schemaSha256 ||
-      JSON.stringify(db.prepare('SELECT version FROM schema_versions ORDER BY version').all()) !== '[{"version":8}]') fail('UNSUPPORTED_SCHEMA');
+  const schemaSha256 = hash(JSON.stringify(rows));
+  const schemaVersions = db.prepare('SELECT version FROM schema_versions ORDER BY version').all().map(row => row.version);
+  const latest = schemaVersions.at(-1);
+  if (schemaPins[latest] !== schemaSha256 || !schemaVersions.every((version, i) =>
+    Number.isInteger(version) && version >= 1 && version <= latest && (!i || version > schemaVersions[i - 1]))) fail('UNSUPPORTED_SCHEMA');
   if (JSON.stringify(db.prepare('PRAGMA integrity_check').all()) !== '[{"integrity_check":"ok"}]') fail('INTEGRITY_FAILED');
   if (db.prepare('PRAGMA foreign_key_check').all().length) fail('FOREIGN_KEYS_FAILED');
   const counts = {};
@@ -46,7 +52,7 @@ function inspect(db) {
     if (!Number.isSafeInteger(count) || count < 0) fail('COUNT_OVERFLOW');
     counts[row.name] = count;
   }
-  return { schemaSha256, schemaVersions: [8], counts };
+  return { schemaSha256, schemaVersions, counts };
 }
 
 async function sha256(path) {

@@ -1,13 +1,13 @@
 # Application snapshot semantic inspection
 
-`inspectControlRestore(absoluteSnapshotDirectory)` inspects a previously created/decrypted **schema8 application snapshot**. It first calls `verifyControl` for private paths/components, exact schema, manifest SHA256/counts, SQLite integrity and foreign keys. It then opens application SQLite read-only with extensions disabled and a query-only read transaction. It re-verifies the snapshot afterward and rejects a changed manifest. It never opens a native database, reads credentials, writes rows, activates tasks, retries effects, releases locks or restores anything.
+`inspectControlRestore(absoluteSnapshotDirectory)` inspects a previously created/decrypted **schema8 or schema9 application snapshot** and reports its actual latest schema version. It first calls `verifyControl` for private paths/components, exact schema, manifest SHA256/counts, SQLite integrity and foreign keys. It then opens application SQLite read-only with extensions disabled and a query-only read transaction. It re-verifies the snapshot afterward and rejects a changed manifest. It never opens a native database, reads credentials, writes rows, activates tasks, retries effects, releases locks or restores anything.
 
 ```sh
 node scripts/inspect-control-restore.mjs /absolute/private/staging-snapshot
 npx vitest run tests/control-restore-inspection.test.ts
 ```
 
-Test fixtures default to `DB/schema.sql`. An older extraction must explicitly set `HEHEBOT_RESTORE_TEST_SCHEMA=/absolute/path/to/current-schema.sql` to the parent-transferred schema8, and use the matching current `backup-control.mjs`. No schema or dependency installation is part of this unit. Tested with Node26.5.1; tests use the existing supported SQLite snapshot API (Node22.16+ or24+), while the inspector itself uses `DatabaseSync`.
+Test fixtures default to `DB/schema.sql`. An older extraction must explicitly set `HEHEBOT_RESTORE_TEST_SCHEMA=/absolute/path/to/current-schema.sql` to the current schema9, and use the matching current `backup-control.mjs`. The legacy-schema regression removes only the flight table in a disposable fixture. No source snapshot migration occurs. Tested with Node26.5.1; tests use the existing supported SQLite snapshot API (Node22.16+ or24+), while the inspector itself uses `DatabaseSync`.
 
 ## Three separate claims
 
@@ -31,11 +31,13 @@ CLI exit0 means the bounded scan found no issues or listed blockers; exit2 print
 - `ACTIVE_RUN`, `PENDING_RUN`, `RECOVERY_RUN`, `UNSETTLED_ATTEMPT`, `UNRESOLVED_OPERATION`, `UNRESOLVED_EFFECT`, `UNRESOLVED_DELIVERY` count work independently of run terminal status. Effects in intent/dispatched/outcome_unknown remain unresolved; every retained lock blocks. Historical completed/failed/cancelled/terminated attempts need not match the current epoch and are not by themselves active-work blockers.
 - `STALE_NATIVE_CUSTODY` counts background runs with pending work/obligations whose own or ancestor mapping no longer matches current parent/child attempts. It follows the entire ancestor chain, including through completed parents. Wholly settled historical trees attached to an earlier root attempt remain acceptable history.
 
-These checks derive from schema8 `runs`, `attempts`, `native_task_links`, `operations`, `resource_locks`, `effects`, and `outbox`, plus `NativeTaskLedger.register`, `ResourceLedger`, `EffectLedger.transition`, and retained-context contracts. Counts overlap: one obligation may contribute to multiple codes and must not be summed as unique tasks. The generic effects table has **no attempt column**; this utility cannot prove generic effect attempt custody or decode/authenticate mediated request digests.
+Schema9 additionally reports `UNRESOLVED_FLIGHT_RESTORE` for pending, enqueued and outcome_unknown flight deadlines, independently of referenced run status. Confirmed and superseded history does not add this blocker; this is not verification of provider receipts.
+
+These checks derive from `runs`, `attempts`, `native_task_links`, `operations`, `resource_locks`, `effects`, `outbox` and, in schema9, `flight_restore_deadlines`, plus `NativeTaskLedger.register`, `ResourceLedger`, `EffectLedger.transition`, and retained-context contracts. Counts overlap: one obligation may contribute to multiple codes and must not be summed as unique tasks. The generic effects table has **no attempt column**; this utility cannot prove generic effect attempt custody or decode/authenticate mediated request digests.
 
 ## Bounds and restore gaps
 
-Semantic work is limited to a64MiB verified application database and at most10,000 combined rows in the seven inspected tables; graph identifiers are bounded to512 characters. Exceeding limits fails the inspection, without partial-success results. The preliminary verifier still scans/hashes the supplied snapshot; this is not a constant-time or arbitrary-size ingestion service. Output cardinality is fixed by code names, not database contents. Some SQL checks scan unindexed relationships; limits are intentionally conservative. No partial/chunked scan establishes a whole-snapshot result.
+Semantic work is limited to a64MiB verified application database and at most10,000 combined rows in the seven schema8 or eight schema9 inspected tables; flight history counts toward this limit even when settled. Graph identifiers are bounded to512 characters. Exceeding limits fails the inspection, without partial-success results. The preliminary verifier still scans/hashes the supplied snapshot; this is not a constant-time or arbitrary-size ingestion service. Output cardinality is fixed by code names, not database contents. Some SQL checks scan unindexed relationships; limits are intentionally conservative. No partial/chunked scan establishes a whole-snapshot result.
 
 Keep staging under exclusive trusted local custody. Read-only transactions and before/after verification detect ordinary changes but are not an OS ownership lock or protection from a hostile same-UID process replacing files between checks. File-content hashes and directory entries are tested unchanged, including with unresolved effects/locks; no WAL/SHM sidecars are added.
 

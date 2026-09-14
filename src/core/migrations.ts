@@ -1,5 +1,6 @@
 import type {Database} from './store';
 import {requireThat} from './errors';
+import {FLIGHT_RESTORE_SQL} from './flight-restore';
 /** Preserve local v1 records when adding native task metadata. No native DB edits. */
 export function migrateApplication(db:Database,now:string):void {
  let version=db.all<{version:number}>('SELECT MAX(version) AS version FROM schema_versions')[0].version;
@@ -54,5 +55,14 @@ export function migrateApplication(db:Database,now:string):void {
   db.exec("CREATE INDEX task_followups_expiry ON task_followups(created_at,id) WHERE text!=''");
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(8,?)',now);
  });
- requireThat([7,8].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===7)version=8;
+ if(version===8)db.transaction(()=>{
+  // Previously created by FlightRestoreIntegration at startup, outside the
+  // canonical schema. Adopt that exact table without replacing its deadlines.
+  db.exec(FLIGHT_RESTORE_SQL);
+  const sql=db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE type='table' AND name='flight_restore_deadlines'")[0]?.sql;
+  requireThat(sql===FLIGHT_RESTORE_SQL.replace(' IF NOT EXISTS',''),'SCHEMA_MISMATCH','Flight deadline schema needs explicit reconciliation.',503);
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(9,?)',now);
+ });
+ requireThat([8,9].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

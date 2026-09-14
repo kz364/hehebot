@@ -1,9 +1,12 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
+import { DatabaseSync } from 'node:sqlite';
+import { importControlExport } from './import-control-export.mjs';
+import { verifyControl } from './backup-control.mjs';
 const directory=await mkdtemp(join(tmpdir(),'hehe-worker-test-'));
 const child=spawn(process.execPath,['node_modules/wrangler/bin/wrangler.js','dev','--local','--env','local','--ip','127.0.0.1','--port','0','--persist-to',directory],{env:{...process.env,WRANGLER_LOG_PATH:join(directory,'logs'),WRANGLER_SEND_METRICS:'false'},stdio:['ignore','pipe','pipe']});
 let logs='';child.stdout.on('data',x=>{logs+=x.toString();});child.stderr.on('data',x=>{logs+=x.toString();});
@@ -44,7 +47,26 @@ try{
  const csrf=await send('message.send',payload,crypto.randomUUID(),'https://wrong.example');assert.equal(csrf.status,403);checks++;
  const bad=await send('message.send',{conversation_id:bot,text:''});assert.equal(bad.status,422);checks++;
  const runtime=await fetch(base+'/internal/boot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({boot_id:crypto.randomUUID()})});assert.ok([401,503].includes(runtime.status));checks++;
- console.log(`PASS: ${checks} real local Worker/SQLite HTTP checks; assets, receipts, dedupe/conflict, memory, schedules, no-op, CSRF and runtime gate. No model/provider calls.`);
+ for(let i=0;i<24;i++){const result=await send('persona.put',{id:crypto.randomUUID(),expected_revision:0,name:`Export fixture ${i}`,instructions:'Synthetic export data: '+String(i)+':'+ 'x'.repeat(15500),tool_policy_ids:[],archived:true});assert.equal(result.value.status,'applied');}
+ const exported=await fetch(base+'/v1/export/control');assert.equal(exported.status,200,'Bounded application export must succeed');assert.match(exported.headers.get('Content-Disposition'),/attachment/);assert.match(exported.headers.get('Cache-Control'),/no-store/);
+ const text=await exported.text();assert.ok(Buffer.byteLength(text)>1024*1024&&Buffer.byteLength(text)<=4*1024*1024,'Exercise streamed RPC above the plain-value size limit');
+ const data=JSON.parse(text);assert.equal(data.format,'hehebot-control-export');assert.equal(data.schemaSha256,'15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c');assert.ok(data.tables.find(table=>table.name==='runs').rows.some(row=>row[0].value===sent.value.resource_id));assert.ok(data.tables.some(table=>table.name==='flight_restore_deadlines'));assert.equal(data.tables.some(table=>table.name.startsWith('_cf_')||table.name.startsWith('__miniflare')),false);checks++;
+ const exportFile=join(directory,'control-export.json'),snapshot=join(directory,'reconstructed');
+ await writeFile(exportFile,text,{mode:0o600});
+ assert.equal((await importControlExport(exportFile,snapshot)).activation_allowed,false);
+ assert.equal((await verifyControl(snapshot)).createdAt,data.createdAt);
+ const reconstructed=new DatabaseSync(join(snapshot,'control.sqlite'),{readOnly:true});
+ try{
+  for(const table of data.tables){
+   const query=reconstructed.prepare(`SELECT * FROM "${table.name}"`);query.setReadBigInts(true);
+   const actual=query.all().map(row=>JSON.stringify(table.columns.map(column=>{const value=row[column];return {type:value===null?'null':typeof value==='bigint'?'integer':'text',value:typeof value==='bigint'?String(value):value};}))).sort();
+   assert.deepEqual(actual,table.rows.map(row=>JSON.stringify(row)).sort(),`Exact reconstruction of ${table.name}`);
+  }
+  assert.equal(reconstructed.prepare('SELECT status FROM runs WHERE id=?').get(sent.value.resource_id).status,'waiting');
+  assert.equal(reconstructed.prepare('SELECT revision FROM objects WHERE id=?').get(routine.id).revision,1);
+ }finally{reconstructed.close();}
+ checks++;
+ console.log(`PASS: ${checks} real local Worker/SQLite HTTP checks; assets, receipts, dedupe/conflict, memory, schedules, no-op, CSRF, runtime gate and >1MiB export/exact offline reconstruction. No model/provider calls.`);
 }catch(error){console.error(logs.slice(-5000));throw error;}
 finally{
  clearTimeout(timeout);child.kill('SIGTERM');
