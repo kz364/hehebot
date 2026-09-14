@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (4, '2026-09-14T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (5, '2026-09-14T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -28,6 +28,15 @@ CREATE TABLE events (
  payload_json TEXT NOT NULL CHECK(json_valid(payload_json)), created_at TEXT NOT NULL
 );
 CREATE INDEX events_conversation_sequence ON events(conversation_id,sequence);
+CREATE INDEX events_created ON events(created_at,sequence);
+CREATE TABLE event_tombstones (
+ id TEXT PRIMARY KEY, sequence INTEGER NOT NULL UNIQUE, conversation_id TEXT, created_at TEXT NOT NULL
+);
+CREATE INDEX event_tombstones_conversation ON event_tombstones(conversation_id,sequence);
+CREATE TABLE context_retention (
+ consumer_id TEXT NOT NULL, conversation_id TEXT NOT NULL, pruned_through INTEGER NOT NULL,
+ PRIMARY KEY(consumer_id,conversation_id)
+);
 -- Content-free publication identity survives timeline retention; not a full causal scheduler.
 CREATE TABLE room_publications (
  event_id TEXT PRIMARY KEY, room_id TEXT NOT NULL, actor_id TEXT NOT NULL, cause_id TEXT NOT NULL,

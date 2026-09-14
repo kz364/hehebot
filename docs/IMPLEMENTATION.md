@@ -20,13 +20,27 @@ locks, requesting inference or waking the runtime. This is not full retention or
 "forget everywhere": source events, terminal task snapshots, native transcripts
 and backups may still contain copies.
 
-Schema v4 separates new room-publication identities/digests from timeline text.
-Duplicate suppression and the existing three-action-request causal limit survive
-loss of those new timeline rows. Legacy events remain part of both checks and
-must be backfilled before pruning. No event retention job runs yet; compact
-causal records have no expiry until cause-admission/expiry rules are defined.
-This preserves the existing publication digest semantics, not the full per-edge
-collaboration, shared-deadline or yielding requirements.
+Schema v5 adds alarm-driven timeline retention: messages, action requests,
+trigger inputs, follow-up notices and results retain 90 days; metadata audit and
+derived room updates retain 30 days. Each reconciliation prunes at most 100 rows
+and rearms a backlog. Cleanup may lag the nominal cutoff; read paths can still
+return overdue rows awaiting their batch. Dates originate at event creation,
+not the last read. This is timeline-only, not full payload/storage retention.
+
+Compact event provenance and room-publication digests survive timeline expiry.
+Legacy publication identities are backfilled transactionally before deletion,
+preserving duplicate suppression and the existing causal contribution count.
+Global cursors report interior history gaps and never reset when all events
+expire. Recipient contexts disclose expired history alongside current authorized
+objects and retained deltas; cleanup never advances consumed watermarks. Timeline
+responses expose truncation, but the portal does not yet display that notice.
+
+Command payloads/receipts, captured task contexts, attempts/outbox results,
+follow-ups, revisions, native data and backups remain outside this cleanup.
+Compact provenance/causal records currently have no expiry. These are explicit
+remaining retention gaps, not proof of full S30 or "forget everywhere". Existing
+publication digest semantics are preserved; full per-edge collaboration,
+shared-deadline and yielding requirements remain separate.
 
 Disposable service assembly now composes supervisor, bridge, native transport/router,
 per-root inherited MCP grants, child controls and conservative operation accounting.

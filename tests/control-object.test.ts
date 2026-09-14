@@ -109,7 +109,25 @@ it.each(['alarm', 'missed-alarm-read'])('memory expiry through %s purges while r
   expect(db.all('SELECT id FROM runs')).toEqual([]);
   expect(db.all('SELECT id FROM controller_operations')).toEqual([]);
   expect(db.all('SELECT phase,desired_state FROM lifecycle')).toEqual([{ phase: 'STOPPED', desired_state: 'STOP' }]);
-  expect(setAlarm).not.toHaveBeenCalled(); expect(deleteAlarm).toHaveBeenCalledOnce();
+  expect(setAlarm).toHaveBeenLastCalledWith(Date.parse('2026-10-10T00:00:00.000Z')); // Remaining audit retention, not runtime polling.
+  expect(deleteAlarm).not.toHaveBeenCalled();
   await control.alarm();
   expect(db.all("SELECT actor_id FROM events WHERE type='memory.deleted'")).toEqual([{ actor_id: 'system:expiry' }]);
+});
+
+it('timeline retention alarms run while stopped and expose gaps without creating executor work', async () => {
+  const store = new Store(db);
+  const audit = store.event(randomUUID(), bot, 'persona.updated', 'owner', null, { id: bot }, new Date().toISOString());
+  store.event(randomUUID(), bot, 'message.user', 'owner', null, { text: 'Retained input' }, new Date().toISOString());
+  await control.getState('owner');
+  expect(setAlarm).toHaveBeenLastCalledWith(Date.parse('2026-10-10T00:00:00.000Z'));
+  vi.setSystemTime(new Date('2026-10-10T00:00:00.000Z')); await control.alarm();
+  expect(await control.getState('owner', audit - 1)).toMatchObject({ ok: false, error: { code: 'HISTORY_GAP' } });
+  expect(await control.getTimeline('owner', bot)).toMatchObject({ ok: true, value: { history_gap: true, pruned_through: audit } });
+  expect(setAlarm).toHaveBeenLastCalledWith(Date.parse('2026-12-09T00:00:00.000Z'));
+  vi.setSystemTime(new Date('2026-12-09T00:00:00.000Z')); await control.alarm();
+  expect(db.all('SELECT * FROM events')).toEqual([]);
+  expect(deleteAlarm).toHaveBeenCalled();
+  expect(db.all('SELECT * FROM runs')).toEqual([]); expect(db.all('SELECT * FROM controller_operations')).toEqual([]);
+  expect(db.all('SELECT phase,desired_state FROM lifecycle')).toEqual([{ phase: 'STOPPED', desired_state: 'STOP' }]);
 });

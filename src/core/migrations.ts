@@ -27,5 +27,13 @@ export function migrateApplication(db:Database,now:string):void {
   db.exec('CREATE INDEX room_publications_cause ON room_publications(cause_id,kind)');
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(4,?)',now);
  });
- requireThat([3,4].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===3)version=4;
+ if(version===4)db.transaction(()=>{
+  db.exec('CREATE INDEX events_created ON events(created_at,sequence)');
+  db.exec('CREATE TABLE event_tombstones (id TEXT PRIMARY KEY,sequence INTEGER NOT NULL UNIQUE,conversation_id TEXT,created_at TEXT NOT NULL)');
+  db.exec('CREATE INDEX event_tombstones_conversation ON event_tombstones(conversation_id,sequence)');
+  db.exec('CREATE TABLE context_retention (consumer_id TEXT NOT NULL,conversation_id TEXT NOT NULL,pruned_through INTEGER NOT NULL,PRIMARY KEY(consumer_id,conversation_id))');
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(5,?)',now);
+ });
+ requireThat([4,5].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

@@ -7,6 +7,7 @@ import { rpcResult } from './rpc';
 import schema from '../../DB/schema.sql';
 import { Store, type Database, type SqlValue } from '../core/store';
 import { ControlCore } from '../core/control';
+import { TimelineRetention } from '../core/timeline-retention';
 import { LifecycleCore } from '../core/lifecycle';
 import { EffectLedger } from '../core/effects';
 import { ControlError, requireThat, safeError } from '../core/errors';
@@ -27,6 +28,7 @@ export class PersonalControl extends DurableObject<Env> {
  private core:ControlCore;
  private lifecycle:LifecycleCore;
  private flights:FlightRestoreIntegration;
+ private retention:TimelineRetention;
  constructor(ctx:DurableObjectState,env:Env){
   super(ctx,env);
   const db:Database={
@@ -36,6 +38,7 @@ export class PersonalControl extends DurableObject<Env> {
   };
   this.store=new Store(db);
   this.core=new ControlCore(this.store,{executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  this.retention=new TimelineRetention(this.store,()=>this.core.now());
   let idleMode=false;
   try{idleMode=createProvider(JSON.parse(env.PROVIDER_CONFIG) as ProviderConfig).capabilities.stopMode==='provider-idle';}catch{}
   this.lifecycle=new LifecycleCore(this.store,this.core,{idleMode});
@@ -72,12 +75,12 @@ export class PersonalControl extends DurableObject<Env> {
   try{this.reconcile();}finally{await this.arm();}
  }
  private reconcile(){
-  this.core.expireMemories();this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();
+  this.core.expireMemories();this.retention.prune();this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();
  }
  async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{await this.beforeRequest(owner+':write',60);const result=this.core.accept(owner,key,hash,input);await this.arm();return result;});}
  getReceipt(owner:string,id:string){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receipt(id);});}
  async getState(owner:string,after?:number,limit=100){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return {...this.core.state(after,limit),provider:this.providerSummary()};});}
- getTimeline(owner:string,id:string,before?:number){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);const object=this.store.get(id);requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);const events=this.store.conversationEvents(id,before,100);return {events,before_cursor:events[0]?.sequence??null,has_more:events.length===100};});}
+ getTimeline(owner:string,id:string,before?:number){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);const object=this.store.get(id);requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);const events=this.store.conversationEvents(id,before,100);const prunedThrough=this.store.prunedThrough(id);return {events,before_cursor:events[0]?.sequence??null,has_more:events.length===100,history_gap:prunedThrough>0,pruned_through:prunedThrough};});}
  private providerSummary(){
   try{const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);return {id:provider.id,capabilities:provider.capabilities,live_verified:false};}
   catch{return {id:'unconfigured',capabilities:null,live_verified:false};}
@@ -141,6 +144,7 @@ export class PersonalControl extends DurableObject<Env> {
  });}
  private async arm(delayMs=0):Promise<void>{
   const times:number[]=[];
+  const retentionDue=this.retention.nextDue();if(retentionDue)times.push(Date.parse(retentionDue));
   const memoryExpiry=this.core.nextMemoryExpiry();if(memoryExpiry)times.push(Date.parse(memoryExpiry));
   const flightDue=this.flights.nextDue();if(flightDue)times.push(Date.parse(flightDue));
   const due=this.store.db.all<{next_due_at:string}>('SELECT next_due_at FROM schedule_state ORDER BY next_due_at LIMIT 1')[0];

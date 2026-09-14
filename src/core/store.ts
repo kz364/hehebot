@@ -43,6 +43,13 @@ export class Store {
   type Row={sequence:number;id:string;conversation_id:string|null;type:string;actor_id:string;cause_id:string|null;payload_json:string;created_at:string};
   return this.db.all<Row>('SELECT * FROM events WHERE conversation_id=? AND sequence<? ORDER BY sequence DESC LIMIT ?',conversation,before,limit).reverse().map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
  }
- sequence():number { return this.db.all<{seq:number}>('SELECT COALESCE(MAX(sequence),0) AS seq FROM events')[0].seq; }
+ latestEvents(limit=100):TimelineEvent[] {
+  type Row=Omit<TimelineEvent,'payload'>&{payload_json:string};
+  return this.db.all<Row>('SELECT * FROM events ORDER BY sequence DESC LIMIT ?',limit).reverse().map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
+ }
+ prunedThrough(conversation?:string):number {
+  return (conversation?this.db.all<{seq:number}>('SELECT COALESCE(MAX(sequence),0) AS seq FROM event_tombstones WHERE conversation_id=?',conversation):this.db.all<{seq:number}>('SELECT COALESCE(MAX(sequence),0) AS seq FROM event_tombstones'))[0].seq;
+ }
+ sequence():number { return this.db.all<{seq:number}>("SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='events'),0) AS seq")[0].seq; }
  run(id:string):Run { const run=this.db.all<Run>('SELECT * FROM runs WHERE id=?',id)[0]; if(!run) throw new ControlError('NOT_FOUND','Run unavailable.',404);return run; }
 }

@@ -135,7 +135,7 @@ export class ControlCore {
    case 'memory.put': {
     const p=command.payload;
     if(p.scope.kind!=='global')this.store.get(p.scope.id!,p.scope.kind);
-    requireThat(this.store.db.all('SELECT id FROM events WHERE id=?',p.source_event_id).length,'INVALID_INPUT','Memory must reference an existing source event.',422);
+    requireThat(this.store.db.all('SELECT id FROM events WHERE id=? UNION SELECT id FROM event_tombstones WHERE id=?',p.source_event_id,p.source_event_id).length,'INVALID_INPUT','Memory must reference an existing source event.',422);
     if(p.expires_at)requireThat(Date.parse(p.expires_at)>Date.parse(now),'INVALID_INPUT','Memory expiry must be in the future.',422);
     const revision=this.store.put(p.id,'memory',p,p.expected_revision,owner,now,p.source_event_id);
     this.store.event(this.options.uuid(),null,'memory.updated',owner,commandId,{id:p.id,revision,scope:p.scope},now);return p.id;
@@ -217,8 +217,15 @@ export class ControlCore {
   const now=this.now();
   const memories=this.store.list<MemoryPut>('memory').filter(m=>(!m.body.expires_at||Date.parse(m.body.expires_at)>Date.parse(now))&&(m.body.scope.kind==='global'||m.body.scope.kind==='persona'&&m.body.scope.id===personaId||m.body.scope.kind==='routine'&&m.body.scope.id===routineId));
   let contextEvents:ContextSnapshot['context_events']=[];
-  if(roomId){const room=this.store.get<RoomPut>(roomId,'room');requireThat(room.body.member_ids.includes(personaId),'FORBIDDEN','Bot is not in this room.',403);const cursor=this.store.db.all<{consumed_sequence:number}>('SELECT consumed_sequence FROM consumer_cursors WHERE consumer_id=? AND conversation_id=?',personaId,roomId)[0]?.consumed_sequence??0;contextEvents=this.store.contextEvents(roomId,personaId,cursor);}
-  return {schema_version:1,persona,routine,memories,skills:new SkillCatalog(this.store,()=>this.now(),this.options.uuid).enabled(personaId),scope_key:`${personaId}/${routineId?`routine/${routineId}`:roomId?`room/${roomId}`:'personal'}`,instruction,room_id:roomId,context_events:contextEvents,task_summaries:this.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>("SELECT id,title,status,updated_at FROM runs WHERE role='background' AND persona_id=? ORDER BY updated_at DESC LIMIT 30",personaId),authorization_policy_ids:routine?.body.action_policy_ids??[]};
+  let contextHistoryGap:ContextSnapshot['context_history_gap'];
+  if(roomId){
+   const room=this.store.get<RoomPut>(roomId,'room');requireThat(room.body.member_ids.includes(personaId),'FORBIDDEN','Bot is not in this room.',403);
+   const cursor=this.store.db.all<{consumed_sequence:number}>('SELECT consumed_sequence FROM consumer_cursors WHERE consumer_id=? AND conversation_id=?',personaId,roomId)[0]?.consumed_sequence??0;
+   const floor=this.store.db.all<{pruned_through:number}>('SELECT pruned_through FROM context_retention WHERE consumer_id=? AND conversation_id=?',personaId,roomId)[0]?.pruned_through??0;
+   if(cursor<floor)contextHistoryGap={requested_after:cursor,expired_through:floor};
+   contextEvents=this.store.contextEvents(roomId,personaId,cursor);
+  }
+  return {schema_version:1,persona,routine,memories,skills:new SkillCatalog(this.store,()=>this.now(),this.options.uuid).enabled(personaId),scope_key:`${personaId}/${routineId?`routine/${routineId}`:roomId?`room/${roomId}`:'personal'}`,instruction,room_id:roomId,context_events:contextEvents,context_history_gap:contextHistoryGap,task_summaries:this.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>("SELECT id,title,status,updated_at FROM runs WHERE role='background' AND persona_id=? ORDER BY updated_at DESC LIMIT 30",personaId),authorization_policy_ids:routine?.body.action_policy_ids??[]};
  }
  enqueue(personaId:string,instruction:string,commandId:string|null,routineId:string|null,occurrenceId:string|null,roomId:string|null=null):string {
   const id=this.options.uuid(),now=this.now(),context=this.context(personaId,instruction,routineId,roomId);
@@ -270,7 +277,7 @@ export class ControlCore {
   });
  }
  state(after?:number,limit=100){
-  if(after!==undefined){const first=this.store.db.all<{seq:number}>('SELECT MIN(sequence) AS seq FROM events')[0].seq;if(first&&after<first-1)throw new ControlError('HISTORY_GAP','Fetch a new snapshot.');}
+  if(after!==undefined){const first=this.store.db.all<{seq:number}>('SELECT MIN(sequence) AS seq FROM events')[0].seq;if(after<this.store.prunedThrough()||first&&after<first-1)throw new ControlError('HISTORY_GAP','Fetch a new snapshot.');}
   const page=after===undefined?[]:this.store.events(after,limit);
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
    objects:after===undefined?(['persona','room','routine','memory','skill'] as const).flatMap(kind=>this.store.list(kind)):undefined,
@@ -278,6 +285,6 @@ export class ControlCore {
    skill_proposals:after===undefined?this.store.db.all<{id:string;skill_id:string;proposal_revision:number;expected_skill_revision:number;body_json:string;provenance_json:string;status:string;executable_files_changed:number;created_at:string;reviewed_at:string|null}>("SELECT id,skill_id,proposal_revision,expected_skill_revision,body_json,provenance_json,status,executable_files_changed,created_at,reviewed_at FROM skill_proposals ORDER BY created_at,id").map(({body_json,provenance_json,executable_files_changed,...row})=>({...row,body:JSON.parse(body_json),provenance:JSON.parse(provenance_json),executable_files_changed:Boolean(executable_files_changed)})):undefined,
    runs:this.store.db.all<Run>('SELECT * FROM runs ORDER BY created_at DESC LIMIT 100').map(({context_json,checkpoint_json,...rest})=>rest),
    summary:{phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},
-   timeline:after===undefined?this.store.events(Math.max(0,this.store.sequence()-100),100):undefined};
+   timeline:after===undefined?this.store.latestEvents():undefined};
  }
 }
