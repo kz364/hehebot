@@ -1,5 +1,7 @@
 # Native account authentication and optional device setup
 
+**Historical OpenClaw setup, not the selected direct Codex path.** The owner selected direct Codex app-server on 2026-09-13. Use [Direct Codex runtime setup](CODEX_RUNTIME_SETUP.md#owner-authorized-subscription-test-setup) for its private, same-runtime device-code flow. The OpenClaw commands below remain reference material; do not run them to authenticate the Codex harness.
+
 Checked 2026-09-10 against installed OpenClaw **2026.9.3** documentation and current official pages. This is a setup checklist, not a record of completed sign-ins. Sprites and Cloudflare account/provisioning steps belong in the deployment checklist. Run the commands below **inside the selected Sprite**, as the same user and with the same persistent OpenClaw state/config/workspace environment as its Gateway service. Signing in on the Mac does not authenticate that Sprite.
 
 The existing isolated proof established Gateway token authentication and a read-only health RPC. It did **not** establish OpenAI OAuth, model execution, laptop pairing to Sprites, WhatsApp linkage, refresh or catch-up. See [runtime compatibility](RUNTIME_COMPATIBILITY.md).

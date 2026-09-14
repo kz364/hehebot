@@ -212,6 +212,26 @@ try {
   assert.match(commandAfterExit.aggregatedOutput, /BACKGROUND_COMMAND_EXIT/);
   report.backgroundCommandOutlivesRoot = true;
 
+  // A new native process must recover disk-backed history, not a live server cache.
+  // Stop only after the fixture's held request and command have definitively exited.
+  transport.close();
+  await waitFor(() => transport.child.exitCode !== null || transport.child.signalCode !== null, 'native restart stop', 5000);
+  transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 10_000 });
+  transport.child.stderr.on('data', chunk => nativeErrors.push(chunk.toString('utf8')));
+  await transport.initialize();
+  const restarted = await transport.request('thread/read', { threadId, includeTurns: true });
+  assert.equal(restarted.thread.id, threadId);
+  const savedRoot = restarted.thread.turns.find(item => item.id === turn.turn.id);
+  assert.equal(savedRoot.status, 'completed');
+  assert.ok(savedRoot.items.some(item => item.type === 'agentMessage' && item.text === `${marker}:${payload}`));
+  const restartedJournal = new FileJournal(journalPath);
+  const restartedAdapter = new CodexAdapter({ cwd: workspace, journal: restartedJournal,
+    rpc: (method, params) => { assert.equal(method, 'thread/read'); return transport.request(method, params); } });
+  assert.equal((await restartedAdapter.reconcile('recovery-proof')).nativeOutcome, 'completed');
+  assert.equal((await restartedAdapter.reconcile('background-proof')).commands[commandAtRoot.id], 'completed');
+  assert.equal(restartedAdapter.sleepReadiness().allowed, false);
+  report.nativeProcessRestartReadback = true;
+
   assert.equal(requests, 6);
   assert.equal(toolContinuations, 1);
   assert.deepEqual(fixtureErrors, []);
