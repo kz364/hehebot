@@ -51,6 +51,18 @@ async function overdue() {
 }
 const message = () => ({ schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Independent work' } });
 
+it('serves scoped task pages only after owner authentication and validates page bounds',async()=>{
+ await control.accept('owner',randomUUID(),'message',message());
+ const env={AUTH_MODE:'local',INSTALLATION_ID:'local-only',CONTROL:{getByName:()=>control}} as unknown as Env;
+ const request=(origin:string,query='')=>worker.fetch(new Request(`${origin}/v1/conversations/${bot}/tasks${query}`),env);
+ expect((await request('https://control.invalid')).status).toBe(401);
+ const response=await request('http://127.0.0.1');expect(response.status).toBe(200);
+ expect(await response.json()).toMatchObject({counts:{total:1,waiting:1,recovery:0},runs:[{persona_id:bot,status:'waiting',request_status:'applied'}]});
+ expect((await request('http://127.0.0.1','?limit=11')).status).toBe(422);
+ expect((await request('http://127.0.0.1','?after=invalid')).status).toBe(422);
+ expect((await worker.fetch(new Request(`http://127.0.0.1/v1/conversations/${otherBot}/tasks`),env)).status).toBe(200);
+});
+
 it('authenticates provisional output, rejects malformed/old custody and acknowledges cancelled display without resurrection',async()=>{
  await initialize(true);await control.accept('owner',randomUUID(),'message',message());
  const run=db.all<{id:string}>('SELECT id FROM runs')[0].id,identity={epoch:1,boot_id:randomUUID()};

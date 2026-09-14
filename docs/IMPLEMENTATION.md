@@ -177,6 +177,16 @@ pagination, scope, malformed input, empty/error/loading states and late response
 The portal retains separate explicit effect-decision and recovery-close consent.
 This closes the recovery listing window gap, not full restore or native census.
 
+The composer-adjacent task strip reads an independent owner-authenticated task
+feed, so unfinished tasks older than the newest100 runs remain discoverable.
+Stable ID pagination returns ten tasks at a time with conversation-wide waiting
+and recovery counts. Expanded details preserve exact-task cancellation and show
+original receipt status separately from completion. Failed refreshes hide stale
+controls; conversation switches reject late responses. SQLite/Worker tests and
+Chromium checks cover pagination, scope, cancellation isolation, narrow layouts
+and stale/empty states. Counts do not prove native approval/question coverage,
+family settlement or safe sleep.
+
 [Selected portable templates](PORTABLE_TEMPLATES.md) export configuration into
 disabled routines and pending skill proposals with grants removed. This is an
 offline review plan, not full backup/restore or automatic migration.
@@ -197,6 +207,15 @@ verification install only the reviewed Linux x86_64 release and retain its licen
 This remains local staging: no off-host custody/durability, authenticated hosted export,
 coordinated shutdown, restore admission or secure-erasure claim. These setup
 changes are local until pushed to the project's default branch.
+
+[Cooperative encrypted snapshot creation](CONTROL_BACKUP_CREATION.md) preserves
+the verified snapshot's original timestamp and holds the pruning directory lock
+through encryption, exclusive publication and inventory update. Explicit
+[local pruning](CONTROL_BACKUP_PRUNING.md) revalidates a digest-reviewed inventory
+before confirmed deletion. Unknown unlink outcomes and unindexed publication
+leftovers block retries for operator reconciliation. Disposable real-age and
+filesystem-fault tests verify these local contracts, not off-host durability,
+power-cut atomicity, secure erasure or automatic retention compliance.
 
 [Application logical export and reconstruction](CONTROL_EXPORT_IMPORT.md) now
 roundtrip the actual local Durable Object through owner HTTP and supported SQL,

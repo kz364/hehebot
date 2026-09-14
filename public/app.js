@@ -3,6 +3,7 @@ const $=id=>document.getElementById(id);
 const olderEvents=new Map();
 const historyFloors=new Map();
 let recoveryView=null;
+let taskFeed=null;
 let snapshot=null,selected=localStorage.getItem('personal.selected'),events=[],loading=false,lastSignature='',editing=null;
 const names={IDLE_PERMITTED:'Idle — hibernation permitted',STOPPED:'Sleeping',START_REQUESTED:'Waking',BOOTING:'Starting',READY:'Awake',DRAINING:'Finishing up',STOP_COMMITTED:'Stopping',STOPPING:'Stopping',RECOVERY_REQUIRED:'Recovery needed'};
 const statuses={queued:'Queued',claimed:'Starting',running:'Working',finishing:'Saving result',completed:'Completed',waiting:'Waiting',failed:'Failed',cancelling:'Cancelling',cancelled:'Cancelled',recovery_required:'Needs recovery'};
@@ -32,21 +33,25 @@ async function refresh(force=false){
  try{const value=await api('/v1/state');snapshot=value;
   if(!selected||selected!=='skills'&&!value.objects.some(x=>x.id===selected))selected=items('persona').find(x=>!x.body.archived)?.id;
   const conversationId=selected;if(conversationId!=='skills'){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId&&acceptHistory(conversationId,history)){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
+  if(conversationId!=='skills'){
+   try{const page=await api('/v1/conversations/'+conversationId+'/tasks');if(!page.counts||!Array.isArray(page.runs))throw new Error('Invalid task page');if(selected===conversationId)taskFeed={conversationId,page,error:false};}
+   catch{if(selected===conversationId)taskFeed={conversationId,page:taskFeed?.conversationId===conversationId?taskFeed.page:null,error:true};}
+  }
   const view=recoveryView;if(view){const request=++view.request,page=await api(recoveryUrl(view));if(recoveryView===view&&selected===view.conversationId&&view.request===request)view.page=page;}
   $('connection').textContent='Connected';$('connection-dot').classList.add('online');render();
- }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);}
+ }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);if(taskFeed)taskFeed.error=true;if(recoveryView?.kind==='tasks')recoveryView.page=null;render();}
  finally{loading=false;}
 }
-function choose(id){recoveryView=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
-function recoveryUrl(view){return '/v1/conversations/'+view.conversationId+'/recovery'+(view.cursor?'?after='+encodeURIComponent(view.cursor):'');}
-async function loadRecovery(cursor=null,previous=[]){
- const view={conversationId:selected,cursor,previous,page:null,request:1};recoveryView=view;report('');render();
+function choose(id){recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
+function recoveryUrl(view){return '/v1/conversations/'+view.conversationId+'/'+(view.kind==='tasks'?'tasks':'recovery')+(view.cursor?'?after='+encodeURIComponent(view.cursor):'');}
+async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=null){
+ const view={conversationId:selected,cursor,previous,kind,focusRun,page:null,request:1};recoveryView=view;report('');render();
  try{const page=await api(recoveryUrl(view));if(recoveryView===view&&selected===view.conversationId&&view.request===1){view.page=page;render();}}
  catch(e){if(recoveryView===view&&view.request===1){recoveryView=null;report(e.message);render();}}
 }
 function render(){
  if(!snapshot)return;
- renderBudget();renderMonitoring();
+ renderBudget();renderMonitoring();renderTaskStrip();
  for(const [kind,target] of [['persona','bots'],['room','rooms']]){
   $(target).replaceChildren();
   for(const object of items(kind).filter(x=>!x.body.archived)){
@@ -62,17 +67,18 @@ function render(){
  $('runtime-banner').textContent='Your messages and routines are saved. The assistant is waiting for its runtime connection and sign-in before it can work.';
  const view=recoveryView?.conversationId===selected?recoveryView:null;
  const conversation=view?[]:events.filter(x=>x.conversation_id===selected);const runs=view?(view.page?.runs??[]):snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
- const steering=(snapshot.steering??[]).filter(x=>runs.some(run=>run.id===x.run_id));
+ const steering=(view?.kind==='tasks'?view.page?.steering??[]:snapshot.steering??[]).filter(x=>runs.some(run=>run.id===x.run_id));
  const recovery=(view?(view.page?.recovery??[]):snapshot.recovery??[]).filter(x=>runs.some(run=>run.id===x.run_id));
- const previews=(snapshot.output_previews??[]).filter(x=>runs.some(run=>run.id===x.run_id&&run.current_attempt===x.attempt&&['running','finishing','recovery_required'].includes(run.status)&&!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code)));
- const signature=JSON.stringify([selected,conversation,runs,steering,recovery,previews,Boolean(view),view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
+ const previews=(view?.kind==='tasks'?view.page?.output_previews??[]:snapshot.output_previews??[]).filter(x=>runs.some(run=>run.id===x.run_id&&run.current_attempt===x.attempt&&['running','finishing','recovery_required'].includes(run.status)&&!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code)));
+ const signature=JSON.stringify([selected,conversation,runs,steering,recovery,previews,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;const expanded=new Set([...timeline.querySelectorAll('.task-card[open]')].map(card=>card.dataset.runId));timeline.replaceChildren();
   if(view){
-   timeline.append(node('h2','Recovery tasks'),node('p','All retained recovery tasks in this conversation, paged by stable task ID. Restart from the first page to include newly arrived tasks. Reviewing does not retry or release anything.','hint'));
-   const controls=node('div',undefined,'actions');controls.append(button('Back to messages',()=>{recoveryView=null;render();},'quiet'),button('First recovery page',()=>loadRecovery(),'quiet'));
-   if(view.previous.length)controls.append(button('Previous recovery page',()=>loadRecovery(view.previous.at(-1),view.previous.slice(0,-1)),'quiet'));
-   if(view.page?.next_cursor)controls.append(button('Next recovery page',()=>loadRecovery(view.page.next_cursor,[...view.previous,view.cursor]),'quiet'));
-   timeline.append(controls);if(!runs.length){const notice=node('p',view.page?'No recovery tasks on this page.':'Loading recovery tasks…','hint');notice.setAttribute('role','status');timeline.append(notice);}
+   const taskMode=view.kind==='tasks',label=taskMode?'task':'recovery';
+   timeline.append(node('h2',taskMode?'Current tasks':'Recovery tasks'),node('p',`All retained ${taskMode?'unfinished':'recovery'} tasks in this conversation, paged by stable task ID. Restart from the first page to include newly arrived tasks. Reviewing does not retry or release anything.`,'hint'));
+   const controls=node('div',undefined,'actions');controls.append(button('Back to messages',()=>{recoveryView=null;render();},'quiet'),button(`First ${label} page`,()=>loadRecovery(null,[],view.kind),'quiet'));
+   if(view.previous.length)controls.append(button(`Previous ${label} page`,()=>loadRecovery(view.previous.at(-1),view.previous.slice(0,-1),view.kind),'quiet'));
+   if(view.page?.next_cursor)controls.append(button(`Next ${label} page`,()=>loadRecovery(view.page.next_cursor,[...view.previous,view.cursor],view.kind),'quiet'));
+   timeline.append(controls);if(!runs.length){const notice=node('p',view.page?`No ${taskMode?'unfinished':'recovery'} tasks on this page.`:`Loading ${taskMode?'current':'recovery'} tasks…`,'hint');notice.setAttribute('role','status');timeline.append(notice);}
   }else timeline.append(button('Review recovery tasks',()=>loadRecovery(),'quiet'));
   if(!view&&historyFloors.get(selected)){const notice=node('p','Earlier history has expired under the retention policy. Only retained messages and updates are shown.','hint');notice.setAttribute('role','status');timeline.append(notice);}
   if(conversation.length>=100){const conversationId=selected;timeline.append(button('Load earlier messages',async()=>{try{
@@ -101,10 +107,15 @@ function render(){
     const e=node('div',undefined,'event');e.setAttribute('role','status');e.append(node('span','Request expired','status'),node('span','A queued request expired after 90 days without starting. Send a fresh request if it is still needed.'));timeline.append(e);
    }else if(event.type.startsWith('room.')){const e=node('div',undefined,'event');e.append(node('span',event.type==='room.context_update'?'Context update':'Room update'),node('span',event.payload.text??''));timeline.append(e);}
   }
-  for(const run of runs.filter(x=>x.role==='background'||['running','finishing','recovery_required'].includes(x.status)||steering.some(receipt=>receipt.run_id===x.id))){
+  for(const run of runs.filter(x=>view?.kind==='tasks'||x.role==='background'||['running','finishing','recovery_required'].includes(x.status)||steering.some(receipt=>receipt.run_id===x.id))){
    const title=run.title??(run.role==='background'?'Background task':'Conversation task');
-   const card=node('details',undefined,'task-card');card.dataset.runId=run.id;card.open=expanded.has(run.id);card.append(node('summary',`${title} · ${statuses[run.status]??run.status}`));
+   const card=node('details',undefined,'task-card');card.dataset.runId=run.id;card.open=expanded.has(run.id)||view?.focusRun===run.id;card.append(node('summary',`${title} · ${statuses[run.status]??run.status}`));
    card.append(node('p',`Task ${run.id}`,'hint'));
+   if(view?.kind==='tasks'){
+    card.append(node('p',`Owner: ${items('persona').find(bot=>bot.id===run.persona_id)?.body.name??'Unavailable bot'} · Original request: ${run.request_status??'receipt unavailable'}. Request application is not task completion.`,'hint'));
+    if(run.error_code)card.append(node('p',`Waiting or recovery reason: ${run.error_code}`,'hint'));
+    if(run.status==='cancelling')card.append(node('p','Cancellation requested, not confirmed. Children, tools and effects may remain unresolved.','review-notice'));
+   }
    const preview=previews.find(item=>item.run_id===run.id);
    if(preview){
     card.querySelector('summary').append(node('span',' · Provisional output','status'));
@@ -129,6 +140,7 @@ function render(){
    if(['queued','claimed','running','finishing','waiting'].includes(run.status))actions.append(button('Cancel this task',()=>act(()=>command('run.cancel',{run_id:run.id,reason:'Owner selected this task for cancellation.'})),'quiet danger'));
    card.append(actions);timeline.append(card);
   }
+  if(view?.focusRun&&view.page){const card=[...timeline.querySelectorAll('.task-card')].find(card=>card.dataset.runId===view.focusRun);card?.scrollIntoView({block:'nearest'});view.focusRun=null;}
   if(!view&&(nearBottom||!timeline.scrollTop))timeline.scrollTop=timeline.scrollHeight;
  }
  $('routines').replaceChildren();for(const r of items('routine').filter(x=>x.body.persona_id===selected)){
@@ -140,6 +152,22 @@ function render(){
  $('memories').replaceChildren();for(const m of items('memory').filter(x=>x.body.scope.kind==='global'||x.body.scope.kind==='persona'&&x.body.scope.id===selected)){
   const card=node('div',undefined,'card');card.append(node('span',m.body.scope.kind==='global'?'Shared preference':'Bot memory','status'),node('p',m.body.text));const actions=node('div',undefined,'actions');actions.append(button('Edit',()=>editMemory(m)),button('Forget',()=>act(()=>command('memory.delete',{id:m.id,expected_revision:m.revision,purge_transcripts:false})),'danger'));card.append(actions);$('memories').append(card);
  }if(!$('memories').children.length)$('memories').append(node('p','Save preferences you want your bots to remember.','muted'));
+}
+function renderTaskStrip(){
+ const strip=$('task-strip'),target=$('task-strip-content');strip.hidden=skillsSelected();if(strip.hidden)return;
+ const feed=taskFeed?.conversationId===selected?taskFeed:null,page=feed?.page;
+ const signature=JSON.stringify([selected,feed?.error,page?.counts,page?.runs,items('persona').map(bot=>[bot.id,bot.body.name])]);
+ if(strip.dataset.signature===signature)return;strip.dataset.signature=signature;target.replaceChildren();
+ $('task-strip-summary').textContent=feed?.error?'Tasks — unavailable or stale':page?`Tasks ${page.counts.total} · Waiting ${page.counts.waiting} · Recovery ${page.counts.recovery}`:'Tasks — loading';
+ if(feed?.error){target.append(node('p','Task status could not be refreshed. Do not infer completion from missing or stale observations.','hint'),button('Refresh tasks',()=>refresh(true),'quiet'));return;}
+ if(!page){target.append(node('p','Loading authoritative task records…','hint'));return;}
+ target.append(node('p',`${page.runs.length} loaded; scroll to review this page. Counts include all pages. Native approval and question coverage is not yet verified.`,'hint'));
+ for(const run of page.runs){
+  const owner=items('persona').find(bot=>bot.id===run.persona_id)?.body.name??'Unavailable bot';
+  const row=button(`${run.title??(run.role==='background'?'Background task':'Conversation task')} · ${owner} · ${statuses[run.status]??run.status}`,()=>{strip.open=false;loadRecovery(null,[],'tasks',run.id);},'task-strip-row');row.dataset.taskId=run.id;target.append(row);
+ }
+ if(!page.runs.length)target.append(node('p','No unfinished tasks are recorded here. This is not native settlement or safe-sleep evidence.','hint'));
+ target.append(button(page.next_cursor?'Browse all task pages':'Review task details',()=>{strip.open=false;loadRecovery(null,[],'tasks');},'quiet'));
 }
 function renderRecovery(card,run,recovery,title){
  card.append(node('p',recovery.executor_terminated?(recovery.effects.length?'Executor termination confirmed. External effects still need separate review.':'Executor termination confirmed. No unresolved effects are recorded for this task.'):'Executor termination is not confirmed. Recovery actions are unavailable.','review-notice'));

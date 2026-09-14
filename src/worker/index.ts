@@ -41,6 +41,8 @@ export default {
    if(path==='/v1/export/control'&&request.method==='GET')return new Response(unwrap(await control.getControlExport(owner)),{headers:{'Content-Type':'application/json','Content-Disposition':'attachment; filename="hehebot-control-export.json"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
    const conversation=path.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/events$/i);
    if(conversation&&request.method==='GET'){const before=url.searchParams.get('before');requireThat(before===null||/^\d+$/.test(before)&&Number.isSafeInteger(Number(before)),'INVALID_INPUT','Invalid history cursor.',422);return json(unwrap(await control.getTimeline(owner,conversation[1],before===null?undefined:Number(before))));}
+   const tasks=path.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/tasks$/i);
+   if(tasks&&request.method==='GET')return json(unwrap(await control.getTasks(owner,tasks[1],url.searchParams.get('after')??undefined,Number(url.searchParams.get('limit')??10))));
    const recovery=path.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/recovery$/i);
    if(recovery&&request.method==='GET')return json(unwrap(await control.getRecovery(owner,recovery[1],url.searchParams.get('after')??undefined,Number(url.searchParams.get('limit')??20))));
    const receipt=path.match(/^\/v1\/receipts\/([0-9a-f-]{36})$/i);
