@@ -187,6 +187,14 @@ Chromium checks cover pagination, scope, cancellation isolation, narrow layouts
 and stale/empty states. Counts do not prove native approval/question coverage,
 family settlement or safe sleep.
 
+[Owner roster organization](ROSTER.md) now persists ordered sections, membership,
+collapse and independent hiding through revision-checked owner commands. Search
+never changes metadata; removing sections unassigns bots without changing work.
+Hidden attention counts include unfinished tasks outside the newest100 window,
+remain reachable during search, and disclose stale observations. SQLite/Worker
+and inspected Chromium fixtures cover local behavior. Full native approval and
+question coverage remains unverified; roster edits cannot enable execution.
+
 [Selected portable templates](PORTABLE_TEMPLATES.md) export configuration into
 disabled routines and pending skill proposals with grants removed. This is an
 offline review plan, not full backup/restore or automatic migration.

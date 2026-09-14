@@ -51,8 +51,8 @@ async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=nul
 }
 function render(){
  if(!snapshot)return;
- renderBudget();renderMonitoring();renderTaskStrip();
- for(const [kind,target] of [['persona','bots'],['room','rooms']]){
+ renderBudget();renderMonitoring();renderTaskStrip();renderRoster();
+ for(const [kind,target] of [['room','rooms']]){
   $(target).replaceChildren();
   for(const object of items(kind).filter(x=>!x.body.archived)){
    const b=button('',()=>choose(object.id),'nav-item');b.setAttribute('aria-current',String(object.id===selected));b.append(node('span',object.body.name.slice(0,1),'avatar'),node('span',object.body.name));$(target).append(b);
@@ -169,6 +169,49 @@ function renderTaskStrip(){
  if(!page.runs.length)target.append(node('p','No unfinished tasks are recorded here. This is not native settlement or safe-sleep evidence.','hint'));
  target.append(button(page.next_cursor?'Browse all task pages':'Review task details',()=>{strip.open=false;loadRecovery(null,[],'tasks');},'quiet'));
 }
+function renderRoster(){
+ const layout=snapshot.roster??{revision:0,sections:[],hidden_persona_ids:[]},hidden=new Set(layout.hidden_persona_ids),bots=items('persona').filter(bot=>!bot.body.archived),query=$('roster-search').value.toLocaleLowerCase();
+ const observation=snapshot.roster_activity,stale=$('connection').textContent!=='Connected'||!observation||Date.now()-Date.parse(observation.observed_at)>=30000;
+ const activity=id=>observation?.personas.find(row=>row.persona_id===id);
+ const attention=ids=>ids.reduce((sum,id)=>{const row=activity(id);return sum+(row?.waiting??0)+(row?.recovery??0);},0);
+ const row=bot=>{const b=button('',()=>choose(bot.id),'nav-item');b.dataset.personaId=bot.id;b.setAttribute('aria-current',String(bot.id===selected));const text=node('span',bot.body.name),a=activity(bot.id);if(a)text.append(node('small',stale?'Activity stale':`${a.unfinished} unfinished · ${a.waiting} waiting · ${a.recovery} recovery`));b.append(node('span',bot.body.name.slice(0,1),'avatar'),text);return b;};
+ const visible=bots.filter(bot=>!hidden.has(bot.id)&&bot.body.name.toLocaleLowerCase().includes(query)),assigned=new Set(layout.sections.flatMap(section=>section.persona_ids));
+ $('bots').replaceChildren();
+ for(const section of layout.sections){
+  const members=section.persona_ids.flatMap(id=>visible.filter(bot=>bot.id===id));if(query&&!members.length)continue;
+  const group=node('div',undefined,'roster-section'),toggle=button(`${section.collapsed&&!query?'▸':'▾'} ${section.name} · ${stale?'attention stale':attention(section.persona_ids)+' waiting/recovery'}`,()=>act(()=>command('roster.set',{expected_revision:layout.revision,sections:layout.sections.map(s=>s.id===section.id?{...s,collapsed:!s.collapsed}:s),hidden_persona_ids:layout.hidden_persona_ids})),'roster-section-toggle');
+  toggle.setAttribute('aria-expanded',String(!section.collapsed||Boolean(query)));group.append(toggle);if(!section.collapsed||query)group.append(...members.map(row));$('bots').append(group);
+ }
+ const unassigned=visible.filter(bot=>!assigned.has(bot.id));if(layout.sections.length&&unassigned.length)$('bots').append(node('p','Unassigned','roster-observation'));$('bots').append(...unassigned.map(row));
+ if(!visible.length)$('bots').append(node('p',query?'No visible bots match. Hidden bots remain below.':'No visible bots. Review hidden bots or add one.','roster-observation'));
+ const hiddenBots=items('persona').filter(bot=>hidden.has(bot.id));$('hidden-bots').hidden=!hiddenBots.length;
+ $('hidden-bots-summary').textContent=`Hidden ${hiddenBots.length} · ${stale?'attention stale':attention(hiddenBots.map(bot=>bot.id))+' waiting/recovery'}`;
+ $('hidden-bots-list').replaceChildren(...hiddenBots.map(row));
+ $('roster-observation').textContent=stale?'Task observations unavailable or stale.':'Recorded tasks only; native approval/question coverage is unverified.';
+}
+function editRoster(){
+ const layout=snapshot.roster??{revision:0,sections:[],hidden_persona_ids:[]},draft=structuredClone(layout),bots=items('persona'),container=node('div'),available=new Set(bots.map(bot=>bot.id));
+ const move=(array,index,delta)=>{const next=index+delta;if(next>=0&&next<array.length)[array[index],array[next]]=[array[next],array[index]];};
+ const draw=()=>{
+  container.replaceChildren(node('p','Display only: hiding, grouping and collapsing never archive a bot, pause routines or cancel work. Delete a section to return its bots to Unassigned.','review-notice'));
+  const unavailable=[...new Set([...draft.hidden_persona_ids,...draft.sections.flatMap(s=>s.persona_ids)])].filter(id=>!available.has(id));
+  if(unavailable.length)container.append(button(`Remove ${unavailable.length} unavailable references before saving`,()=>{draft.hidden_persona_ids=draft.hidden_persona_ids.filter(id=>available.has(id));for(const s of draft.sections)s.persona_ids=s.persona_ids.filter(id=>available.has(id));draw();},'quiet'));
+  draft.sections.forEach((section,index)=>{
+   const card=node('div',undefined,'card'),name=field(`Section ${index+1} name`,`section-${section.id}`,section.name);name.querySelector('input').maxLength=160;name.querySelector('input').oninput=e=>section.name=e.target.value;
+   card.append(name,button('Move section up',()=>{move(draft.sections,index,-1);draw();},'quiet'),button('Move section down',()=>{move(draft.sections,index,1);draw();},'quiet'),button('Delete section',()=>{draft.sections.splice(index,1);draw();},'quiet danger'));container.append(card);
+  });
+  const add=button('Add section',()=>{draft.sections.push({id:crypto.randomUUID(),name:'New section',persona_ids:[],collapsed:false});draw();},'quiet');add.disabled=draft.sections.length>=20;container.append(add);
+  for(const bot of bots){
+   const card=node('div',undefined,'card'),section=draft.sections.find(s=>s.persona_ids.includes(bot.id)),label=node('label',`${bot.body.name}${bot.body.archived?' (archived)':''}`,'field'),select=node('select');select.setAttribute('aria-label',`Section for ${bot.body.name}`);
+   const none=node('option','Unassigned');none.value='';select.append(none);for(const s of draft.sections){const option=node('option',s.name);option.value=s.id;select.append(option);}select.value=section?.id??'';
+   select.onchange=()=>{for(const s of draft.sections)s.persona_ids=s.persona_ids.filter(id=>id!==bot.id);draft.sections.find(s=>s.id===select.value)?.persona_ids.push(bot.id);draw();};label.append(select);card.append(label);
+   const hide=node('label',undefined,'check'),checkbox=node('input');checkbox.type='checkbox';checkbox.checked=draft.hidden_persona_ids.includes(bot.id);checkbox.onchange=()=>{draft.hidden_persona_ids=draft.hidden_persona_ids.filter(id=>id!==bot.id);if(checkbox.checked)draft.hidden_persona_ids.push(bot.id);};hide.append(checkbox,document.createTextNode(`Hide ${bot.body.name}`));card.append(hide);
+   if(section){card.append(node('p',`Position ${section.persona_ids.indexOf(bot.id)+1} in ${section.name}`,'hint'),button(`Move ${bot.body.name} up`,()=>{move(section.persona_ids,section.persona_ids.indexOf(bot.id),-1);draw();},'quiet'),button(`Move ${bot.body.name} down`,()=>{move(section.persona_ids,section.persona_ids.indexOf(bot.id),1);draw();},'quiet'));}container.append(card);
+  }
+ };
+ draw();$('editor').classList.add('roster-editor');openEditor('Organize bots',[container,node('p','Concurrent edits are rejected. If the revision changed, close and reopen this editor to review the latest layout.','hint')],()=>command('roster.set',{expected_revision:draft.revision,sections:draft.sections,hidden_persona_ids:draft.hidden_persona_ids}));
+}
+$('roster-search').oninput=()=>renderRoster();$('organize-roster').onclick=()=>editRoster();
 function renderRecovery(card,run,recovery,title){
  card.append(node('p',recovery.executor_terminated?(recovery.effects.length?'Executor termination confirmed. External effects still need separate review.':'Executor termination confirmed. No unresolved effects are recorded for this task.'):'Executor termination is not confirmed. Recovery actions are unavailable.','review-notice'));
  for(const [blocked,message] of [[recovery.unresolved_operations,'Operation records are unresolved.'],[recovery.descendants_unsettled,'Recover unfinished descendants before this task.'],[recovery.stale_locks,'A retained lock belongs to a different attempt. Administrative reconciliation is required.']])if(blocked)card.append(node('p',message,'hint'));
@@ -270,8 +313,9 @@ $('edit-budget').onclick=()=>{
   return command('budget.set',{expected_revision:budget.revision,enabled:form.get('enabled')==='true',monthly_cap_cents:cents,optional_routine_ids:optional},key);
  });
 };
-function closeEditor(){$('editor').close();editing=null;}
+function closeEditor(){$('editor').close();$('editor').classList.remove('roster-editor');editing=null;}
 $('close-editor').onclick=closeEditor;$('cancel-editor').onclick=closeEditor;
+$('editor').addEventListener('close',()=>$('editor').classList.remove('roster-editor'));
 $('editor-form').onsubmit=async e=>{e.preventDefault();if(!editing)return;const b=e.submitter;b.disabled=true;try{await editing(new FormData(e.target));closeEditor();await refresh(true);}catch(error){$('editor-error').textContent=error.message;$('editor-error').hidden=false;}finally{b.disabled=false;}};
 function editBot(object){openEditor(object?'Bot instructions':'New bot',[field('Name','name',object?.body.name??''),field('Instructions','instructions',object?.body.instructions??'','textarea')],form=>command('persona.put',{id:object?.id??crypto.randomUUID(),expected_revision:object?.revision??0,name:form.get('name'),instructions:form.get('instructions'),tool_policy_ids:object?.body.tool_policy_ids??[],archived:false}));}
 function editRoutine(object){

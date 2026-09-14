@@ -1,4 +1,5 @@
 import type { BudgetPolicy } from './budget';
+import type { RosterLayout } from './roster';
 export type Scope = { kind: 'global' | 'persona' | 'routine' | 'skill'; id: string | null };
 export type BasePut = { id: string; expected_revision: number };
 export type PersonaPut = BasePut & { name: string; instructions: string; tool_policy_ids: string[]; archived: boolean };
@@ -17,6 +18,7 @@ export type RoomPublish = { room_id: string; kind: 'context_update' | 'action_re
 export type PayloadMap = {
  'run.recover':{run_id:string;expected_attempt:number;release_resources:true};
  'effect.reconcile':{run_id:string;expected_attempt:number;effect_id:string;expected_request_digest:string;outcome:'confirmed'|'failed';evidence_ref:string};
+ 'roster.set':RosterLayout;
  'budget.set':BudgetPolicy;
  'budget.override':{run_id:string;expected_revision:number};
  'run.steer':{run_id:string;expected_attempt:number;text:string};

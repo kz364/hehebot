@@ -13,6 +13,7 @@ it('pages active work outside the latest100 window, with global counts independe
  f.setNow('2026-09-10T00:01:00.000Z');
  for(let n=0;n<117;n++){const id=message(otherBot);f.db.exec("UPDATE runs SET status='completed' WHERE id=?",id);}
  expect(f.core.state().runs.some(run=>ids.includes(run.id))).toBe(false);
+ expect(f.core.state().roster_activity.personas).toEqual([{persona_id:bot,unfinished:13,active:1,waiting:11,recovery:1}]);
  const before=['runs','commands','operations','effects','resource_locks','lifecycle'].map(table=>f.db.all(`SELECT * FROM ${table}`));
  const first=f.core.taskPage(bot),second=f.core.taskPage(bot,first.next_cursor!);
  expect(first.counts).toEqual({total:13,waiting:11,recovery:1});expect(second.counts).toEqual(first.counts);

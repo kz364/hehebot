@@ -41,6 +41,21 @@ async function initialize(executionEnabled=false) {
 }
 afterEach(() => { db.close(); vi.useRealTimers(); });
 
+it('persists owner roster commands idempotently without task or lifecycle effects and rejects nonlocal bypass',async()=>{
+ const env={AUTH_MODE:'local',INSTALLATION_ID:'local-only',CONTROL:{getByName:()=>control}} as unknown as Env;
+ const key=randomUUID(),section=randomUUID(),payload={expected_revision:0,sections:[{id:section,name:'Travel group',persona_ids:[otherBot,bot],collapsed:true}],hidden_persona_ids:[bot]};
+ const post=(origin:string,p=payload,k=key)=>worker.fetch(new Request(`${origin}/v1/commands`,{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':k,Origin:origin},body:JSON.stringify({schema_version:1,type:'roster.set',payload:p})}),env);
+ const tables=['objects','object_revisions','runs','attempts','effects','resource_locks','events','lifecycle','controller_operations'];
+ const before=tables.map(table=>db.all(`SELECT * FROM ${table}`));
+ expect((await post('https://control.invalid')).status).toBe(401);
+ const response=await post('http://127.0.0.1'),receipt=await response.json();expect(response.status).toBe(202);expect(receipt).toMatchObject({status:'applied',resource_id:'roster-layout'});
+ expect(await (await post('http://127.0.0.1')).json()).toEqual(receipt);
+ expect(await control.getState('owner')).toMatchObject({ok:true,value:{roster:{revision:1,sections:payload.sections,hidden_persona_ids:[bot]}}});
+ expect(await (await post('http://127.0.0.1',payload,randomUUID())).json()).toMatchObject({status:'rejected',error:{code:'REVISION_CONFLICT'}});
+ expect(tables.map(table=>db.all(`SELECT * FROM ${table}`))).toEqual(before);
+ await initialize();expect(await control.getState('owner')).toMatchObject({ok:true,value:{roster:{revision:1,hidden_persona_ids:[bot]}}});
+});
+
 async function overdue() {
   const r = routine();
   const result = await control.accept('owner', randomUUID(), 'synthetic', { schema_version: 1, type: 'routine.put', payload: r });

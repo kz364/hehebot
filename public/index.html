@@ -6,7 +6,10 @@
  <aside class="sidebar" aria-label="Conversations">
   <a class="brand" href="/" aria-label="Hehebot home"><span class="brand-mark">H</span><span>Hehebot</span></a>
   <div class="section-label">YOUR BOTS <button id="add-bot" class="icon-button" aria-label="Add bot">+</button></div>
+  <div class="roster-controls"><label class="sr-only" for="roster-search">Search bots</label><input id="roster-search" type="search" placeholder="Search bots" maxlength="80"><button id="organize-roster" type="button">Organize</button></div>
   <nav id="bots" aria-label="Bots"></nav>
+  <details id="hidden-bots"><summary id="hidden-bots-summary">Hidden bots</summary><p>Hiding does not archive bots or pause routines.</p><div id="hidden-bots-list"></div></details>
+  <p id="roster-observation" class="roster-observation"></p>
   <div class="section-label rooms-label">ROOMS <button id="add-room" class="icon-button" aria-label="Add room">+</button></div>
   <nav id="rooms" aria-label="Rooms"></nav>
   <div class="section-label skills-label">MANAGED</div>

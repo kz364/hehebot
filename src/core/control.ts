@@ -5,6 +5,7 @@ import { Store } from './store';
 import { dueOccurrences, nextDue, preview, validateSchedule } from './schedule';
 import {SkillCatalog} from './skills';
 import {BudgetLedger} from './budget';
+import {RosterLedger} from './roster';
 import {controlMonitoring} from './monitoring';
 import {TaskSteering} from './task-steering';
 import {nativeDescendantsSettledSql} from './native-tasks';
@@ -86,6 +87,7 @@ export class ControlCore {
     this.store.event(this.options.uuid(),this.store.run(p.run_id).persona_id,'effect.owner_reconciled',owner,commandId,
      {run_id:p.run_id,effect_id:id,attempt:p.expected_attempt,outcome:p.outcome},now);return id;
    }
+   case 'roster.set':return new RosterLedger(this.store,()=>this.now()).set(owner,commandId,command.payload);
    case 'budget.set':{
     const id=this.budget.set(owner,commandId,command.payload);this.reconcileBudget();return id;
    }
@@ -448,6 +450,10 @@ export class ControlCore {
   const previews=new OutputPreviews(this.store,()=>now);
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
    budget:this.budget.summary(),
+   roster:new RosterLedger(this.store,()=>now).summary(),
+   roster_activity:{observed_at:now,personas:this.store.db.all<{persona_id:string;unfinished:number;active:number;waiting:number;recovery:number}>(`SELECT persona_id,COUNT(*) AS unfinished,
+    SUM(status IN ('claimed','running','finishing','cancelling')) AS active,SUM(status='waiting') AS waiting,SUM(status='recovery_required') AS recovery
+    FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required') GROUP BY persona_id ORDER BY persona_id`)},
    monitoring:controlMonitoring(this.store,now,this.budget,this.options.executionEnabled),
    objects:after===undefined?(['persona','room','routine','memory','skill'] as const).flatMap(kind=>this.store.list(kind)):undefined,
    skill_enablements:after===undefined?this.store.db.all<{skill_id:string;persona_id:string;skill_revision:number;enabled:number}>('SELECT skill_id,persona_id,skill_revision,enabled FROM skill_enablements ORDER BY skill_id,persona_id').map(row=>({...row,enabled:Boolean(row.enabled)})):undefined,
