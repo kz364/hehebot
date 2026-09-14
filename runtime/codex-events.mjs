@@ -30,13 +30,13 @@ export class CodexEventRouter {
     const spawn = params?.item?.type === 'collabAgentToolCall' && params.item.tool === 'spawnAgent';
     const turn = ['turn/started', 'turn/completed'].includes(method);
     if (!turn &&
-        !(['item/started', 'item/completed'].includes(method) && (spawn || ['commandExecution', 'mcpToolCall'].includes(params?.item?.type)))) return null;
+        !(['item/started', 'item/completed'].includes(method) && (spawn || ['commandExecution', 'mcpToolCall', 'fileChange', 'dynamicToolCall'].includes(params?.item?.type)))) return null;
     const threadId = params?.threadId, turnId = turn ? params?.turn?.id : params?.turnId;
     if (![threadId, turnId].every(id => typeof id === 'string' && id.length > 0 && id.length <= 256)) fail('INVALID_EVENT_IDENTITY');
     if (turn) {
       if (!(method === 'turn/started' ? ['inProgress'] : ['completed', 'interrupted', 'failed']).includes(params.turn.status)) fail('INVALID_EVENT_STATUS');
     } else {
-      const terminal = params.item.type === 'commandExecution' ? ['completed', 'failed', 'declined'] : ['completed', 'failed'];
+      const terminal = ['commandExecution', 'fileChange'].includes(params.item.type) ? ['completed', 'failed', 'declined'] : ['completed', 'failed'];
       if (typeof params.item.id !== 'string' || !params.item.id || params.item.id.length > 256 ||
           !(method === 'item/started' ? ['inProgress'] : terminal).includes(params.item.status)) fail('INVALID_EVENT_ITEM');
       if (spawn && (params.item.senderThreadId !== threadId || !Array.isArray(params.item.receiverThreadIds) ||

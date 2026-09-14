@@ -463,6 +463,8 @@ try {
       assert.equal(dynamicCalls.length, 6); assert.equal(new Set(dynamicCalls.map(call => call.callId)).size, 6);
       assert.ok(dynamicCalls.every(call => call.threadId === threadId && call.turnId === turnId && call.success));
       assert.equal(nativeCalls.mcpCalls, undefined);
+      assert.equal(Object.keys(nativeCalls.dynamicCalls ?? {}).length, 6);
+      assert.ok(Object.values(nativeCalls.dynamicCalls).every(status => status === 'completed'));
     } else {
       const calls = childMode ? nativeCalls.childObligations?.[JSON.stringify([childThreadId, completed.params.turn.id])]?.mcpCalls : nativeCalls.mcpCalls;
       assert.equal(Object.keys(calls).length, 6);

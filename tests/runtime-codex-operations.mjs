@@ -49,3 +49,15 @@ test('heartbeat cap fails closed rather than dropping live obligations', async t
   await f.journal.update('attempt-a', { mcpCalls: { overflow: 'inProgress' } });
   await assert.rejects(f.operations.snapshot(), { code: 'NATIVE_OPERATION_LIMIT' });
 });
+
+test('file and dynamic lifetimes charge distinct operations even with reused item IDs', async t => {
+  const f = await fixture(t), child = '["child","turn"]';
+  await f.journal.putIfAbsent('attempt-a', { status: 'finishing', rootSettled: true,
+    fileChanges: { same: 'declined' }, dynamicCalls: { same: 'inProgress' },
+    childObligations: { [child]: { fileChanges: { same: 'inProgress' }, dynamicCalls: { same: 'failed' } } } });
+  const rows = await f.operations.snapshot();
+  assert.equal(new Set(rows.map(row => row.id)).size, 6);
+  assert.deepEqual(rows.map(row => row.status), ['unknown', 'settled', 'settled', 'active', 'active', 'settled']);
+  assert.ok(rows.every(row => row.run_id === f.config.runId && row.attempt === 2));
+  assert.deepEqual(await f.operations.snapshot(), rows);
+});

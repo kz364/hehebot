@@ -103,6 +103,29 @@ test('a second logical attempt cannot take an existing native identity', async t
   assert.deepEqual(f.recoveries, ['NATIVE_IDENTITY_CONFLICT']);
 });
 
+for (const [type, field, terminal] of [['fileChange', 'fileChanges', 'declined'], ['dynamicToolCall', 'dynamicCalls', 'failed']])
+test(`${type} tracks exact root and child invocations without retaining payloads or inferring effects`, async t => {
+  const f = await fixture(t); await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
+  f.transport.emit('notification', spawn('completed', ['child']));
+  f.transport.emit('notification', { method: 'turn/started', params: { threadId: 'child', turn: { id: 'child-turn', status: 'inProgress' } } });
+  await f.router.flush();
+  const event = (threadId, turnId, status) => ({ method: status === 'inProgress' ? 'item/started' : 'item/completed', params: {
+    threadId, turnId, item: { id: 'same-item', type, status, changes: ['PRIVATE_DIFF'], arguments: { secret: 'PRIVATE_ARG' }, contentItems: ['PRIVATE_RESULT'] },
+  } });
+  for (const [thread, turn] of [['parent', 'turn'], ['child', 'child-turn']]) f.transport.emit('notification', event(thread, turn, 'inProgress'));
+  f.transport.emit('notification', root('parent', 'turn')); await f.router.flush();
+  const childKey = JSON.stringify(['child', 'child-turn']);
+  const before = await f.journal.get('a');
+  assert.deepEqual(before[field], { 'same-item': 'inProgress' });
+  assert.deepEqual(before.childObligations[childKey][field], { 'same-item': 'inProgress' });
+  f.transport.emit('notification', event('child', 'child-turn', terminal)); await f.router.flush();
+  const next = await f.journal.get('a');
+  assert.deepEqual(next[field], before[field]); assert.deepEqual(next.childObligations[childKey][field], { 'same-item': terminal });
+  assert.doesNotMatch(JSON.stringify(next), /PRIVATE_|effectsSettled/); assert.equal(f.adapter.sleepReadiness().allowed, false);
+  f.transport.emit('notification', event('child', 'child-turn', 'completed')); await f.router.flush();
+  assert.deepEqual(f.recoveries, ['NATIVE_EVENT_RECONCILIATION_FAILED']);
+});
+
 const spawn = (status, receiverThreadIds, extra = {}) => ({ method: status === 'inProgress' ? 'item/started' : 'item/completed', params: {
   threadId: 'parent', turnId: 'turn', item: { id: 'spawn-19', type: 'collabAgentToolCall', tool: 'spawnAgent',
     senderThreadId: 'parent', status, receiverThreadIds, prompt: 'PRIVATE_TASK', agentsStates: { private: 'PRIVATE_RESULT' }, ...extra },

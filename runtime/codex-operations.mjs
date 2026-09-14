@@ -39,7 +39,7 @@ export class CodexOperations {
       : row?.status === 'cancelling' ? 'cancelling' : row?.status === 'running' ? 'active' : 'unknown');
     if (!row) return operations;
     const items = (owner, identity) => {
-      for (const field of ['commands', 'mcpCalls']) {
+      for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls']) {
         for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], 'tool', status(value));
       }
       for (const [id, spawn] of Object.entries(owner.spawns ?? {})) {

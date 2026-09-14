@@ -203,11 +203,12 @@ export class CodexAdapter {
       Object.defineProperty(spawns, id, { value: { status, receiverThreadIds: receivers }, enumerable: true, writable: true, configurable: true });
       return save({ spawns });
     }
-    const field = params?.item?.type === 'commandExecution' ? 'commands' : params?.item?.type === 'mcpToolCall' ? 'mcpCalls' : null;
+    const field = params?.item?.type === 'commandExecution' ? 'commands' : params?.item?.type === 'mcpToolCall' ? 'mcpCalls'
+      : params?.item?.type === 'fileChange' ? 'fileChanges' : params?.item?.type === 'dynamicToolCall' ? 'dynamicCalls' : null;
     if (['item/started', 'item/completed'].includes(notification?.method) && field) {
       if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const { id, status } = params.item;
-      const terminal = field === 'commands' ? ['completed', 'failed', 'declined'] : ['completed', 'failed'];
+      const terminal = ['commands', 'fileChanges'].includes(field) ? ['completed', 'failed', 'declined'] : ['completed', 'failed'];
       if (typeof id !== 'string' || !id || id.length > 256 ||
           !(notification.method === 'item/started' ? ['inProgress'] : terminal).includes(status)) fail('CODEX_PROTOCOL_ERROR');
       const obligations = { ...owner[field] };
