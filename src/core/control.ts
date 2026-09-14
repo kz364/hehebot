@@ -337,13 +337,19 @@ export class ControlCore {
   });
  }
  flushFollowups(runId:string):void {
-  const run=this.store.run(runId);
-  if(!['completed','failed','cancelled'].includes(run.status))return;
   const cutoff=new Date(this.options.now().getTime()-90*86400000).toISOString();
-  // Enforce the cutoff even when bounded physical cleanup has a backlog.
-  for(const followup of this.store.db.all<{id:string;text:string;command_id:string}>("SELECT id,text,command_id FROM task_followups WHERE run_id=? AND status='pending' AND created_at>? ORDER BY created_at,id",runId,cutoff)){
-   const coordinator=this.enqueue(run.persona_id,`Owner follow-up explicitly targets task ${run.id} (${run.title??'Task'}). The previous native execution is settled. Decide the next authorized action; do not resume any other task.\n\n${followup.text}`,followup.command_id,null,null);
-   this.store.db.exec("UPDATE task_followups SET status='coordinator_queued',coordinator_run_id=? WHERE id=?",coordinator,followup.id);
+  // A completed descendant may release its own and its ancestors' deferred work,
+  // but never another branch. UNION terminates even on inconsistent cyclic input.
+  const targets=this.store.db.all<Run>(`WITH RECURSIVE ancestors(id) AS (
+   SELECT ? UNION SELECT r.parent_run_id FROM runs r JOIN ancestors a ON a.id=r.id WHERE r.parent_run_id IS NOT NULL
+  ) SELECT r.* FROM runs r JOIN ancestors a ON a.id=r.id
+   WHERE r.status IN ('completed','failed','cancelled') AND (${nativeDescendantsSettledSql})`,runId);
+  for(const run of targets){
+   // Enforce the cutoff even when bounded physical cleanup has a backlog.
+   for(const followup of this.store.db.all<{id:string;text:string;command_id:string}>("SELECT id,text,command_id FROM task_followups WHERE run_id=? AND status='pending' AND created_at>? ORDER BY created_at,id",run.id,cutoff)){
+    const coordinator=this.enqueue(run.persona_id,`Owner follow-up explicitly targets task ${run.id} (${run.title??'Task'}). The previous native execution is settled. Decide the next authorized action; do not resume any other task.\n\n${followup.text}`,followup.command_id,null,null);
+    this.store.db.exec("UPDATE task_followups SET status='coordinator_queued',coordinator_run_id=? WHERE id=?",coordinator,followup.id);
+   }
   }
  }
  private activePersona(id:string):StoredObject<PersonaPut>{const p=this.store.get<PersonaPut>(id,'persona');requireThat(!p.body.archived,'CAPABILITY_UNAVAILABLE','This bot is archived.');return p;}

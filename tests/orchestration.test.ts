@@ -69,6 +69,21 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(f.store.run(b.id)).toEqual(b);
   });
 
+  it('defers a task followup through its live grandchild, then queues it once without waiting for an unrelated sibling', () => {
+    const p=parent(),a=tasks.register(identity,receipt(p)),b=tasks.register(identity,receipt(p,'Unrelated sibling'));
+    const grandchild=tasks.register(identity,receipt(a.id,'Nested work'));
+    const accepted=f.accept({schema_version:1,type:'run.followup',payload:{run_id:a.id,text:'Use the reconciled result from A only'}});
+    finish(p);finish(a.id);
+    expect(f.db.all('SELECT status FROM task_followups')).toEqual([{status:'pending'}]);
+    expect(f.db.all('SELECT id FROM runs')).toHaveLength(4);
+    finish(grandchild.id);
+    f.core.flushFollowups(grandchild.id);
+    const queued=f.db.all<{coordinator_run_id:string}>('SELECT coordinator_run_id FROM task_followups WHERE id=?',accepted.resource_id!)[0];
+    expect(queued.coordinator_run_id).toBeTruthy();
+    expect(JSON.parse(f.store.run(queued.coordinator_run_id).context_json).instruction).toContain(a.id);
+    expect(f.db.all('SELECT id FROM runs')).toHaveLength(5);
+    expect(f.store.run(b.id)).toEqual(b);
+  });
   it('cancels only B while A and its currently claimed coordinator remain unchanged', () => {
     const p = parent(), a = tasks.register(identity, receipt(p)), b = tasks.register(identity, receipt(p, 'Task B'));
     const beforeParent = f.store.run(p);

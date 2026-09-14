@@ -27,6 +27,12 @@ its limit so late child observations block the original root without hiding
 independent queued work. This preserves the old parent attempt for reconciliation;
 it does not prove a complete native census or settle missing observations.
 
+Deferred task follow-ups use the same recorded-descendant settlement predicate.
+A child completion/recovery rechecks only that task and its ancestors; an
+unrelated sibling neither receives the instruction nor blocks a settled subtree's
+follow-up. Original 90-day instruction expiry and one coordinator continuation
+per follow-up still apply. Ordinary messages and immediate steering are separate.
+
 ## Current concurrency boundary
 
 [Two-root Worker admission](CODEX_TWO_ROOTS.md) remains globally serialized.
