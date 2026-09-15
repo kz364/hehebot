@@ -149,6 +149,30 @@ const question = (turnId = 'turn-43') => ({ threadId: 'thread-19', turnId, itemI
 const answer = () => ({ answers: { time: { answers: ['Tomorrow'] }, draft: { answers: ['Second'] } } });
 const ask = (child, id, params = question()) => child.stdout.write(JSON.stringify({ id, method: 'item/tool/requestUserInput', params }) + '\n');
 
+test('owner answer timeout is independent of RPC latency and still fences late responses', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let finish, signal;
+  const { child, writes, transport } = fixture({ timeoutMs: 5, userInputTimeoutMs: 100, onUserInput: (_params, options) => {
+    signal = options.signal; return new Promise(resolve => { finish = resolve; });
+  } });
+  t.after(() => transport.close());
+  ask(child, 'question'); await new Promise(setImmediate);
+  const rejected = assert.rejects(transport.request('thread/read'), { code: 'CODEX_TIMEOUT' });
+  t.mock.timers.tick(5); await rejected;
+  assert.equal(signal.aborted, false); assert.equal(transport.closed, false);
+  t.mock.timers.tick(94); assert.equal(transport.closed, false);
+  t.mock.timers.tick(1); assert.equal(signal.aborted, true); assert.equal(transport.closed, true);
+  finish(answer()); await new Promise(setImmediate);
+  assert.equal(writes.length, 1); assert.equal(writes[0].method, 'thread/read');
+});
+
+test('explicit owner answer timeout must be a bounded positive integer', () => {
+  for (const userInputTimeoutMs of [0, -1, 1.5, Infinity, null, 900001]) {
+    assert.throws(() => fixture({ userInputTimeoutMs }), /INVALID_USER_INPUT_TIMEOUT/);
+  }
+  const f = fixture({ userInputTimeoutMs: 900000 }); f.transport.close();
+});
+
 test('user input remains denied without its explicit handler; opting in never enables approvals', async () => {
   let tools = 0, questions = 0;
   const first = fixture({ onToolCall: () => { tools++; } });

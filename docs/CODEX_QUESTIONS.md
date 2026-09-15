@@ -70,7 +70,9 @@ The final transport matches both the original request ID (including its type) an
 
 ## Host boundary, evidence and limits
 
-The proof uses the parent-transferred `CodexTransport` **`onUserInput(params,{signal,requestId})` callback**. Its subclass only records traffic; it does not override request handling or manually emit answers. The fixture callback validates its exact known root, observed current turn, original item/call ID, original server RPC ID, question IDs/content and normalized flags before resolving synthetic answers. The transport owns the RPC ID, answer validation and bounds. Final tested dependency SHA256:
+`CodexTransport` and `spawnCodex` accept an optional `userInputTimeoutMs` (integer 1–900000). It bounds only owner-question callbacks; ordinary RPCs and dynamic tool calls retain `timeoutMs`. Omission preserves the existing shared timeout. Expiry still closes the transport as an unknown outcome, aborts the callback, and suppresses late answers; a longer answer window does not extend application custody or lease authority. The independent-deadline tests pass with a 5ms RPC deadline and a 100ms question deadline. The native proof was rerun after this additive change: all 16 checkpoints passed with 15 model requests, 5 question RPCs, unchanged pinned binary and cleanup confirmed.
+
+The proof uses the parent-transferred `CodexTransport` **`onUserInput(params,{signal,requestId})` callback**. Its subclass only records traffic; it does not override request handling or manually emit answers. The fixture callback validates its exact known root, observed current turn, original item/call ID, original server RPC ID, question IDs/content and normalized flags before resolving synthetic answers. The transport owns the RPC ID, answer validation and bounds. Original delivery's tested dependency SHA256 (before the separate timeout addition above):
 
 ```text
 d78bd2fcd33a1e24f91f503a53065c2643fb89ccc62433a4b9622ce459e96b7e

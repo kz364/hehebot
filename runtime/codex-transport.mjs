@@ -2,14 +2,18 @@ import { EventEmitter } from 'node:events';
 import { StringDecoder } from 'node:string_decoder';
 import { spawn } from 'node:child_process';
 
+const validUserInputTimeout = value => value === undefined || Number.isSafeInteger(value) && value >= 1 && value <= 900000;
+
 /** Codex 0.154.0's supported stdio protocol. Never retries a request. */
 export class CodexTransport extends EventEmitter {
-  constructor(child, { timeoutMs = 30000, maxFrameBytes = 8 * 1024 * 1024, maxPending = 64, onToolCall = null, onUserInput = null } = {}) {
+  constructor(child, { timeoutMs = 30000, userInputTimeoutMs, maxFrameBytes = 8 * 1024 * 1024, maxPending = 64, onToolCall = null, onUserInput = null } = {}) {
     super();
     if (onToolCall !== null && typeof onToolCall !== 'function') throw new Error('INVALID_TOOL_HANDLER');
     if (onUserInput !== null && typeof onUserInput !== 'function') throw new Error('INVALID_USER_INPUT_HANDLER');
+    if (!validUserInputTimeout(userInputTimeoutMs)) throw new Error('INVALID_USER_INPUT_TIMEOUT');
     this.child = child;
     this.timeoutMs = timeoutMs;
+    this.userInputTimeoutMs = userInputTimeoutMs ?? timeoutMs;
     this.maxFrameBytes = maxFrameBytes;
     this.maxPending = maxPending;
     this.backpressured = false;
@@ -112,7 +116,7 @@ export class CodexTransport extends EventEmitter {
         !['threadId', 'turnId', 'itemId'].every(key => typeof message.params[key] === 'string' && message.params[key].length > 0))) return this.fail('CODEX_USER_INPUT_INVALID_REQUEST');
     this.seenServerCalls.add(id);
     const controller = new AbortController();
-    const timer = setTimeout(() => this.fail(`${prefix}_OUTCOME_UNKNOWN`), this.timeoutMs);
+    const timer = setTimeout(() => this.fail(`${prefix}_OUTCOME_UNKNOWN`), userInput ? this.userInputTimeoutMs : this.timeoutMs);
     this.serverCalls.set(id, { controller, timer, questionThreadId: userInput ? message.params.threadId : null });
     // Handler owns exact native identity/grant validation. Merely installing it
     // grants no command, file, network or approval capability. User-input handlers
@@ -184,13 +188,14 @@ export class CodexTransport extends EventEmitter {
 }
 
 /** Dedicated customer-owned home; never inherit provider keys or Amp auth. */
-export function spawnCodex({ binary, home, cwd, timeoutMs, onToolCall = null, onUserInput = null }) {
+export function spawnCodex({ binary, home, cwd, timeoutMs, userInputTimeoutMs, onToolCall = null, onUserInput = null }) {
   if (!binary?.startsWith('/') || !home?.startsWith('/') || !cwd?.startsWith('/')) throw new Error('ABSOLUTE_PATHS_REQUIRED');
+  if (!validUserInputTimeout(userInputTimeoutMs)) throw new Error('INVALID_USER_INPUT_TIMEOUT');
   const env = Object.fromEntries(['PATH', 'LANG']
     .filter(key => process.env[key]).map(key => [key, process.env[key]]));
   env.HOME = home;
   env.CODEX_HOME = home;
   return new CodexTransport(spawn(binary, ['app-server', '--listen', 'stdio://'], {
     cwd, env, stdio: ['pipe', 'pipe', 'pipe'],
-  }), { timeoutMs, onToolCall, onUserInput });
+  }), { timeoutMs, userInputTimeoutMs, onToolCall, onUserInput });
 }
