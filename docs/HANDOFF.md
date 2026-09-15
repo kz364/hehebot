@@ -369,6 +369,15 @@ complete E01 operation coverage. Verification: 63 focused tests; combined 901
 control / 237 runtime tests, all native/service fixtures, typecheck and build.
 Private logs: `.local/unknown-item-focused.log`, `.local/unknown-item-combined.log`.
 
+Quiet-clock regression checkpoint (2026-09-16): `advanceQuietPhases` checks
+recorded ends as well as starts before accepting a live timestamp. A new operation
+one millisecond before a closed interval's end rejects without journal writes for
+both root and child; exact-end timestamps remain valid. Legacy unknown ends are
+not reconstructed. This protects chronology, not complete streaming coverage or
+VM idle/cost measurement. Verification: 74 focused tests; 901 control / 240 runtime
+combined, native/service fixtures, typecheck and build passed. Private logs:
+`.local/quiet-regression-focused.log`, `.local/quiet-regression-combined.log`.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

@@ -220,7 +220,11 @@ Quiet-window activity diagnostics retain an optional immutable `endedAt` when
 the first closing boundary has a live host timestamp. The offline inspector
 exports that timestamp and `durationMs` alongside the existing owner, preceding
 item/category and start. Historical closure without a timestamp and old journal
-rows remain unmeasured; later replay never invents an end. These additions contain
+rows remain unmeasured; later replay never invents an end. New live boundaries
+cannot predate any recorded end for the same owner; a regressed clock refuses
+the observation without writing the operation or changing its deadlines. Equal
+timestamps remain valid. Legacy records constrain only their known start.
+These additions contain
 no prompts, answers or tool payloads, create no timer/polling/provider calls and
 do not change heartbeat progress or deadlines. Inspect only under the existing
 stopped-executor/kernel-lock procedure. They measure observed native-event silence,

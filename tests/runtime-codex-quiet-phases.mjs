@@ -44,6 +44,37 @@ test('invalid phase state, multiple active records and backwards clocks refuse w
   assert.deepEqual(valid, { [first]: { status: 'inProgress', startedAt: later } });
 });
 
+test('closed intervals reject regressed boundaries but permit their exact end without inventing legacy time', () => {
+  const closed = advanceQuietPhases(advanceQuietPhases(undefined, at, first), later);
+  const before = structuredClone(closed);
+  assert.throws(() => advanceQuietPhases(closed, '2026-09-15T01:00:59.999Z', second), { code: 'INVALID_QUIET_PHASE' });
+  assert.deepEqual(closed, before);
+  assert.deepEqual(advanceQuietPhases(closed, later, second), {
+    ...closed, [second]: { status: 'inProgress', startedAt: later },
+  });
+  const legacy = { [first]: { status: 'completed', startedAt: at } };
+  assert.deepEqual(advanceQuietPhases(legacy, at, second), {
+    ...legacy, [second]: { status: 'inProgress', startedAt: at },
+  });
+});
+
+for (const threadId of ['root', 'child']) test(`${threadId} clock regression after quiet closure cannot write a new operation`, async t => {
+  const f = await fixture(t), key = '["child","turn"]';
+  if (threadId === 'child') await f.journal.update('attempt', {
+    spawns: { s: { status: 'completed', receiverThreadIds: ['child'] } }, childTurns: { [key]: 'inProgress' },
+  });
+  await f.item('first', 'completed', at, threadId);
+  await f.item('busy', 'inProgress', later, threadId);
+  const before = await f.journal.get('attempt');
+  await assert.rejects(f.item('regressed', 'inProgress', '2026-09-15T01:00:59.999Z', threadId), { code: 'INVALID_QUIET_PHASE' });
+  assert.deepEqual(await f.journal.get('attempt'), before);
+  await f.item('same-time', 'inProgress', later, threadId);
+  const row = await f.journal.get('attempt'), owner = threadId === 'root' ? row : row.childObligations[key];
+  assert.equal(owner.commands['same-time'], 'inProgress');
+  assert.equal(owner.commands.regressed, undefined);
+  assert.equal(owner.quietPhases['["commands","first"]'].endedAt, later);
+});
+
 test('only the last parallel tool completion opens quiet time; duplicate/history items cannot reset it', async t => {
   const f = await fixture(t);
   await f.item('z', 'inProgress', at); await f.item('a', 'inProgress', at);

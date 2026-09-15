@@ -29,7 +29,7 @@ export function readQuietPhases(value) {
  */
 export function advanceQuietPhases(value, at, after = undefined) {
   const phases = readQuietPhases(value);
-  if (at !== undefined && (!timestamp(at) || Object.values(phases).some(phase => phase.startedAt > at))) fail();
+  if (at !== undefined && (!timestamp(at) || Object.values(phases).some(phase => (phase.endedAt ?? phase.startedAt) > at))) fail();
   for (const phase of Object.values(phases)) {
     if (phase.status === 'inProgress' && at !== undefined) phase.endedAt = at;
     phase.status = 'completed';
