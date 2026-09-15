@@ -20,10 +20,11 @@ const root = resolve(import.meta.dirname, '..');
 const effectsMode = process.argv.includes('--child-effects');
 const childMode = process.argv.includes('--child') || effectsMode;
 const crashMode = process.argv.includes('--crash');
+const historyMode = process.argv.includes('--history');
 const questionCancelMode = process.argv.includes('--questions-cancel');
 const questionsMode = process.argv.includes('--questions') || questionCancelMode;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -215,6 +216,16 @@ try {
   const dependencies = { spriteRequest, fetchImpl: trustedFetch,
     launch: options => {
       const transport = spawnCodex(options), request = transport.request.bind(transport);
+      if (historyMode) {
+        const emit = transport.emit.bind(transport);
+        report.withheldMcpCompletions = 0;
+        transport.emit = (event, ...args) => {
+          if (event === 'notification' && args[0]?.method === 'item/completed' && args[0].params?.item?.type === 'mcpToolCall') {
+            report.withheldMcpCompletions++; return true;
+          }
+          return emit(event, ...args);
+        };
+      }
       if (questionsMode) {
         const write = transport.write.bind(transport);
         report.nativeAnswerWrites = 0;
@@ -369,6 +380,20 @@ try {
       Object.assign(report, { nativeChildEffectCustody: true, childOwnedLocksRetained: true, atomicLockRollback: true,
         nativeSubmissionIdentityPreserved: true, effectReconciledDuringCancellation: true, effectReplayPreserved: true, connectorDispatches: 0 });
     }
+  }
+  if (historyMode) {
+    const before = await service.observe();
+    assert.equal(report.withheldMcpCompletions, 1);
+    assert.deepEqual(Object.values(before.mcpCalls), ['inProgress']);
+    assert.equal(before.rootSettled, true);
+    const requests = report.modelRequests;
+    const recovered = await service.adapter.reconcile(dispatched.attemptId);
+    assert.deepEqual(Object.keys(recovered.mcpCalls), Object.keys(before.mcpCalls));
+    assert.deepEqual(Object.values(recovered.mcpCalls), ['completed']);
+    assert.equal(recovered.effectsSettled, undefined);
+    assert.deepEqual(await service.adapter.reconcile(dispatched.attemptId), recovered);
+    assert.equal(report.modelRequests, requests);
+    report.missedMcpCompletionRecovered = true;
   }
   const native = await service.observe();
   assert.deepEqual(Object.values(native.mcpCalls ?? {}), childMode ? [] : ['completed']);

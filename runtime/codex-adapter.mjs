@@ -315,25 +315,30 @@ export class CodexAdapter {
       const prior = child ? row.childTurns[key] : row.rootSettled ? row.nativeOutcome : 'inProgress';
       if (prior !== 'inProgress' && prior !== turn.status) fail('SETTLEMENT_CONFLICT');
       const owner = child ? row.childObligations?.[key] ?? {} : row;
-      const commands = { ...owner.commands };
-      let changed = false;
-      for (const [id, status] of Object.entries(commands)) {
-        const matches = (turn.items ?? []).filter(item => item?.id === id);
-        if (!matches.length) continue; // Omitted history is not a terminal receipt.
-        if (matches.length !== 1) fail('RECONCILIATION_INCOMPLETE');
-        const item = matches[0];
-        if (item.type !== 'commandExecution' || !['inProgress', 'completed', 'failed', 'declined'].includes(item.status)) fail('CODEX_PROTOCOL_ERROR');
-        if (status !== 'inProgress' && status !== item.status) fail('SETTLEMENT_CONFLICT');
-        if (status !== item.status) { commands[id] = item.status; changed = true; }
+      const recovered = {};
+      for (const [field, type] of Object.entries({ commands: 'commandExecution', mcpCalls: 'mcpToolCall',
+        dynamicCalls: 'dynamicToolCall', fileChanges: 'fileChange' })) {
+        const values = { ...owner[field] }; let changed = false;
+        for (const [id, status] of Object.entries(values)) {
+          const matches = (turn.items ?? []).filter(item => item?.id === id);
+          if (!matches.length) continue; // Omitted history is not a terminal receipt.
+          if (matches.length !== 1) fail('RECONCILIATION_INCOMPLETE');
+          const item = matches[0];
+          const states = ['inProgress', 'completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : [])];
+          if (item.type !== type || !states.includes(item.status)) fail('CODEX_PROTOCOL_ERROR');
+          if (status !== 'inProgress' && status !== item.status) fail('SETTLEMENT_CONFLICT');
+          if (status !== item.status) { values[id] = item.status; changed = true; }
+        }
+        if (changed) recovered[field] = values;
       }
       const patch = {};
       if (prior !== turn.status) {
         if (child) patch.childTurns = { ...row.childTurns, [key]: turn.status };
         else Object.assign(patch, { rootSettled: true, status: 'finishing', nativeOutcome: turn.status });
       }
-      if (changed) {
-        if (child) patch.childObligations = { ...row.childObligations, [key]: { ...owner, commands } };
-        else patch.commands = commands;
+      if (Object.keys(recovered).length) {
+        if (child) patch.childObligations = { ...row.childObligations, [key]: { ...owner, ...recovered } };
+        else Object.assign(patch, recovered);
       }
       // No new items, statusless-tool inference, descendant census, or effect
       // settlement. Identical readback produces no journal write.

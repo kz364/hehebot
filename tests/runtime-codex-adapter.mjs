@@ -356,7 +356,7 @@ for (const child of [false, true]) test(`exact ${child ? 'child' : 'root'} comma
   await adapter.submit(input);
   const key = '["child-a","child-turn"]', sibling = '["sibling","child-turn"]';
   const obligations = { commands: { done: 'inProgress', missing: 'inProgress', held: 'inProgress' },
-    mcpCalls: { effect: 'inProgress' }, webSearches: { search: 'inProgress' } };
+    mcpCalls: { effect: 'inProgress' }, dynamicCalls: { dynamic: 'inProgress' }, fileChanges: { file: 'inProgress' }, webSearches: { search: 'inProgress' } };
   await journal.update(input.attemptId, {
     ...obligations,
     spawns: { spawn: { status: 'completed', receiverThreadIds: ['child-a', 'sibling'] } },
@@ -366,7 +366,8 @@ for (const child of [false, true]) test(`exact ${child ? 'child' : 'root'} comma
   const threadId = child ? 'child-a' : 'thread-a', turnId = child ? 'child-turn' : 'turn-b';
   const command = (id, status) => ({ type: 'commandExecution', id, status });
   let turn = { id: turnId, status: 'inProgress', items: [command('done', 'failed'), command('held', 'inProgress'),
-    command('unrecorded', 'completed'), { type: 'mcpToolCall', id: 'effect', status: 'completed' }, { type: 'webSearch', id: 'search' }] };
+    command('unrecorded', 'completed'), { type: 'mcpToolCall', id: 'effect', status: 'completed' },
+    { type: 'dynamicToolCall', id: 'dynamic', status: 'failed' }, { type: 'fileChange', id: 'file', status: 'declined' }, { type: 'webSearch', id: 'search' }] };
   const restored = new CodexAdapter({ cwd, journal: new FileJournal(cwd), rpc: async (method, params) => {
     assert.equal(method, 'thread/read'); assert.deepEqual(params, { threadId, includeTurns: true });
     return { thread: { id: threadId, source: { subAgent: { thread_spawn: { parent_thread_id: 'thread-a' } } },
@@ -375,7 +376,10 @@ for (const child of [false, true]) test(`exact ${child ? 'child' : 'root'} comma
   const reconcile = () => child ? restored.reconcileChild(input.attemptId, { threadId, turnId }) : restored.reconcile(input.attemptId);
   const row = await reconcile(), selected = child ? row.childObligations[key] : row;
   assert.deepEqual(selected.commands, { done: 'failed', missing: 'inProgress', held: 'inProgress' });
-  assert.deepEqual(selected.mcpCalls, { effect: 'inProgress' });
+  assert.deepEqual(selected.mcpCalls, { effect: 'completed' });
+  assert.deepEqual(selected.dynamicCalls, { dynamic: 'failed' });
+  assert.deepEqual(selected.fileChanges, { file: 'declined' });
+  assert.equal(row.effectsSettled, undefined);
   assert.deepEqual(selected.webSearches, { search: 'inProgress' });
   assert.deepEqual(row.childObligations[sibling], obligations);
   if (child) assert.deepEqual(row.commands, obligations.commands);
@@ -396,7 +400,7 @@ for (const child of [false, true]) test(`exact ${child ? 'child' : 'root'} comma
 test('invalid command history cannot partially settle a turn or overwrite a newer live observation', async t => {
   const { adapter, journal } = await fixture(t);
   await adapter.submit(input);
-  const before = await journal.update(input.attemptId, { commands: { first: 'inProgress', second: 'inProgress' } });
+  const before = await journal.update(input.attemptId, { commands: { first: 'inProgress', second: 'inProgress' }, mcpCalls: { effect: 'inProgress' } });
   const command = (id, status = 'completed') => ({ id, type: 'commandExecution', status });
   let items;
   adapter.rpc = async () => ({ thread: { id: 'thread-a', turns: [{ id: 'turn-b', status: 'completed', items }] } });
@@ -404,6 +408,9 @@ test('invalid command history cannot partially settle a turn or overwrite a newe
     [[command('first'), command('second', 'unknown')], 'CODEX_PROTOCOL_ERROR'],
     [[command('first'), { ...command('second'), type: 'mcpToolCall' }], 'CODEX_PROTOCOL_ERROR'],
     [[command('first'), command('second'), command('second')], 'RECONCILIATION_INCOMPLETE'],
+    [[command('first'), { id: 'effect', type: 'mcpToolCall', status: 'declined' }], 'CODEX_PROTOCOL_ERROR'],
+    [[command('first'), { id: 'effect', type: 'dynamicToolCall', status: 'completed' }], 'CODEX_PROTOCOL_ERROR'],
+    [[command('first'), { id: 'effect', type: 'mcpToolCall' }], 'CODEX_PROTOCOL_ERROR'],
     [{}, 'CODEX_PROTOCOL_ERROR'],
   ]) {
     items = bad;

@@ -82,11 +82,12 @@ After inspection, retain the state and reconcile uncertain Worker/native/effect
 outcomes through separately supported procedures. This tool supplies evidence
 only; safe resume, recursive settlement and production sleep gates stay open work.
 
-## Exact native command history recovery
+## Exact status-bearing native history recovery
 
 The adapter's separate `reconcile` and `reconcileChild` APIs use supported
 `thread/read` for an already acknowledged exact turn. They can recover a missed
-terminal command observation only for a recorded `commandExecution` item ID in
+terminal invocation observation only for a recorded `commandExecution`,
+`mcpToolCall`, `dynamicToolCall` or `fileChange` item ID and matching type in
 that same thread/turn. Child readback additionally verifies the recorded native
 parent. A completed root, omitted item, another turn's matching item ID, or an
 empty background-terminal list cannot settle a command.
@@ -97,6 +98,15 @@ observations reject reconciliation without partial settlement. Identical replay
 does not write. This does not import unrecorded items, infer statusless tool
 completion, settle MCP effects, discover missing children, or remove unknown
 operation coverage. Production admission and sleep remain denied.
+
+`bash scripts/test-codex-service.sh --history` withholds one actual MCP completion
+notification from the assembled host. The journal retains its start after native
+root completion; exact supported history recovers the invocation, with identical
+replay and no additional model request. The real local HTTPS Worker receipt is
+verified independently. This fixture uses synthetic loopback model responses and
+a read-only routine-list tool; it does not prove external mutation recovery.
+Dynamic-tool/file-change and root/child isolation have adapter contract tests,
+not equivalent live recovery evidence. Statusless observations remain untouched.
 
 `node scripts/test-codex-native.mjs` preserves an open command receipt while
 withholding its actual late completion from that receipt. After the FIFO-backed
