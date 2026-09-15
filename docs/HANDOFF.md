@@ -2,6 +2,18 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Worker operation envelope checkpoint (2026-09-16)
+
+Heartbeat now enforces start ≤ operation deadline ≤ authenticated attempt deadline
+and progress ≥ start, after UTC normalization. Invalid new records roll back the
+page and lease. Late completion progress remains reportable without extending
+deadlines. Focused lifecycle/projection integration: 63 passed; log
+`.local/operation-envelope-focused.log`. Combined check passed 907 control / 251
+runtime tests, all native/service fixtures and typecheck/build dry run
+(`.local/operation-envelope-combined.log`). No schema migration, provider activity or
+production gate change. E01 progress policy/termination and other credential-free
+work remain open; schedule unchanged.
+
 ## Interrupted-spawn checkpoint (2026-09-16)
 
 Heartbeat projection and offline inspection now agree with the adapter/pinned

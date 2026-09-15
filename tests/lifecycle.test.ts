@@ -105,6 +105,31 @@ describe('executor leases and attempts', () => {
       { started_at: op.started_at, deadline_at: op.deadline_at, last_progress_at: '2026-09-10T00:00:10.000Z' },
     ]);
   });
+  it.each([
+    { deadline_at: '2026-09-10T07:20:00.001+07:00' },
+    { started_at: '2026-09-10T00:02:00.001Z', deadline_at: '2026-09-10T00:02:00.000Z', last_progress_at: '2026-09-10T00:02:00.001Z' },
+    { last_progress_at: '2026-09-09T23:59:59.999Z' },
+  ])('rejects new operation timing outside its attempt envelope atomically: %j', patch => {
+    const claim = claimed(), before = life.get();
+    f.setNow('2026-09-10T00:00:10.000Z');
+    const invalid = { ...operation(claim.run.id), started_at: '2026-09-10T00:00:00.000Z', ...patch };
+    expect(() => life.heartbeat(identity, [operation(claim.run.id), invalid]))
+      .toThrowError(expect.objectContaining({ code: 'INVALID_INPUT', status: 422 }));
+    expect(f.db.all('SELECT * FROM operations')).toEqual([]);
+    expect(life.get()).toEqual(before);
+  });
+  it('accepts an exact hard-deadline boundary and late progress without extending custody', () => {
+    const claim = claimed(), op = { ...operation(claim.run.id), started_at: claim.deadline_at,
+      deadline_at: '2026-09-10T07:20:00+07:00', last_progress_at: claim.deadline_at };
+    f.db.exec("UPDATE lifecycle SET lease_until='2026-09-10T00:21:00.000Z'");
+    f.setNow(claim.deadline_at);
+    life.heartbeat(identity, [op]);
+    f.setNow('2026-09-10T00:20:00.001Z');
+    life.heartbeat(identity, [{ ...op, status: 'settled', last_progress_at: '2026-09-10T00:20:00.001Z' }]);
+    expect(f.db.all('SELECT started_at,deadline_at,last_progress_at,status FROM operations WHERE id=?', op.id)).toEqual([
+      { started_at: claim.deadline_at, deadline_at: claim.deadline_at, last_progress_at: '2026-09-10T00:20:00.001Z', status: 'settled' },
+    ]);
+  });
   it('canonicalizes retained offset custody only on equivalent authorized replay', () => {
     const claim = claimed(), op = operation(claim.run.id); life.heartbeat(identity, [op]);
     f.db.exec('UPDATE operations SET started_at=?,deadline_at=?,last_progress_at=? WHERE id=?',

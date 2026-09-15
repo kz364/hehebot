@@ -4,6 +4,19 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Worker operation envelope checkpoint (2026-09-16): after existing attempt/epoch
+authentication and UTC normalization, heartbeat requires start ≤ operation deadline
+≤ admitted attempt deadline and progress ≥ start. The hard limit comes from the
+attempt row, not the submitted operation. Invalid timing rolls back the entire
+heartbeat page and lease update. Progress after a deadline is still accepted so
+late completion can be reported; it cannot extend immutable operation custody.
+Focused verification passed 63 lifecycle/projection integration tests, including
+offset hard-limit +1ms, inverted times, exact limit and late completion. Log:
+`.local/operation-envelope-focused.log`; combined verification passed 907 control /
+251 runtime tests, all native/service fixtures and typecheck/build dry run
+(`.local/operation-envelope-combined.log`). No production gate or provider action
+changed; progress-extension policy and actual termination remain unverified.
+
 Interrupted-spawn checkpoint (2026-09-16): pinned generated
 `CollabAgentToolCallStatus` includes `interrupted`, already admitted by the event
 adapter. Heartbeat projection previously left that invocation unknown, while

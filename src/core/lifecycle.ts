@@ -67,8 +67,9 @@ export class LifecycleCore {
     const op={...input,started_at:operationTime(input.started_at),deadline_at:operationTime(input.deadline_at),last_progress_at:operationTime(input.last_progress_at)};
     const run=this.store.run(op.run_id);
     requireThat(run.current_attempt===op.attempt&&['claimed','running','finishing','cancelling','recovery_required'].includes(run.status),'STALE_EPOCH','Operation does not belong to an active attempt.');
-    const attempt=this.store.db.all<{epoch:number;boot_id:string}>('SELECT epoch,boot_id FROM attempts WHERE run_id=? AND attempt=?',run.id,op.attempt)[0];
+    const attempt=this.store.db.all<{epoch:number;boot_id:string;deadline_at:string}>('SELECT epoch,boot_id,deadline_at FROM attempts WHERE run_id=? AND attempt=?',run.id,op.attempt)[0];
     requireThat(attempt?.epoch===identity.epoch&&attempt.boot_id===identity.boot_id,'STALE_EPOCH','Attempt belongs to a different executor.');
+    requireThat(op.started_at<=op.deadline_at&&op.deadline_at<=operationTime(attempt.deadline_at)&&op.last_progress_at>=op.started_at,'INVALID_INPUT','Operation timing exceeds its attempt or is out of order.',422);
     const old=this.store.db.all<HeartbeatOperation>('SELECT * FROM operations WHERE id=?',op.id)[0];
     requireThat(!old||old.run_id===run.id&&old.attempt===op.attempt,'INVALID_INPUT','Operation identity was reused.',422);
     requireThat(!old||old.kind===op.kind&&operationTime(old.started_at)===op.started_at&&operationTime(old.deadline_at)===op.deadline_at,'INVALID_INPUT','Operation custody changed.',422);
