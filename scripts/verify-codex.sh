@@ -30,6 +30,7 @@ node scripts/test-codex-tools.mjs --supervisor-child
 bash scripts/test-codex-service.sh
 bash scripts/test-codex-service.sh --submission-ack
 bash scripts/test-codex-service.sh --operation-pages
+bash scripts/test-codex-service.sh --reasoning
 bash scripts/test-codex-service.sh --history
 bash scripts/test-codex-service.sh --history-child
 bash scripts/test-codex-service.sh --questions

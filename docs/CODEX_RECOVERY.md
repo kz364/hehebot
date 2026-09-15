@@ -54,11 +54,11 @@ this checks local consistency, not authenticity or current Worker authority.
 
 The report includes service epoch/boot, current Worker run/attempt and adapter
 attempt ID, exact observed native root/child thread and turn IDs, command/MCP/spawn,
-file-change, dynamic-tool, web-search, wait, compaction, image-generation and
+file-change, dynamic-tool, web-search, wait, compaction, image-generation, reasoning and
 collaboration observations, plus cancellation acknowledgments. Collaboration
 records preserve both the tool name and item ID within the exact thread/turn;
 matching IDs in another tool or child remain separate. Status validation follows
-the adapter's persisted enums. For search/wait/compaction/image generation,
+the adapter's persisted enums. For search/wait/compaction/image generation/reasoning,
 `completed` means an observed item termination, not verified success. The report
 accepts at most 4096 observations across all categories and descendants; overflow
 rejects the native projection rather than silently truncating it.

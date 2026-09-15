@@ -61,6 +61,7 @@ test('private real journal projects asymmetric identities and obligations withou
 test('recovery includes every recorded tool category with exact root/child and collaboration identity', async t => {
   const f = await fixture(t);
   await f.journal.write(attemptId, { ...f.native, fileChanges: { 'file/19': 'declined' }, dynamicCalls: { 'same-item': 'failed' },
+    reasoningItems: { reasoning: 'inProgress' },
     webSearches: { search: 'completed' }, sleeps: { sleep: 'inProgress' }, compactions: { compact: 'completed' },
     imageGenerations: { image: 'inProgress' }, collabCalls: { '["wait","same-item"]': 'interrupted', '["sendMessage","same-item"]': 'completed' },
     childObligations: { [childKey]: { ...f.native.childObligations[childKey], dynamicCalls: { 'same-item': 'inProgress' },
@@ -69,7 +70,7 @@ test('recovery includes every recorded tool category with exact root/child and c
   assert.deepEqual(report.issues, []);
   const root = report.native.observations.filter(row => row.threadId === 'root-19');
   for (const [kind, itemId, status] of [['fileChanges', 'file/19', 'declined'], ['dynamicCalls', 'same-item', 'failed'],
-    ['webSearches', 'search', 'completed'], ['sleeps', 'sleep', 'inProgress'], ['compactions', 'compact', 'completed'], ['imageGenerations', 'image', 'inProgress']]) {
+    ['webSearches', 'search', 'completed'], ['sleeps', 'sleep', 'inProgress'], ['compactions', 'compact', 'completed'], ['imageGenerations', 'image', 'inProgress'], ['reasoningItems', 'reasoning', 'inProgress']]) {
     assert.deepEqual(root.find(row => row.kind === kind), { threadId: 'root-19', turnId: 'turn-23', kind, itemId, status });
   }
   assert.deepEqual(root.filter(row => row.kind === 'collabCalls').map(({ tool, itemId, status }) => ({ tool, itemId, status })),
@@ -83,6 +84,7 @@ test('recovery includes every recorded tool category with exact root/child and c
 test('malformed extended observations reject the native projection instead of hiding active work', async t => {
   const f = await fixture(t);
   for (const patch of [{ dynamicCalls: { item: 'declined' } }, { webSearches: { item: 'failed' } },
+    { reasoningItems: { item: 'failed' } },
     { imageGenerations: { item: 'success' } }, { fileChanges: { item: { status: 'completed', secret: canary } } },
     { collabCalls: { '["unknownTool","item"]': 'completed' } }, { collabCalls: { '["wait", "item"]': 'completed' } },
     { collabCalls: { '["wait",19]': 'completed' } }, { collabCalls: { item: 'completed' } }]) {

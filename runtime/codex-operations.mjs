@@ -31,7 +31,7 @@ export class CodexOperations {
           new Date(timing[key]).toISOString() === timing[key]) || timing.lastProgressAt < timing.startedAt)) fail('INVALID_OPERATION_TIMING');
       operations.push({ id: uuid([attemptId, runId, attempt, key]), run_id: runId, attempt,
         kind, status, started_at: timing?.startedAt ?? startedAt,
-        deadline_at: timing ? new Date(Math.min(Date.parse(timing.startedAt) + 120000, Date.parse(deadlineAt))).toISOString() : deadlineAt,
+        deadline_at: timing ? new Date(Math.min(Date.parse(timing.startedAt) + (kind === 'inference' ? 300000 : 120000), Date.parse(deadlineAt))).toISOString() : deadlineAt,
         // Reading the same journal is not fresh native progress.
         last_progress_at: timing?.lastProgressAt ?? startedAt });
     };
@@ -43,10 +43,10 @@ export class CodexOperations {
     if (!row) return operations;
     const items = (owner, identity) => {
       if (owner.operationTimes !== undefined && (!owner.operationTimes || typeof owner.operationTimes !== 'object' || Array.isArray(owner.operationTimes))) fail('INVALID_OPERATION_TIMING');
-      for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations']) {
-        const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations'].includes(field) ? ['completed']
+      for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems']) {
+        const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems'].includes(field) ? ['completed']
           : ['completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
-        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], 'tool', status(value, terminal), owner.operationTimes?.[JSON.stringify([field, id])]);
+        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], field === 'reasoningItems' ? 'inference' : 'tool', status(value, terminal), owner.operationTimes?.[JSON.stringify([field, id])]);
       }
       for (const [id, spawn] of Object.entries(owner.spawns ?? {})) {
         add([identity, 'spawns', id], 'tool', status(spawn?.status, ['completed', 'failed']), owner.operationTimes?.[JSON.stringify(['spawns', id])]);

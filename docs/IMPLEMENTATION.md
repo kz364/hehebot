@@ -4,7 +4,7 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
-Latest implementation checkpoint (2026-09-15): heartbeat clocks canonicalize to UTC milliseconds and reject changed operation custody/backwards progress atomically. Final control tests: 877 passed; typecheck passed. The combined verifier passed 872 control / 183 runtime tests, native/service fixtures and build before five additional boundary tests passed in the final control run. See [handoff](HANDOFF.md) for the exact evidence boundary. No production gate changed.
+Latest implementation checkpoint (2026-09-15): native reasoning-item boundaries now retain content-free root/child phase clocks with five-minute bounds capped by the task deadline. Root completion does not erase unfinished reasoning; recovery diagnostics retain it. The combined verifier passed 877 control / 185 runtime tests, all native/service fixtures including the new `--reasoning` mode, typecheck and build. Before-start silence and progress-based extensions remain unimplemented. See [service contracts](CODEX_SERVICE.md) and [handoff](HANDOFF.md) for evidence boundaries. No production gate changed.
 
 The owner-selected Mac direction is SwiftUI + WKWebView around the remote portal, not yet implemented. The Electron foundation listed below remains existing code, not a verified Mac release; separate Mac-decision specification edits are awaiting integration.
 

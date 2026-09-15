@@ -87,6 +87,20 @@ native/service fixtures and build before five additional boundary tests were
 added and included in the final control run. Production gates remain false.
 No account calls, live provider changes, pushes or deployments were made.
 
+Reasoning-item checkpoint (2026-09-15): exact root/child `reasoning` item boundaries
+now retain host-observed five-minute phase clocks capped by the task deadline.
+Only identity/status/times enter the host journal, never reasoning content or
+deltas. Root completion does not erase unfinished reasoning, and the offline
+inspector now includes those obligations. Two new regressions failed before the
+change; 68 focused router/adapter/projection tests passed afterward. The actual
+native `--reasoning` fixture passed with two scripted model requests and an
+accepted HTTPS Worker heartbeat. The combined verifier passed 877 control and
+185 runtime tests, all native/service fixtures, typecheck and build dry run.
+E01 remains open for before-start silence, progress extensions, longer declared
+shell/transfer bounds and complete coverage. Native reasoning history is not
+erased by host projection. Production gates remain false; no live accounts,
+provider operations, pushes or deployments were used.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

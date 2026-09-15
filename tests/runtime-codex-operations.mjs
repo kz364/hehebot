@@ -127,6 +127,22 @@ test('late root and child tools use independent two-minute clocks capped by the 
   assert.deepEqual(await f.journal.get('attempt-a'), before);
 });
 
+test('reasoning uses five-minute independent phase clocks, not tool clocks or root settlement', async t => {
+  const f = await fixture(t), key = '["reasoningItems","same"]';
+  await f.journal.putIfAbsent('attempt-a', { status: 'finishing', rootSettled: true,
+    reasoningItems: { same: 'inProgress', legacy: 'completed', invalid: 'failed' },
+    operationTimes: { [key]: { startedAt: '2026-09-14T01:10:00.000Z', lastProgressAt: '2026-09-14T01:10:00.000Z' } },
+    childObligations: { '["child","turn"]': { reasoningItems: { same: 'completed' },
+      operationTimes: { [key]: { startedAt: '2026-09-14T01:18:00.000Z', lastProgressAt: '2026-09-14T01:18:30.000Z' } } } } });
+  const rows = await f.operations.snapshot();
+  assert.deepEqual(rows.slice(2).map(row => [row.kind, row.status, row.deadline_at]), [
+    ['inference', 'active', '2026-09-14T01:15:00.000Z'], ['inference', 'settled', f.config.deadlineAt],
+    ['inference', 'unknown', f.config.deadlineAt], ['inference', 'settled', f.config.deadlineAt],
+  ]);
+  assert.equal(rows[1].status, 'settled'); assert.equal(new Set(rows.map(row => row.id)).size, 6);
+  assert.deepEqual(await new CodexOperations(f.config).snapshot(), rows);
+});
+
 for (const timing of [null, {}, { startedAt: 'invalid', lastProgressAt: 'invalid' },
   { startedAt: '2026-09-14T01:10:00.000Z', lastProgressAt: '2026-09-14T01:09:59.999Z' }]) {
   test(`corrupt phase timing cannot silently fall back to the hard deadline: ${JSON.stringify(timing)}`, async t => {

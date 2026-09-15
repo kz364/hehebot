@@ -95,7 +95,22 @@ Spawn invocation completion does not stop its child clock or settle child work;
 the child retains its independent turn and tool observations.
 Legacy/history-only observations without clocks retain their existing hard-deadline
 fallback. Coverage and root/child inference records also retain that bound.
-Quiet-inference deadlines, explicit longer transfer/shell allowances and
+Live `reasoning` item boundaries now retain separate root/child inference
+operations with five-minute deadlines capped by the task hard deadline. Only
+identity, boundary status and trusted host clocks enter the application journal;
+reasoning summaries, content and deltas are excluded. Duplicate starts do not
+reset clocks. Item completion is not root/child/tool/effect settlement, and root
+completion cannot erase an unfinished reasoning item. The offline recovery
+inspector includes these obligations and rejects invalid status values.
+
+`bash scripts/test-codex-service.sh --reasoning` exercises actual pinned Codex
+reasoning boundaries through the service and an accepted HTTPS Worker heartbeat,
+with two scripted model requests and a read-only MCP receipt. Router/journal tests
+cover root/child isolation, buffering, replay and retained unfinished reasoning;
+projection tests cover five-minute versus two-minute bounds and hard-deadline caps.
+This does not measure authenticated model behavior or erase native-owned reasoning
+history. Quiet inference before any reasoning-item start, token-progress-based
+extensions, explicit longer transfer/shell allowances and
 progress-based phase extensions remain separate work; this is not full S19 or
 proof of the native operation's true start before its host notification arrived.
 Timeout still requests cancellation, not settlement or automatic replay.

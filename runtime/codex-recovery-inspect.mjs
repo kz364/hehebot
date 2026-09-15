@@ -133,7 +133,7 @@ export async function inspectCodexRecovery(directory) {
     const children = [], obligations = [], origins = new Map();
     const items = (owner, threadId, turnId) => {
       require(object(owner));
-      for (const field of ['commands', 'mcpCalls', 'spawns', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'collabCalls']) for (const [key, item] of entries(owner[field])) {
+      for (const field of ['commands', 'mcpCalls', 'spawns', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'collabCalls', 'reasoningItems']) for (const [key, item] of entries(owner[field])) {
         let itemId = key, tool;
         if (field === 'collabCalls') {
           const pair = JSON.parse(key);
@@ -141,7 +141,7 @@ export async function inspectCodexRecovery(directory) {
           [tool, itemId] = pair;
         }
         const status = field === 'spawns' ? item?.status : item;
-        const states = ['webSearches', 'sleeps', 'compactions', 'imageGenerations'].includes(field) ? ['inProgress', 'completed']
+        const states = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems'].includes(field) ? ['inProgress', 'completed']
           : ['inProgress', 'completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
         require(typeof itemId === 'string' && itemId.length > 0 && itemId.length <= 256 && states.includes(status) && obligations.length < 4096);
         obligations.push({ threadId, turnId, kind: field, itemId, status, ...(tool ? { tool } : {}) });

@@ -26,9 +26,10 @@ const questionCancelMode = process.argv.includes('--questions-cancel');
 const questionsMode = process.argv.includes('--questions') || questionCancelMode;
 const submissionAckMode = process.argv.includes('--submission-ack');
 const operationPagesMode = process.argv.includes('--operation-pages');
+const reasoningMode = process.argv.includes('--reasoning');
 const expectedToolCalls = operationPagesMode ? 101 : 1;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -55,7 +56,7 @@ function send(res, output) {
   for (const [output_index, item] of output.entries()) {
     event('response.output_item.added', { output_index, item: { ...item, ...(item.type === 'function_call' ? { arguments: '' } : { content: [] }) } });
     if (item.type === 'function_call') event('response.function_call_arguments.done', { output_index, item_id: item.id, arguments: item.arguments });
-    else {
+    else if (item.type === 'message') {
       event('response.content_part.added', { output_index, item_id: item.id, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } });
       event('response.output_text.delta', { output_index, item_id: item.id, content_index: 0, delta: item.content[0].text });
       event('response.output_text.done', { output_index, item_id: item.id, content_index: 0, text: item.content[0].text });
@@ -156,6 +157,7 @@ try {
         assert.ok(tool);
         send(res, [...(childMode ? [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant', phase: 'commentary',
           content: [{ type: 'output_text', text: 'SERVICE_CHILD_PROGRESS', annotations: [] }] }] : []),
+          ...(reasoningMode ? [{ id: 'rs_fixture_43', type: 'reasoning', summary: [{ type: 'summary_text', text: 'PRIVATE_SYNTHETIC_REASONING_43' }] }] : []),
           ...Array.from({ length: expectedToolCalls }, () => ({ id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
           ...(tool.name === 'mcp__hehebot' ? { namespace: 'mcp__hehebot', name: 'hehebot_list_routines' } : { name: tool.name }), arguments: '{}' }))]);
       } else {
@@ -223,7 +225,7 @@ try {
   const submissionRequests = [], heartbeatPages = [];
   const dependencies = { spriteRequest, fetchImpl: async (url, init) => {
     const response = await trustedFetch(url, init);
-    if (operationPagesMode && new URL(url).pathname === '/internal/heartbeat') {
+    if ((operationPagesMode || reasoningMode) && new URL(url).pathname === '/internal/heartbeat') {
       assert.equal(response.status, 200);
       heartbeatPages.push(JSON.parse(init.body).operations);
     }
@@ -444,7 +446,16 @@ try {
   assert.equal(native.effectsSettled, undefined);
   await service.maintain();
   const operations = await service.supervisor.operations();
-  assert.equal(operations.length, childMode ? 5 : expectedToolCalls + 2);
+  assert.equal(operations.length, childMode ? 5 : expectedToolCalls + 2 + Number(reasoningMode));
+  if (reasoningMode) {
+    assert.deepEqual(Object.values(native.reasoningItems), ['completed']);
+    assert.doesNotMatch(JSON.stringify(native), /PRIVATE_SYNTHETIC_REASONING_43/);
+    const phases = operations.filter(operation => operation.kind === 'inference' && operation.deadline_at < dispatched.claim.deadline_at);
+    assert.equal(phases.length, 1); assert.equal(phases[0].status, 'settled');
+    assert.equal(Date.parse(phases[0].deadline_at) - Date.parse(phases[0].started_at), 300000);
+    assert.deepEqual(heartbeatPages.at(-1), operations);
+    report.reasoningPhaseObserved = true; report.reasoningContentExcluded = true;
+  }
   if (operationPagesMode) {
     assert.deepEqual(heartbeatPages.slice(-2).map(page => page.length), [100, 3]);
     assert.deepEqual(heartbeatPages.slice(-2).flat(), operations);

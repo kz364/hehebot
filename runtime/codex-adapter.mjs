@@ -255,6 +255,7 @@ export class CodexAdapter {
       : params?.item?.type === 'webSearch' ? 'webSearches' : params?.item?.type === 'sleep' ? 'sleeps'
       : params?.item?.type === 'contextCompaction' ? 'compactions'
       : params?.item?.type === 'imageGeneration' ? 'imageGenerations'
+      : params?.item?.type === 'reasoning' ? 'reasoningItems'
       : params?.item?.type === 'collabAgentToolCall' && OBSERVED_COLLAB_TOOLS.includes(params.item.tool) ? 'collabCalls' : null;
     if (['item/started', 'item/completed'].includes(notification?.method) && field) {
       if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
@@ -262,7 +263,7 @@ export class CodexAdapter {
       const { id } = params.item;
       // These variants lack a closed native success/failure enum. Track lifecycle
       // termination only; never persist their payload-supplied status strings.
-      const status = ['webSearches', 'sleeps', 'compactions', 'imageGenerations'].includes(field)
+      const status = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems'].includes(field)
         ? notification.method === 'item/started' ? 'inProgress' : 'completed' : params.item.status;
       const terminal = ['commands', 'fileChanges'].includes(field) ? ['completed', 'failed', 'declined']
         : field === 'collabCalls' ? ['completed', 'failed', 'interrupted'] : ['completed', 'failed'];
