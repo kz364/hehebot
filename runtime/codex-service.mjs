@@ -159,7 +159,7 @@ export function createCodexService(config, dependencies) {
             return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, testMode: true, mcpServers }).submit(input);
           },
         };
-        router = new CodexEventRouter({ transport, adapter, onRecovery: recover });
+        router = new CodexEventRouter({ transport, adapter, onRecovery: recover, now });
         const taskController = async () => {
           const row = await journal.get(supervisor.bridge.cursor);
           if (!row?.attemptId || !row.nativeRunId) return null;

@@ -68,6 +68,24 @@ for both root and child records, preserving stable operation IDs and original
 progress timestamps without rewriting the journal. This does not validate all
 journal structure or remove the separate unknown-coverage blocker.
 
+Live command, MCP, file-change, dynamic-tool, search, wait, compaction, image and
+non-spawn collaboration starts now retain the trusted host's notification receipt
+time, before event buffering. Per-owner/per-kind/per-item clocks are written with
+the observed status. Native payload timestamps are ignored. Duplicate starts and
+terminal replays do not advance progress; history-only reconciliation cannot
+invent a start time. A backwards live transition clock fences reconciliation.
+These tool deadlines are two minutes from the first observed start, capped by the
+admitted task's hard deadline. Reopening a journal or sending another heartbeat
+does not extend them. Worker tests cover the exact timeout boundary for a tool
+starting ten minutes into a task; native service fixtures check the MCP deadlines.
+
+Legacy/history-only observations without clocks retain their existing hard-deadline
+fallback. Coverage, root/child inference and spawn records also retain that bound.
+Quiet-inference deadlines, explicit longer transfer/shell allowances and
+progress-based phase extensions remain separate work; this is not full S19 or
+proof of the native operation's true start before its host notification arrived.
+Timeout still requests cancellation, not settlement or automatic replay.
+
 The `--child` mode uses four scripted requests. The native root spawns a child,
 finishes, and the child uses its inherited root MCP grant to retrieve the exact
 paused routine from Worker/SQLite. Its next model HTTP response is deliberately

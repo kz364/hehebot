@@ -453,7 +453,10 @@ try {
     report.completeHeartbeatPages = [100, 3];
   }
   assert.equal(operations.filter(operation => operation.status === 'unknown').length, 1);
-  assert.ok(operations.every(operation => operation.run_id === queued.resource_id && operation.deadline_at === dispatched.claim.deadline_at));
+  assert.ok(operations.every(operation => operation.run_id === queued.resource_id && operation.deadline_at <= dispatched.claim.deadline_at));
+  const timedTools = operations.filter(operation => operation.kind === 'tool' && operation.deadline_at < dispatched.claim.deadline_at);
+  assert.equal(timedTools.length, expectedToolCalls);
+  assert.ok(timedTools.every(operation => Date.parse(operation.deadline_at) <= Date.parse(operation.started_at) + 120000));
   await assert.rejects(service.supervisor.complete({ attemptId: dispatched.attemptId, nativeRunId: native.nativeRunId, rootSettled: true }), { code: 'NATIVE_SETTLEMENT_INCOMPLETE' });
   await assert.rejects(service.supervisor.drain({ state: 'fixture' }), { code: 'SLEEP_DENIED' });
   if (crashMode) {

@@ -40,3 +40,28 @@ it('persists native invocation states into SQLite without authorizing result pub
     expect(f.store.run(claim.run.id).status).toBe('claimed');
   } finally { f.close(); await rm(directory, { recursive: true, force: true }); }
 });
+
+it('Worker watchdog cancels at the late tool phase deadline, not at task start or after the hard deadline', async () => {
+  const f = fixture(true), directory = await mkdtemp(join(tmpdir(), 'hehebot-tool-deadline-'));
+  try {
+    const life = new LifecycleCore(f.store, f.core);
+    f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
+    const identity = life.registerBoot(randomUUID()); life.ready(identity);
+    f.accept({ schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Synthetic phase deadline' } });
+    const claim = life.claim(identity)!; life.submitted(identity, claim.run.id, 1, 'turn');
+    const journal = new FileJournal(directory);
+    await journal.putIfAbsent('native-attempt', { status: 'running', threadId: 'root', nativeRunId: 'turn', commands: { call: 'inProgress' },
+      operationTimes: { '["commands","call"]': { startedAt: '2026-09-10T00:10:00.000Z', lastProgressAt: '2026-09-10T00:10:00.000Z' } } });
+    const projection = new CodexOperations({ journal, attemptId: 'native-attempt', runId: claim.run.id, attempt: 1,
+      startedAt: f.core.now(), deadlineAt: claim.deadline_at });
+    // Isolate the phase watchdog from the independently tested heartbeat lease.
+    f.db.exec("UPDATE lifecycle SET lease_until='2026-09-10T00:20:00.000Z'");
+    f.setNow('2026-09-10T00:11:59.999Z');
+    life.heartbeat(identity, await projection.snapshot() as HeartbeatOperation[]); life.watchdog();
+    expect(f.store.run(claim.run.id).status).toBe('running');
+    f.setNow('2026-09-10T00:12:00.000Z'); life.watchdog();
+    expect(f.store.run(claim.run.id)).toMatchObject({ status: 'cancelling', error_code: 'DEADLINE_EXCEEDED' });
+    expect(f.db.all("SELECT id FROM operations WHERE status='active'")).toHaveLength(2);
+    expect(f.db.all("SELECT status FROM attempts WHERE run_id=?", claim.run.id)).toEqual([{ status: 'running' }]);
+  } finally { f.close(); await rm(directory, { recursive: true, force: true }); }
+});

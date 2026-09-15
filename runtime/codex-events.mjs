@@ -7,10 +7,10 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
  * buffered; they never select a task by prompt text, timing, or turn position.
  */
 export class CodexEventRouter {
-  constructor({ transport, adapter, onRecovery, maxPending = 256, maxBindings = 100 }) {
+  constructor({ transport, adapter, onRecovery, maxPending = 256, maxBindings = 100, now = Date.now }) {
     if (!transport?.on || !transport?.off || !adapter?.observe || !adapter?.requireRun || typeof onRecovery !== 'function' ||
         !Number.isSafeInteger(maxPending) || maxPending < 1 || maxPending > 4096 ||
-        !Number.isSafeInteger(maxBindings) || maxBindings < 1 || maxBindings > 1000) fail('INVALID_EVENT_ROUTER');
+        !Number.isSafeInteger(maxBindings) || maxBindings < 1 || maxBindings > 1000 || typeof now !== 'function') fail('INVALID_EVENT_ROUTER');
     Object.assign(this, { transport, adapter, onRecovery, maxPending, maxBindings });
     this.bindings = new Map(); this.pending = []; this.tail = Promise.resolve(); this.closed = false;
     this.childOwners = new Map(); this.childBindings = new Map();
@@ -18,6 +18,7 @@ export class CodexEventRouter {
       try {
         const event = this.project(value);
         if (!event || this.closed) return;
+        event.observedAt = new Date(now()).toISOString();
         if (this.pending.length >= this.maxPending) return this.recover('NATIVE_EVENT_OVERFLOW');
         this.pending.push(event);
         void this.flush();
@@ -107,7 +108,7 @@ export class CodexEventRouter {
           }
           index++; continue;
         }
-        const row = await this.adapter.observe(attemptId, event.notification);
+        const row = await this.adapter.observe(attemptId, event.notification, event.observedAt);
         this.bindChildren(attemptId, row);
         this.pending.splice(index, 1);
         // A spawn receipt may make earlier child observations attributable.

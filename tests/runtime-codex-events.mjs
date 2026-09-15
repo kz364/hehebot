@@ -284,7 +284,8 @@ test('router restart restores only durable child attribution and rejects adoptio
 });
 
 test('child tools require observed exact turns and survive root and child completion without sibling collisions', async t => {
-  const f = await fixture(t);
+  const stamp = '2026-09-15T01:03:00.000Z', timing = { startedAt: stamp, lastProgressAt: stamp };
+  const f = await fixture(t, { now: () => Date.parse(stamp) });
   const mcp = (thread, status) => {
     const event = command(thread, 'same-turn', 'same-item', status);
     event.params.item.type = 'mcpToolCall';
@@ -306,19 +307,21 @@ test('child tools require observed exact turns and survive root and child comple
   const a = '["child-a","same-turn"]', b = '["child-b","same-turn"]';
   let row = await f.journal.get('a');
   assert.deepEqual(row.childObligations, {
-    [a]: { mcpCalls: { 'same-item': 'inProgress' }, commands: { 'same-item': 'inProgress' } },
-    [b]: { mcpCalls: { 'same-item': 'inProgress' } },
+    [a]: { mcpCalls: { 'same-item': 'inProgress' }, commands: { 'same-item': 'inProgress' },
+      operationTimes: { '["mcpCalls","same-item"]': timing, '["commands","same-item"]': timing } },
+    [b]: { mcpCalls: { 'same-item': 'inProgress' }, operationTimes: { '["mcpCalls","same-item"]': timing } },
   });
   assert.equal(row.rootSettled, true); assert.equal(row.childTurns[a], 'completed');
   f.router.close();
   const restarted = new CodexEventRouter({ transport: f.transport, adapter: f.adapter,
-    onRecovery: value => f.recoveries.push(value.code) });
+    onRecovery: value => f.recoveries.push(value.code), now: () => Date.parse(stamp) + 5000 });
   // Rebind from persisted state, not the old router's in-memory child map.
   t.after(() => restarted.close()); await restarted.bind('a');
   f.transport.emit('notification', mcp('child-a', 'failed')); await restarted.flush();
   row = await f.journal.get('a');
-  assert.deepEqual(row.childObligations[a], { mcpCalls: { 'same-item': 'failed' }, commands: { 'same-item': 'inProgress' } });
-  assert.deepEqual(row.childObligations[b], { mcpCalls: { 'same-item': 'inProgress' } });
+  assert.deepEqual(row.childObligations[a], { mcpCalls: { 'same-item': 'failed' }, commands: { 'same-item': 'inProgress' },
+    operationTimes: { '["mcpCalls","same-item"]': { ...timing, lastProgressAt: '2026-09-15T01:03:05.000Z' }, '["commands","same-item"]': timing } });
+  assert.deepEqual(row.childObligations[b], { mcpCalls: { 'same-item': 'inProgress' }, operationTimes: { '["mcpCalls","same-item"]': timing } });
   assert.equal(row.mcpCalls, undefined); assert.equal(row.effectsSettled, undefined);
   assert.doesNotMatch(JSON.stringify(row), /PRIVATE_OUTPUT/);
   assert.equal(restarted.pending.length, 0); assert.deepEqual(f.recoveries, []);
@@ -398,3 +401,45 @@ test('disconnect and malformed identity fence once without issuing native reques
   const other = await fixture(t); other.transport.emit('disconnect'); other.transport.emit('disconnect');
   assert.deepEqual(other.recoveries, ['NATIVE_DISCONNECTED']);
 });
+
+test('host ingress time survives buffering, replay and history without borrowing native timestamps', async t => {
+  let now = Date.parse('2026-09-15T01:03:00.000Z');
+  const f = await fixture(t, { now: () => now }), key = '["commands","cmd"]';
+  const start = command('root', 'turn', 'cmd'); start.params.observedAt = '2099-01-01T00:00:00.000Z';
+  f.transport.emit('notification', start); await f.router.flush();
+  now += 60000;
+  await f.admit('a', 'root', 'turn'); await f.router.bind('a');
+  const first = (await f.journal.get('a')).operationTimes[key];
+  assert.deepEqual(first, { startedAt: '2026-09-15T01:03:00.000Z', lastProgressAt: '2026-09-15T01:03:00.000Z' });
+  f.transport.emit('notification', start); await f.router.flush();
+  assert.deepEqual((await f.journal.get('a')).operationTimes[key], first);
+  f.transport.emit('notification', command('root', 'turn', 'cmd', 'completed')); await f.router.flush();
+  const row = await f.journal.get('a');
+  assert.deepEqual(row.operationTimes[key], { ...first, lastProgressAt: '2026-09-15T01:04:00.000Z' });
+  now += 60000; f.transport.emit('notification', command('root', 'turn', 'cmd', 'completed')); await f.router.flush();
+  assert.deepEqual(await f.journal.get('a'), row);
+  await f.adapter.observe('a', command('root', 'turn', 'history', 'completed'));
+  assert.equal((await f.journal.get('a')).operationTimes['["commands","history"]'], undefined);
+  assert.deepEqual(f.recoveries, []);
+});
+
+test('clock reversal on a live transition fences instead of rewriting its phase clock', async t => {
+  let now = Date.parse('2026-09-15T01:03:00.000Z');
+  const f = await fixture(t, { now: () => now }); await f.admit('a', 'root', 'turn'); await f.router.bind('a');
+  f.transport.emit('notification', command('root', 'turn', 'cmd')); await f.router.flush();
+  const before = await f.journal.get('a'); now--;
+  f.transport.emit('notification', command('root', 'turn', 'cmd', 'completed')); await f.router.flush();
+  assert.deepEqual(await f.journal.get('a'), before);
+  assert.deepEqual(f.recoveries, ['NATIVE_EVENT_RECONCILIATION_FAILED']);
+});
+
+for (const timing of [null, 'invalid', {}, { startedAt: 'bad', lastProgressAt: 'bad' }]) {
+  test(`live completion cannot repair corrupt phase timing: ${JSON.stringify(timing)}`, async t => {
+    const f = await fixture(t); await f.admit('a', 'root', 'turn');
+    await f.journal.update('a', { commands: { cmd: 'inProgress' }, operationTimes: { '["commands","cmd"]': timing } });
+    await f.router.bind('a'); const before = await f.journal.get('a');
+    f.transport.emit('notification', command('root', 'turn', 'cmd', 'completed')); await f.router.flush();
+    assert.deepEqual(await f.journal.get('a'), before);
+    assert.deepEqual(f.recoveries, ['NATIVE_EVENT_RECONCILIATION_FAILED']);
+  });
+}

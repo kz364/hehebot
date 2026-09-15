@@ -25,12 +25,15 @@ export class CodexOperations {
     const { attemptId, runId, attempt, startedAt, deadlineAt } = this.binding;
     const row = await this.journal.get(attemptId);
     const operations = [];
-    const add = (key, kind, status) => {
+    const add = (key, kind, status, timing = undefined) => {
       if (operations.length === 4096) fail('NATIVE_OPERATION_LIMIT');
+      if (timing !== undefined && (!timing || typeof timing !== 'object' || Array.isArray(timing) || !['startedAt', 'lastProgressAt'].every(key => typeof timing[key] === 'string' && Number.isFinite(Date.parse(timing[key])) &&
+          new Date(timing[key]).toISOString() === timing[key]) || timing.lastProgressAt < timing.startedAt)) fail('INVALID_OPERATION_TIMING');
       operations.push({ id: uuid([attemptId, runId, attempt, key]), run_id: runId, attempt,
-        kind, status, started_at: startedAt, deadline_at: deadlineAt,
+        kind, status, started_at: timing?.startedAt ?? startedAt,
+        deadline_at: timing ? new Date(Math.min(Date.parse(timing.startedAt) + 120000, Date.parse(deadlineAt))).toISOString() : deadlineAt,
         // Reading the same journal is not fresh native progress.
-        last_progress_at: startedAt });
+        last_progress_at: timing?.lastProgressAt ?? startedAt });
     };
     const status = (value, terminal) => value === 'inProgress' ? 'active'
       : terminal.includes(value) ? 'settled' : 'unknown';
@@ -39,10 +42,11 @@ export class CodexOperations {
       : row?.status === 'cancelling' ? 'cancelling' : row?.status === 'running' ? 'active' : 'unknown');
     if (!row) return operations;
     const items = (owner, identity) => {
+      if (owner.operationTimes !== undefined && (!owner.operationTimes || typeof owner.operationTimes !== 'object' || Array.isArray(owner.operationTimes))) fail('INVALID_OPERATION_TIMING');
       for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations']) {
         const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations'].includes(field) ? ['completed']
           : ['completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
-        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], 'tool', status(value, terminal));
+        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], 'tool', status(value, terminal), owner.operationTimes?.[JSON.stringify([field, id])]);
       }
       for (const [id, spawn] of Object.entries(owner.spawns ?? {})) {
         add([identity, 'spawns', id], 'tool', status(spawn?.status, ['completed', 'failed']));

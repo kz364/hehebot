@@ -110,3 +110,28 @@ test('child turn status accepts interruption but never tool-only decline', async
   assert.deepEqual((await f.operations.snapshot()).slice(2).map(row => [row.kind, row.status]),
     [['child', 'settled'], ['child', 'unknown'], ['child', 'active']]);
 });
+
+test('late root and child tools use independent two-minute clocks capped by the task deadline', async t => {
+  const f = await fixture(t), key = '["commands","same"]';
+  await f.journal.putIfAbsent('attempt-a', { status: 'running', commands: { same: 'inProgress' },
+    operationTimes: { [key]: { startedAt: '2026-09-14T01:10:00.000Z', lastProgressAt: '2026-09-14T01:10:00.000Z' } },
+    childObligations: { '["child","turn"]': { commands: { same: 'inProgress' },
+      operationTimes: { [key]: { startedAt: '2026-09-14T01:19:30.000Z', lastProgressAt: '2026-09-14T01:19:30.000Z' } } } } });
+  const before = await f.journal.get('attempt-a'), rows = await f.operations.snapshot();
+  assert.deepEqual(rows.slice(2).map(row => [row.started_at, row.deadline_at, row.last_progress_at]), [
+    ['2026-09-14T01:10:00.000Z', '2026-09-14T01:12:00.000Z', '2026-09-14T01:10:00.000Z'],
+    ['2026-09-14T01:19:30.000Z', '2026-09-14T01:20:00.000Z', '2026-09-14T01:19:30.000Z'],
+  ]);
+  assert.notEqual(rows[2].id, rows[3].id);
+  assert.deepEqual(await new CodexOperations(f.config).snapshot(), rows);
+  assert.deepEqual(await f.journal.get('attempt-a'), before);
+});
+
+for (const timing of [null, {}, { startedAt: 'invalid', lastProgressAt: 'invalid' },
+  { startedAt: '2026-09-14T01:10:00.000Z', lastProgressAt: '2026-09-14T01:09:59.999Z' }]) {
+  test(`corrupt phase timing cannot silently fall back to the hard deadline: ${JSON.stringify(timing)}`, async t => {
+    const f = await fixture(t);
+    await f.journal.putIfAbsent('attempt-a', { commands: { c: 'inProgress' }, operationTimes: { '["commands","c"]': timing } });
+    await assert.rejects(f.operations.snapshot(), { code: 'INVALID_OPERATION_TIMING' });
+  });
+}
