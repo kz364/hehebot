@@ -443,3 +443,22 @@ for (const timing of [null, 'invalid', {}, { startedAt: 'bad', lastProgressAt: '
     assert.deepEqual(f.recoveries, ['NATIVE_EVENT_RECONCILIATION_FAILED']);
   });
 }
+
+test('spawn invocation clock is replay-stable and completion leaves its child active', async t => {
+  let now = Date.parse('2026-09-15T01:03:00.000Z');
+  const f = await fixture(t, { now: () => now }); await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
+  f.transport.emit('notification', spawn('inProgress', [])); await f.router.flush();
+  now += 5000; f.transport.emit('notification', spawn('inProgress', [])); await f.router.flush();
+  assert.deepEqual((await f.journal.get('a')).operationTimes['["spawns","spawn-19"]'], {
+    startedAt: '2026-09-15T01:03:00.000Z', lastProgressAt: '2026-09-15T01:03:00.000Z',
+  });
+  f.transport.emit('notification', spawn('completed', ['child']));
+  f.transport.emit('notification', { method: 'turn/started', params: { threadId: 'child', turn: { id: 'child-turn', status: 'inProgress' } } });
+  await f.router.flush(); const before = await f.journal.get('a');
+  assert.equal(before.childTurns['["child","child-turn"]'], 'inProgress');
+  assert.deepEqual(before.operationTimes['["spawns","spawn-19"]'], {
+    startedAt: '2026-09-15T01:03:00.000Z', lastProgressAt: '2026-09-15T01:03:05.000Z',
+  });
+  now += 60000; f.transport.emit('notification', spawn('completed', ['child'])); await f.router.flush();
+  assert.deepEqual(await f.journal.get('a'), before); assert.deepEqual(f.recoveries, []);
+});

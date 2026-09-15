@@ -62,6 +62,18 @@ coordinated restore proof. Focused tests passed 86; the latest control suite pas
 864, with typecheck/build and 16 desktop tests also passing. Prior full native/runtime
 verification for the heartbeat checkpoint remains recorded above.
 
+Native tool and spawn invocations now retain host-observed start/progress clocks
+and use two-minute phase deadlines capped by the task hard deadline. Buffered
+events retain receipt time; duplicate events/history reads never restart clocks.
+Corrupt timing and backwards live transitions fence without repairing custody.
+Spawn completion does not settle its child. The combined credential-free check
+passed 865 control and 183 runtime tests, native/service fixtures and build;
+focused timing tests passed 66. Actual native fixtures cover 101 MCP calls and
+independent child cancellation. No account or live Sprite calls were made.
+Legacy/history-only records keep the hard-deadline fallback. Quiet inference,
+explicit longer shell/transfer windows and progress-based extensions remain
+unimplemented; do not call this full S19, settlement or production readiness.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

@@ -49,7 +49,7 @@ export class CodexOperations {
         for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], 'tool', status(value, terminal), owner.operationTimes?.[JSON.stringify([field, id])]);
       }
       for (const [id, spawn] of Object.entries(owner.spawns ?? {})) {
-        add([identity, 'spawns', id], 'tool', status(spawn?.status, ['completed', 'failed']));
+        add([identity, 'spawns', id], 'tool', status(spawn?.status, ['completed', 'failed']), owner.operationTimes?.[JSON.stringify(['spawns', id])]);
       }
     };
     items(row, [row.threadId, row.nativeRunId]);

@@ -175,6 +175,24 @@ export class CodexAdapter {
     const owner = childItem ? row.childObligations?.[childKey] ?? {} : row;
     const save = patch => this.journal.update(attemptId, childItem
       ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, ...patch } } } : patch);
+    const saveOperation = (field, itemKey, prior, status, patch) => {
+      const timingKey = JSON.stringify([field, itemKey]);
+      if (owner.operationTimes !== undefined && (!owner.operationTimes || typeof owner.operationTimes !== 'object' || Array.isArray(owner.operationTimes))) fail('INVALID_OPERATION_TIMING');
+      const timing = owner.operationTimes?.[timingKey];
+      if (timing !== undefined && (!timing || typeof timing !== 'object' || Array.isArray(timing) ||
+          !['startedAt', 'lastProgressAt'].every(key => typeof timing[key] === 'string' && Number.isFinite(Date.parse(timing[key])) && new Date(timing[key]).toISOString() === timing[key]) ||
+          timing.lastProgressAt < timing.startedAt)) fail('INVALID_OPERATION_TIMING');
+      let operationTimes;
+      // Only a live host-observed start establishes a phase clock. History reads
+      // and duplicate starts cannot invent or advance native progress.
+      if (observedAt !== undefined && prior !== status && (timing || !prior && status === 'inProgress')) {
+        if (timing && observedAt < timing.lastProgressAt) fail('INVALID_OBSERVATION_TIME');
+        operationTimes = { ...owner.operationTimes, [timingKey]: {
+          startedAt: timing?.startedAt ?? observedAt, lastProgressAt: observedAt,
+        } };
+      }
+      return save({ ...patch, ...(operationTimes ? { operationTimes } : {}) });
+    };
     if (notification?.method === 'item/completed' && params?.item?.type === 'agentMessage') {
       if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const { id } = params.item;
@@ -230,7 +248,7 @@ export class CodexAdapter {
       // A completed spawn invocation acknowledges children, not their settlement
       // or authorization. Keep receivers even when the parent root completes.
       Object.defineProperty(spawns, id, { value: { status, receiverThreadIds: receivers }, enumerable: true, writable: true, configurable: true });
-      return save({ spawns });
+      return saveOperation('spawns', id, prior?.status, status, { spawns });
     }
     const field = params?.item?.type === 'commandExecution' ? 'commands' : params?.item?.type === 'mcpToolCall' ? 'mcpCalls'
       : params?.item?.type === 'fileChange' ? 'fileChanges' : params?.item?.type === 'dynamicToolCall' ? 'dynamicCalls'
@@ -258,26 +276,11 @@ export class CodexAdapter {
         return row;
       }
       if (!Object.hasOwn(obligations, itemKey) && Object.keys(obligations).length >= 4096) fail('COMMAND_TRACKING_LIMIT');
-      const timingKey = JSON.stringify([field, itemKey]);
-      if (owner.operationTimes !== undefined && (!owner.operationTimes || typeof owner.operationTimes !== 'object' || Array.isArray(owner.operationTimes))) fail('INVALID_OPERATION_TIMING');
-      const timing = owner.operationTimes?.[timingKey];
-      if (timing !== undefined && (!timing || typeof timing !== 'object' || Array.isArray(timing) ||
-          !['startedAt', 'lastProgressAt'].every(key => typeof timing[key] === 'string' && Number.isFinite(Date.parse(timing[key])) && new Date(timing[key]).toISOString() === timing[key]) ||
-          timing.lastProgressAt < timing.startedAt)) fail('INVALID_OPERATION_TIMING');
-      let operationTimes;
-      // Only a live host-observed start establishes a phase clock. History reads
-      // and duplicate starts cannot invent or advance native progress.
-      if (observedAt !== undefined && prior !== status && (timing || !prior && status === 'inProgress')) {
-        if (timing && observedAt < timing.lastProgressAt) fail('INVALID_OBSERVATION_TIME');
-        operationTimes = { ...owner.operationTimes, [timingKey]: {
-          startedAt: timing?.startedAt ?? observedAt, lastProgressAt: observedAt,
-        } };
-      }
       // Persist starts even if history omits them. Root completion cannot remove
       // these obligations; command recovery requires an exact status-bearing item.
       Object.defineProperty(obligations, itemKey, { value: status, enumerable: true, writable: true, configurable: true });
       // An MCP terminal response settles only the invocation, not external effects.
-      return save({ [field]: obligations, ...(operationTimes ? { operationTimes } : {}) });
+      return saveOperation(field, itemKey, prior, status, { [field]: obligations });
     }
     if (notification?.method !== 'turn/completed') return row;
     if (params?.threadId !== row.threadId || params?.turn?.id !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');
