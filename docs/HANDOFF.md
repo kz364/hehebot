@@ -384,10 +384,21 @@ projects only ID/type at boundaries and stores `planItems` lifetimes/clocks;
 text/deltas are discarded. Root/child/category identities, replay stability,
 five-minute task-capped inference bounds and offline clocks pass synthetic tests.
 Root completion never settles a still-open plan. No Plan/experimental setting,
-tool permission or production gate is enabled. Native Plan-item emission through
-the service is still unverified. Verification: 95 focused tests; 901 control / 242
+tool permission or production gate is enabled. Native Plan-item emission was
+unverified at this checkpoint; the follow-up below closes the root case. Verification: 95 focused tests; 901 control / 242
 runtime combined, all existing native/service fixtures, typecheck/build passed.
 Private logs: `.local/plan-item-focused.log`, `.local/plan-item-combined.log`.
+
+Native Plan follow-up (2026-09-16): `--plan` fixture requests experimental API and
+Plan mode only in its disposable transport wrapper. Pristine Codex emits actual
+root Plan boundaries from a scripted `<proposed_plan>` response, after an exact
+MCP receipt. Two model requests; host/Worker clocks, preview privacy and offline
+inspection passed. Initial preview mismatch was the preserved pre-plan newline,
+not leaked plan content; corrected exact expectation passed. Combined verification
+now includes this case and passed 901 control / 242 runtime tests, native/service
+fixtures and typecheck/build. Logs: `.local/plan-native-focused.log` and
+`.local/plan-native-combined.log`. Native child Plan emission and held-stream expiry
+remain open. No runtime configuration or production gate changed.
 
 ## Next work
 

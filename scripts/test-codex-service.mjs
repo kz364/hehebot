@@ -27,9 +27,10 @@ const questionsMode = process.argv.includes('--questions') || questionCancelMode
 const submissionAckMode = process.argv.includes('--submission-ack');
 const operationPagesMode = process.argv.includes('--operation-pages');
 const reasoningMode = process.argv.includes('--reasoning');
+const planMode = process.argv.includes('--plan');
 const expectedToolCalls = operationPagesMode ? 101 : 1;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -217,7 +218,7 @@ try {
           return;
         }
         send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
-          content: [{ type: 'output_text', text: 'SERVICE_ASSEMBLY_OK', annotations: [] }] }]);
+          content: [{ type: 'output_text', text: planMode ? 'SERVICE_ASSEMBLY_OK\n<proposed_plan>\nPRIVATE_PLAN_43\n</proposed_plan>' : 'SERVICE_ASSEMBLY_OK', annotations: [] }] }]);
       }
     } catch (error) {
       errors.push(error.message);
@@ -249,7 +250,7 @@ try {
   const submissionRequests = [], heartbeatPages = [];
   const dependencies = { spriteRequest, fetchImpl: async (url, init) => {
     const response = await trustedFetch(url, init);
-    if ((operationPagesMode || reasoningMode) && new URL(url).pathname === '/internal/heartbeat') {
+    if ((operationPagesMode || reasoningMode || planMode) && new URL(url).pathname === '/internal/heartbeat') {
       assert.equal(response.status, 200);
       heartbeatPages.push(JSON.parse(init.body).operations);
     }
@@ -287,6 +288,9 @@ try {
       transport.on('notification', notification => notifications.push(notification));
       transport.request = (method, params) => {
         if (method === 'turn/interrupt') interrupts.push(structuredClone(params));
+        if (planMode && method === 'initialize') params = { ...params, capabilities: { ...params.capabilities, experimentalApi: true } };
+        if (planMode && method === 'turn/start') params = { ...params,
+          collaborationMode: { mode: 'plan', settings: { model: 'fixture-model', reasoning_effort: null, developer_instructions: null } } };
         return request(method, params);
       };
       return transport;
@@ -485,7 +489,7 @@ try {
     }
     report.quietPhaseJournalObserved = true;
   }
-  assert.equal(operations.length, (childMode ? 8 : expectedToolCalls + 3 + Number(reasoningMode)) + quietPhases.length);
+  assert.equal(operations.length, (childMode ? 8 : expectedToolCalls + 3 + Number(reasoningMode) + Number(planMode)) + quietPhases.length);
   if (childMode) {
     assert.ok(Object.values(native.childObligations).every(child => child.initialInference === 'completed'));
     assert.equal(operations.filter(operation => operation.kind === 'inference' && operation.status === 'settled').length, 3 + quietPhases.length);
@@ -496,14 +500,18 @@ try {
     assert.equal(Date.parse(startup[0].deadline_at) - Date.parse(startup[0].started_at), 120000);
     report.childStartupClockObserved = true;
   }
-  if (reasoningMode) {
-    assert.deepEqual(Object.values(native.reasoningItems), ['completed']);
-    assert.doesNotMatch(JSON.stringify(native), /PRIVATE_SYNTHETIC_REASONING_43/);
+  if (reasoningMode || planMode) {
+    assert.deepEqual(Object.values(native[planMode ? 'planItems' : 'reasoningItems']), ['completed']);
+    assert.doesNotMatch(JSON.stringify(native), /PRIVATE_SYNTHETIC_REASONING_43|PRIVATE_PLAN_43/);
     const phases = operations.filter(operation => operation.kind === 'inference' && operation.deadline_at < dispatched.claim.deadline_at);
     assert.equal(phases.length, 2 + quietPhases.length); assert.ok(phases.every(phase => phase.status === 'settled'));
     assert.ok(phases.every(phase => Date.parse(phase.deadline_at) - Date.parse(phase.started_at) === 300000));
     assert.deepEqual(heartbeatPages.at(-1), operations);
-    report.reasoningPhaseObserved = true; report.reasoningContentExcluded = true;
+    if (planMode) {
+      assert.ok(notifications.some(n => n.method === 'item/started' && n.params.item.type === 'plan'));
+      assert.ok(notifications.some(n => n.method === 'item/completed' && n.params.item.type === 'plan' && n.params.item.text.includes('PRIVATE_PLAN_43')));
+      report.planPhaseObserved = true; report.planContentExcluded = true;
+    } else { report.reasoningPhaseObserved = true; report.reasoningContentExcluded = true; }
   }
   if (operationPagesMode) {
     const total = 104 + quietPhases.length, pageCount = Math.ceil(total / 100);
@@ -552,7 +560,7 @@ try {
   if (questionCancelMode) assert.deepEqual(final.output_previews, []);
   if (!crashMode && !questionCancelMode) {
     assert.deepEqual(final.output_previews, [{ run_id: queued.resource_id, attempt: dispatched.claim.run.current_attempt,
-      version: 1, text: childMode ? 'SERVICE_PARENT_DONE' : 'SERVICE_ASSEMBLY_OK', truncated: false }]);
+      version: 1, text: childMode ? 'SERVICE_PARENT_DONE' : planMode ? 'SERVICE_ASSEMBLY_OK\n' : 'SERVICE_ASSEMBLY_OK', truncated: false }]);
     report.nativeProvisionalOutputWithoutSettlement = true;
   }
   if (childMode) {

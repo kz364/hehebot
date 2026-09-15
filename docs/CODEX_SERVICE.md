@@ -207,9 +207,15 @@ bound capped by the task deadline, with separate root/child/category identity.
 Replay cannot refresh it, root completion cannot erase it, and exact item completion
 ends only that item's lifetime. Post-plan quiet phases and offline inspection use
 the same existing contracts. This does not enable experimental API/Plan mode,
-render plans, execute their text or authorize effects. Synthetic boundary fixtures
-verify this projection; actual Plan-mode item emission through service assembly
-remains unverified, as does full operation coverage.
+render plans, execute their text or authorize effects. The disposable `--plan`
+fixture explicitly requests experimental API and Plan mode at its transport
+boundary only. Two scripted loopback responses drive pristine 0.154.0 through a
+real MCP receipt and a `<proposed_plan>` response. Native plan start/completion,
+five-minute clocks in Worker heartbeats, content exclusion from the host journal
+and preview, and offline clock preservation are verified. The native preview
+retains the newline preceding the plan; the fixture checks it exactly. This closes
+root Plan-item service emission evidence, not child Plan-mode emission, a held
+stream's expiry, authenticated model judgment or complete operation coverage.
 
 Completed message phases use `outputItems` and the exact message ID, not message
 text or a new content copy. A live message during an observed active tool opens

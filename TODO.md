@@ -6,9 +6,9 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest checkpoint:** content-free plan-item accounting, 2026-09-16. Local, not pushed or deployed. Pinned-protocol plan boundaries now retain separate root/child clocks with a five-minute inference bound; text/deltas are discarded. No Plan mode or experimental feature is enabled. Actual Plan-item emission through service assembly remains unverified; E01 stays partial.
-- **Verified:** **95 focused event/operation/quiet-phase/recovery tests passed**, including plan identity and privacy, replay-stable task-capped deadlines, root/child isolation and offline clock inspection.
-- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 242 runtime tests**, all existing native/service fixtures, typecheck and build dry run. Private logs: `.local/plan-item-focused.log`, `.local/plan-item-combined.log`.
+- **Latest checkpoint:** native Plan-item service proof, 2026-09-16. Local, not pushed or deployed. Disposable fixture now verifies actual root Plan start/completion through the assembled service, Worker heartbeat and offline inspection. Experimental mode is fixture-only; E01 remains partial.
+- **Verified:** `bash scripts/test-codex-service.sh --plan` passed with **2 scripted model requests**, real native Plan events, five-minute clocks and plan content excluded from host journal/preview. The initial fixture failed on a preserved pre-plan newline; the exact expectation was corrected and rerun successfully.
+- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 242 runtime tests**, native/service fixtures including the new Plan case, typecheck and build dry run. Private logs: `.local/plan-native-focused.log`, `.local/plan-native-combined.log`.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
 - **Next implementation priority:** E01, complete deadline/activity accounting; then E02 recovery and E03 responsive orchestration. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
@@ -43,7 +43,7 @@ These are useful foundations that should not be rebuilt simply because their ful
 - [x] Bounded inference interval after live message start, with no text/delta retention or replay refresh. Evidence: `tests/runtime-codex-events.mjs` and seven native service cases. Full overlapping-stream lifetime accounting and progress extensions remain E01.
 - [x] Five-minute non-checkpointed service question callback ceiling and private persisted wait deadline. Evidence: question/service/inspection tests and native answer/cancel fixtures. Worker custody can outlive the callback; restart-required UI, checkpoint parking and safe compute release remain E01/E02.
 - [x] Unsupported live native item boundaries trigger recovery rather than silently evading operation accounting. Evidence: `tests/runtime-codex-events.mjs`; complete supported coverage remains E01, and recovery does not prove native termination.
-- [x] Content-free plan-item lifetime/deadline projection and offline inspection. Evidence: synthetic event/operation/recovery fixtures; native Plan-item service emission, rendering and full operation coverage remain unverified under E01/E04.
+- [x] Content-free plan-item lifetime/deadline projection and offline inspection, plus actual root Plan-item service emission under scripted loopback inference. Evidence: `scripts/test-codex-service.sh --plan` and synthetic event/operation/recovery fixtures. Native child Plan emission, held-stream expiry, rendering and full operation coverage remain E01/E04.
 
 ## Remaining implementation and acceptance
 
