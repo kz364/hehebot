@@ -225,6 +225,19 @@ Next quiet-gap work needs explicit ordered journal phases, not inference from
 equal wall-clock timestamps of parallel tool completions. No code for that next
 phase has been added. No accounts, live providers, push or deployment involved.
 
+Live-clock checkpoint (2026-09-15): heartbeat projection now consumes every
+operationTimes entry within its exact root/child owner and canonical category/item
+key. Leftovers reject the entire snapshot as INVALID_OPERATION_TIMING, matching
+the offline inspector's refusal. Valid nested collaboration keys and identical
+IDs across owners remain independent; missing legacy clocks retain fallback.
+Two regressions failed first. Final focused checks passed 39 projection/inspection
+and 50 supervisor tests. Corrupt bytes/mtime remain unchanged; maintenance fences
+before heartbeat, releases no hold and replays no native work. Combined verifier
+passed 897 control / 210 runtime tests, all native/service fixtures, typecheck and
+build. This is structural consistency, not journal authentication or successful
+recovery. Quiet-period implementation remains next; no new phase state added.
+No accounts, live provider operations, pushes, deployments or gate changes.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

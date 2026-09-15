@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FileJournal } from '../runtime/file-journal.mjs';
@@ -206,6 +206,31 @@ test('reasoning uses five-minute independent phase clocks, not tool clocks or ro
   ]);
   assert.equal(rows[1].status, 'settled'); assert.equal(new Set(rows.map(row => row.id)).size, 6);
   assert.deepEqual(await new CodexOperations(f.config).snapshot(), rows);
+});
+
+for (const child of [false, true]) test(`orphan ${child ? 'child' : 'root'} clocks cannot disappear from live accounting`, async t => {
+  const f = await fixture(t), at = '2026-09-14T01:10:00.000Z';
+  const timing = { startedAt: at, lastProgressAt: at };
+  for (const key of ['["commands","missing"]', '["mcpCalls","same"]', '["unknown","same"]', '["commands", "same"]', '["spawns","missing"]', '["commands","other-owner"]']) {
+    const owner = { commands: { same: 'inProgress' }, operationTimes: { [key]: timing } };
+    const other = { commands: { 'other-owner': 'inProgress' } };
+    await f.journal.write('attempt-a', { status: 'running', ...(child ? other : owner),
+      childObligations: { '["child","turn"]': child ? owner : other } });
+    const path = f.journal.path('attempt-a'), before = await readFile(path), modified = (await stat(path)).mtimeMs;
+    await assert.rejects(f.operations.snapshot(), { code: 'INVALID_OPERATION_TIMING' });
+    assert.deepEqual(await readFile(path), before); assert.equal((await stat(path)).mtimeMs, modified);
+  }
+});
+
+test('clock consumption keeps identical category/item keys independent across owners', async t => {
+  const f = await fixture(t), at = '2026-09-14T01:10:00.000Z', later = '2026-09-14T01:17:00.000Z';
+  const owner = startedAt => ({ commands: { same: 'inProgress' }, collabCalls: { '["wait","same"]': 'inProgress' },
+    spawns: { same: { status: 'inProgress', receiverThreadIds: [] } }, operationTimes: Object.fromEntries(
+      [['commands', 'same'], ['collabCalls', '["wait","same"]'], ['spawns', 'same']].map(key => [JSON.stringify(key), { startedAt, lastProgressAt: startedAt }])) });
+  await f.journal.write('attempt-a', { status: 'running', ...owner(at), childObligations: { '["child","turn"]': owner(later) } });
+  const rows = await f.operations.snapshot();
+  assert.deepEqual(rows.slice(2).map(row => row.deadline_at), Array(3).fill('2026-09-14T01:12:00.000Z').concat(Array(3).fill('2026-09-14T01:19:00.000Z')));
+  assert.equal(new Set(rows.map(row => row.id)).size, 8);
 });
 
 for (const timing of [null, {}, { startedAt: 'invalid', lastProgressAt: 'invalid' },

@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { fixture, bot } from './helpers';
 import { LifecycleCore } from '../src/core/lifecycle';
 import { FileJournal } from '../runtime/file-journal.mjs';
+import { CodexOperations } from '../runtime/codex-operations.mjs';
 import { ExecutionSupervisor } from '../runtime/execution-supervisor.mjs';
 
 let f: ReturnType<typeof fixture>, life: LifecycleCore, directory: string, supervisor: any;
@@ -256,6 +257,22 @@ it.each([null, {}, Array(4097).fill({})])('rejects malformed or unbounded operat
   supervisor.operations = async () => operations;
   await expect(supervisor.maintain()).rejects.toThrow();
   expect(calls.length).toBe(before); expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
+});
+
+it('an orphan native clock fences maintenance before heartbeat without releasing or replaying work', async () => {
+  const id = enqueue(); await supervisor.start(); await supervisor.dispatch();
+  const journal = new FileJournal(directory), now = f.core.now();
+  await journal.putIfAbsent('orphan-proof', { status: 'running', commands: { valid: 'inProgress' },
+    operationTimes: { '["commands","missing"]': { startedAt: now, lastProgressAt: now } } });
+  const projection = new CodexOperations({ journal, attemptId: 'orphan-proof', runId: id, attempt: 1,
+    startedAt: now, deadlineAt: '2026-09-10T00:20:00.000Z' });
+  supervisor.operations = () => projection.snapshot();
+  const before = calls.length, original = await readFile(journal.path('orphan-proof'));
+  await expect(supervisor.maintain()).rejects.toMatchObject({ code: 'INVALID_OPERATION_TIMING' });
+  expect(calls.length).toBe(before); expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
+  expect(nativeCalls).toBe(1); expect(cancellations).toEqual([]); expect(f.store.run(id).status).toBe('running');
+  expect(await readFile(journal.path('orphan-proof'))).toEqual(original);
+  await expect(supervisor.dispatch()).rejects.toThrow(); expect(nativeCalls).toBe(1);
 });
 
 it('lease expiration after claim prevents native submission and preserves uncertainty', async () => {

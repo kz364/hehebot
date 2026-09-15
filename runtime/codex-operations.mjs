@@ -61,13 +61,19 @@ export class CodexOperations {
           { startedAt: owner.initialInferenceAt, lastProgressAt: owner.initialInferenceAt });
       }
       if (owner.operationTimes !== undefined && (!owner.operationTimes || typeof owner.operationTimes !== 'object' || Array.isArray(owner.operationTimes))) fail('INVALID_OPERATION_TIMING');
+      const clocks = new Map(Object.entries(owner.operationTimes ?? {}));
+      const takeClock = (field, id) => {
+        const key = JSON.stringify([field, id]), timing = clocks.get(key);
+        clocks.delete(key);
+        return timing;
+      };
       for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems']) {
         const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems'].includes(field) ? ['completed']
           : ['completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
-        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], field === 'reasoningItems' ? 'inference' : 'tool', status(value, terminal), owner.operationTimes?.[JSON.stringify([field, id])]);
+        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], field === 'reasoningItems' ? 'inference' : 'tool', status(value, terminal), takeClock(field, id));
       }
       for (const [id, spawn] of Object.entries(owner.spawns ?? {})) {
-        const timing = owner.operationTimes?.[JSON.stringify(['spawns', id])];
+        const timing = takeClock('spawns', id);
         add([identity, 'spawns', id], 'tool', status(spawn?.status, ['completed', 'failed']), timing);
         // A terminal spawn's observed progress time is immutable. Acknowledged
         // receivers need their own bound before any child turn arrives; observing
@@ -79,6 +85,9 @@ export class CodexOperations {
             observedChildren.has(receiver) ? 'settled' : 'active', { startedAt: timing.lastProgressAt, lastProgressAt: timing.lastProgressAt });
         }
       }
+      // No sibling, category alias or omitted item can consume this owner's
+      // remaining clocks. Reject the whole snapshot instead of hiding deadlines.
+      if (clocks.size) fail('INVALID_OPERATION_TIMING');
     };
     items(row, [row.threadId, row.nativeRunId]);
     for (const [key, value] of Object.entries(row.childTurns ?? {})) add(['child', key], 'child', status(value, ['completed', 'failed', 'interrupted']));

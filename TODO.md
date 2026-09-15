@@ -6,9 +6,9 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest implementation:** [child startup deadlines](docs/CODEX_SERVICE.md), 2026-09-15. Local, not pushed. Acknowledged children retain independent two-minute startup bounds until exact child-turn evidence; parent completion cannot settle them. E01 remains partial.
-- **Verified:** two regressions failed first; **41 adapter/projection and 5 SQLite watchdog tests passed**. Native child fixtures verify the recorded startup timestamp, capped deadline and settled startup without settling task work.
-- **Combined:** `bash scripts/verify-codex.sh` passed **896 control / 207 runtime tests**, all native/service fixtures, typecheck and build dry run. An outdated native operation-count assertion and a test-update variable error were corrected before the successful rerun.
+- **Latest implementation:** [live orphan-clock refusal](docs/CODEX_RECOVERY.md), 2026-09-15. Local, not pushed. Every recorded clock must match an operation in its exact owner/category; invalid snapshots fence before heartbeat without rewriting the journal or releasing activity. E01/E02 remain partial.
+- **Verified:** two regressions failed first; **39 projection/inspection and 50 supervisor tests passed**, including cross-owner/category mismatches, noncanonical keys, unchanged bytes/mtime, retained hold and no replay.
+- **Combined:** `bash scripts/verify-codex.sh` passed **897 control / 210 runtime tests**, all native/service fixtures, typecheck and build dry run.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
 - **Next implementation priority:** E01, complete deadline/activity accounting; then E02 recovery and E03 responsive orchestration. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.

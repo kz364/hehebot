@@ -108,6 +108,16 @@ and undefined patch fields retain their existing JSON omission behavior. There i
 no automatic repair/deletion. This structural check does not authenticate records,
 add cross-process locks or replace each consumer's schema/custody validation.
 
+Live heartbeat projection also rejects orphan `operationTimes` entries with
+`INVALID_OPERATION_TIMING`, matching offline inspection's refusal to hide clocks.
+Every clock must match a canonical category/item key in the exact root or child
+owner. A sibling's matching ID, another category, or an omitted item cannot consume
+it. All clocks must be accounted for before any snapshot is returned. Invalid
+projection fences supervisor maintenance before heartbeat; it does not release
+the activity hold, replay native work or rewrite the journal. Missing legacy
+clocks keep their documented hard-deadline fallback. This is not full journal
+authentication, successful recovery or additional quiet-inference coverage.
+
 After inspection, retain the state and reconcile uncertain Worker/native/effect
 outcomes through separately supported procedures. This tool supplies evidence
 only; safe resume, recursive settlement and production sleep gates stay open work.
