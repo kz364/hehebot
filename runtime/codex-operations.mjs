@@ -94,7 +94,7 @@ export class CodexOperations {
       }
       for (const [id, spawn] of entries(owner.spawns)) {
         const timing = takeClock('spawns', id);
-        add([identity, 'spawns', id], 'tool', status(spawn?.status, ['completed', 'failed']), timing);
+        add([identity, 'spawns', id], 'tool', status(spawn?.status, ['completed', 'failed', 'interrupted']), timing);
         // A terminal spawn's observed progress time is immutable. Acknowledged
         // receivers need their own bound before any child turn arrives; observing
         // that turn ends startup only, never its work or descendants.

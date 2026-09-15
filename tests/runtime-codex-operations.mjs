@@ -15,6 +15,25 @@ async function fixture(t) {
   return { journal, config, operations: new CodexOperations(config) };
 }
 
+test('interrupted root and nested spawns settle only invocation, preserving receiver startup and work', async t => {
+  const f = await fixture(t), child = '["child","turn"]';
+  const timing = { startedAt: '2026-09-14T01:02:00.000Z', lastProgressAt: '2026-09-14T01:03:00.000Z' };
+  const inventory = receivers => ({ spawns: { spawn: { status: 'interrupted', receiverThreadIds: receivers } },
+    operationTimes: { '["spawns","spawn"]': timing } });
+  await f.journal.write('attempt-a', { status: 'finishing', rootSettled: true, ...inventory(['child']),
+    childTurns: { [child]: 'inProgress' }, childObligations: { [child]: { ...inventory(['grandchild']), commands: { command: 'inProgress' } } } });
+  const before = await f.journal.get('attempt-a'), rows = await f.operations.snapshot();
+  assert.deepEqual(rows.map(row => [row.kind, row.status]), [
+    ['tool', 'unknown'], ['inference', 'settled'], ['tool', 'settled'], ['child', 'settled'],
+    ['child', 'active'], ['tool', 'active'], ['tool', 'settled'], ['child', 'active'],
+  ]);
+  assert.equal(rows.at(-1).started_at, timing.lastProgressAt);
+  assert.equal(rows.at(-1).deadline_at, '2026-09-14T01:05:00.000Z');
+  assert.notEqual(rows[2].id, rows[6].id);
+  assert.deepEqual(await new CodexOperations(f.config).snapshot(), rows);
+  assert.deepEqual(await f.journal.get('attempt-a'), before);
+});
+
 test('malformed root and child inventories cannot silently project as empty work', async t => {
   const f = await fixture(t), child = '["child","turn"]';
   const fields = ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions',
@@ -135,7 +154,7 @@ for (const child of [false, true]) test(`invalid ${child ? 'child' : 'root'} too
     compactions: { valid: 'completed', invalid: 'failed' },
     collabCalls: { '["wait","valid"]': 'interrupted', '["wait","invalid"]': 'declined' },
     imageGenerations: { valid: 'completed', invalid: 'interrupted' },
-    spawns: { valid: { status: 'failed' }, invalid: { status: 'interrupted' }, missing: null },
+    spawns: { valid: { status: 'failed' }, invalid: { status: 'declined' }, missing: null },
   };
   await f.journal.putIfAbsent('attempt-a', { status: 'running', threadId: 'root', nativeRunId: 'turn', rootSettled: false,
     ...(child ? { childObligations: { [key]: owner } } : owner) });

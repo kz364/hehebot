@@ -4,6 +4,21 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Interrupted-spawn checkpoint (2026-09-16): pinned generated
+`CollabAgentToolCallStatus` includes `interrupted`, already admitted by the event
+adapter. Heartbeat projection previously left that invocation unknown, while
+offline inspection rejected the entire otherwise-valid record. Both now accept
+the terminal invocation state, retaining receiver startup clocks and child work.
+Root/nested tests keep active commands, pending grandchild startup, unknown
+coverage and `CHILD_TURN_UNKNOWN`; offline inspection remains read-only and cannot
+authorize resume/sleep. Focused rerun: 89 tests passed. Initial failures identified
+two old fixtures misclassifying interrupted spawns and a new test incorrectly
+expecting no missing-grandchild warning; logs are `.local/interrupted-spawn-focused.log`
+and `.local/interrupted-spawn-focused-rerun.log`. Combined verification passed
+903 control / 251 runtime tests, all native/service fixtures, typecheck and build
+dry run (`.local/interrupted-spawn-combined.log`). Schema/synthetic event evidence does not
+prove a live interrupted spawn or recursive process termination. No gates changed.
+
 Operation inventory integrity checkpoint (2026-09-16): heartbeat projection rejects
 null, scalar and array inventories instead of interpreting them as absent work.
 This covers root/child tool and stream maps, spawn maps, child-turn maps and child

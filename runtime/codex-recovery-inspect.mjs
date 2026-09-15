@@ -167,7 +167,7 @@ export async function inspectCodexRecovery(directory) {
         if (field === 'messageStarts') require(item === true);
         const status = field === 'messageStarts' ? Object.hasOwn(owner.outputItems ?? {}, key) ? 'completed' : 'inProgress' : field === 'spawns' ? item?.status : item;
         const states = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems', 'planItems'].includes(field) ? ['inProgress', 'completed']
-          : ['inProgress', 'completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
+          : ['inProgress', 'completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : ['collabCalls', 'spawns'].includes(field) ? ['interrupted'] : [])];
         require(typeof itemId === 'string' && itemId.length > 0 && itemId.length <= 256 && states.includes(status) && obligations.length < 4096);
         obligations.push({ threadId, turnId, kind: field, itemId, status, ...(tool ? { tool } : {}) });
         const timingKey = JSON.stringify([field, key]);

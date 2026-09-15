@@ -58,6 +58,25 @@ test('private real journal projects asymmetric identities and obligations withou
   assert.deepEqual(await snapshot(f.directory), before);
 });
 
+test('interrupted spawn observations preserve root and nested receiver custody without recovery authority', async t => {
+  const f = await fixture(t), timing = { startedAt: '2026-09-15T01:02:00.000Z', lastProgressAt: '2026-09-15T01:03:00.000Z' };
+  await f.journal.write(attemptId, { ...f.native,
+    spawns: { spawn: { status: 'interrupted', receiverThreadIds: ['child-43'] } },
+    operationTimes: { '["spawns","spawn"]': timing },
+    childObligations: { [childKey]: { ...f.native.childObligations[childKey],
+      spawns: { spawn: { status: 'interrupted', receiverThreadIds: ['grandchild-97'] } },
+      operationTimes: { '["spawns","spawn"]': timing } } } });
+  const before = await snapshot(f.directory), report = await inspectCodexRecovery(f.directory);
+  assert.deepEqual(report.issues, ['CHILD_TURN_UNKNOWN']);
+  assert.deepEqual(report.native.observations.filter(row => row.kind === 'spawns'), [
+    { threadId: 'root-19', turnId: 'turn-23', kind: 'spawns', itemId: 'spawn', status: 'interrupted', timing, receiverThreadIds: ['child-43'] },
+    { threadId: 'child-43', turnId: 'turn-71', kind: 'spawns', itemId: 'spawn', status: 'interrupted', timing, receiverThreadIds: ['grandchild-97'] },
+  ]);
+  assert.equal(report.native.observations.filter(row => row.kind === 'commands' && row.status === 'inProgress').length, 2);
+  assert.equal(report.resumeAllowed, false); assert.equal(report.sleepAllowed, false);
+  assert.deepEqual(await snapshot(f.directory), before);
+});
+
 test('initial inference is reported without guessing legacy state or mutating custody', async t => {
   const f = await fixture(t);
   for (const initialInference of ['inProgress', 'completed']) {

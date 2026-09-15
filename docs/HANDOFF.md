@@ -2,6 +2,19 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Interrupted-spawn checkpoint (2026-09-16)
+
+Heartbeat projection and offline inspection now agree with the adapter/pinned
+schema that `spawnAgent: interrupted` is a terminal invocation state. Receivers,
+startup clocks, active child work, unknown coverage and missing-turn warnings stay
+independent. Root/nested projection and offline tests passed in an 89-test focused
+rerun. Initial failures were fixture expectations, documented in IMPLEMENTATION.
+Logs: `.local/interrupted-spawn-focused.log`,
+`.local/interrupted-spawn-focused-rerun.log`; combined verification passed 903
+control / 251 runtime tests, all native/service fixtures and typecheck/build dry run
+(`.local/interrupted-spawn-combined.log`). This is not live interrupted-spawn or
+recursive termination proof. Production gates/schedule unchanged; E01 remains open.
+
 ## Operation inventory integrity checkpoint (2026-09-16)
 
 Codex heartbeat projection now rejects null/scalar/array observation maps and
