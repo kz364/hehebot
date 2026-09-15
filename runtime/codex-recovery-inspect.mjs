@@ -3,6 +3,7 @@ import { lstat, open, opendir, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { OBSERVED_COLLAB_TOOLS } from './codex-adapter.mjs';
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -132,10 +133,18 @@ export async function inspectCodexRecovery(directory) {
     const children = [], obligations = [], origins = new Map();
     const items = (owner, threadId, turnId) => {
       require(object(owner));
-      for (const field of ['commands', 'mcpCalls', 'spawns']) for (const [itemId, item] of entries(owner[field])) {
+      for (const field of ['commands', 'mcpCalls', 'spawns', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'collabCalls']) for (const [key, item] of entries(owner[field])) {
+        let itemId = key, tool;
+        if (field === 'collabCalls') {
+          const pair = JSON.parse(key);
+          require(Array.isArray(pair) && pair.length === 2 && OBSERVED_COLLAB_TOOLS.includes(pair[0]) && JSON.stringify(pair) === key);
+          [tool, itemId] = pair;
+        }
         const status = field === 'spawns' ? item?.status : item;
-        require(id(itemId) && ['inProgress', 'completed', 'failed', ...(field === 'commands' ? ['declined'] : [])].includes(status));
-        obligations.push({ threadId, turnId, kind: field, itemId, status });
+        const states = ['webSearches', 'sleeps', 'compactions', 'imageGenerations'].includes(field) ? ['inProgress', 'completed']
+          : ['inProgress', 'completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
+        require(typeof itemId === 'string' && itemId.length > 0 && itemId.length <= 256 && states.includes(status) && obligations.length < 4096);
+        obligations.push({ threadId, turnId, kind: field, itemId, status, ...(tool ? { tool } : {}) });
         if (field === 'spawns') {
           require(Array.isArray(item.receiverThreadIds) && item.receiverThreadIds.length <= 100);
           for (const receiver of item.receiverThreadIds) {

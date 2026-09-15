@@ -53,8 +53,16 @@ per question record. It validates exact fields and filename/custody hash binding
 this checks local consistency, not authenticity or current Worker authority.
 
 The report includes service epoch/boot, current Worker run/attempt and adapter
-attempt ID, exact observed native root/child thread and turn IDs, command/MCP/spawn
-invocation statuses and cancellation acknowledgments. Unknown claim custody never
+attempt ID, exact observed native root/child thread and turn IDs, command/MCP/spawn,
+file-change, dynamic-tool, web-search, wait, compaction, image-generation and
+collaboration observations, plus cancellation acknowledgments. Collaboration
+records preserve both the tool name and item ID within the exact thread/turn;
+matching IDs in another tool or child remain separate. Status validation follows
+the adapter's persisted enums. For search/wait/compaction/image generation,
+`completed` means an observed item termination, not verified success. The report
+accepts at most 4096 observations across all categories and descendants; overflow
+rejects the native projection rather than silently truncating it.
+Unknown claim custody never
 borrows a stale native attempt left in a reused bridge cursor. Missing child turns,
 conflicting root IDs, child ancestry and cancellation identities remain unknown.
 An accepted interrupt is only an acknowledgment; an interrupted turn is only an
