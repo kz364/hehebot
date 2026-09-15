@@ -324,6 +324,23 @@ it('alarms expire only settled steering audit with execution disabled and no pro
   expect(db.all('SELECT * FROM controller_operations')).toEqual([]);expect(deleteAlarm).toHaveBeenCalled();
 });
 
+it('question retention alarm runs while execution is disabled without wake or task mutation',async()=>{
+  const run=randomUUID(),id=randomUUID(),now=new Date().toISOString();
+  db.exec("INSERT INTO runs(id,persona_id,context_json,status,current_attempt,created_at,updated_at) VALUES(?,?,'{}','completed',1,?,?)",run,bot,now,now);
+  db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,settled_at) VALUES(?,1,?,1,?,'completed',?,?)",run,randomUUID(),randomUUID(),now,now);
+  const row={version:1,id,connection_id:randomUUID(),request_id:19,params:{threadId:'thread',turnId:'turn',itemId:'item',isBlocking:true,
+    questions:[{id:'choice',header:'Choice',question:'Synthetic text'}]},revision:2,state:'resolved',run_id:run,attempt:1,epoch:1,
+    boot_id:randomUUID(),persona_id:bot,conversation_id:bot,created_at:now,expires_at:'2026-09-10T00:15:00.000Z',
+    answers:null,answer_owner_id:null,answer_command_id:null,answered_at:null,response_taken_at:null,resolved_at:now};
+  db.exec('INSERT INTO runtime_metadata VALUES(?,?)',`native-question:${id}`,JSON.stringify(row));
+  const before=['runs','attempts','lifecycle','events','controller_operations'].map(table=>db.all(`SELECT * FROM ${table}`));
+  await control.getState('owner');expect(setAlarm).toHaveBeenLastCalledWith(Date.parse('2026-12-09T00:00:00.000Z'));
+  vi.setSystemTime(new Date('2026-12-09T00:00:00.000Z'));await control.alarm();
+  expect(db.all("SELECT key FROM runtime_metadata WHERE key GLOB 'native-question:*'")).toEqual([]);
+  expect(['runs','attempts','lifecycle','events','controller_operations'].map(table=>db.all(`SELECT * FROM ${table}`))).toEqual(before);
+  expect(deleteAlarm).toHaveBeenCalled();
+});
+
 it('serves validated recovery pages through owner RPC without starting runtime work',async()=>{
   const ids=[randomUUID(),randomUUID()].sort(),now=new Date().toISOString();
   for(const id of ids)db.exec("INSERT INTO runs(id,persona_id,context_json,status,current_attempt,created_at,updated_at) VALUES(?,?,'{}','recovery_required',1,?,?)",id,bot,now,now);

@@ -165,3 +165,60 @@ it('fails closed on corrupt records and unresolved/retained capacity, without re
   db.transaction(() => { for (let n = 100; n < 4196; n++) db.exec('INSERT INTO runtime_metadata VALUES(?,?)', `native-question:${id(n)}`, JSON.stringify({ ...settled, id: id(n), request_id: n })); });
   rejects(() => record(5000), 'NATIVE_QUESTION_CAPACITY'); expect(ledger.list()).toEqual([]);
 });
+
+function settleForRetention() {
+  db.exec("UPDATE runs SET status='completed' WHERE id=?", id(20));
+  db.exec("UPDATE attempts SET status='completed',settled_at=? WHERE run_id=?", clock, id(20));
+  db.exec('DELETE FROM resource_locks'); db.exec("UPDATE effects SET status='confirmed'");
+}
+it('expires resolved content at 90 days after later settlement, preserving other tables and preventing replay', () => {
+  queued(); ledger.takeAnswer(identity, id(100), connection); ledger.resolve(identity, id(100), connection);
+  clock = '2026-09-15T12:00:00.000Z'; settleForRetention();
+  expect(ledger.nextExpiry()).toBe('2026-12-14T12:00:00.000Z');
+  const before = otherTables();
+  clock = '2026-12-14T11:59:59.999Z'; expect(ledger.prune()).toBe(0);
+  clock = '2026-12-14T12:00:00.000Z'; expect(ledger.prune()).toBe(1);
+  expect(ledger.nextExpiry()).toBeNull(); expect(ledger.prune()).toBe(0);
+  expect(otherTables()).toEqual(before); rejects(() => ledger.get(id(100)), 'NOT_FOUND');
+  // Expiry cannot make the old terminal attempt eligible for a new record.
+  db.exec("UPDATE lifecycle SET lease_until='2027-01-01T00:00:00.000Z'");
+  rejects(() => record(), 'REVISION_CONFLICT');
+});
+it('late native resolution starts retention after the earlier task settlement', () => {
+  record(); settleForRetention(); clock = '2026-09-14T12:02:00.000Z';
+  ledger.resolve(identity, id(100), connection);
+  expect(ledger.nextExpiry()).toBe('2026-12-13T12:02:00.000Z');
+  clock = '2026-12-13T12:00:00.000Z'; expect(ledger.prune()).toBe(0);
+  clock = '2026-12-13T12:02:00.000Z'; expect(ledger.prune()).toBe(1);
+});
+it('never purges pending, answered or unknown questions merely because their task is terminal and expired', () => {
+  record(100); record(101); record(102);
+  for (const n of [101, 102]) { const c = command(n); ledger.answer('alice', receipt(c), c); }
+  ledger.takeAnswer(identity, id(102), connection); settleForRetention();
+  const before = db.all('SELECT * FROM runtime_metadata ORDER BY key');
+  clock = '2027-09-15T00:00:00.000Z'; expect(ledger.nextExpiry()).toBeNull(); expect(ledger.prune()).toBe(0);
+  expect(db.all('SELECT * FROM runtime_metadata ORDER BY key')).toEqual(before);
+});
+it.each(['run', 'attempt', 'retry', 'operation', 'effect', 'lock'])('preserves resolved question with %s obligation', kind => {
+  record(); ledger.resolve(identity, id(100), connection); settleForRetention();
+  if (kind === 'run') db.exec("UPDATE runs SET status='recovery_required' WHERE id=?", id(20));
+  if (kind === 'attempt') db.exec("UPDATE attempts SET status='running' WHERE run_id=?", id(20));
+  if (kind === 'retry') db.exec('INSERT INTO retry_queue VALUES(?,?,?)', id(20), clock, 'test');
+  if (kind === 'operation') db.exec("INSERT INTO operations VALUES(?,?,1,'tool','unknown',?,?,?)", id(90), id(20), clock, clock, clock);
+  if (kind === 'effect') db.exec("UPDATE effects SET status='outcome_unknown'");
+  if (kind === 'lock') db.exec('INSERT INTO resource_locks VALUES(?,?,1,?)', 'resource', id(20), clock);
+  const before = otherTables(); clock = '2027-09-15T00:00:00.000Z';
+  expect(ledger.nextExpiry()).toBeNull(); expect(ledger.prune()).toBe(0); expect(ledger.get(id(100)).state).toBe('resolved');
+  expect(otherTables()).toEqual(before);
+});
+it('bounds cleanup to 100 rows and rolls back a batch containing corrupt custody', () => {
+  record(); ledger.resolve(identity, id(100), connection); const base = ledger.get(id(100));
+  for (let n = 101; n < 201; n++) db.exec('INSERT INTO runtime_metadata VALUES(?,?)', `native-question:${id(n)}`, JSON.stringify({ ...base, id: id(n), request_id: n }));
+  settleForRetention(); clock = '2027-01-01T00:00:00.000Z';
+  db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=?', JSON.stringify({ ...base, id: id(199), revision: 99 }), `native-question:${id(199)}`);
+  rejects(() => ledger.prune(), 'NATIVE_QUESTION_CORRUPT');
+  expect(db.all('SELECT key FROM runtime_metadata')).toHaveLength(101);
+  db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=?', JSON.stringify({ ...base, id: id(199) }), `native-question:${id(199)}`);
+  expect(ledger.prune()).toBe(100); expect(ledger.nextExpiry()).not.toBeNull();
+  expect(ledger.prune()).toBe(1); expect(ledger.nextExpiry()).toBeNull();
+});

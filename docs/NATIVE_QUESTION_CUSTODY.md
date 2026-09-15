@@ -14,6 +14,8 @@ list(): NativeQuestionView[]
 answer(owner: string, commandId: string, input: NativeQuestionAnswerCommand): string
 takeAnswer(identity: Identity, id: string, connectionId: string): { answers: NativeQuestionAnswers } | null
 resolve(identity: Identity, id: string, connectionId: string): void
+nextExpiry(): string | null
+prune(): number
 ```
 
 `NativeQuestionInput` is `{id,connection_id,request_id,params:{threadId,turnId,itemId,isBlocking,questions,autoResolutionMs?}}`. `NativeQuestion` is `{id,header,question,isOther?,isSecret?,options?:{label,description}[]|null}`. `NativeQuestionAnswers` is `Record<string,{answers:string[]}>`. `NativeQuestionAnswerCommand` is `{question_id,expected_revision,answers}`. Unknown object fields are rejected.
@@ -95,4 +97,6 @@ npm run typecheck
 
 Without the environment override the test uses DB/schema.sql. Tests use disposable in-memory schema9 SQLite, actual Store/LifecycleCore transactions and synthetic data, including unknown effects and locks. They cover request-ID types, two tasks/owners, receipt mismatch, uncertainty/reopen, resolution ordering, authority/expiry fences, Unicode/input bounds, corruption, capacity and failed-write rollback.
 
-Capacity retention, post-epoch reconciliation, runtime thread binding and production transport assembly remain separate work. Expiry only fences answers; it does not cancel a native request or settle a task. Question/answer text remains potentially sensitive despite secret-question rejection; restrict read access and do not put it in logs. Local ingress/rendering tests do not establish production authentication. This unit makes no production readiness or external executor shutdown claim.
+Resolved question records expire 90 days after the later of native resolution and attempt settlement, only when both task and attempt are terminal and no retry, unsettled operation, uncertain effect or resource lock remains for that task. Worker alarms and missed-alarm ingress maintenance prune at most 100 rows transactionally, including while execution is disabled. Remaining eligible backlog rearms the alarm. Corrupt selected records roll back the batch; pending, answered and response_unknown records are never purged by age. Cleanup touches only these metadata rows, not command receipts, tasks, effects, locks, native journals or backups. Existing command-payload retention separately governs owner answer payloads. This is not deletion everywhere, and retained unresolved work can still exhaust capacity.
+
+Post-epoch reconciliation and production transport assembly remain separate work; disposable runtime thread binding is documented in [CODEX_QUESTION_BINDING.md](CODEX_QUESTION_BINDING.md). Expiry only fences answers; it does not cancel a native request or settle a task. Question/answer text remains potentially sensitive despite secret-question rejection; restrict read access and do not put it in logs. Local ingress/rendering tests do not establish production authentication. This unit makes no production readiness or external executor shutdown claim.

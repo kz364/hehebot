@@ -84,6 +84,7 @@ export class PersonalControl extends DurableObject<Env> {
  private reconcile(){
   this.core.expireMemories();this.core.expireCommandPayloads();this.core.expireFollowups();this.core.expireQueuedContexts();this.retention.prune();this.resultRetention.prune();this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();this.core.reconcileBudget();
   new TaskSteering(this.store,()=>this.core.now()).prune();
+  this.core.questions.prune();
   new OutputPreviews(this.store,()=>this.core.now()).prune();
  }
  async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{await this.beforeRequest(owner+':write',60);const result=this.core.accept(owner,key,hash,input);await this.arm();return result;});}
@@ -200,6 +201,7 @@ export class PersonalControl extends DurableObject<Env> {
   const resultDue=this.resultRetention.nextDue();if(resultDue)times.push(Date.parse(resultDue));
   const previewDue=new OutputPreviews(this.store,()=>this.core.now()).nextDue();if(previewDue)times.push(Date.parse(previewDue));
   const steeringDue=new TaskSteering(this.store,()=>this.core.now()).nextExpiry();if(steeringDue)times.push(Date.parse(steeringDue));
+  const questionDue=this.core.questions.nextExpiry();if(questionDue)times.push(Date.parse(questionDue));
   const commandExpiry=this.core.nextCommandPayloadExpiry();if(commandExpiry)times.push(Date.parse(commandExpiry));
   const followupExpiry=this.core.nextFollowupExpiry();if(followupExpiry)times.push(Date.parse(followupExpiry));
   const queuedContextExpiry=this.core.nextQueuedContextExpiry();if(queuedContextExpiry)times.push(Date.parse(queuedContextExpiry));

@@ -58,9 +58,37 @@ function answersFor(questions: NativeQuestion[], value: unknown): NativeQuestion
 }
 const inputOf = (r: NativeQuestionRecord): NativeQuestionInput => ({ id: r.id, connection_id: r.connection_id, request_id: r.request_id, params: r.params });
 
+// Question bodies/answers are content (90d), not merely delivery metadata.
+// Resolution alone never establishes task/effect settlement.
+const retentionCandidates = `FROM runtime_metadata m
+ JOIN runs r ON r.id=json_extract(m.value_json,'$.run_id')
+ JOIN attempts a ON a.run_id=r.id AND a.attempt=json_extract(m.value_json,'$.attempt')
+ WHERE m.key GLOB 'native-question:*' AND json_extract(m.value_json,'$.state')='resolved'
+ AND r.status IN ('completed','failed','cancelled') AND a.status IN ('completed','failed','cancelled') AND a.settled_at IS NOT NULL
+ AND NOT EXISTS(SELECT 1 FROM retry_queue q WHERE q.run_id=r.id)
+ AND NOT EXISTS(SELECT 1 FROM operations o WHERE o.run_id=r.id AND o.status!='settled')
+ AND NOT EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=r.id)
+ AND NOT EXISTS(SELECT 1 FROM effects e WHERE e.run_id=r.id AND e.status IN ('intent','dispatched','outcome_unknown'))`;
+const retentionOrigin = "MAX(json_extract(m.value_json,'$.resolved_at'),a.settled_at)";
+
 /** Trusted runtime custody and owner-answer queue, never approval, dispatch retry or task settlement. */
 export class NativeQuestionLedger {
   constructor(private store: Store, private lifecycle: LifecycleCore, private now: () => string) {}
+  nextExpiry(): string | null {
+    return this.store.db.all<{ due: string | null }>(`SELECT strftime('%Y-%m-%dT%H:%M:%fZ',MIN(${retentionOrigin}),'+90 days') AS due ${retentionCandidates}`)[0].due;
+  }
+  prune(): number {
+    return this.store.db.transaction(() => {
+      const cutoff = new Date(Date.parse(this.clock()) - 90 * 86400000).toISOString();
+      const rows = this.store.db.all<{ key: string }>(`SELECT m.key ${retentionCandidates}
+        AND ${retentionOrigin}<=? ORDER BY ${retentionOrigin},m.key LIMIT 100`, cutoff);
+      for (const row of rows) {
+        this.get(row.key.slice(NATIVE_QUESTION_PREFIX.length)); // Corruption is not permission to erase custody.
+        this.store.db.exec('DELETE FROM runtime_metadata WHERE key=?', row.key);
+      }
+      return rows.length;
+    });
+  }
   private clock(): string { const now = this.now(); requireThat(timestamp(now), 'INVALID_INPUT', 'The question clock is invalid.', 422); return now; }
   private save(record: NativeQuestionRecord): void {
     this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json',

@@ -137,8 +137,12 @@ task settlement. The portal uses attributed literal question cards and explicit
 answer/skip controls, retains hidden-bot attention, fences stale edits, and leaves
 the ordinary chat composer independent. SQLite, actual local HTTPS Worker and
 inspected Chromium fixtures cover these boundaries. Runtime thread-journal
-binding, post-epoch reconciliation, bounded retention and production callback
-assembly remain incomplete; production execution remains disabled.
+binding is now connected through default-off disposable service assembly, including
+real native answer delivery and cancellation without an answer. Resolved question
+content has bounded 90-day cleanup after resolution and task settlement, guarded
+by retries, operations, effects and locks. Pending/unknown records, native journals
+and backups remain retained. Post-epoch reconciliation and production callback
+admission remain incomplete; production execution remains disabled.
 
 Observed native child starts are now acknowledged by the service atomically with
 Worker registration. Exact receipt replay recovers a lost acknowledgement without
