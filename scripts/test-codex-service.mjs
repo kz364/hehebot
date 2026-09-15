@@ -20,9 +20,10 @@ const root = resolve(import.meta.dirname, '..');
 const effectsMode = process.argv.includes('--child-effects');
 const childMode = process.argv.includes('--child') || effectsMode;
 const crashMode = process.argv.includes('--crash');
-const questionsMode = process.argv.includes('--questions');
+const questionCancelMode = process.argv.includes('--questions-cancel');
+const questionsMode = process.argv.includes('--questions') || questionCancelMode;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -113,7 +114,7 @@ try {
       const chunks = []; for await (const chunk of req) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString());
       report.modelRequests++;
-      assert.ok(report.modelRequests <= (childMode ? 4 : questionsMode ? 3 : 2), 'Unexpected model continuation');
+      assert.ok(report.modelRequests <= (childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2), 'Unexpected model continuation');
       await wait(() => bound, 'service acknowledged root');
       if (questionsMode && report.modelRequests === 3) {
         const result = body.input.find(item => item.type === 'function_call_output' && item.call_id === 'question_call_43');
@@ -214,6 +215,14 @@ try {
   const dependencies = { spriteRequest, fetchImpl: trustedFetch,
     launch: options => {
       const transport = spawnCodex(options), request = transport.request.bind(transport);
+      if (questionsMode) {
+        const write = transport.write.bind(transport);
+        report.nativeAnswerWrites = 0;
+        transport.write = message => {
+          if (message?.result?.answers) report.nativeAnswerWrites++;
+          return write(message);
+        };
+      }
       nativeTransport = transport; nativeLaunches++;
       transport.on('notification', notification => notifications.push(notification));
       transport.request = (method, params) => {
@@ -233,11 +242,34 @@ try {
     assert.equal(report.modelRequests, 2);
     const response = await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
       'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
-    }, body: JSON.stringify({ schema_version: 1, type: 'question.answer', payload: {
-      question_id: question.id, expected_revision: question.revision, answers: questionAnswers } }) });
+    }, body: JSON.stringify(questionCancelMode
+      ? { schema_version: 1, type: 'run.cancel', payload: { run_id: queued.resource_id, reason: 'Cancel pending fixture question' } }
+      : { schema_version: 1, type: 'question.answer', payload: {
+        question_id: question.id, expected_revision: question.revision, answers: questionAnswers } }) });
     assert.equal(response.status, 202); assert.equal((await response.json()).status, 'applied');
+    if (questionCancelMode) await service.maintain();
     await wait(async () => (await (await trustedFetch(`${origin}/v1/state`)).json()).questions.length === 0, 'native resolved custody');
     report.ownerQuestionResolved = true;
+    if (questionCancelMode) {
+      const observed = await wait(async () => {
+        const row = await service.observe(); return row?.nativeOutcome === 'interrupted' && row;
+      }, 'interrupted question root');
+      assert.deepEqual(interrupts, [{ threadId: observed.threadId, turnId: observed.nativeRunId }]);
+      const late = await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
+        'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
+      }, body: JSON.stringify({ schema_version: 1, type: 'question.answer', payload: {
+        question_id: question.id, expected_revision: question.revision, answers: questionAnswers } }) });
+      assert.equal(late.status, 202);
+      const lateReceipt = await late.json();
+      assert.equal(lateReceipt.status, 'rejected'); assert.equal(lateReceipt.error.code, 'REVISION_CONFLICT');
+      await service.maintain();
+      assert.equal(report.nativeAnswerWrites, 0); assert.equal(report.modelRequests, 2);
+      assert.equal(nativeTransport.closed, false);
+      const readback = await nativeTransport.request('thread/read', { threadId: observed.threadId, includeTurns: true });
+      assert.equal(readback.thread.id, observed.threadId);
+      assert.equal(readback.thread.turns.find(turn => turn.id === observed.nativeRunId)?.status, 'interrupted');
+      report.pendingQuestionCancelledWithoutAnswer = true;
+    }
   }
   if (crashMode) await wait(() => crashHeld, 'active root inference after verified MCP receipt');
   else await wait(async () => (await service.observe())?.rootSettled, 'root completion');
@@ -376,8 +408,9 @@ try {
     assert.equal(rejected.status, 409); assert.match(JSON.stringify(await rejected.json()), /CANCEL_UNCONFIRMED/);
   }
   const final = await (await trustedFetch(`${origin}/v1/state`)).json();
-  assert.equal(final.runs.find(run => run.id === queued.resource_id).status, 'running');
-  if (!crashMode) {
+  assert.equal(final.runs.find(run => run.id === queued.resource_id).status, questionCancelMode ? 'cancelling' : 'running');
+  if (questionCancelMode) assert.deepEqual(final.output_previews, []);
+  if (!crashMode && !questionCancelMode) {
     assert.deepEqual(final.output_previews, [{ run_id: queued.resource_id, attempt: dispatched.claim.run.current_attempt,
       version: 1, text: childMode ? 'SERVICE_PARENT_DONE' : 'SERVICE_ASSEMBLY_OK', truncated: false }]);
     report.nativeProvisionalOutputWithoutSettlement = true;
@@ -388,7 +421,8 @@ try {
     Object.assign(report, { interrupts: interrupts.length, childInterrupted: true, childHttpClosed: childClosed,
       heartbeatOperations: operations.length, unknownCoverage: 1, rootWorkerStatus: 'running', childWorkerStatus: 'cancelling', sleepDenied: true });
   }
-  assert.deepEqual(taskRequests, ['PUT', 'GET']); assert.equal(report.modelRequests, childMode ? 4 : questionsMode ? 3 : 2); assert.deepEqual(errors, []);
+  assert.deepEqual(taskRequests, ['PUT', 'GET']); assert.equal(report.modelRequests, childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2); assert.deepEqual(errors, []);
+  if (questionsMode) assert.equal(report.nativeAnswerWrites, questionCancelMode ? 0 : 1);
   await service.stop();
   assert.equal((await service.journal.get('service')).phase, 'recovery');
   const diagnostic = await inspectCodexRecovery(join(stateDirectory, 'journal'));
