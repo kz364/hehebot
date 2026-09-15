@@ -68,7 +68,8 @@ export async function inspectCodexRecovery(directory) {
       try {
         require(/^question_[a-f0-9]{64}\.json$/.test(entry.name));
         const row = await read(entry.name.slice(0, -5), false, 16384);
-        require(exact(row, ['version', 'questionId', 'connectionId', 'requestId', 'binding', 'threadId', 'turnId', 'itemId', 'inputSha256', 'phase', 'resolutionObserved']));
+        require(exact(row, ['version', 'questionId', 'connectionId', 'requestId', 'binding', 'threadId', 'turnId', 'itemId', 'inputSha256', 'phase', 'resolutionObserved',
+          ...(Object.hasOwn(row, 'wait') ? ['wait'] : [])]));
         const binding = row.binding;
         require(row.version === 1 && questionUuid(row.questionId) && questionUuid(row.connectionId) &&
           (Number.isSafeInteger(row.requestId) || text(row.requestId, 128)) &&
@@ -82,6 +83,13 @@ export async function inspectCodexRecovery(directory) {
         require(entry.name === `question_${hash([binding.attemptId, row.threadId, row.turnId, row.itemId])}.json` &&
           ['record_unknown', 'waiting', 'take_unknown', 'handoff_unknown', 'resolve_unknown', 'resolved'].includes(row.phase) &&
           typeof row.resolutionObserved === 'boolean' && (row.phase !== 'resolved' || row.resolutionObserved));
+        if (Object.hasOwn(row, 'wait')) {
+          require(exact(row.wait, ['startedAt', 'deadlineAt']) && ['startedAt', 'deadlineAt'].every(key =>
+            typeof row.wait[key] === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(row.wait[key]) && new Date(row.wait[key]).toISOString() === row.wait[key]) &&
+            row.wait.deadlineAt > row.wait.startedAt && row.wait.deadlineAt <= binding.deadline_at &&
+            Date.parse(row.wait.deadlineAt) - Date.parse(row.wait.startedAt) <= 900000);
+          (report.questions.waits ??= []).push({ ...row.wait, phase: row.phase });
+        }
         report.questions.total++;
         report.questions.phases[row.phase] = (report.questions.phases[row.phase] ?? 0) + 1;
         if (row.phase !== 'resolved') report.questions.unresolved++;

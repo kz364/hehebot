@@ -319,6 +319,19 @@ Seven native service cases observed starts. Private logs:
 `.local/message-start-focused.log`, `.local/message-start-combined.log`.
 Overlapping-stream lifetime accounting and human waits remain E01; no gate changes.
 
+Question-wait checkpoint (2026-09-16): service binding/transport ceilings now agree
+at 300000ms per SPEC, with ordinary RPCs still 10000ms. New question journal rows
+retain immutable callback entry and task-capped deadline; inspection accepts old
+rows without backfill and exposes only timing/phase. Tests passed 60 focused,
+901 control / 223 runtime combined, all native/service fixtures, typecheck/build.
+Native answer and cancellation cases verify five-minute stored windows. The first
+focused failure was a test looking outside the service's journal subdirectory;
+the corrected fixture reads actual persisted custody. Private logs:
+`.local/question-wait-focused.log`, `.local/question-wait-combined.log`.
+Worker custody may outlive the callback. Explicit restart-required UI, checkpoint
+parking, coordinated cancellation and compute release remain E01/E02. No gates,
+account/provider deployment or replay permissions changed.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

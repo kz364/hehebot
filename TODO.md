@@ -6,9 +6,9 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest checkpoint:** message-start silence bound, 2026-09-16. Local, not pushed or deployed. ID-only live start markers open bounded inference phases; text deltas never refresh the deadline. E01 remains partial.
-- **Verified:** **68 focused tests passed**, including start/completion separation, replay/history isolation, text exclusion and malformed-marker refusal. Seven native service cases observed message starts.
-- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 222 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/message-start-focused.log`, `.local/message-start-combined.log`.
+- **Latest checkpoint:** bounded human-question callback, 2026-09-16. Local, not pushed or deployed. Disposable service binding/transport both cap waits at five minutes, with immutable callback/task-capped timing in the journal. E01 remains partial.
+- **Verified:** **60 focused tests passed**, including service limit agreement, original-task capping, timeout without false resolution, legacy compatibility and malformed timing refusal. Native answer/cancel fixtures verify persisted five-minute windows.
+- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 223 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/question-wait-focused.log`, `.local/question-wait-combined.log`.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
 - **Next implementation priority:** E01, complete deadline/activity accounting; then E02 recovery and E03 responsive orchestration. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
@@ -41,6 +41,7 @@ These are useful foundations that should not be rebuilt simply because their ful
 - [x] Credential-free 1,000-publication passive-update volume cases with execution enabled: stopped provider driver receives zero wake calls; idle/busy supervisor receives zero additional native submissions; active task/attempt and recipient delivery remain intact. Evidence: `tests/control-acceptance.test.ts`, `tests/execution-supervisor.test.ts`. Staging trace and full E15 acceptance remain open.
 - [x] Content-free quiet-window start/end/duration diagnostics for timeout analysis. Evidence: `tests/runtime-codex-quiet-phases.mjs`, `tests/runtime-codex-recovery-inspect.mjs`. Real workload collection and VM CPU/billing/safe-sleep analysis remain E11; no shorter timeout is justified yet.
 - [x] Bounded inference interval after live message start, with no text/delta retention or replay refresh. Evidence: `tests/runtime-codex-events.mjs` and seven native service cases. Full overlapping-stream lifetime accounting and progress extensions remain E01.
+- [x] Five-minute non-checkpointed service question callback ceiling and private persisted wait deadline. Evidence: question/service/inspection tests and native answer/cancel fixtures. Worker custody can outlive the callback; restart-required UI, checkpoint parking and safe compute release remain E01/E02.
 
 ## Remaining implementation and acceptance
 

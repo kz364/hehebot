@@ -248,7 +248,14 @@ test('invalid question phase, identity, filename, secret fields and links make c
   const row = { version: 1, questionId: runId, connectionId: boot, requestId: '71',
     binding: { identity, run_id: runId, attempt: 7, attemptId, deadline_at: '2026-09-15T00:00:00.000Z' },
     threadId: 'thread', turnId: 'turn', itemId: 'item', inputSha256: 'c'.repeat(64), phase: 'resolved', resolutionObserved: true };
+  const wait = { startedAt: '2026-09-14T23:55:00.000Z', deadlineAt: '2026-09-15T00:00:00.000Z' };
+  await f.journal.write(key, { ...row, phase: 'waiting', resolutionObserved: false, wait });
+  const timed = await inspectCodexRecovery(f.directory);
+  assert.deepEqual(timed.questions.waits, [{ ...wait, phase: 'waiting' }]);
+  assert.equal(timed.questions.unresolved, 1); assert.equal(timed.sleepAllowed, false);
   for (const patch of [{ phase: 'accepted' }, { resolutionObserved: false }, { questionId: 71 }, { questionId: '0'.repeat(36) }, { requestId: {} },
+    { wait: null }, { wait: { ...wait, deadlineAt: wait.startedAt } }, { wait: { ...wait, deadlineAt: '2026-09-15T00:00:00.001Z' } },
+    { wait: { ...wait, startedAt: '2026-09-14T23:44:59.999Z' } }, { wait: { ...wait, text: canary } },
     { itemId: 'different-item' }, { answers: canary }, { binding: { ...row.binding, attempt: 0 } }]) {
     await f.journal.write(key, { ...row, ...patch });
     const report = await inspectCodexRecovery(f.directory);

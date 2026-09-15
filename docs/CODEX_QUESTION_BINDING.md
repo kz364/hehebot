@@ -39,7 +39,7 @@ For explicit test/opt-in assembly, give `binding.onUserInput` to CodexTransport,
 
 The original unit was tested against transport v2 SHA256 `d78bd2fcd33a1e24f91f503a53065c2643fb89ccc62433a4b9622ce459e96b7e`. Parent integration also verifies the additive separate `userInputTimeoutMs` transport option. ControlClient allows `question-record`, `question-take`, and `question-resolve`.
 
-`createCodexService` now accepts explicit boolean `ownerQuestions`, default off and still blocked outside `disposableTest`. Opt-in installs this binding before native submission, forwards resolution notifications after callback return, and closes it on recovery/disconnect/shutdown. Both binding and transport question windows are 900000ms; ordinary RPCs remain 10000ms. The resolver waits at most 400 × 25ms plus journal I/O, bounded by the binding's 15000ms dependency timeout, for the exact in-flight bridge admission to become `running` after Worker acknowledgment. It checks supervisor lease and exact native identities; an unknown submission never grants answer authority. This option does not enable Codex experimental features or change production gates.
+`createCodexService` now accepts explicit boolean `ownerQuestions`, default off and still blocked outside `disposableTest`. Opt-in installs this binding before native submission, forwards resolution notifications after callback return, and closes it on recovery/disconnect/shutdown. Both binding and transport question windows are 300000ms, matching SPEC's five-minute non-checkpointed human-wait ceiling; ordinary RPCs remain 10000ms. The resolver waits at most 400 × 25ms plus journal I/O, bounded by the binding's 15000ms dependency timeout, for the exact in-flight bridge admission to become `running` after Worker acknowledgment. It checks supervisor lease and exact native identities; an unknown submission never grants answer authority. This option does not enable Codex experimental features or change production gates.
 
 ## Wire and validation
 
@@ -54,6 +54,19 @@ Params/questions and answer checks mirror custody bounds: 1–3 questions; uniqu
 Before record, a fresh question UUID, original custody, typed request ID, native tuple and input hash are durably journaled under `question_<SHA256([attemptId,threadId,turnId,itemId])>`. Existing rows always reject replay, even after module reconstruction with a fresh connection UUID. No existing row is repaired or reused. This deliberately sacrifices automatic retry rather than risk duplicate native answers. FileJournal requires exclusive single-executor ownership and the existing OS/provider fence; it is not a cross-process lock or authenticated storage.
 
 Journal phases are record_unknown → waiting → take_unknown → handoff_unknown, with pending take returning to waiting. take_unknown is saved before the mutating take request; handoff_unknown is fsynced before data can leave this module. The journal stores no question text, option text, or answer text; native identifiers/custody and input hash are still private metadata. Do not log callback params or upstream errors.
+
+New records also retain immutable `wait: {startedAt, deadlineAt}` in canonical UTC
+milliseconds. Start is callback entry, including admission latency; deadline is
+the earlier configured callback limit or original task deadline. Polling and
+resolution do not refresh it. Offline inspection validates and exposes timing
+and phase without question/connection IDs or content; old records remain readable
+without invented timing. The reusable binding still permits explicit fixture
+limits up to 15 minutes, but service assembly uses five. Worker custody expiry
+remains separate and may be later; this metadata is not an extension of authority.
+Callback expiry neither resolves that custody nor proves native termination.
+Restart-required UI, durable checkpoint parking, reconciled cancellation and safe
+compute release remain unimplemented; existing inference deadlines may stop the
+callback earlier. No automatic retry or sleep is introduced.
 
 Resolution is tracked separately as resolutionObserved. A matching typed requestId AND threadId aborts active answer delivery immediately and queues resolution behind the in-flight record/take operation. It can arrive before answer, during take, or after callback return. For resolution, original custody is used without requiring a still-running resolver result, future deadline, rootSettled=false, or running journal status: interruption can settle the root first. Exact journal thread/turn must still match, and Worker enforces the original lease. Successful Worker resolution saves phase resolved. Neither the notification nor this phase proves answer acceptance, RPC delivery, model consumption, or task settlement.
 

@@ -104,8 +104,9 @@ export class CodexQuestionBinding {
     try {
       check(!this.#closed && signal instanceof AbortSignal && requestIdValid(requestId)); validateParams(params);
       check(!this.#entries.has(requestId) && this.#entries.size < this.maxRequests, 'QUESTION_REQUEST_CONFLICT');
+      const startedAt = Date.now();
       const e = { params: structuredClone(params), requestId, id: randomUUID(), controller: new AbortController(),
-        deadline: Date.now() + this.timeoutMs, tail: Promise.resolve(), blocked: false, recorded: false, resolutionObserved: false };
+        deadline: startedAt + this.timeoutMs, tail: Promise.resolve(), blocked: false, recorded: false, resolutionObserved: false };
       const input = { id: e.id, connection_id: this.connectionId, request_id: requestId, params: e.params };
       check(Buffer.byteLength(JSON.stringify(input)) <= 65536);
       this.#entries.set(requestId, e);
@@ -118,7 +119,8 @@ export class CodexQuestionBinding {
         e.key = `question_${hash([e.binding.attemptId, e.params.threadId, e.params.turnId, e.params.itemId])}`;
         const existing = await bounded(this.journal.putIfAbsent(e.key, { version: 1, questionId: e.id, connectionId: this.connectionId,
           requestId, binding: e.binding, threadId: e.params.threadId, turnId: e.params.turnId, itemId: e.params.itemId,
-          inputSha256: hash(input), phase: 'record_unknown', resolutionObserved: false }), this.controlTimeoutMs);
+          inputSha256: hash(input), phase: 'record_unknown', resolutionObserved: false,
+          wait: { startedAt: new Date(startedAt).toISOString(), deadlineAt: new Date(e.deadline).toISOString() } }), this.controlTimeoutMs);
         check(existing === null, 'QUESTION_REPLAY_FORBIDDEN'); e.owned = true; this.#alive(e);
         const reply = await this.#request(e, 'question-record', { identity: e.binding.identity, run_id: e.binding.run_id, attempt: e.binding.attempt, question: input }, 'record_unknown');
         check(fields(reply, ['id']) && reply.id === e.id, 'QUESTION_INVALID_RESPONSE'); e.recorded = true;

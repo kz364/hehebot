@@ -155,8 +155,21 @@ test('unrelated admitted root stays pending when first root receives its answer'
 test('timeout stops polling without settlement or retained abort listeners', async t => {
   const f = await fixture(t, { timeoutMs: 80 }), abort = new AbortController();
   await assert.rejects(f.binding.onUserInput(params(), { signal: abort.signal, requestId: 71 }));
+  const row = (await f.rows())[0];
+  assert.equal(Date.parse(row.wait.deadlineAt) - Date.parse(row.wait.startedAt), 80);
+  assert.notEqual(row.phase, 'resolved'); assert.equal(row.resolutionObserved, false);
   const count = f.calls.length; await sleep(30); assert.equal(f.calls.length, count);
   assert.equal(getEventListeners(abort.signal, 'abort').length, 0); assert.equal(f.calls.filter(c => c.type === 'question-resolve').length, 0);
+});
+test('persisted callback deadline is capped by the original task, not by a fresh poll', async t => {
+  const f = await fixture(t, { timeoutMs: 900000 });
+  f.setTake(async () => ({ state: 'response_unknown', answer: answer() }));
+  await f.binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 });
+  const row = (await f.rows())[0];
+  assert.equal(row.wait.deadlineAt, f.claim.deadline_at);
+  assert.ok(Date.parse(row.wait.deadlineAt) - Date.parse(row.wait.startedAt) <= 60000);
+  f.notify(); await until(async () => (await f.rows())[0].phase === 'resolved');
+  assert.deepEqual((await f.rows())[0].wait, row.wait);
 });
 test('failed resolution retains observed/unknown evidence and never retries duplicate notification', async t => {
   const f = await fixture(t); f.setTake(async () => ({ state: 'response_unknown', answer: answer() }));

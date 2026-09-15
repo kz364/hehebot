@@ -267,7 +267,10 @@ test('opt-in question waits for acknowledged admission, takes once, and resolves
     return native(method, payload);
   };
   await service.start(); assert.deepEqual(await answer, expected); assert.equal(takes, 1);
-  assert.equal(launched.timeoutMs, 10000); assert.equal(launched.userInputTimeoutMs, 900000);
+  assert.equal(launched.timeoutMs, 10000); assert.equal(launched.userInputTimeoutMs, 300000);
+  const questionFile = (await readdir(service.journal.directory)).find(name => name.startsWith('question_'));
+  const custody = JSON.parse(await readFile(join(service.journal.directory, questionFile), 'utf8'));
+  assert.equal(Date.parse(custody.wait.deadlineAt) - Date.parse(custody.wait.startedAt), 300000);
   const row = await service.journal.get(service.supervisor.bridge.cursor);
   await service.journal.update(row.attemptId, { rootSettled: true, status: 'completed' });
   f.transport.emit('notification', { method: 'serverRequest/resolved', params: { threadId: params.threadId, requestId: 71 } });

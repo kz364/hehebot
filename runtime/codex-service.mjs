@@ -98,7 +98,7 @@ export function createCodexService(config, dependencies) {
         const home = join(config.stateDirectory, 'codex-home'), workspace = join(config.stateDirectory, 'workspace');
         await mkdir(home, { mode: 0o700 }); await mkdir(workspace, { mode: 0o700 });
         await starting(prepareNative(home));
-        if (config.ownerQuestions === true) questions = new CodexQuestionBinding({ journal, control, timeoutMs: 900000,
+        if (config.ownerQuestions === true) questions = new CodexQuestionBinding({ journal, control, timeoutMs: 300000,
           resolveBinding: async ({ threadId, turnId }) => {
             // A server question can precede the turn/start reply and Worker ACK.
             // Wait only for that same in-flight admission; never infer its success.
@@ -121,7 +121,7 @@ export function createCodexService(config, dependencies) {
             return null;
           } });
         transport = launch({ binary: config.binary, home, cwd: workspace, timeoutMs: 10000,
-          ...(questions ? { onUserInput: questions.onUserInput, userInputTimeoutMs: 900000 } : {}) });
+          ...(questions ? { onUserInput: questions.onUserInput, userInputTimeoutMs: 300000 } : {}) });
         if (questions) {
           questionNotification = message => { void questions.onNotification(message).catch(recover); };
           transport.on('notification', questionNotification);

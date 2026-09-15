@@ -567,7 +567,14 @@ try {
   assert.equal((await service.journal.get('service')).phase, 'recovery');
   const diagnostic = await inspectCodexRecovery(join(stateDirectory, 'journal'));
   assert.deepEqual(diagnostic.issues, []);
-  assert.deepEqual(diagnostic.questions, { complete: true, total: questionsMode ? 1 : 0, unresolved: 0,
+  const { waits, ...questionCounts } = diagnostic.questions;
+  if (questionsMode) {
+    assert.equal(waits.length, 1); assert.equal(waits[0].phase, 'resolved');
+    assert.equal(Date.parse(waits[0].deadlineAt) - Date.parse(waits[0].startedAt), 300000);
+    assert.ok(waits[0].deadlineAt <= dispatched.claim.deadline_at);
+    report.questionWaitBounded = true;
+  } else assert.equal(waits, undefined);
+  assert.deepEqual(questionCounts, { complete: true, total: questionsMode ? 1 : 0, unresolved: 0,
     resolutionObserved: questionsMode ? 1 : 0, phases: questionsMode ? { resolved: 1 } : {} });
   assert.equal(diagnostic.dispatch.runId, queued.resource_id);
   assert.equal(diagnostic.dispatch.attemptId, dispatched.attemptId);
