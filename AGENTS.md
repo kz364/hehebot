@@ -2,6 +2,10 @@
 
 Read `README.md`, `docs/IMPLEMENTATION.md`, `docs/PROJECT_INTENT.md`, and `docs/HANDOFF.md` first. `SPEC.md`, `PRODUCT_UX_SPEC.md`, and the S/O/UX acceptance IDs are targets, not completion claims. The only supported harness is direct Codex app-server **0.154.0**; preserve the external control plane, sleeping runtime, and replaceable supported-interface boundary.
 
+## Progress tracking
+
+Read `TODO.md` before choosing implementation work. It is the owner-facing progress checklist; update it at every substantive checkpoint without waiting for a status request. Keep its review date, current checkpoint, affected task status, verification evidence, next priority and exact external blockers current. Checked local deliverables do not imply full acceptance or production readiness. Keep detailed evidence in `docs/IMPLEMENTATION.md` and continuation context in `docs/HANDOFF.md`; do not maintain a competing live checklist in `IMPLEMENTATION_PLAN.md`. Record local versus published state honestly, and never publish merely to update progress.
+
 ## Ownership
 
 - `src/worker/`: authenticated HTTP ingress and SQLite Durable Object integration. Public mutations enter `/v1/commands`.

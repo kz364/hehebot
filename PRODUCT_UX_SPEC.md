@@ -3,6 +3,8 @@
 Status: normative UX detail incorporated into SPEC v0.5, not implemented functionality.
 [SPEC section 21](SPEC.md#21-consolidated-product-and-apache-reuse-contract) is the consolidated entry point for S/O, UX01–UX15, Apache reuse, and sleeping-container acceptance R01–R08. Codex app-server 0.154.0 is selected; this document does not authorize deployment, account connections, copying credentials, or activating routines.
 
+See [Progress and TODO](TODO.md) for maintained implementation status, verification and external blockers. UX acceptance remains open until its distinguishing tests pass; checked local subfeatures are not full UX completion.
+
 ## 1. Scope and precedence
 
 Extend the Hehebot portal and control plane with a small, coherent bot experience. Preserve the safety, authorization, scoped-memory, resource-lock, receipt, and cold-start requirements in [SPEC.md](SPEC.md) and [project intent](docs/PROJECT_INTENT.md). Codex app-server 0.154.0 is the sole harness.

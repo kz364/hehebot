@@ -4,7 +4,7 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Resume
 
-1. Read `AGENTS.md`, `README.md`, `SPEC.md`, `PRODUCT_UX_SPEC.md`, `docs/PROJECT_INTENT.md`, and `docs/IMPLEMENTATION.md`.
+1. Read `AGENTS.md`, `README.md`, `TODO.md`, `SPEC.md`, `PRODUCT_UX_SPEC.md`, `docs/PROJECT_INTENT.md`, and `docs/IMPLEMENTATION.md`.
 2. Run:
 
    ```sh
@@ -15,6 +15,7 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
    ```
 
 3. Report current output without carrying forward old test totals. Scripted model fixtures are execution-contract evidence only.
+4. Update [the owner-facing TODO](../TODO.md) at each substantive checkpoint: date, task status, verification, next priority and exact account/device blockers. Do not wait for the owner to ask for progress. Keep unverified acceptance open and distinguish local from published changes.
 
 ## Native question checkpoint (2026-09-15)
 
@@ -97,11 +98,6 @@ provide selected, authority-stripped offline import plans, not complete backups.
 Live Sprite Tasks hold/renew/delete evidence is recorded in `docs/PROVIDERS.md`;
 it does not prove service sleep, resume or crash recovery.
 
-1. Production service assembly and complete operation accounting.
-2. Owner-authorized authenticated inference, restart, refresh, quota, and no-fallback proof.
-3. Recursive child/tool/effect settlement and exact targeted cancellation at supported interfaces.
-4. Intent-aware orchestration and complete task/recovery/streaming UX.
-5. Connector, browser, and actual Mac acceptance.
-6. Backup/restore, portable state, provider lifecycle, cost, and staged release gates.
+Use [TODO.md](../TODO.md) as the maintained queue and acceptance coverage index, rather than duplicating its task statuses here. Current order is E01 deadline/activity accounting, E02 recovery/service assembly, then E03 responsive orchestration; independent portal, connector-fixture, portability and client work need not wait for account access. Owner/account/device actions are listed separately there. Mac direction is SwiftUI + WKWebView, not yet implemented; existing Electron files are not a verified Mac release.
 
 Preserve exact task identity and unknown outcomes. A root turn is not settlement. Never copy credentials between orbs, patch the runtime, edit runtime-owned databases, enable production gates to make a demo pass, or treat connector catalog presence as callable authorized effects.

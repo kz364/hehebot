@@ -2,6 +2,12 @@
 
 Hehebot is a locally tested foundation, not an operational assistant. Direct Codex app-server **0.154.0** is the only supported harness. No cloud deployment or authenticated inference has been completed; production execution and native-verification flags remain false.
 
+**Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
+
+Latest implementation checkpoint (2026-09-15): heartbeat clocks canonicalize to UTC milliseconds and reject changed operation custody/backwards progress atomically. Final control tests: 877 passed; typecheck passed. The combined verifier passed 872 control / 183 runtime tests, native/service fixtures and build before five additional boundary tests passed in the final control run. See [handoff](HANDOFF.md) for the exact evidence boundary. No production gate changed.
+
+The owner-selected Mac direction is SwiftUI + WKWebView around the remote portal, not yet implemented. The Electron foundation listed below remains existing code, not a verified Mac release; separate Mac-decision specification edits are awaiting integration.
+
 ## Implemented locally
 
 - Cloudflare Worker portal/API and one SQLite Durable Object per installation for commands, receipts, timelines, revisions, routines, occurrences, runs, scoped memory, policies, effects, locks, and lifecycle state.
