@@ -178,9 +178,13 @@ export class ExecutionSupervisor {
       this.assertLease();
       if (this.native.sleepReadiness().allowed !== true || this.idleSince === null ||
           this.now() - this.idleSince < 60000) fail('SLEEP_DENIED');
+      if (!checkpoint || typeof checkpoint !== 'object' || Array.isArray(checkpoint) || !Object.keys(checkpoint).length) fail('INVALID_CHECKPOINT');
+      let snapshot;
+      try { snapshot = JSON.parse(JSON.stringify(checkpoint)); }
+      catch { fail('INVALID_CHECKPOINT'); }
+      if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) || !Object.keys(snapshot).length) fail('INVALID_CHECKPOINT');
       const row = await this.journal.get(this.bridge.cursor);
       if (row?.phase !== 'complete') fail('SLEEP_DENIED');
-      if (!checkpoint || typeof checkpoint !== 'object' || Array.isArray(checkpoint) || !Object.keys(checkpoint).length) fail('INVALID_CHECKPOINT');
       if (this.maintenance) await this.maintenance;
       this.assertLease();
       this.phase = 'draining';
@@ -194,9 +198,10 @@ export class ExecutionSupervisor {
         assertDraining();
         if (typeof stop?.stop_token !== 'string' || !stop.stop_token || !Number.isSafeInteger(stop.queue_sequence)) fail('INVALID_DRAIN_RESPONSE');
         const key = `drain-${this.bridge.cursor}`;
-        await this.journal.putIfAbsent(key, { checkpoint, stop, phase: 'commit_unknown' });
+        const existing = await this.journal.putIfAbsent(key, { checkpoint: snapshot, stop, phase: 'commit_unknown' });
+        if (existing !== null) fail('DRAIN_REPLAY_FORBIDDEN');
         assertDraining();
-        await this.control.request('commit-sleep', { identity: this.identity, ...stop, checkpoint });
+        await this.control.request('commit-sleep', { identity: this.identity, ...stop, checkpoint: snapshot });
         assertDraining();
         await this.journal.update(key, { phase: 'committed' });
         assertDraining();

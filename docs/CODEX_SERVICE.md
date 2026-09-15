@@ -280,6 +280,17 @@ Real SQLite/supervisor tests cover disconnect and exact expiry at four return
 boundaries, plus success one millisecond before expiry. These are local await-race
 tests, not live provider stop or hardware power-cut proof.
 
+Before its first journal await, the queued drain operation snapshots the supplied
+checkpoint into its JSON wire representation and requires a nonempty object.
+Serialization failure or an empty/non-object representation rejects before
+prepare without changing supervisor readiness. Subsequent caller mutation cannot
+change the intent or the checkpoint committed to the controller. After prepare,
+`putIfAbsent` must confirm insertion of a new drain intent; any returned prior
+intent causes `DRAIN_REPLAY_FORBIDDEN`, recovery and no commit/release. Both unknown
+and committed prior intents are preserved, never silently reused or repaired.
+The controller may already have prepared a new stop token at this point; refusal
+does not claim that preparation was rolled back or authorize retry.
+
 `stop()` stops the app-server, confirms its process exit, retains journal/grants and
 marks recovery. It does **not** prove descendants or external effects stopped, publish
 a result, release an activity hold, or commit sleep. Holds retain their bounded TTL;

@@ -180,6 +180,21 @@ Its 28 tests passed. Final combined verification passed 888 control / 198 runtim
 tests, all native/service fixtures, typecheck and build. No accounts, live provider
 operations, pushes, deployments or production gate changes. E02 remains partial.
 
+Drain-custody checkpoint (2026-09-15): the queued drain snapshots its checkpoint
+to a nonempty JSON object before its first await. The same detached value goes
+to the intent journal and controller commit. Invalid serialization rejects before
+prepare and permits a subsequent valid call. `putIfAbsent` must return null for
+new insertion; any returned prior intent causes `DRAIN_REPLAY_FORBIDDEN` and
+recovery, with prior contents preserved and no commit/release. Preparation may
+already have happened; the host does not infer rollback or automatically retry.
+Three initial regressions failed before implementation. The final focused run
+passed 205 supervisor/lifecycle/seeded-control tests, covering mutation at three
+await boundaries, prior unknown/committed records and malformed checkpoints.
+Combined verification passed 894 control / 198 runtime tests, all native/service
+fixtures, typecheck and build. This remains single-executor FileJournal behavior,
+not successful native recovery or live provider sleep. E02 stays partial.
+No accounts, live provider operations, pushes, deployments or gate changes.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

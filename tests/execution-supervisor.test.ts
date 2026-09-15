@@ -71,6 +71,49 @@ it('fenced SQLite dispatch, settlement, idle grace and drain release in order', 
   await expect(supervisor.dispatch()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
 });
 
+it.each(['commit_unknown', 'committed'])('prior %s drain intent cannot be overwritten or reused', async phase => {
+  await supervisor.start(); f.setNow('2026-09-10T00:01:00.000Z');
+  const key = `drain-${supervisor.bridge.cursor}`, prior = { checkpoint: { snapshot: 'original' },
+    stop: { stop_token: 'old-token', queue_sequence: 17 }, phase };
+  await supervisor.journal.putIfAbsent(key, prior);
+  await expect(supervisor.drain({ snapshot: 'replacement' })).rejects.toMatchObject({ code: 'DRAIN_REPLAY_FORBIDDEN' });
+  expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
+  expect(calls).not.toContain('commit-sleep');
+  expect(await supervisor.journal.get(key)).toEqual(prior);
+  expect(f.db.all("SELECT value_json FROM runtime_metadata WHERE key='checkpoint'")).toHaveLength(0);
+});
+
+it.each(['journal-read', 'prepare-sleep', 'commit-sleep'])('drain detaches nested checkpoint state before %s caller mutation', async boundary => {
+  await supervisor.start(); f.setNow('2026-09-10T00:01:00.000Z');
+  const checkpoint = { snapshot: 'original', nested: { generation: 17 }, files: ['one'] };
+  hook = async type => {
+    if (type === boundary) { checkpoint.snapshot = 'changed'; checkpoint.nested.generation = 43; checkpoint.files.push('two'); }
+  };
+  const get = supervisor.journal.get.bind(supervisor.journal);
+  supervisor.journal.get = async (key: string) => {
+    const result = await get(key);
+    if (key === supervisor.bridge.cursor) await hook?.('journal-read');
+    return result;
+  };
+  await supervisor.drain(checkpoint);
+  const expected = { snapshot: 'original', nested: { generation: 17 }, files: ['one'] };
+  expect((await supervisor.journal.get(`drain-${supervisor.bridge.cursor}`)).checkpoint).toEqual(expected);
+  expect(JSON.parse(f.db.all<{ value_json: string }>("SELECT value_json FROM runtime_metadata WHERE key='checkpoint'")[0].value_json)).toEqual(expected);
+  expect(supervisor.phase).toBe('sleeping'); expect(releases).toBe(1);
+});
+
+it('nonserializable or empty wire checkpoints fail before prepare without poisoning the supervisor', async () => {
+  await supervisor.start(); f.setNow('2026-09-10T00:01:00.000Z');
+  const cyclic: any = {}; cyclic.self = cyclic;
+  for (const checkpoint of [cyclic, { value: 1n }, { value: undefined }, { toJSON: () => [] }]) {
+    await expect(supervisor.drain(checkpoint)).rejects.toMatchObject({ code: 'INVALID_CHECKPOINT' });
+    expect(supervisor.phase).toBe('running'); expect(releases).toBe(0);
+    expect(calls).not.toContain('prepare-sleep');
+  }
+  await supervisor.drain({ snapshot: 'valid-after-rejection' });
+  expect(supervisor.phase).toBe('sleeping'); expect(releases).toBe(1);
+});
+
 it('renews independently while native submission is unresolved', async () => {
   enqueue();
   let entered!: () => void, release!: () => void;
