@@ -186,16 +186,22 @@ export class ExecutionSupervisor {
       this.phase = 'draining';
       clearTimeout(this.timer);
       this.timer = null;
+      const assertDraining = () => {
+        if (this.phase !== 'draining' || this.now() >= this.leaseUntil) fail('EXECUTOR_FENCED');
+      };
       try {
         const stop = await this.control.request('prepare-sleep', { identity: this.identity });
+        assertDraining();
         if (typeof stop?.stop_token !== 'string' || !stop.stop_token || !Number.isSafeInteger(stop.queue_sequence)) fail('INVALID_DRAIN_RESPONSE');
         const key = `drain-${this.bridge.cursor}`;
         await this.journal.putIfAbsent(key, { checkpoint, stop, phase: 'commit_unknown' });
-        if (this.phase !== 'draining' || this.now() >= this.leaseUntil) fail('EXECUTOR_FENCED');
+        assertDraining();
         await this.control.request('commit-sleep', { identity: this.identity, ...stop, checkpoint });
+        assertDraining();
         await this.journal.update(key, { phase: 'committed' });
-        if (this.phase !== 'draining') fail('EXECUTOR_FENCED');
+        assertDraining();
         await this.activity.releaseAfterDrain({ controlCommitted: true, nativeSettled: true, checkpointDurable: true });
+        assertDraining();
         this.phase = 'sleeping';
         this.leaseUntil = 0;
       } catch (error) { this.recover('DRAIN_OUTCOME_UNKNOWN'); throw error; }

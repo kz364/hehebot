@@ -164,6 +164,22 @@ fixtures, typecheck and build. E11 remains partial; E01/E02 gaps remain open.
 No accounts, paid inference, live provider operations, pushes, deployments or
 gate changes were used.
 
+Drain-fence checkpoint (2026-09-15): every asynchronous drain return now checks
+the draining phase and original lease. Previously, disconnect during hold release
+could be overwritten by `sleeping`; expiry after commit could still initiate release.
+Seven regressions failed before the fix. Tests cover disconnect/exact expiry after
+prepare, commit, committed-journal write and release; success remains allowed one
+millisecond before expiry. Once fenced no new commit/release/retry starts. An
+already-started release can still complete; host recovery does not claim retention.
+Focused supervisor/lifecycle/control acceptance passed 199 tests, including the
+existing 100 seeded queue/stop interleavings (not complete effect-race proof).
+First combined run found a question fixture's 30 ms I/O timeout preempting its
+intended handoff failure under load. It now uses a bounded larger setup allowance,
+requires exact persisted phase/call counts and proves the handoff hook was reached.
+Its 28 tests passed. Final combined verification passed 888 control / 198 runtime
+tests, all native/service fixtures, typecheck and build. No accounts, live provider
+operations, pushes, deployments or production gate changes. E02 remains partial.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

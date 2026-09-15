@@ -268,6 +268,45 @@ it('lost sleep commit acknowledgement retains the provider hold and stops reques
   expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
 });
 
+it.each(['prepare', 'commit', 'journal', 'release'].flatMap(boundary =>
+  ['disconnect', 'expiry'].map(reason => ({ boundary, reason }))))('drain fences $reason after $boundary without claiming sleep or replaying release', async ({ boundary, reason }) => {
+  await supervisor.start(); f.setNow('2026-09-10T00:01:00.000Z');
+  const invalidate = () => {
+    if (reason === 'disconnect') supervisor.disconnect();
+    else f.setNow(new Date(supervisor.leaseUntil).toISOString());
+  };
+  const request = supervisor.control.request;
+  supervisor.control.request = async (type: string, p: any) => {
+    const result = await request(type, p);
+    if (type === (boundary === 'prepare' ? 'prepare-sleep' : boundary === 'commit' ? 'commit-sleep' : 'none')) invalidate();
+    return result;
+  };
+  const update = supervisor.journal.update.bind(supervisor.journal);
+  supervisor.journal.update = async (key: string, value: any) => {
+    const result = await update(key, value);
+    if (boundary === 'journal' && key.startsWith('drain-')) invalidate();
+    return result;
+  };
+  supervisor.activity.releaseAfterDrain = async () => { releases++; if (boundary === 'release') invalidate(); };
+  await expect(supervisor.drain({ snapshot: 'fenced' })).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  expect(supervisor.phase).toBe('recovery'); expect(supervisor.timer).toBeNull();
+  expect(releases).toBe(boundary === 'release' ? 1 : 0);
+  const record = await supervisor.journal.get(`drain-${supervisor.bridge.cursor}`);
+  if (boundary === 'prepare') {
+    expect(record).toBeNull(); expect(calls).not.toContain('commit-sleep');
+  } else expect(record.phase).toBe(boundary === 'commit' ? 'commit_unknown' : 'committed');
+  const before = [...calls];
+  await expect(supervisor.drain({ snapshot: 'retry' })).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  expect(calls).toEqual(before); expect(releases).toBe(boundary === 'release' ? 1 : 0);
+});
+
+it('drain can finish one millisecond before the original lease expiry', async () => {
+  await supervisor.start(); f.setNow('2026-09-10T00:01:00.000Z');
+  supervisor.activity.releaseAfterDrain = async () => { releases++; f.setNow(new Date(supervisor.leaseUntil - 1).toISOString()); };
+  await supervisor.drain({ snapshot: 'within-lease' });
+  expect(supervisor.phase).toBe('sleeping'); expect(releases).toBe(1);
+});
+
 it('production compatibility gate runs before heartbeat and claim', async () => {
   supervisor.native.admissionReadiness = () => ({ allowed: false });
   await expect(supervisor.start()).rejects.toMatchObject({ code: 'COMPATIBILITY_GATE_BLOCKED' });

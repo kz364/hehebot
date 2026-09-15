@@ -118,14 +118,17 @@ test('disconnect during take cannot send a late answer and does not manufacture 
   assert.equal(f.calls.filter(c => c.type === 'question-resolve').length, 0);
 });
 for (const failure of ['journal', 'handoff', 'record', 'timeout', 'answer']) test(`retains uncertainty on ${failure} failure without retry`, async t => {
-  const f = await fixture(t, { controlTimeoutMs: 30 }), original = f.journal.update.bind(f.journal);
+  const f = await fixture(t, { controlTimeoutMs: 1000, timeoutMs: 5000 }), original = f.journal.update.bind(f.journal);
+  let handoffAttempted = false;
   if (failure === 'journal') f.journal.update = async () => { throw new Error('PRIVATE disk'); };
-  if (failure === 'handoff') f.journal.update = async (key, patch) => { if (patch.phase === 'handoff_unknown') throw new Error('PRIVATE disk'); return original(key, patch); };
+  if (failure === 'handoff') f.journal.update = async (key, patch) => { if (patch.phase === 'handoff_unknown') { handoffAttempted = true; throw new Error('PRIVATE disk'); } return original(key, patch); };
   if (failure === 'record') f.control.request = async () => { throw new Error('PRIVATE network'); };
   f.setTake(async () => failure === 'timeout' ? new Promise(() => {}) : { state: 'response_unknown', answer: failure === 'answer' ? { answers: {} } : answer() });
   await assert.rejects(f.binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 }), { message: 'QUESTION_CALLBACK_STOPPED' });
-  assert.ok(['record_unknown', 'take_unknown'].includes((await f.rows())[0].phase));
-  assert.ok(f.calls.filter(c => c.type === 'question-take').length <= 1);
+  const beforeTake = ['journal', 'record'].includes(failure);
+  assert.equal((await f.rows())[0].phase, beforeTake ? 'record_unknown' : 'take_unknown');
+  assert.equal(f.calls.filter(c => c.type === 'question-take').length, beforeTake ? 0 : 1);
+  assert.equal(handoffAttempted, failure === 'handoff');
 });
 test('changed bridge identity before take is fenced; no inference from matching turn', async t => {
   const f = await fixture(t); let reads = 0;

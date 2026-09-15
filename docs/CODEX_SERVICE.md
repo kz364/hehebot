@@ -267,6 +267,19 @@ response requires explicit reconciliation, not another executor. Disconnect, lea
 loss or uncertain activity holds fence the supervisor. Shutdown during startup
 cannot subsequently launch a native process or acknowledge readiness.
 
+The supervisor also fences every asynchronous drain boundary: prepare response,
+checkpoint write, commit response, committed-journal write and activity release.
+Each continuation requires the same draining phase and an unexpired original
+lease; equality at expiry is closed. A disconnect or expiry cannot be overwritten
+by a late successful return setting `sleeping`. Once fenced, no later commit or
+release is initiated and the same supervisor cannot retry the drain. An already
+started release may still complete externally; the host reports recovery rather
+than claiming the hold was retained or replaying it. A commit whose continuation
+was fenced leaves `commit_unknown` when the local committed marker was not written.
+Real SQLite/supervisor tests cover disconnect and exact expiry at four return
+boundaries, plus success one millisecond before expiry. These are local await-race
+tests, not live provider stop or hardware power-cut proof.
+
 `stop()` stops the app-server, confirms its process exit, retains journal/grants and
 marks recovery. It does **not** prove descendants or external effects stopped, publish
 a result, release an activity hold, or commit sleep. Holds retain their bounded TTL;
