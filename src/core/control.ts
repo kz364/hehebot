@@ -213,7 +213,8 @@ export class ControlCore {
     const run=this.store.run(command.payload.run_id);
     if(['completed','failed','cancelled'].includes(run.status))return run.id;
     const status=['queued','waiting'].includes(run.status)?'cancelled':'cancelling';
-    this.store.db.exec("UPDATE runs SET status=?,error_code='OWNER_CANCELLED',updated_at=? WHERE id=?",status,now,run.id);
+    // While cancelling, updated_at is the watchdog's original grace anchor.
+    this.store.db.exec("UPDATE runs SET status=?,error_code='OWNER_CANCELLED',updated_at=? WHERE id=?",status,run.status==='cancelling'?run.updated_at:now,run.id);
     this.store.event(this.options.uuid(),run.persona_id,'run.cancellation_requested',owner,commandId,{run_id:run.id,status,reason:command.payload.reason},now);return run.id;
    }
    case 'run.retry': {
@@ -293,7 +294,8 @@ export class ControlCore {
   this.store.db.exec("UPDATE commands SET payload_json='{}' WHERE type='memory.put' AND json_extract(payload_json,'$.id') IN (SELECT value FROM json_each(?))",keys);
   const runs=this.store.db.all<Run>("SELECT * FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')");
   for(const run of runs){const context=JSON.parse(run.context_json) as ContextSnapshot;if(context.memories?.some(x=>selected.has(x.id))){
-   this.store.db.exec("UPDATE runs SET status=?,error_code='CONTEXT_INVALIDATED',context_json=?,updated_at=? WHERE id=?",run.status==='recovery_required'?'recovery_required':['claimed','running','finishing','cancelling'].includes(run.status)?'cancelling':'cancelled',JSON.stringify({...context,memories:context.memories.filter(x=>!selected.has(x.id))}),now,run.id);
+   // Purging more context must not restart an existing cancellation grace.
+   this.store.db.exec("UPDATE runs SET status=?,error_code='CONTEXT_INVALIDATED',context_json=?,updated_at=? WHERE id=?",run.status==='recovery_required'?'recovery_required':['claimed','running','finishing','cancelling'].includes(run.status)?'cancelling':'cancelled',JSON.stringify({...context,memories:context.memories.filter(x=>!selected.has(x.id))}),run.status==='cancelling'?run.updated_at:now,run.id);
    new OutputPreviews(this.store,()=>now).discard(run.id);
   }}
   for(const id of ids)this.store.event(this.options.uuid(),null,'memory.deleted',owner,commandId,{id,transcript_cleanup_requested:purgeTranscripts,transcript_cleanup_status:purgeTranscripts?'requires_runtime_verification':'not_requested'},now);

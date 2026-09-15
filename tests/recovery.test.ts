@@ -12,6 +12,20 @@ function running(){
  return {life,identity,runId:claim.run.id};
 }
 describe('bounded recovery',()=>{
+ it('distinct owner cancel commands do not restart the original cancellation grace',()=>{
+  const {life,runId}=running();
+  const cancel=()=>f.accept({schema_version:1,type:'run.cancel',payload:{run_id:runId,reason:'Stop'}});
+  expect(cancel().status).toBe('applied');
+  const began=f.store.run(runId).updated_at;
+  f.setNow('2026-09-10T08:00:20.000Z');expect(cancel().status).toBe('applied');
+  expect(f.store.run(runId)).toMatchObject({status:'cancelling',updated_at:began});
+  expect(f.db.all("SELECT id FROM events WHERE type='run.cancellation_requested'")).toHaveLength(2);
+  f.setNow('2026-09-10T08:00:29.999Z');life.watchdog();expect(f.store.run(runId).status).toBe('cancelling');
+  f.setNow('2026-09-10T08:00:30.000Z');life.watchdog();
+  expect(f.store.run(runId)).toMatchObject({status:'recovery_required',error_code:'OWNER_CANCELLED'});
+  expect(f.db.all('SELECT status FROM attempts WHERE run_id=?',runId)).toEqual([{status:'running'}]);
+  expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0);
+ });
  it('parks ignored cancellation without globally stopping other tasks',()=>{
   const {life,identity,runId}=running();f.accept({schema_version:1,type:'run.cancel',payload:{run_id:runId,reason:'Stop'}});
   f.setNow('2026-09-10T08:00:20.000Z');life.heartbeat(identity,[]);life.watchdog();expect(life.get().phase).toBe('READY');

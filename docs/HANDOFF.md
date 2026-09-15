@@ -2,6 +2,19 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Cancellation-grace checkpoint (2026-09-16)
+
+Owner cancel and captured-memory purge/expiry now preserve `updated_at` when a run
+is already cancelling: it is the watchdog's original 30-second grace anchor, not a
+fresh update timestamp in that state. New audit events and privacy purges still
+occur. Tests cover distinct owner commands and two staggered memory removals via
+expiry/delete, before/exact original boundary, unsettled attempts and no retry.
+Focused recovery/memory/lifecycle suite: 68 passed (`.local/cancel-grace-focused.log`).
+Combined verification passed 913 control / 251 runtime tests, all native/service
+fixtures and typecheck/build dry run (`.local/cancel-grace-combined.log`). No migration,
+provider use or production-gate change. Native termination and remaining E01/E02
+work are still open; schedule unchanged.
+
 ## Snapshot-fencing checkpoint (2026-09-16)
 
 Expanded supervisor integration verifies real journal/projection/SQLite rejection

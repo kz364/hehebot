@@ -4,6 +4,19 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Cancellation-grace checkpoint (2026-09-16): repeated distinct owner cancellation
+commands and later memory purge/expiry used to reset an already-cancelling run's
+`updated_at`, postponing the watchdog indefinitely. Both paths now preserve that
+original grace anchor. New command events still use current time, and canonical
+memory/context purge and preview discard still occur. First entry into cancellation
+is unchanged. Focused recovery/memory/lifecycle tests: 68 passed, including
+staggered expiry versus explicit deletion, second owner receipts, −1ms/exact
+original 30-second boundary, unsettled attempt and no retry. Log:
+`.local/cancel-grace-focused.log`; combined verification passed 913 control / 251
+runtime tests, all native/service fixtures and typecheck/build dry run
+(`.local/cancel-grace-combined.log`). No schema migration or production-gate change;
+the timer transition is not native cancellation or termination proof.
+
 Snapshot-fencing checkpoint (2026-09-16): the real FileJournal/projection/supervisor/
 SQLite integration now first persists valid live operations, then injects orphan
 timing, a null inventory, invalid completion evidence or a new late-start operation.
