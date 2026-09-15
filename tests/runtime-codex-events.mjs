@@ -24,6 +24,36 @@ async function fixture(t, limits = {}) {
   return { journal, transport, recoveries, calls, adapter, router, admit };
 }
 
+for (const method of ['item/started', 'item/completed'])
+test(`${method} fences unsupported items before buffering or changing settlement`, async t => {
+  for (const item of [{ id: 'unknown', type: 'futureNativeTool', payload: 'PRIVATE_BODY' },
+    { id: 'unknown', type: 'collabAgentToolCall', tool: 'futureCollab', payload: 'PRIVATE_BODY' },
+    { id: 'unknown', payload: 'PRIVATE_BODY' }]) {
+    const f = await fixture(t); await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
+    const before = await f.journal.get('a');
+    f.transport.emit('notification', { method, params: { threadId: 'parent', turnId: 'turn', item } });
+    await f.router.flush();
+    assert.deepEqual(f.recoveries, ['NATIVE_EVENT_INVALID']); assert.equal(f.router.closed, true);
+    assert.deepEqual(f.router.pending, []); assert.deepEqual(await f.journal.get('a'), before);
+    assert.deepEqual(f.calls, []); assert.equal(f.adapter.sleepReadiness().allowed, false);
+    f.transport.emit('notification', root('parent', 'turn')); await f.router.flush();
+    assert.deepEqual(await f.journal.get('a'), before);
+  }
+});
+
+test('user-message echoes are ignored while unsupported unbound item boundaries still fence', async t => {
+  const f = await fixture(t); await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
+  const before = await f.journal.get('a');
+  for (const method of ['item/started', 'item/completed']) f.transport.emit('notification', {
+    method, params: { threadId: 'parent', turnId: 'turn', item: { type: 'userMessage', id: 'input', content: 'PRIVATE_INPUT' } },
+  });
+  await f.router.flush(); assert.deepEqual(f.recoveries, []); assert.deepEqual(await f.journal.get('a'), before);
+  f.transport.emit('notification', { method: 'item/started', params: {
+    threadId: 'unbound', turnId: 'other', item: { type: 'futureTool', id: 'unbound-item' },
+  } });
+  await f.router.flush(); assert.deepEqual(f.recoveries, ['NATIVE_EVENT_INVALID']); assert.deepEqual(f.router.pending, []);
+});
+
 test('message starts bound the next silent interval without retaining text or refreshing on deltas/replay', async t => {
   let now = Date.parse('2026-09-16T01:00:00.000Z');
   const f = await fixture(t, { now: () => now });

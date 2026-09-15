@@ -42,6 +42,12 @@ export class CodexEventRouter {
     const boundaryOnly = ['webSearch', 'sleep', 'contextCompaction', 'imageGeneration', 'reasoning', 'agentMessage'].includes(params?.item?.type);
     const turn = ['turn/started', 'turn/completed'].includes(method);
     const message = method === 'item/completed' && params?.item?.type === 'agentMessage';
+    if (['item/started', 'item/completed'].includes(method) &&
+        !(spawn || collab || boundaryOnly || ['commandExecution', 'mcpToolCall', 'fileChange', 'dynamicToolCall', 'userMessage'].includes(params?.item?.type))) {
+      // Unknown execution cannot silently evade operation clocks. Recovery keeps
+      // native obligations unsettled; never retain unknown payloads or tool names.
+      fail('UNSUPPORTED_NATIVE_ITEM');
+    }
     if (!turn &&
         !message && !(['item/started', 'item/completed'].includes(method) && (spawn || collab || boundaryOnly || ['commandExecution', 'mcpToolCall', 'fileChange', 'dynamicToolCall'].includes(params?.item?.type)))) return null;
     const threadId = params?.threadId, turnId = turn ? params?.turn?.id : params?.turnId;

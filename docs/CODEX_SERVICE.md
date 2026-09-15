@@ -190,6 +190,15 @@ the active bound while holding the next model response. Human-wait interactions
 and complete streaming/unknown-item coverage remain E01. No sleep/production
 gate is relaxed; timeout does not prove native termination or permit replay.
 
+Unsupported `item/started` or `item/completed` variants, including unknown
+collaboration tools and missing item types, now fence the event router through
+the existing redacted recovery callback before buffering any payload. They are
+not silently ignored or assigned fabricated completion/deadline semantics.
+User-message echoes remain non-execution input and are ignored. This deliberately
+refuses unsupported paths (including schema-advertised variants without a host
+projection); it does not implement their operation coverage. Recovery retains
+uncertainty and does not prove native termination or permit sleep/replay.
+
 Completed message phases use `outputItems` and the exact message ID, not message
 text or a new content copy. A live message during an observed active tool opens
 no quiet phase. A message after exact turn termination cannot reopen one. Root

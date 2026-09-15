@@ -6,9 +6,9 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest checkpoint:** cancellable WhatsApp read boundary, 2026-09-16. Local, not pushed or deployed. Selected-chat reads now have a two-minute maximum local wait, forwarded abort signal and late-result suppression. E09 remains partial and installation remains blocked; local timeout does not prove remote cancellation or safe sleep.
-- **Verified:** **9 focused tests passed**, including exact timeout boundaries, pre-call/in-flight cancellation, listener cleanup, late-result suppression and existing scope/response checks. Scripted MCP boundary only; no plugin install or pairing.
-- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 234 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/wappmcp-timeout-focused.log`, `.local/wappmcp-timeout-combined.log`.
+- **Latest checkpoint:** unsupported native-item recovery fence, 2026-09-16. Local, not pushed or deployed. Unknown item boundaries no longer disappear without operation accounting: they trigger conservative recovery. This refuses unsupported paths; E01 coverage remains partial and recovery is not native termination or safe sleep.
+- **Verified:** **63 focused router/operation tests passed**, including unknown start/completion types, unknown collaboration tools, malformed types, unbound events and unchanged journal/settlement. User-message echoes remain ignored; unknown payloads never enter the event buffer.
+- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 237 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/unknown-item-focused.log`, `.local/unknown-item-combined.log`.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
 - **Next implementation priority:** E01, complete deadline/activity accounting; then E02 recovery and E03 responsive orchestration. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
@@ -42,6 +42,7 @@ These are useful foundations that should not be rebuilt simply because their ful
 - [x] Content-free quiet-window start/end/duration diagnostics for timeout analysis. Evidence: `tests/runtime-codex-quiet-phases.mjs`, `tests/runtime-codex-recovery-inspect.mjs`. Real workload collection and VM CPU/billing/safe-sleep analysis remain E11; no shorter timeout is justified yet.
 - [x] Bounded inference interval after live message start, with no text/delta retention or replay refresh. Evidence: `tests/runtime-codex-events.mjs` and seven native service cases. Full overlapping-stream lifetime accounting and progress extensions remain E01.
 - [x] Five-minute non-checkpointed service question callback ceiling and private persisted wait deadline. Evidence: question/service/inspection tests and native answer/cancel fixtures. Worker custody can outlive the callback; restart-required UI, checkpoint parking and safe compute release remain E01/E02.
+- [x] Unsupported live native item boundaries trigger recovery rather than silently evading operation accounting. Evidence: `tests/runtime-codex-events.mjs`; complete supported coverage remains E01, and recovery does not prove native termination.
 
 ## Remaining implementation and acceptance
 

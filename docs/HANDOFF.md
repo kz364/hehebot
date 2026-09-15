@@ -359,6 +359,16 @@ lease/revocation, bounded transport and setup integration remain; patch policy s
 blocks upstream installation. See IMPLEMENTATION.md for pinned source provenance
 and contract limits. Do not wire this directly to model-provided grants.
 
+Unsupported native-item checkpoint (2026-09-16): the live router now fences
+unsupported item starts/completions, including unknown collaboration tools and
+missing types, before buffering payloads. User-message echoes remain ignored.
+The existing service recovery callback disconnects admission; no native termination,
+settlement or safe sleep is inferred. This intentionally refuses schema-advertised
+variants without a host projection as well as unknown future variants. It is not
+complete E01 operation coverage. Verification: 63 focused tests; combined 901
+control / 237 runtime tests, all native/service fixtures, typecheck and build.
+Private logs: `.local/unknown-item-focused.log`, `.local/unknown-item-combined.log`.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.
