@@ -2,6 +2,19 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Overlapping-stream watchdog checkpoint (2026-09-16)
+
+The SQLite integration suite now checks message/plan streams with distinct
+deadlines in both completion orders. Exact deadline and 30-second unconfirmed
+cancellation boundaries hold despite repeated heartbeats; no operations settle,
+retry is queued or sleep allowed merely because cancellation timed out. Eight
+focused tests passed in `.local/overlap-watchdog-focused.log`; combined verification
+passed 903 control / 248 runtime tests, all native/service fixtures and typecheck/
+build dry run (`.local/overlap-watchdog-combined.log`). No runtime behavior changed.
+Native held-stream expiry and actual process termination remain unverified; the
+test does not establish the separate 15-second cancel/verify stages. E01 and other
+credential-free work remain open. Production gates and schedule remain unchanged.
+
 ## Message completion integrity checkpoint (2026-09-16)
 
 Live operation projection and offline inspection now reject malformed completion

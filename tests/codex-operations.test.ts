@@ -8,6 +8,54 @@ import { FileJournal } from '../runtime/file-journal.mjs';
 import { LifecycleCore, type HeartbeatOperation } from '../src/core/lifecycle';
 import { fixture, bot } from './helpers';
 
+it.each(['message', 'plan'])('overlapping streams preserve the remaining %s deadline and cancellation grace', async remaining => {
+  const f = fixture(true), directory = await mkdtemp(join(tmpdir(), 'hehebot-overlap-deadline-'));
+  try {
+    const life = new LifecycleCore(f.store, f.core);
+    f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
+    const identity = life.registerBoot(randomUUID()); life.ready(identity);
+    f.accept({ schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Synthetic overlapping streams' } });
+    const claim = life.claim(identity)!; life.submitted(identity, claim.run.id, 1, 'turn');
+    const journal = new FileJournal(directory);
+    const row = { status: 'running', threadId: 'root', nativeRunId: 'turn', messageStarts: { message: true },
+      planItems: { plan: 'inProgress' }, operationTimes: {
+        '["messageStarts","message"]': { startedAt: '2026-09-10T00:07:00.000Z', lastProgressAt: '2026-09-10T00:07:00.000Z' },
+        '["planItems","plan"]': { startedAt: '2026-09-10T00:08:00.000Z', lastProgressAt: '2026-09-10T00:08:00.000Z' },
+      } };
+    await journal.write('native-attempt', row);
+    const projection = new CodexOperations({ journal, attemptId: 'native-attempt', runId: claim.run.id, attempt: 1,
+      startedAt: f.core.now(), deadlineAt: claim.deadline_at });
+    const heartbeat = async () => life.heartbeat(identity, await projection.snapshot() as HeartbeatOperation[]);
+    // Advance the fixture clock without exercising the independent lease-expiry path.
+    f.db.exec("UPDATE lifecycle SET lease_until='2026-09-10T00:20:00.000Z'");
+    f.setNow('2026-09-10T00:11:59.998Z'); await heartbeat();
+    expect(f.db.all('SELECT deadline_at FROM operations WHERE kind=? AND deadline_at<? ORDER BY deadline_at', 'inference', claim.deadline_at))
+      .toEqual([{ deadline_at: '2026-09-10T00:12:00.000Z' }, { deadline_at: '2026-09-10T00:13:00.000Z' }]);
+    await journal.update('native-attempt', remaining === 'message' ? { planItems: { plan: 'completed' } }
+      : { outputItems: { message: 'a'.repeat(64) } });
+    await heartbeat();
+    const deadline = remaining === 'message' ? '2026-09-10T00:12:00.000Z' : '2026-09-10T00:13:00.000Z';
+    if (remaining === 'plan') {
+      f.setNow('2026-09-10T00:12:00.000Z'); life.watchdog();
+      expect(f.store.run(claim.run.id).status).toBe('running');
+    }
+    f.setNow(new Date(Date.parse(deadline) - 1).toISOString()); await heartbeat(); life.watchdog();
+    expect(f.store.run(claim.run.id).status).toBe('running');
+    f.setNow(deadline); life.watchdog();
+    expect(f.store.run(claim.run.id)).toMatchObject({ status: 'cancelling', error_code: 'DEADLINE_EXCEEDED', updated_at: deadline });
+    expect((await heartbeat()).cancellations).toEqual([claim.run.id]);
+    f.setNow(new Date(Date.parse(deadline) + 29999).toISOString()); await heartbeat(); life.watchdog();
+    expect(f.store.run(claim.run.id)).toMatchObject({ status: 'cancelling', updated_at: deadline });
+    f.setNow(new Date(Date.parse(deadline) + 30000).toISOString()); life.watchdog();
+    expect(f.store.run(claim.run.id)).toMatchObject({ status: 'recovery_required', error_code: 'CANCEL_UNCONFIRMED' });
+    expect(f.db.all("SELECT status FROM attempts WHERE run_id=?", claim.run.id)).toEqual([{ status: 'running' }]);
+    expect(f.db.all("SELECT id FROM operations WHERE status='active'")).toHaveLength(2);
+    expect(f.db.all("SELECT id FROM operations WHERE status='unknown'")).toHaveLength(1);
+    expect(f.db.all('SELECT run_id FROM retry_queue')).toEqual([]);
+    expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
+  } finally { f.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
 it('persists native invocation states into SQLite without authorizing result publication or sleep', async () => {
   const f = fixture(true), directory = await mkdtemp(join(tmpdir(), 'hehebot-operation-control-'));
   try {

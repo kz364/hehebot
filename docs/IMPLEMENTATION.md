@@ -4,6 +4,20 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Overlapping-stream watchdog checkpoint (2026-09-16): real FileJournal → operation
+projection → SQLite heartbeat/watchdog tests cover message and plan streams
+starting one minute apart. Either can complete without settling the other; the
+remaining operation cancels at its own deadline, not a completed earlier deadline
+or the run hard deadline. Checks at deadline−1ms/exact deadline and cancellation
++29,999ms/+30,000ms prove the current boundary. Repeated heartbeats preserve the
+cancellation timestamp. Unconfirmed cancellation leaves attempts and operations
+live, retains unknown coverage, queues no retry and denies sleep. Eight focused
+tests passed (`.local/overlap-watchdog-focused.log`); combined verification passed
+903 control / 248 runtime tests, all native/service fixtures, typecheck and build
+dry run (`.local/overlap-watchdog-combined.log`). No runtime behavior changed.
+This does not exercise a real held native stream through expiry, the separate
+15-second cancel/15-second verification steps, or actual process termination.
+
 Message completion integrity checkpoint (2026-09-16): live heartbeat projection and
 offline inspection reject non-object output maps, invalid item IDs and noncanonical
 SHA-256 digest values. Previously, key presence alone could classify a malformed
