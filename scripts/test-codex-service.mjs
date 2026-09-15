@@ -62,10 +62,12 @@ async function send(res, output, duringPlan = undefined) {
       event('response.content_part.added', { output_index, item_id: item.id, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } });
       const text = item.content[0].text;
       if (duringPlan) {
-        const split = text.indexOf('</proposed_plan>');
-        assert.ok(split > 0);
-        event('response.output_text.delta', { output_index, item_id: item.id, content_index: 0, delta: text.slice(0, split) });
-        await duringPlan();
+        const split = text.indexOf('</proposed_plan>'), continuation = text.indexOf('PRIVATE_PLAN_43');
+        assert.ok(continuation > 0 && split > continuation);
+        event('response.output_text.delta', { output_index, item_id: item.id, content_index: 0, delta: text.slice(0, continuation) });
+        await duringPlan(() => event('response.output_text.delta', {
+          output_index, item_id: item.id, content_index: 0, delta: text.slice(continuation, split),
+        }));
         event('response.output_text.delta', { output_index, item_id: item.id, content_index: 0, delta: text.slice(split) });
       } else event('response.output_text.delta', { output_index, item_id: item.id, content_index: 0, delta: text });
       event('response.output_text.done', { output_index, item_id: item.id, content_index: 0, text: item.content[0].text });
@@ -225,7 +227,7 @@ try {
           return;
         }
         await send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
-          content: [{ type: 'output_text', text: planMode ? 'SERVICE_ASSEMBLY_OK\n<proposed_plan>\nPRIVATE_PLAN_43\n</proposed_plan>' : 'SERVICE_ASSEMBLY_OK', annotations: [] }] }], planMode ? async () => {
+          content: [{ type: 'output_text', text: planMode ? 'SERVICE_ASSEMBLY_OK\n<proposed_plan>\nPLAN_START_19\nPRIVATE_PLAN_43\n</proposed_plan>' : 'SERVICE_ASSEMBLY_OK', annotations: [] }] }], planMode ? async continuePlan => {
             const row = await wait(async () => {
               const current = await service.observe();
               return Object.values(current.planItems ?? {}).includes('inProgress') && current;
@@ -237,9 +239,16 @@ try {
             assert.equal(active.length, 1);
             const [planId] = Object.keys(row.planItems);
             assert.equal(active[0].started_at, row.operationTimes[JSON.stringify(['planItems', planId])].startedAt);
-            await sleep(75);
+            continuePlan();
+            await wait(() => notifications.some(n => n.method === 'item/plan/delta' && n.params.threadId === row.threadId &&
+              n.params.turnId === row.nativeRunId && n.params.itemId === planId && n.params.delta.includes('PRIVATE_PLAN_43')), 'attributed native plan delta');
+            assert.deepEqual(await service.observe(), row);
             const reread = await service.supervisor.operations();
             assert.deepEqual(reread.find(op => op.id === active[0].id), active[0]);
+            await service.maintain();
+            assert.deepEqual(heartbeatPages.at(-1).find(op => op.id === active[0].id), active[0]);
+            report.planDeltaClockUnchanged = true;
+            report.activePlanHeartbeatAccepted = true;
             report.planStreamActiveBounded = true;
           } : undefined);
       }

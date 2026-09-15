@@ -219,7 +219,10 @@ stream's expiry, authenticated model judgment or complete operation coverage.
 The fixture also withholds the closing tag and response completion until native
 plan start is journaled. While that stream is open, it verifies an active
 five-minute clock tied to the exact plan item, an unsettled root and no retained
-plan text; a later snapshot must preserve the clock unchanged. It then releases
+plan text. A second text chunk must produce an actual `item/plan/delta` with
+matching thread/turn/item identity; the host journal and operation clock remain
+unchanged. A successful Worker heartbeat must contain that same active clock.
+The fixture then releases
 the closing tag and verifies ordinary completion. This short controlled hold
 tests active accounting, not watchdog expiry or forced native termination.
 

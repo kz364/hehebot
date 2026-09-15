@@ -571,7 +571,7 @@ test(`${type} boundaries retain private content-free clocks and isolate child co
   assert.equal(after.childObligations['["child","child-turn"]'][field].same, 'completed');
   assert.equal(after.childTurns['["child","child-turn"]'], 'inProgress');
   assert.doesNotMatch(JSON.stringify(after), /PRIVATE_/);
-  assert.equal(f.router.project(reasoning('parent', 'turn', `item/${type}/textDelta`)), null);
+  assert.equal(f.router.project(reasoning('parent', 'turn', type === 'plan' ? 'item/plan/delta' : 'item/reasoning/textDelta')), null);
   assert.deepEqual(f.recoveries, []); assert.deepEqual(f.calls, []);
 });
 

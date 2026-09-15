@@ -410,6 +410,15 @@ fixtures and typecheck/build. Logs: `.local/plan-stream-focused.log`,
 `.local/plan-stream-combined.log`. This is not watchdog expiry or forced native
 termination evidence; those and child Plan emission remain open.
 
+Plan-delta follow-up (2026-09-16): the fixture now emits another plan-text chunk
+before closure and waits for native `item/plan/delta` with exact thread/turn/item
+and canary text. The journal and original clock remain unchanged, and a successful
+Worker heartbeat carries that active clock. Synthetic delta method spelling was
+corrected. Verification: 42 router tests, two-request native Plan fixture, combined
+901 control / 242 runtime tests, all native/service fixtures and typecheck/build
+passed. Logs: `.local/plan-delta-unit.log`, `.local/plan-delta-focused.log`,
+`.local/plan-delta-combined.log`. No expiry/forced-termination claim or gate change.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

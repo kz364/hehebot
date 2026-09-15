@@ -6,9 +6,9 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest checkpoint:** open Plan-stream accounting proof, 2026-09-16. Local, not pushed or deployed. Fixture now withholds the closing plan tag and verifies the active clock before releasing the stream. E01 remains partial: this does not test watchdog expiry or forced termination.
-- **Verified:** `bash scripts/test-codex-service.sh --plan` passed with **2 scripted model requests** and `planStreamActiveBounded:true`: exact plan clock, five-minute deadline, unchanged reread, unsettled root and no journaled plan text while the native stream is open; normal completion after release.
-- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 242 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/plan-stream-focused.log`, `.local/plan-stream-combined.log`.
+- **Latest checkpoint:** native Plan-delta and active-heartbeat proof, 2026-09-16. Local, not pushed or deployed. Additional streamed text produces an exactly attributed native delta without changing the journal/deadline; the Worker accepts that same active clock. E01 remains partial: expiry and forced termination are not tested here.
+- **Verified:** **42 router tests passed**; `bash scripts/test-codex-service.sh --plan` passed with **2 scripted model requests**, `planDeltaClockUnchanged:true` and `activePlanHeartbeatAccepted:true`. Synthetic Plan delta test now uses the actual `item/plan/delta` method.
+- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 242 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/plan-delta-unit.log`, `.local/plan-delta-focused.log`, `.local/plan-delta-combined.log`.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
 - **Next implementation priority:** E01, complete deadline/activity accounting; then E02 recovery and E03 responsive orchestration. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
@@ -43,7 +43,7 @@ These are useful foundations that should not be rebuilt simply because their ful
 - [x] Bounded inference interval after live message start, with no text/delta retention or replay refresh. Evidence: `tests/runtime-codex-events.mjs` and seven native service cases. Full overlapping-stream lifetime accounting and progress extensions remain E01.
 - [x] Five-minute non-checkpointed service question callback ceiling and private persisted wait deadline. Evidence: question/service/inspection tests and native answer/cancel fixtures. Worker custody can outlive the callback; restart-required UI, checkpoint parking and safe compute release remain E01/E02.
 - [x] Unsupported live native item boundaries trigger recovery rather than silently evading operation accounting. Evidence: `tests/runtime-codex-events.mjs`; complete supported coverage remains E01, and recovery does not prove native termination.
-- [x] Content-free plan-item lifetime/deadline projection and offline inspection, plus actual root Plan-item service emission and active held-stream clock under scripted loopback inference. Evidence: `scripts/test-codex-service.sh --plan` and synthetic event/operation/recovery fixtures. Native child Plan emission, held-stream expiry, rendering and full operation coverage remain E01/E04.
+- [x] Content-free plan-item lifetime/deadline projection and offline inspection, plus actual root Plan emission, unchanged clocks across native text deltas and accepted active Worker heartbeat under scripted loopback inference. Evidence: `scripts/test-codex-service.sh --plan` and synthetic event/operation/recovery fixtures. Native child Plan emission, held-stream expiry, rendering and full operation coverage remain E01/E04.
 
 ## Remaining implementation and acceptance
 
