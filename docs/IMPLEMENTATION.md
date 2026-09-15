@@ -4,7 +4,7 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
-Latest checkpoint (2026-09-16): question callbacks now abort at the effective task deadline even during initial journal/control work, rather than waiting for the longer callback/dependency limit. Deterministic tests distinguish 499ms/500ms expiry for both held operations and verify late results cannot take an answer or synthesize resolution. Focused verification passed 66 tests; combined verification passed 901 control / 225 runtime tests, all native/service fixtures, typecheck and build. In-flight I/O still may finish and must retain uncertainty; this is not remote cancellation, checkpoint parking or safe sleep. See [binding contracts](CODEX_QUESTION_BINDING.md), [TODO](../TODO.md) and [handoff](HANDOFF.md). No live rollout or production gate change.
+Latest checkpoint (2026-09-16): an unregistered WhatsApp read boundary now validates exact task-granted chats/tools, bounds reads/search and rejects mixed-chat or mismatched results. It returns minimal text records with unknown coverage, not upstream payload/resource blocks. Five focused tests passed, including 16 pre-call denial variants; combined verification passed 901 control / 230 runtime tests, all native/service fixtures, typecheck and build. No upstream code/dependency installation, pairing or live MCP occurred. Trusted grant/lease/revocation/transport wiring and the patch-policy blocker remain; this is not a ready connector. See the source/contracts below, [TODO](../TODO.md) and [handoff](HANDOFF.md). No production gate changed.
 
 The owner-selected Mac direction is SwiftUI + WKWebView around the remote portal, not yet implemented. The Electron foundation listed below remains existing code, not a verified Mac release; separate Mac-decision specification edits are awaiting integration.
 
@@ -379,6 +379,33 @@ transitive licenses requiring audit before redistribution. Node 24+, Chromium,
 QR LocalAuth persistence, account terms, history coverage and sleep cost remain
 separate prerequisites/evidence. This static review grants no live pairing,
 installation, routine activation, provider provisioning or production readiness.
+
+`runtime/wappmcp-reads.mjs` is an independently written, unregistered host read
+boundary based on that revision's public MCP schemas in `src/lib/mcp/server.ts`
+(message reads/search), `src/lib/mcp/helpers.ts` (structured result envelope), and
+`src/lib/whatsapp/session.ts` (search/default semantics). No upstream code,
+dependencies, branding or assets were imported; distribution/license audit remains
+required before shipping the upstream package.
+
+`readWappMcp(grant, name, args, call)` accepts only recent-message reads and scoped
+message search. The trusted caller must supply the admitted task's exact chat/tool
+grant; model input cannot supply grants. It must also enforce live lease/revocation,
+bounded transport, one installation connection and the unresolved installation gate.
+The module does not install or expose tools, issue grants, authenticate customers
+or replace these outer checks. Empty scope denies; global search, chat enumeration,
+contacts and every mutation are unavailable. Calls inject explicit defaults of 50
+messages/page 1; limits and search pages are capped at 100, query at 1000 UTF-16
+units and grant chat IDs at 100. No automatic paging or retries occur.
+
+Responses require bounded structured JSON (1MiB), exact requested chat on every
+message, distinct nonempty message IDs, canonical timestamps, and matching search
+metadata. Mixed-chat batches fail as a whole. Only message ID/body/timestamp and
+requested chat/query/page cross the boundary; upstream text/resource blocks,
+attachment paths, contact fields and extra metadata do not. Message body remains
+untrusted content, not instructions or authorization. Coverage is always `unknown`:
+recent reads have no cursor and search supplies no completeness evidence. This
+does not prove history recovery, sender attribution, attachment support or live
+WhatsApp compatibility. Synthetic contract tests are not live plugin acceptance.
 
 1. Promote the disposable service composition only after complete operation coverage, safe recovery/resume and warm/cold lifecycle evidence. Disconnect, lease-loss and uncertain-admission fixtures do not establish production recovery.
 2. Complete owner-authorized Codex login in the executing environment and verify model eligibility, no paid fallback, bounded inference, restart continuity, refresh ownership, and concurrent-turn behavior.

@@ -342,6 +342,19 @@ all native/service fixtures, typecheck/build. Private logs are
 `.local/question-deadline-focused.log`, `.local/question-deadline-combined.log`.
 This does not cancel already-started I/O, settle native work or enable sleep.
 
+WhatsApp read-boundary checkpoint (2026-09-16): independently written
+`runtime/wappmcp-reads.mjs` permits only bounded selected-chat recent messages and
+search using host-supplied task grants. Mutations/global search deny before calls;
+mixed-chat or invalid response metadata rejects the entire result. Minimal
+ID/body/timestamp records exclude extra payloads and always report unknown coverage.
+Five focused tests (including 16 denied variants) and combined 901 control / 230
+runtime tests passed, with all native/service fixtures, typecheck/build. Logs:
+`.local/wappmcp-reads-focused.log`, `.local/wappmcp-reads-combined.log`.
+No tool registration/installation/pairing occurred. Outer trusted authority,
+lease/revocation, bounded transport and setup integration remain; patch policy still
+blocks upstream installation. See IMPLEMENTATION.md for pinned source provenance
+and contract limits. Do not wire this directly to model-provided grants.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

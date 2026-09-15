@@ -6,9 +6,9 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest checkpoint:** exact task-deadline abort during question initialization, 2026-09-16. Local, not pushed or deployed. A held initial journal/control operation no longer keeps the callback pending past its effective task deadline. E01 remains partial.
-- **Verified:** **66 focused tests passed**. Deterministic tests distinguish 499ms from the 500ms task deadline during both journal and record waits, then release late I/O and verify no take/replay/false resolution.
-- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 225 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/question-deadline-focused.log`, `.local/question-deadline-combined.log`.
+- **Latest checkpoint:** scoped WhatsApp read boundary, 2026-09-16. Local, not pushed or deployed. Unregistered adapter permits only bounded selected-chat message reads/search; denies mutations/global search and rejects mixed-chat responses. E09 remains partial and installation remains blocked.
+- **Verified:** **5 focused tests passed**, covering 16 denied-request variants with zero upstream calls, response scope/identity/size checks, metadata binding, untrusted extras and immutable admitted parameters. Scripted MCP boundary only; no plugin install or pairing.
+- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 230 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/wappmcp-reads-focused.log`, `.local/wappmcp-reads-combined.log`.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
 - **Next implementation priority:** E01, complete deadline/activity accounting; then E02 recovery and E03 responsive orchestration. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
@@ -71,7 +71,9 @@ Do not perform these implicitly. [AUTH_SETUP.md](docs/AUTH_SETUP.md) contains de
 
 **E09 selected WhatsApp integration:** owner-selected `wappmcp` 0.4.0 at
 `9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8` is now specified in SPEC.md. Setup/catalog
-and host-scoped adapter work remain unimplemented. Installation is blocked by its
+remains unimplemented. An unregistered scoped read boundary now has synthetic
+contract tests; trusted task-grant/lease/revocation and transport wiring remain.
+Installation is blocked by its
 `postinstall: patch-package` dependency mutation; no exception is authorized.
 Credential-free authorization/compatibility fixtures can proceed independently.
 Pairing, reconnect/history coverage and sleep/cost measurements require separate
