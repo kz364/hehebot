@@ -37,6 +37,15 @@ disconnect. SQLite supervisor tests cover expiry during activity, collection and
 response delivery; recovery retains the provider hold. This conservative local
 fence does not implement successful warm-resume or alter Worker lease authority.
 
+Lost Worker submission acknowledgments now permit one exact registration retry
+under the original live lease. No native admission or claim is replayed; repeated
+loss fences the executor. Identical already-registered receipts preserve later
+cancellation/terminal state without writes. The combined credential-free check
+passed 839 control and 171 runtime tests plus native/service fixtures and build;
+the new `--submission-ack` fixture observed one native launch, two model requests,
+and two identical HTTPS registration requests after dropping the first reply.
+This does not establish production settlement or restart recovery.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

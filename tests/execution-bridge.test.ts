@@ -42,8 +42,8 @@ function bridge(testMode = true, journal = new FileJournal(join(directory, 'brid
     if (lose === type) throw new Error('lost acknowledgment after durable mutation');
     return result;
   } };
-  return new ExecutionBridge({ control, native, journal, identity,
-    installationId: 'synthetic-installation', personas: { [bot]: { agentId: 'chief-of-staff', model: 'gpt-5.5' } } });
+  return Object.assign(new ExecutionBridge({ control, native, journal, identity,
+    installationId: 'synthetic-installation', personas: { [bot]: { agentId: 'chief-of-staff', model: 'gpt-5.5' } } }), { control, journal });
 }
 function settled(row: any) {
   return { attemptId: row.attemptId, nativeRunId: row.nativeRunId, rootSettled: true, toolsSettled: true,
@@ -118,6 +118,55 @@ it.each(['claim', 'native', 'submitted'])('lost %s acknowledgment survives journ
   expect(after.phase).toBe(loss === 'claim' ? 'claim_unknown' : loss === 'native' ? 'submission_unknown' : 'submitted_unknown');
   expect(nativeCalls).toBe(loss === 'claim' ? 0 : 1);
   expect(f.db.all('SELECT attempt FROM attempts WHERE run_id=?', id)).toHaveLength(1);
+});
+
+it.each(['before', 'after'])('reconstructs an exact submitted receipt after failure %s Worker registration without another native turn', async timing => {
+  const id = enqueue(), executor = bridge();
+  if (timing === 'after') lose = 'submitted';
+  else {
+    const request = executor.control.request;
+    executor.control.request = async (type: string, payload: any) => {
+      if (type === 'submitted') throw new Error('request never arrived');
+      return request(type, payload);
+    };
+  }
+  const row = await executor.claimNext(); expect(row.phase).toBe('submitted_unknown');
+  expect(f.store.run(id).status).toBe(timing === 'before' ? 'claimed' : 'running');
+  const changes = f.db.all<{ n:number }>('SELECT total_changes() AS n')[0].n;
+  lose = undefined; const restored = bridge(), calls: string[] = [], request = restored.control.request;
+  restored.control.request = async (type: string, payload: any) => { calls.push(type); return request(type, payload); };
+  const acknowledged = await restored.acknowledgeSubmission();
+  expect(acknowledged).toEqual({ ...row, phase: 'running' }); expect(calls).toEqual(['submitted']);
+  expect(nativeCalls).toBe(1); expect(f.store.run(id).status).toBe('running');
+  if (timing === 'after') expect(f.db.all<{ n:number }>('SELECT total_changes() AS n')[0].n).toBe(changes);
+  expect(f.db.all('SELECT attempt FROM attempts WHERE run_id=?', id)).toEqual([{ attempt: 1 }]);
+});
+
+it.each(['claim', 'native'])('does not turn %s uncertainty into a submission registration', async loss => {
+  enqueue(); lose = loss; const executor = bridge(), row = await executor.claimNext();
+  lose = undefined; const before = f.db.all<{ n:number }>('SELECT total_changes() AS n')[0].n;
+  await expect(bridge().acknowledgeSubmission()).rejects.toMatchObject({ code: 'RECOVERY_REQUIRED' });
+  expect(await executor.journal.get(executor.cursor)).toEqual(row);
+  expect(f.db.all<{ n:number }>('SELECT total_changes() AS n')[0].n).toBe(before);
+  expect(nativeCalls).toBe(loss === 'native' ? 1 : 0);
+});
+
+it.each(['stale-epoch', 'changed-native', 'lost-reply'])('keeps exact submitted uncertainty after %s reconciliation failure', async failure => {
+  const id = enqueue(); lose = 'submitted'; const executor = bridge(), row = await executor.claimNext(); lose = undefined;
+  if (failure === 'stale-epoch') f.db.exec('UPDATE lifecycle SET epoch=2');
+  if (failure === 'changed-native') f.db.exec("UPDATE attempts SET native_run_ref='different-native' WHERE run_id=?", id);
+  if (failure === 'lost-reply') lose = 'submitted';
+  await expect(bridge().acknowledgeSubmission()).rejects.toThrow();
+  expect(await executor.journal.get(executor.cursor)).toEqual(row); expect(nativeCalls).toBe(1);
+});
+
+it('does not resurrect a cancelled task when recovering its already registered submission', async () => {
+  const id = enqueue(); lose = 'submitted'; const executor = bridge(); await executor.claimNext(); lose = undefined;
+  f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: id, reason: 'Exact task only' } });
+  const before = ['runs', 'attempts', 'events', 'lifecycle'].map(table => f.db.all(`SELECT * FROM ${table}`));
+  expect((await bridge().acknowledgeSubmission()).phase).toBe('running');
+  expect(['runs', 'attempts', 'events', 'lifecycle'].map(table => f.db.all(`SELECT * FROM ${table}`))).toEqual(before);
+  expect(f.store.run(id).status).toBe('cancelling'); expect(nativeCalls).toBe(1);
 });
 
 it.each(['completed', 'waiting', 'retryable_failure'] as const)('lost %s completion acknowledgment replays the persisted attempt result without another turn', async kind => {

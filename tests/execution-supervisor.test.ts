@@ -220,6 +220,41 @@ it('binds acknowledged native events before reporting submission to the control 
   expect(bound).toBe(row.attemptId); expect(row.phase).toBe('running');
 });
 
+it('recovers one lost Worker submission reply while retaining exact native execution and cancellation', async () => {
+  const id = enqueue(), request = supervisor.control.request; let submissions = 0;
+  supervisor.control.request = async (type: string, payload: any) => {
+    const result = await request(type, payload);
+    if (type === 'submitted' && ++submissions === 1) {
+      f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: id, reason: 'Cancel during lost reply' } });
+      throw new Error('lost submission reply');
+    }
+    return result;
+  };
+  const row = await supervisor.start();
+  expect(row.phase).toBe('running'); expect(supervisor.phase).toBe('running');
+  expect(calls.filter(type => type === 'submitted')).toHaveLength(2); expect(nativeCalls).toBe(1);
+  expect(f.store.run(id).status).toBe('cancelling');
+  await supervisor.maintain(); expect(cancellations).toEqual([row.attemptId]); expect(releases).toBe(0);
+});
+
+it.each(['lost-again', 'expired', 'disconnected'])('bounds submission receipt reconciliation after %s', async failure => {
+  enqueue(); const request = supervisor.control.request; let submissions = 0;
+  supervisor.control.request = async (type: string, payload: any) => {
+    const result = await request(type, payload);
+    if (type === 'submitted') {
+      submissions++;
+      if (failure === 'expired') f.setNow('2026-09-10T00:01:30.000Z');
+      if (failure === 'disconnected') supervisor.disconnect();
+      throw new Error('submission reply unavailable');
+    }
+    return result;
+  };
+  await expect(supervisor.start()).rejects.toThrow();
+  expect(submissions).toBe(failure === 'lost-again' ? 2 : 1); expect(nativeCalls).toBe(1);
+  expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
+  expect((await supervisor.journal.get(supervisor.bridge.cursor)).phase).toBe('submitted_unknown');
+});
+
 it.each(['journal failure', 'expired lease'])('event binding %s parks admitted work without replay or release', async failure => {
   const id = enqueue();
   eventBind = async () => {

@@ -76,6 +76,25 @@ describe('executor leases and attempts', () => {
     expect(() => life.heartbeat(identity, [op])).toThrowError(expect.objectContaining({ code: 'INVALID_INPUT' }));
     expect(() => life.complete(identity, claim.run.id, 2, { status: 'completed', text: '' })).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
   });
+  it.each(['running','cancelling','completed','waiting','recovery_required'])('identical submission receipt replay leaves %s work and every table unchanged', status => {
+    const id = claimed().run.id;
+    life.submitted(identity, id, 1, 'native-receipt-71');
+    f.db.exec('UPDATE runs SET status=? WHERE id=?', status, id);
+    f.setNow('2026-09-10T00:00:20.000Z');
+    const before = f.db.all<{ n:number }>('SELECT total_changes() AS n')[0].n;
+    life.submitted(identity, id, 1, 'native-receipt-71');
+    expect(f.db.all<{ n:number }>('SELECT total_changes() AS n')[0].n).toBe(before);
+    expect(f.store.run(id).status).toBe(status);
+    expect(() => life.submitted(identity, id, 1, 'native-receipt-17')).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
+    expect(() => life.submitted({ ...identity, epoch: 2 }, id, 1, 'native-receipt-71')).toThrowError(expect.objectContaining({ code: 'STALE_EPOCH' }));
+  });
+  it('unacknowledged cancellation is not authority for a new submission registration', () => {
+    const id = claimed().run.id;
+    f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: id, reason: 'Stop before acknowledgment' } });
+    expect(() => life.submitted(identity, id, 1, 'never-registered')).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
+    expect(f.db.all('SELECT native_run_ref FROM attempts WHERE run_id=?', id)).toEqual([{ native_run_ref: null }]);
+    expect(f.store.run(id).status).toBe('cancelling');
+  });
   it('completion replay uses retained receipts and cannot overwrite a checkpoint or acknowledge a pruned result', () => {
     const id = claimed().run.id;
     const result = { status: 'waiting' as const, text: 'Owner input needed', checkpoint: { cursor: 43, draft: 'first' } };

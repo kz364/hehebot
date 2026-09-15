@@ -134,15 +134,23 @@ export class ExecutionSupervisor {
 
   dispatch() {
     return this.serialized(async () => {
-      this.assertLease();
-      const row = await this.bridge.claimNext();
-      if (!['running', 'complete'].includes(row.phase)) {
-        this.recover('DISPATCH_OUTCOME_UNKNOWN');
+      try {
+        this.assertLease();
+        let row = await this.bridge.claimNext();
+        if (row.phase === 'submitted_unknown') {
+          this.assertLease();
+          // One bounded retry of the exact Worker receipt, never native admission.
+          row = await this.bridge.acknowledgeSubmission();
+        }
+        if (!['running', 'complete'].includes(row.phase)) {
+          this.recover('DISPATCH_OUTCOME_UNKNOWN');
+          return row;
+        }
+        this.assertLease();
+        if (row.phase === 'complete') this.idleSince ??= this.now();
+        else this.idleSince = null;
         return row;
-      }
-      if (row.phase === 'complete') this.idleSince ??= this.now();
-      else this.idleSince = null;
-      return row;
+      } catch (error) { this.recover('DISPATCH_OUTCOME_UNKNOWN'); throw error; }
     });
   }
 

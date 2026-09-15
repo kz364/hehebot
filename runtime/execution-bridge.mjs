@@ -61,6 +61,23 @@ export class ExecutionBridge {
       return this.journal.update(this.cursor, { phase: 'running' });
     } finally { this.#busy = false; }
   }
+  /** Replay only a durably acknowledged native turn's Worker registration.
+   * Never infer a native ID, issue another claim, or call thread/turn start. */
+  async acknowledgeSubmission() {
+    if (this.#busy) fail('DISPATCH_BUSY');
+    this.#busy = true;
+    try {
+      if (this.native.admissionReadiness().allowed !== true) fail('COMPATIBILITY_GATE_BLOCKED');
+      const row = await this.journal.get(this.cursor), claim = row?.claim;
+      if (row?.phase !== 'submitted_unknown' || row.identity?.epoch !== this.identity.epoch || row.identity?.boot_id !== this.identity.boot_id ||
+          !claim?.run?.id || !Number.isSafeInteger(claim.run.current_attempt) || claim.run.current_attempt < 1 ||
+          claim.submission_key !== `${claim.run.id}:${claim.run.current_attempt}` ||
+          row.attemptId !== hash([this.installationId, claim.submission_key]) || typeof row.nativeRunId !== 'string' || !row.nativeRunId) fail('RECOVERY_REQUIRED');
+      await this.control.request('submitted', { identity: this.identity, run_id: claim.run.id,
+        attempt: claim.run.current_attempt, native_ref: row.nativeRunId });
+      return this.journal.update(this.cursor, { phase: 'running' });
+    } finally { this.#busy = false; }
+  }
   /** Called by the trusted native event reconciler, never directly by model output.
    * Root termination/abort ACK alone cannot produce a complete settlement receipt.
    */

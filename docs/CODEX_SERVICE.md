@@ -16,6 +16,7 @@ bash scripts/test-codex-service.sh
 bash scripts/test-codex-service.sh --child
 bash scripts/test-codex-service.sh --child-effects
 bash scripts/test-codex-service.sh --crash
+bash scripts/test-codex-service.sh --submission-ack
 ```
 
 The second command builds `src/providers/sprites.ts` into the ignored
@@ -32,6 +33,16 @@ and proves root-only completion is rejected. The real Sprite Tasks client and Un
 socket transport are composed, but `http.request` is synthetic: PUT/GET checks
 **do not prove a live Sprite hold**. Successful cleanup removes fixture homes,
 SQLite and certificates. Failures retain private diagnostics for inspection.
+
+The `--submission-ack` mode drops the first registration reply after the real
+HTTPS Worker has acknowledged it. The supervisor retries exactly that persisted
+`submitted` receipt once under its existing live lease. The fixture checks two
+identical registration requests, one native launch, and the normal two model
+requests. No claim or native turn is replayed. SQLite tests separately cover loss
+before registration, cancellation/terminal replay without writes, conflicting
+native identity and expired authority. A second failure, disconnect, or local
+lease expiry fences admission and retains the hold; this is not crash recovery
+or permission to retry unknown native submission or effects.
 
 Heartbeat invocation statuses follow the adapter's per-kind terminal enums.
 For example, a declined file change can be settled, but a declined MCP call is

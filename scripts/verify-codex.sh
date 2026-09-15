@@ -28,6 +28,7 @@ node scripts/test-codex-tools.mjs --dynamic
 node scripts/test-codex-tools.mjs --supervisor
 node scripts/test-codex-tools.mjs --supervisor-child
 bash scripts/test-codex-service.sh
+bash scripts/test-codex-service.sh --submission-ack
 bash scripts/test-codex-service.sh --history
 bash scripts/test-codex-service.sh --history-child
 bash scripts/test-codex-service.sh --questions

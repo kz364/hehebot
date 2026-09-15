@@ -24,8 +24,9 @@ const crashMode = process.argv.includes('--crash');
 const historyMode = process.argv.includes('--history') || historyChildMode;
 const questionCancelMode = process.argv.includes('--questions-cancel');
 const questionsMode = process.argv.includes('--questions') || questionCancelMode;
+const submissionAckMode = process.argv.includes('--submission-ack');
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -214,7 +215,19 @@ try {
     ...(questionsMode ? { ownerQuestions: true } : {}),
     portalOrigin: origin + '/', runtimeTokenFile, tlsCAFile: cert, installationId: 'service-fixture',
     personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model', allowedTools: ['hehebot_list_routines'] } } };
-  const dependencies = { spriteRequest, fetchImpl: trustedFetch,
+  const submissionRequests = [];
+  const dependencies = { spriteRequest, fetchImpl: async (url, init) => {
+    const response = await trustedFetch(url, init);
+    if (submissionAckMode && new URL(url).pathname === '/internal/submitted') {
+      assert.equal(response.status, 200);
+      submissionRequests.push(JSON.parse(init.body));
+      if (submissionRequests.length === 1) {
+        await response.text();
+        throw new Error('Synthetic reply loss after Worker registration');
+      }
+    }
+    return response;
+  },
     launch: options => {
       const transport = spawnCodex(options), request = transport.request.bind(transport);
       if (historyMode) {
@@ -247,6 +260,13 @@ try {
   service = createSpriteCodexService(config, dependencies);
   const dispatched = await service.start(); bound = true;
   assert.equal(dispatched.phase, 'running'); assert.equal(dispatched.claim.run.id, queued.resource_id);
+  if (submissionAckMode) {
+    assert.equal(submissionRequests.length, 2);
+    assert.deepEqual(submissionRequests[0], submissionRequests[1]);
+    assert.equal(submissionRequests[1].native_ref, dispatched.nativeRunId);
+    assert.equal(nativeLaunches, 1);
+    report.exactSubmissionRegistrationRecovered = true;
+  }
   if (questionsMode) {
     const question = await wait(async () => (await (await trustedFetch(`${origin}/v1/state`)).json()).questions?.[0], 'durable native question');
     assert.equal(question.run_id, queued.resource_id); assert.equal(question.attempt, dispatched.claim.run.current_attempt);
