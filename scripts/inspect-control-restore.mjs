@@ -6,7 +6,7 @@ import { verifyControl } from './backup-control.mjs';
 
 export const MAX_SEMANTIC_ROWS = 10000;
 export const MAX_SEMANTIC_BYTES = 64 * 1024 * 1024;
-const tables = ['runs', 'attempts', 'native_task_links', 'resource_locks', 'effects', 'operations', 'outbox'];
+const tables = ['runs', 'attempts', 'native_task_links', 'resource_locks', 'effects', 'operations', 'outbox', 'runtime_metadata'];
 /** @returns {never} */
 const fail = () => { throw new Error('CONTROL_RESTORE_INSPECTION_FAILED'); };
 
@@ -61,6 +61,34 @@ export async function inspectControlRestore(directory) {
          (routine_id IS NOT NULL AND json_type(context_json,'$.routine.id') IS NOT 'text'))`);
       count(issues, 'TERMINAL_EFFECT_RECEIPT_INVALID', `SELECT id FROM effects WHERE status IN ('confirmed','failed') AND
         (receipt_json IS NULL OR json_type(receipt_json)!='object' OR NOT EXISTS(SELECT 1 FROM json_each(receipt_json)))`);
+
+      // Inspect durable custody independently of task status. An expired question
+      // or terminated attempt can still retain an unknown answer handoff.
+      const questions = "FROM runtime_metadata m WHERE m.key GLOB 'native-question:*'";
+      if (db.prepare(`SELECT count(*) AS n ${questions} AND length(CAST(m.value_json AS BLOB))>131072`).get().n) fail();
+      count(issues, 'NATIVE_QUESTION_CUSTODY_INVALID', `SELECT m.key ${questions} AND (
+        json_type(m.value_json) IS NOT 'object' OR
+        json_type(m.value_json,'$.id') IS NOT 'text' OR m.key IS NOT 'native-question:'||json_extract(m.value_json,'$.id') OR
+        json_type(m.value_json,'$.run_id') IS NOT 'text' OR json_type(m.value_json,'$.attempt') IS NOT 'integer' OR json_extract(m.value_json,'$.attempt')<1 OR
+        json_type(m.value_json,'$.epoch') IS NOT 'integer' OR json_extract(m.value_json,'$.epoch')<0 OR
+        json_type(m.value_json,'$.boot_id') IS NOT 'text' OR json_type(m.value_json,'$.persona_id') IS NOT 'text' OR
+        json_type(m.value_json,'$.conversation_id') IS NOT 'text' OR json_type(m.value_json,'$.params.turnId') IS NOT 'text' OR
+        NOT COALESCE((json_extract(m.value_json,'$.version')=1 AND json_extract(m.value_json,'$.state') IN ('pending','answered','response_unknown','resolved')) OR
+          (json_extract(m.value_json,'$.version')=2 AND json_extract(m.value_json,'$.state')='closed'),0) OR
+        (json_extract(m.value_json,'$.state')='resolved' AND json_type(m.value_json,'$.resolved_at') IS NOT 'text') OR
+        (json_extract(m.value_json,'$.state')='closed' AND (json_type(m.value_json,'$.closed_at') IS NOT 'text' OR json_type(m.value_json,'$.resolved_at') IS NOT 'null')))`);
+      count(issues, 'NATIVE_QUESTION_ATTEMPT_MISMATCH', `SELECT m.key ${questions} AND NOT EXISTS
+        (SELECT 1 FROM attempts a WHERE a.run_id=json_extract(m.value_json,'$.run_id') AND a.attempt=json_extract(m.value_json,'$.attempt') AND
+          a.epoch=json_extract(m.value_json,'$.epoch') AND a.boot_id=json_extract(m.value_json,'$.boot_id') AND a.native_run_ref=json_extract(m.value_json,'$.params.turnId'))`);
+      count(issues, 'NATIVE_QUESTION_SCOPE_MISMATCH', `SELECT m.key ${questions} AND NOT EXISTS
+        (SELECT 1 FROM runs r WHERE r.id=json_extract(m.value_json,'$.run_id') AND r.role='coordinator' AND r.parent_run_id IS NULL AND
+          r.persona_id=json_extract(m.value_json,'$.persona_id') AND COALESCE(json_extract(r.context_json,'$.room_id'),r.persona_id)=json_extract(m.value_json,'$.conversation_id'))`);
+      count(issues, 'NATIVE_QUESTION_CLOSURE_UNCONFIRMED', `SELECT m.key ${questions} AND json_extract(m.value_json,'$.state')='closed' AND NOT EXISTS
+        (SELECT 1 FROM attempts a WHERE a.run_id=json_extract(m.value_json,'$.run_id') AND a.attempt=json_extract(m.value_json,'$.attempt') AND a.status='terminated' AND
+          a.settled_at>=COALESCE(json_extract(m.value_json,'$.response_taken_at'),json_extract(m.value_json,'$.answered_at'),json_extract(m.value_json,'$.created_at')) AND
+          a.settled_at<=json_extract(m.value_json,'$.closed_at'))`);
+      count(blockers, 'UNRESOLVED_NATIVE_QUESTION', `SELECT m.key ${questions} AND
+        COALESCE(json_extract(m.value_json,'$.state'),'') NOT IN ('resolved','closed')`);
 
       const rows = db.prepare('SELECT id,parent_run_id FROM runs ORDER BY id').all();
       const parents = new Map(rows.map(row => [row.id, row.parent_run_id]));

@@ -33,11 +33,27 @@ CLI exit0 means the bounded scan found no issues or listed blockers; exit2 print
 
 Schema9 additionally reports `UNRESOLVED_FLIGHT_RESTORE` for pending, enqueued and outcome_unknown flight deadlines, independently of referenced run status. Confirmed and superseded history does not add this blocker; this is not verification of provider receipts.
 
-These checks derive from `runs`, `attempts`, `native_task_links`, `operations`, `resource_locks`, `effects`, `outbox` and, in schema9, `flight_restore_deadlines`, plus `NativeTaskLedger.register`, `ResourceLedger`, `EffectLedger.transition`, and retained-context contracts. Counts overlap: one obligation may contribute to multiple codes and must not be summed as unique tasks. The generic effects table has **no attempt column**; this utility cannot prove generic effect attempt custody or decode/authenticate mediated request digests.
+Native-question custody in `runtime_metadata` additionally reports:
+
+- `UNRESOLVED_NATIVE_QUESTION`: pending, answered, response-unknown or unknown/missing states, even after expiry or original attempt termination. Resolved and explicitly closed history is not counted as unresolved.
+- `NATIVE_QUESTION_CUSTODY_INVALID`: missing/wrongly typed custody identity fields, key/ID disagreement, unknown version/state combinations, or missing terminal timestamp fields. Version2 closure must preserve null `resolved_at`.
+- `NATIVE_QUESTION_ATTEMPT_MISMATCH`: the original retained attempt must match epoch, boot and native turn reference. A newer current attempt or lifecycle epoch does not itself invalidate historical custody.
+- `NATIVE_QUESTION_SCOPE_MISMATCH`: the retained run must be a coordinator with the same persona and conversation/room scope.
+- `NATIVE_QUESTION_CLOSURE_UNCONFIRMED`: a closed record requires original attempt termination between the last recorded question transition and closure. A completed root is not termination evidence.
+
+These are relationship and selected field-shape checks, not a duplicate of the full
+`NativeQuestionLedger` payload/revision/Unicode/timestamp validator, authentication
+of answer/closure command receipts, or reconstruction of native connection history.
+No question text or answer is emitted. Absence of these findings does not authorize
+replaying a response, reconnecting a native turn, or trusting a closure as native
+resolution. Corrupt terminal records may produce inconsistencies without increasing
+the unresolved count; the CLI still exits2.
+
+These checks derive from `runs`, `attempts`, `native_task_links`, `operations`, `resource_locks`, `effects`, `outbox`, `runtime_metadata` and, in schema9, `flight_restore_deadlines`, plus `NativeTaskLedger.register`, `ResourceLedger`, `EffectLedger.transition`, and retained-context contracts. Counts overlap: one obligation may contribute to multiple codes and must not be summed as unique tasks. The generic effects table has **no attempt column**; this utility cannot prove generic effect attempt custody or decode/authenticate mediated request digests.
 
 ## Bounds and restore gaps
 
-Semantic work is limited to a64MiB verified application database and at most10,000 combined rows in the seven schema8 or eight schema9 inspected tables; flight history counts toward this limit even when settled. Graph identifiers are bounded to512 characters. Exceeding limits fails the inspection, without partial-success results. The preliminary verifier still scans/hashes the supplied snapshot; this is not a constant-time or arbitrary-size ingestion service. Output cardinality is fixed by code names, not database contents. Some SQL checks scan unindexed relationships; limits are intentionally conservative. No partial/chunked scan establishes a whole-snapshot result.
+Semantic work is limited to a64MiB verified application database and at most10,000 combined rows in the eight schema8 or nine schema9 inspected tables; flight and runtime metadata history count toward this limit even when settled. Each native-question metadata value is bounded to128KiB UTF8 before relationship inspection. Graph identifiers are bounded to512 characters. Exceeding limits fails the inspection, without partial-success results. The preliminary verifier still scans/hashes the supplied snapshot; this is not a constant-time or arbitrary-size ingestion service. Output cardinality is fixed by code names, not database contents. Some SQL checks scan unindexed relationships; limits are intentionally conservative. No partial/chunked scan establishes a whole-snapshot result.
 
 Keep staging under exclusive trusted local custody. Read-only transactions and before/after verification detect ordinary changes but are not an OS ownership lock or protection from a hostile same-UID process replacing files between checks. File-content hashes and directory entries are tested unchanged, including with unresolved effects/locks; no WAL/SHM sidecars are added.
 

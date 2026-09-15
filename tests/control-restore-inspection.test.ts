@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -67,6 +67,83 @@ it('includes flight history in the combined semantic row limit', async () => {
   const insert = db.prepare("INSERT INTO flight_restore_deadlines VALUES('leg',?,'departure','Asia/Jakarta','restore','routine','source','superseded',NULL,NULL)");
   for (let n = 0; n < 10000; n++) insert.run(n);
   db.exec('COMMIT');
+  await expect(inspect()).rejects.toThrow('CONTROL_RESTORE_INSPECTION_FAILED');
+});
+
+function question(state = 'pending') {
+  const answered = ['answered', 'response_unknown'].includes(state), taken = state === 'response_unknown';
+  return { id: randomUUID(), version: state === 'closed' ? 2 : 1, revision: 1 + Number(answered) + Number(taken) + Number(['resolved', 'closed'].includes(state)),
+    state, run_id: 'root-19', attempt: 1, epoch: 1, boot_id: 'boot-1', persona_id: 'persona-a', conversation_id: 'persona-a',
+    connection_id: randomUUID(), request_id: 43, params: { threadId: 'root-thread', turnId: 'root-19-native-1', itemId: 'question-item',
+      isBlocking: true, autoResolutionMs: null, questions: [{ id: 'q', header: 'Route', question: canary, isOther: true, isSecret: false, options: null }] },
+    created_at: '2026-09-10T00:00:00.000Z', expires_at: '2026-09-10T00:15:00.000Z',
+    answers: answered ? { q: { answers: [canary] } } : null, answer_owner_id: answered ? 'owner' : null,
+    answer_command_id: answered ? randomUUID() : null, answered_at: answered ? '2026-09-10T00:01:00.000Z' : null,
+    response_taken_at: taken ? '2026-09-10T00:02:00.000Z' : null, resolved_at: state === 'resolved' ? '2026-09-10T00:03:00.000Z' : null,
+    ...(state === 'closed' ? { closed_at: '2026-09-10T00:04:00.000Z', close_owner_id: 'owner', close_command_id: randomUUID() } : {}) };
+}
+function storeQuestion(value: any) {
+  db.prepare('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)').run(`native-question:${value.id}`, JSON.stringify(value));
+}
+
+it('preserves expired pending/answered/unknown question obligations on a terminated historical attempt', async () => {
+  db.exec("UPDATE attempts SET status='terminated',settled_at='2026-09-10T00:03:00.000Z' WHERE run_id='root-19' AND attempt=1");
+  for (const state of ['pending', 'answered', 'response_unknown', 'resolved', 'closed']) storeQuestion(question(state));
+  db.prepare('INSERT INTO runtime_metadata VALUES(?,?)').run('roster-layout', '{}');
+  const report = await inspect();
+  expect(report.inconsistencies).toEqual({});
+  expect(report.blockers).toEqual({ UNRESOLVED_NATIVE_QUESTION: 3 });
+  const before = await fingerprint();
+  const cli = spawnSync(process.execPath, [new URL('../scripts/inspect-control-restore.mjs', import.meta.url).pathname, snapshot], { encoding: 'utf8' });
+  expect(cli.status).toBe(2); expect(JSON.parse(cli.stdout)).toEqual(report);
+  expect(cli.stdout + cli.stderr).not.toContain(canary);
+  expect(report.coordinated_restore_ready).toBe(false); expect(await fingerprint()).toEqual(before);
+});
+
+it.each([
+  [{ attempt: 9 }, 'NATIVE_QUESTION_ATTEMPT_MISMATCH'],
+  [{ boot_id: 'another-boot' }, 'NATIVE_QUESTION_ATTEMPT_MISMATCH'],
+  [{ epoch: 2 }, 'NATIVE_QUESTION_ATTEMPT_MISMATCH'],
+  [{ params: { turnId: 'another-turn' } }, 'NATIVE_QUESTION_ATTEMPT_MISMATCH'],
+  [{ conversation_id: 'persona-b' }, 'NATIVE_QUESTION_SCOPE_MISMATCH'],
+  [{ persona_id: 'persona-b' }, 'NATIVE_QUESTION_SCOPE_MISMATCH'],
+  [{ version: 2 }, 'NATIVE_QUESTION_CUSTODY_INVALID'],
+  [{ state: 'mystery' }, 'NATIVE_QUESTION_CUSTODY_INVALID'],
+  [{ state: 'resolved', resolved_at: null }, 'NATIVE_QUESTION_CUSTODY_INVALID'],
+])('reports question custody defect %j without echoing question content', async (patch, code) => {
+  storeQuestion({ ...question(), ...patch });
+  const report = await inspect();
+  expect(report.semantic_status).toBe('inconsistent'); expect(report.inconsistencies[code as string]).toBe(1);
+  expect(JSON.stringify(report)).not.toContain(canary);
+});
+
+it('malformed question envelopes remain visible as inconsistencies and unresolved obligations', async () => {
+  db.prepare('INSERT INTO runtime_metadata VALUES(?,?)').run('native-question:bad', '[]');
+  const report = await inspect();
+  expect(report.inconsistencies.NATIVE_QUESTION_CUSTODY_INVALID).toBe(1);
+  expect(report.blockers.UNRESOLVED_NATIVE_QUESTION).toBe(1);
+});
+
+it.each([
+  ['completed', '2026-09-10T00:03:00.000Z'],
+  ['terminated', '2026-09-09T23:59:59.999Z'],
+  ['terminated', '2026-09-10T00:04:00.001Z'],
+])('does not accept closed custody with original attempt %s at %s', async (status, settledAt) => {
+  db.prepare("UPDATE attempts SET status=?,settled_at=? WHERE run_id='root-19' AND attempt=1").run(status, settledAt);
+  storeQuestion(question('closed'));
+  const report = await inspect();
+  expect(report.inconsistencies).toEqual({ NATIVE_QUESTION_CLOSURE_UNCONFIRMED: 1 });
+  expect(report.blockers).toEqual({}); expect(report.coordinated_restore_ready).toBe(false);
+});
+
+it.each(['row-bytes', 'row-count'])('bounds native-question inspection by %s before emitting a report', async limit => {
+  if (limit === 'row-bytes') storeQuestion({ ...question(), extra: 'x'.repeat(131072) });
+  else {
+    db.exec('BEGIN');
+    const insert = db.prepare('INSERT INTO runtime_metadata VALUES(?,?)');
+    for (let n = 0; n < 10000; n++) insert.run(`native-question:${n}`, '{}');
+    db.exec('COMMIT');
+  }
   await expect(inspect()).rejects.toThrow('CONTROL_RESTORE_INSPECTION_FAILED');
 });
 
