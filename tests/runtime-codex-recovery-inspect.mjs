@@ -104,6 +104,60 @@ test('recovery includes every recorded tool category with exact root/child and c
   assert.doesNotMatch(JSON.stringify(report), /PRIVATE_/); assert.deepEqual(await snapshot(f.directory), before);
 });
 
+test('inspection preserves exact root and child operation clocks without copying extra fields', async t => {
+  const f = await fixture(t);
+  const first = { startedAt: '2026-09-15T01:02:00.000Z', lastProgressAt: '2026-09-15T01:03:00.000Z' };
+  const second = { startedAt: '2026-09-15T01:04:00.000Z', lastProgressAt: '2026-09-15T01:04:17.000Z' };
+  await f.journal.write(attemptId, { ...f.native, operationTimes: { '["commands","root-command"]': { ...first, secret: canary } },
+    childObligations: { [childKey]: { ...f.native.childObligations[childKey],
+      operationTimes: { '["commands","child-command"]': second } } } });
+  const before = await snapshot(f.directory), report = await inspectCodexRecovery(f.directory);
+  assert.deepEqual(report.issues, []);
+  assert.deepEqual(report.native.observations.find(row => row.itemId === 'root-command').timing, first);
+  assert.deepEqual(report.native.observations.find(row => row.itemId === 'child-command').timing, second);
+  assert.equal(Object.hasOwn(report.native.observations.find(row => row.itemId === 'child-call'), 'timing'), false);
+  assert.doesNotMatch(JSON.stringify(report), /PRIVATE_|secret/);
+  assert.deepEqual(await snapshot(f.directory), before);
+  assert.equal(report.resumeAllowed, false); assert.equal(report.sleepAllowed, false);
+});
+
+test('clock lookup preserves nested collaboration keys and same item IDs across categories and owners', async t => {
+  const f = await fixture(t), at = '2026-09-15T01:02:00.000Z', later = '2026-09-15T01:03:00.000Z';
+  const root = { startedAt: at, lastProgressAt: at }, child = { startedAt: later, lastProgressAt: later };
+  const categories = ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems'];
+  const inventory = Object.fromEntries(categories.map(field => [field, { same: 'inProgress' }]));
+  inventory.collabCalls = { '["wait","same"]': 'inProgress', '["sendMessage","same"]': 'completed' };
+  const clocks = timing => Object.fromEntries([...categories.map(field => [JSON.stringify([field, 'same']), timing]),
+    [JSON.stringify(['collabCalls', '["wait","same"]']), timing], [JSON.stringify(['collabCalls', '["sendMessage","same"]']), timing]]);
+  await f.journal.write(attemptId, { ...f.native, ...inventory, operationTimes: {
+    ...clocks(root), '["spawns","spawn"]': root }, childObligations: { [childKey]: { ...inventory, operationTimes: clocks(child) } } });
+  const report = await inspectCodexRecovery(f.directory);
+  assert.deepEqual(report.issues, []);
+  assert.equal(report.native.observations.length, 23);
+  for (const observation of report.native.observations) assert.deepEqual(observation.timing, observation.threadId === 'root-19' ? root : child);
+  assert.deepEqual(report.native.observations.filter(row => row.kind === 'collabCalls').map(row => row.tool), ['wait', 'sendMessage', 'wait', 'sendMessage']);
+  await f.journal.write(attemptId, { ...f.native, childObligations: { [childKey]: {
+    ...f.native.childObligations[childKey], operationTimes: { '["commands","root-command"]': root } } } });
+  assert.equal((await inspectCodexRecovery(f.directory)).native, null);
+});
+
+test('invalid or orphan phase clocks reject the entire native report without modification', async t => {
+  const f = await fixture(t), at = '2026-09-15T01:02:00.000Z';
+  const valid = { startedAt: at, lastProgressAt: at };
+  for (const clocks of [null, [], { '["commands","root-command"]': null },
+    { '["commands","root-command"]': { startedAt: at } },
+    { '["commands","root-command"]': { startedAt: '2026-09-15T01:02:00Z', lastProgressAt: at } },
+    { '["commands","root-command"]': { startedAt: at, lastProgressAt: '2026-09-15T01:01:59.999Z' } },
+    { '["commands", "root-command"]': valid }, { '["unknown","root-command"]': valid },
+    { '["commands","missing"]': valid }, { '["commands","root-command"]': { ...valid, startedAt: canary } }]) {
+    await f.journal.write(attemptId, { ...f.native, operationTimes: clocks });
+    const before = await snapshot(f.directory), report = await inspectCodexRecovery(f.directory);
+    assert.equal(report.native, null); assert.ok(report.issues.includes('NATIVE_RECORD_INVALID_OR_CONTRADICTORY'));
+    assert.doesNotMatch(JSON.stringify(report), /PRIVATE_/);
+    assert.deepEqual(await snapshot(f.directory), before);
+  }
+});
+
 test('malformed extended observations reject the native projection instead of hiding active work', async t => {
   const f = await fixture(t);
   for (const patch of [{ dynamicCalls: { item: 'declined' } }, { webSearches: { item: 'failed' } },

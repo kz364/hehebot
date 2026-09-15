@@ -133,6 +133,20 @@ native/service fixtures, typecheck and build. E01 remains partial for later quie
 gaps, time before child-start notification, progress extensions and full coverage.
 No accounts, live provider operations, pushes, deployments or gate changes.
 
+Offline-clock checkpoint (2026-09-15): recovery observations now include optional
+`timing: {startedAt,lastProgressAt}` copied only from validated stored clocks.
+Canonical UTC, nondecreasing progress and exact owner/category/item keys are
+required, including nested collaboration keys. Orphan/invalid clocks invalidate
+the native report; missing legacy clocks remain absent. No deadline/expiry or
+resume authority is inferred. Additional stored fields never enter the report.
+Two regressions failed before implementation; 17 focused tests passed afterward,
+covering every category, root/child isolation, corruption, redaction and no writes.
+Eleven actual native service scenarios preserve MCP timing after shutdown.
+`bash scripts/verify-codex.sh` passed 879 control / 195 runtime tests, all
+native/service fixtures, typecheck and build. E01/E02 remain partial; next work
+remains deadline coverage and successful fenced recovery, not merely inspection.
+No accounts, live provider operations, pushes, deployments or gate changes.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

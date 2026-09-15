@@ -135,6 +135,7 @@ export async function inspectCodexRecovery(directory) {
     const children = [], obligations = [], origins = new Map();
     const items = (owner, threadId, turnId) => {
       require(object(owner));
+      const clocks = new Map(entries(owner.operationTimes));
       for (const field of ['commands', 'mcpCalls', 'spawns', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'collabCalls', 'reasoningItems']) for (const [key, item] of entries(owner[field])) {
         let itemId = key, tool;
         if (field === 'collabCalls') {
@@ -147,6 +148,14 @@ export async function inspectCodexRecovery(directory) {
           : ['inProgress', 'completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
         require(typeof itemId === 'string' && itemId.length > 0 && itemId.length <= 256 && states.includes(status) && obligations.length < 4096);
         obligations.push({ threadId, turnId, kind: field, itemId, status, ...(tool ? { tool } : {}) });
+        const timingKey = JSON.stringify([field, key]);
+        if (clocks.has(timingKey)) {
+          const timing = clocks.get(timingKey);
+          require(object(timing) && ['startedAt', 'lastProgressAt'].every(key => typeof timing[key] === 'string' &&
+            Number.isFinite(Date.parse(timing[key])) && new Date(timing[key]).toISOString() === timing[key]) && timing.lastProgressAt >= timing.startedAt);
+          obligations.at(-1).timing = { startedAt: timing.startedAt, lastProgressAt: timing.lastProgressAt };
+          clocks.delete(timingKey);
+        }
         if (field === 'spawns') {
           require(Array.isArray(item.receiverThreadIds) && item.receiverThreadIds.length <= 100);
           for (const receiver of item.receiverThreadIds) {
@@ -156,6 +165,9 @@ export async function inspectCodexRecovery(directory) {
           obligations.at(-1).receiverThreadIds = [...item.receiverThreadIds];
         }
       }
+      // A clock must identify an observed operation in this exact owner, not a
+      // sibling's matching item ID or a noncanonical/unknown inventory key.
+      require(clocks.size === 0);
     };
     items(native, root.threadId, root.turnId);
     const turns = entries(native.childTurns);

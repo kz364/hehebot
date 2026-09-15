@@ -543,6 +543,17 @@ try {
   assert.equal(diagnostic.native.root.threadId, native.threadId);
   assert.equal(diagnostic.native.root.turnId, native.nativeRunId);
   assert.equal(diagnostic.native.root.observedTerminal, !crashMode);
+  const inspectedCalls = diagnostic.native.observations.filter(observation => observation.kind === 'mcpCalls');
+  assert.equal(inspectedCalls.length, expectedToolCalls);
+  const stoppedNative = await service.journal.get(dispatched.attemptId);
+  for (const call of inspectedCalls) {
+    const owner = call.threadId === stoppedNative.threadId ? stoppedNative
+      : stoppedNative.childObligations[JSON.stringify([call.threadId, call.turnId])];
+    const stored = owner.operationTimes[JSON.stringify(['mcpCalls', call.itemId])];
+    assert.equal(typeof call.timing?.startedAt, 'string');
+    assert.deepEqual(call.timing, { startedAt: stored.startedAt, lastProgressAt: stored.lastProgressAt });
+  }
+  report.offlineOperationClocksPreserved = true;
   assert.equal(diagnostic.resumeAllowed, false); assert.equal(diagnostic.sleepAllowed, false);
   report.offlineRecoveryDiagnostic = true;
   if (crashMode) {

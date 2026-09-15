@@ -62,6 +62,14 @@ the adapter's persisted enums. For search/wait/compaction/image generation/reaso
 `completed` means an observed item termination, not verified success. The report
 accepts at most 4096 observations across all categories and descendants; overflow
 rejects the native projection rather than silently truncating it.
+Each observation with a stored phase clock includes `timing: {startedAt,
+lastProgressAt}`. Both timestamps must be canonical UTC and progress cannot precede
+start. Only these two fields are copied, never additional stored content. Clocks
+must refer to an existing operation under the exact owner and canonical inventory
+key, including the nested collaboration tool/item key. Invalid, orphan or
+noncanonical clocks invalidate the entire native projection. Missing legacy
+clocks remain absent. The report does not infer deadlines, expiry, fresh progress
+or permission to resume from these historical timestamps.
 The root's optional `initialInference` marker is also reported and validated.
 Child initial-phase markers and their required canonical `initialInferenceAt`
 timestamps are reported alongside each child's exact turn identity. Malformed or
