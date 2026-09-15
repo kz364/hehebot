@@ -47,6 +47,11 @@ export class CodexOperations {
       add(['initialInference'], 'inference', status(row.initialInference, ['completed']), { startedAt: start, lastProgressAt: start });
     }
     const items = (owner, identity) => {
+      if (owner !== row && (owner.initialInference !== undefined || owner.initialInferenceAt !== undefined)) {
+        if (!['inProgress', 'completed'].includes(owner.initialInference) || typeof owner.initialInferenceAt !== 'string') fail('INVALID_OPERATION_TIMING');
+        add([identity, 'initialInference'], 'inference', status(owner.initialInference, ['completed']),
+          { startedAt: owner.initialInferenceAt, lastProgressAt: owner.initialInferenceAt });
+      }
       if (owner.operationTimes !== undefined && (!owner.operationTimes || typeof owner.operationTimes !== 'object' || Array.isArray(owner.operationTimes))) fail('INVALID_OPERATION_TIMING');
       for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems']) {
         const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems'].includes(field) ? ['completed']

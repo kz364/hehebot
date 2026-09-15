@@ -164,7 +164,13 @@ export async function inspectCodexRecovery(directory) {
       require(Array.isArray(pair) && pair.length === 2 && pair.every(id) && pair[0] !== native.threadId && JSON.stringify(pair) === key);
       require(['inProgress', 'completed', 'failed', 'interrupted'].includes(status));
       children.push({ threadId: pair[0], turnId: pair[1], status });
-      items(native.childObligations?.[key] ?? {}, pair[0], pair[1]);
+      const owner = native.childObligations?.[key] ?? {};
+      if (owner.initialInference !== undefined || owner.initialInferenceAt !== undefined) {
+        require(['inProgress', 'completed'].includes(owner.initialInference) && typeof owner.initialInferenceAt === 'string' &&
+          Number.isFinite(Date.parse(owner.initialInferenceAt)) && new Date(owner.initialInferenceAt).toISOString() === owner.initialInferenceAt);
+        Object.assign(children.at(-1), { initialInference: owner.initialInference, initialInferenceAt: owner.initialInferenceAt });
+      }
+      items(owner, pair[0], pair[1]);
     }
     for (const [key] of entries(native.childObligations)) require(turns.some(([turn]) => turn === key));
     for (const child of children) {

@@ -61,6 +61,40 @@ test('initial inference survives acknowledgment and child events until exact roo
   assert.equal((await f.journal.get(input.attemptId)).initialInference, 'completed');
 });
 
+test('child initial silence retains its own first observed start through replay and root activity', async t => {
+  const f = await fixture(t); await f.adapter.submit(input);
+  await f.journal.update(input.attemptId, { spawns: { s: { status: 'completed', receiverThreadIds: ['child'] } } });
+  const start = { method: 'turn/started', params: { threadId: 'child', turn: { id: 'turn', status: 'inProgress' } } };
+  const key = '["child","turn"]', at = '2026-09-15T01:02:00.000Z';
+  await f.adapter.observe(input.attemptId, start, at);
+  await f.adapter.observe(input.attemptId, start, '2026-09-15T01:03:00.000Z');
+  await f.adapter.observe(input.attemptId, { method: 'turn/completed', params: { threadId: 'thread-a', turn: { id: 'turn-b', status: 'completed' } } });
+  assert.deepEqual((await f.journal.get(input.attemptId)).childObligations[key], { initialInference: 'inProgress', initialInferenceAt: at });
+  await f.adapter.observe(input.attemptId, { method: 'item/started', params: { threadId: 'child', turnId: 'turn', item: { id: 'reason', type: 'reasoning' } } }, '2026-09-15T01:04:00.000Z');
+  const child = (await f.journal.get(input.attemptId)).childObligations[key];
+  assert.equal(child.initialInference, 'completed'); assert.equal(child.initialInferenceAt, at);
+  assert.equal(child.reasoningItems.reason, 'inProgress');
+  await f.adapter.observe(input.attemptId, start, '2026-09-15T01:05:00.000Z');
+  assert.deepEqual((await f.journal.get(input.attemptId)).childObligations[key], child);
+});
+
+test('child terminal-only observation ends initial silence without inventing legacy clocks', async t => {
+  const f = await fixture(t); await f.adapter.submit(input);
+  await f.journal.update(input.attemptId, { spawns: { s: { status: 'completed', receiverThreadIds: ['child', 'legacy'] } } });
+  const event = (threadId, status) => ({ method: status === 'inProgress' ? 'turn/started' : 'turn/completed', params: { threadId, turn: { id: 'turn', status } } });
+  const at = '2026-09-15T01:02:00.000Z';
+  await f.adapter.observe(input.attemptId, event('child', 'inProgress'), at);
+  await f.adapter.observe(input.attemptId, event('child', 'interrupted'), '2026-09-15T01:03:00.000Z');
+  const row = await f.journal.get(input.attemptId);
+  assert.equal(row.initialInference, 'inProgress');
+  assert.deepEqual(row.childObligations['["child","turn"]'], { initialInference: 'completed', initialInferenceAt: at });
+  await f.adapter.observe(input.attemptId, event('legacy', 'inProgress'));
+  await f.adapter.observe(input.attemptId, event('legacy', 'inProgress'), at);
+  assert.equal((await f.journal.get(input.attemptId)).childObligations['["legacy","turn"]'], undefined);
+  await f.journal.update(input.attemptId, { childObligations: { '["child","turn"]': { initialInference: 'inProgress' } } });
+  await assert.rejects(f.adapter.observe(input.attemptId, event('child', 'interrupted')), { code: 'INVALID_OPERATION_TIMING' });
+});
+
 test('host dynamic definitions are snapshotted and changes cannot reuse a submitted attempt', async t => {
   const f = await fixture(t);
   const definitions = [{ type: 'function', name: 'read_fixture', description: 'Read fixture', inputSchema: { type: 'object' } }];
@@ -223,7 +257,8 @@ test('read-only child recovery requires exact recorded ancestry and turn, preser
   const prior = await journal.update(input.attemptId, {
     spawns: { spawn: { status: 'completed', receiverThreadIds: ['child-a', 'sibling'] } },
     childTurns: { [childKey]: 'inProgress', [grandKey]: 'inProgress', '["sibling","turn-83"]': 'inProgress' },
-    childObligations: { [childKey]: { commands: { open: 'inProgress' }, spawns: { nested: { status: 'completed', receiverThreadIds: ['grandchild'] } } } },
+    childObligations: { [childKey]: { commands: { open: 'inProgress' }, spawns: { nested: { status: 'completed', receiverThreadIds: ['grandchild'] } } },
+      [grandKey]: { initialInference: 'inProgress', initialInferenceAt: '2026-09-15T01:02:00.000Z' } },
   });
   let response = { id: 'grandchild', source: { subAgent: { thread_spawn: { parent_thread_id: 'child-a' } } },
     turns: [{ id: 'newer', status: 'failed' }, { id: 'turn-39', status: 'completed', items: [] }] };
@@ -245,7 +280,8 @@ test('read-only child recovery requires exact recorded ancestry and turn, preser
   }
   assert.deepEqual(await journal.get(input.attemptId), prior);
   const recovered = await restored.reconcileChild(input.attemptId, target);
-  assert.deepEqual(recovered, { ...prior, childTurns: { ...prior.childTurns, [grandKey]: 'completed' } });
+  assert.deepEqual(recovered, { ...prior, childTurns: { ...prior.childTurns, [grandKey]: 'completed' },
+    childObligations: { ...prior.childObligations, [grandKey]: { ...prior.childObligations[grandKey], initialInference: 'completed' } } });
   assert.deepEqual(await restored.reconcileChild(input.attemptId, target), recovered);
   for (const status of ['inProgress', 'interrupted']) {
     response = { ...response, turns: [{ id: 'turn-39', status }] };

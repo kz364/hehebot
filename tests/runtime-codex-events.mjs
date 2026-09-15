@@ -308,8 +308,10 @@ test('child tools require observed exact turns and survive root and child comple
   let row = await f.journal.get('a');
   assert.deepEqual(row.childObligations, {
     [a]: { mcpCalls: { 'same-item': 'inProgress' }, commands: { 'same-item': 'inProgress' },
+      initialInference: 'completed', initialInferenceAt: stamp,
       operationTimes: { '["mcpCalls","same-item"]': timing, '["commands","same-item"]': timing } },
-    [b]: { mcpCalls: { 'same-item': 'inProgress' }, operationTimes: { '["mcpCalls","same-item"]': timing } },
+    [b]: { initialInference: 'completed', initialInferenceAt: stamp,
+      mcpCalls: { 'same-item': 'inProgress' }, operationTimes: { '["mcpCalls","same-item"]': timing } },
   });
   assert.equal(row.rootSettled, true); assert.equal(row.childTurns[a], 'completed');
   f.router.close();
@@ -320,8 +322,10 @@ test('child tools require observed exact turns and survive root and child comple
   f.transport.emit('notification', mcp('child-a', 'failed')); await restarted.flush();
   row = await f.journal.get('a');
   assert.deepEqual(row.childObligations[a], { mcpCalls: { 'same-item': 'failed' }, commands: { 'same-item': 'inProgress' },
+    initialInference: 'completed', initialInferenceAt: stamp,
     operationTimes: { '["mcpCalls","same-item"]': { ...timing, lastProgressAt: '2026-09-15T01:03:05.000Z' }, '["commands","same-item"]': timing } });
-  assert.deepEqual(row.childObligations[b], { mcpCalls: { 'same-item': 'inProgress' }, operationTimes: { '["mcpCalls","same-item"]': timing } });
+  assert.deepEqual(row.childObligations[b], { initialInference: 'completed', initialInferenceAt: stamp,
+    mcpCalls: { 'same-item': 'inProgress' }, operationTimes: { '["mcpCalls","same-item"]': timing } });
   assert.equal(row.mcpCalls, undefined); assert.equal(row.effectsSettled, undefined);
   assert.doesNotMatch(JSON.stringify(row), /PRIVATE_OUTPUT/);
   assert.equal(restarted.pending.length, 0); assert.deepEqual(f.recoveries, []);

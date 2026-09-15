@@ -157,6 +157,13 @@ try {
           return;
         }
         await wait(async () => (await service.observe())?.rootSettled, 'parent terminal before child MCP');
+        if (toolRequests === 0) {
+          await wait(async () => Object.values((await service.observe()).childObligations ?? {}).some(child => child.initialInference === 'inProgress'), 'child initial phase');
+          const phases = (await service.supervisor.operations()).filter(operation => operation.kind === 'inference' && operation.status === 'active');
+          assert.equal(phases.length, 1);
+          assert.equal(Date.parse(phases[0].deadline_at) - Date.parse(phases[0].started_at), 300000);
+          report.childInitialSilenceBounded = true;
+        }
       } else assert.match(JSON.stringify(body.input), /SERVICE_ASSEMBLY_19_43/);
       toolRequests++;
       if (toolRequests === 1) {
@@ -454,7 +461,11 @@ try {
   await service.maintain();
   const operations = await service.supervisor.operations();
   assert.equal(native.initialInference, 'completed');
-  assert.equal(operations.length, childMode ? 6 : expectedToolCalls + 3 + Number(reasoningMode));
+  assert.equal(operations.length, childMode ? 7 : expectedToolCalls + 3 + Number(reasoningMode));
+  if (childMode) {
+    assert.ok(Object.values(native.childObligations).every(child => child.initialInference === 'completed'));
+    assert.equal(operations.filter(operation => operation.kind === 'inference' && operation.status === 'settled').length, 3);
+  }
   if (reasoningMode) {
     assert.deepEqual(Object.values(native.reasoningItems), ['completed']);
     assert.doesNotMatch(JSON.stringify(native), /PRIVATE_SYNTHETIC_REASONING_43/);

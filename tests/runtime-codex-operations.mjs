@@ -143,6 +143,25 @@ test('initial silence has a replay-stable five-minute bound distinct from root a
   await assert.rejects(f.operations.snapshot(), { code: 'INVALID_OPERATION_TIMING' });
 });
 
+test('child initial phase is independent, capped, replay stable and refuses incomplete clocks', async t => {
+  const f = await fixture(t), key = '["child","turn"]';
+  const child = { initialInference: 'inProgress', initialInferenceAt: '2026-09-14T01:17:00.000Z' };
+  await f.journal.putIfAbsent('attempt-a', { status: 'finishing', rootSettled: true,
+    childTurns: { [key]: 'inProgress' }, childObligations: { [key]: child } });
+  const first = await f.operations.snapshot(), phase = first.at(-1);
+  assert.equal(phase.kind, 'inference'); assert.equal(phase.status, 'active');
+  assert.equal(phase.started_at, child.initialInferenceAt); assert.equal(phase.deadline_at, f.config.deadlineAt);
+  const uncapped = await new CodexOperations({ ...f.config, deadlineAt: '2026-09-14T01:30:00.000Z' }).snapshot();
+  assert.equal(uncapped.at(-1).deadline_at, '2026-09-14T01:22:00.000Z');
+  assert.deepEqual(await new CodexOperations(f.config).snapshot(), first);
+  await f.journal.update('attempt-a', { childObligations: { [key]: { ...child, initialInference: 'completed' } } });
+  assert.deepEqual((await f.operations.snapshot()).at(-1), { ...phase, status: 'settled' });
+  for (const invalid of [{ initialInference: 'inProgress' }, { initialInferenceAt: child.initialInferenceAt }, { ...child, initialInferenceAt: 'bad' }]) {
+    await f.journal.update('attempt-a', { childObligations: { [key]: invalid } });
+    await assert.rejects(f.operations.snapshot(), { code: 'INVALID_OPERATION_TIMING' });
+  }
+});
+
 test('reasoning uses five-minute independent phase clocks, not tool clocks or root settlement', async t => {
   const f = await fixture(t), key = '["reasoningItems","same"]';
   await f.journal.putIfAbsent('attempt-a', { status: 'finishing', rootSettled: true,

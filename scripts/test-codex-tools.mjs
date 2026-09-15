@@ -523,8 +523,8 @@ try {
       assert.equal(operations.filter(op => op.status === 'unknown').length, 1);
       assert.equal(operations.find(op => op.kind === 'inference').status, 'settled');
       if (supervisorChildMode) {
-        assert.equal(operations.length, 11);
-        assert.equal(operations.filter(op => op.kind === 'inference' && op.status === 'settled').length, 2);
+        assert.equal(operations.length, 12);
+        assert.equal(operations.filter(op => op.kind === 'inference' && op.status === 'settled').length, 3);
         assert.equal(operations.find(op => op.kind === 'child').status, 'settled');
         assert.equal(operations.filter(op => op.kind === 'tool' && op.status === 'settled').length, 7);
       }

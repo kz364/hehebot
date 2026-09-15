@@ -63,6 +63,9 @@ the adapter's persisted enums. For search/wait/compaction/image generation/reaso
 accepts at most 4096 observations across all categories and descendants; overflow
 rejects the native projection rather than silently truncating it.
 The root's optional `initialInference` marker is also reported and validated.
+Child initial-phase markers and their required canonical `initialInferenceAt`
+timestamps are reported alongside each child's exact turn identity. Malformed or
+incomplete phase custody invalidates the native projection rather than hiding it.
 Absent legacy markers remain absent; neither inspection nor root-terminal status
 invents a completed initial phase. This is diagnostic data, not resume authority.
 Unknown claim custody never

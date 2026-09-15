@@ -116,6 +116,23 @@ native/service fixtures, typecheck and build. The 101-MCP-call fixture now deliv
 quiet interval or child startup. E01 remains partial; production stays disabled.
 No accounts, live provider operations, pushes or deployments were used.
 
+Child initial-response checkpoint (2026-09-15): newly observed child starts retain
+`initialInference` and immutable `initialInferenceAt` in their own obligation row.
+Five minutes from host receipt, capped by the task deadline; root activity cannot
+end it. Exact child item/terminal observation or terminal readback ends only this
+phase, leaving tools/effects untouched. Replay never restarts it; legacy clocks
+are not invented. Offline inspection validates and reports the pair.
+Focused runtime checks passed 87 and Worker checks passed 4, including exact
+five-minute cancellation. The native service fixture observed the active phase
+after parent completion while withholding the child's first response, then
+verified seven heartbeat operations with unknown coverage still blocking sleep.
+Two combined attempts found stale metadata/count expectations; those assertions
+now require the new independent phase while retaining tool/sibling custody checks.
+Final `bash scripts/verify-codex.sh` passed 879 control / 192 runtime tests, all
+native/service fixtures, typecheck and build. E01 remains partial for later quiet
+gaps, time before child-start notification, progress extensions and full coverage.
+No accounts, live provider operations, pushes, deployments or gate changes.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

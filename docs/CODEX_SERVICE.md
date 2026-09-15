@@ -119,8 +119,15 @@ duplicate submission and repeated heartbeats never restart or extend this clock.
 Legacy rows without the marker are not backfilled; the diagnostic reports the
 marker only when present. Initial-phase completion is not task settlement.
 The native fixtures inspect the active phase before returning their first model
-response and its completion after native work. This bounds initial root silence,
-not every later gap after a tool, child startup silence or token-progress liveness.
+response and its completion after native work. Each newly observed child
+`turn/started` with a host receipt timestamp also persists its own initial phase
+and immutable `initialInferenceAt`. It ends only on that child's validated item
+or terminal observation/readback, not parent completion. Its independent five-minute
+deadline is capped by the admitted task deadline. Duplicate starts cannot reset
+it; missing legacy timestamps are never reconstructed. The native child fixture
+observes this phase while withholding the child's first model response, after
+the parent has completed. These bounds do not cover time before a child start
+notification, later gaps after tools, or token-progress liveness.
 Those remaining quiet periods, explicit longer transfer/shell allowances and
 progress-based phase extensions remain separate work; this is not full S19 or
 proof of the native operation's true start before its host notification arrived.
@@ -133,7 +140,7 @@ held open. The actual service child facade persists the native-to-Worker mapping
 an owner `run.cancel` command then travels through Worker heartbeat and supervisor
 maintenance to exactly one child `turn/interrupt`, even across repeated maintenance.
 The fixture separately observes the exact interrupted turn and HTTP connection
-closure. Six root-owned heartbeat operations retain one unknown coverage record.
+closure. Seven root-owned heartbeat operations retain one unknown coverage record.
 Worker completion returns HTTP 409 `CANCEL_UNCONFIRMED`; the root remains running,
 the child remains cancelling, and supervisor completion/sleep are denied. This is
 not recursive settlement, model judgment, active-work crash recovery, per-child

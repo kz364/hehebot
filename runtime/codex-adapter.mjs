@@ -82,6 +82,12 @@ export class CodexAdapter {
     const row = await this.journal.get(attemptId);
     if (!row?.threadId || !row.nativeRunId) fail('SUBMISSION_OUTCOME_UNKNOWN');
     if (row.initialInference !== undefined && !['inProgress', 'completed'].includes(row.initialInference)) fail('INVALID_OPERATION_TIMING');
+    for (const child of Object.values(row.childObligations ?? {})) {
+      if (child.initialInference !== undefined || child.initialInferenceAt !== undefined) {
+        if (!['inProgress', 'completed'].includes(child.initialInference) || typeof child.initialInferenceAt !== 'string' ||
+            !Number.isFinite(Date.parse(child.initialInferenceAt)) || new Date(child.initialInferenceAt).toISOString() !== child.initialInferenceAt) fail('INVALID_OPERATION_TIMING');
+      }
+    }
     return row;
   }
   async steer(attemptId, instruction) {
@@ -175,7 +181,8 @@ export class CodexAdapter {
     const childItem = params?.threadId !== row.threadId && Object.hasOwn(row.childTurns ?? {}, childKey);
     const owner = childItem ? row.childObligations?.[childKey] ?? {} : row;
     const save = patch => this.journal.update(attemptId, childItem
-      ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, ...patch } } }
+      ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, ...patch,
+        ...(owner.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) } } }
       : { ...patch, ...(row.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) });
     const saveOperation = (field, itemKey, prior, status, patch) => {
       const timingKey = JSON.stringify([field, itemKey]);
@@ -223,8 +230,13 @@ export class CodexAdapter {
       if (prior && prior !== 'inProgress' && prior !== status) fail('SETTLEMENT_CONFLICT');
       if (!prior && Object.keys(childTurns).length >= 4096) fail('CHILD_TURN_TRACKING_LIMIT');
       Object.defineProperty(childTurns, key, { value: status, enumerable: true, writable: true, configurable: true });
+      const child = row.childObligations?.[key] ?? {};
+      const phase = !prior && status === 'inProgress' && observedAt !== undefined
+        ? { initialInference: 'inProgress', initialInferenceAt: observedAt }
+        : status !== 'inProgress' && child.initialInference === 'inProgress' ? { initialInference: 'completed' } : {};
       // This settles only an observed child turn, never its tools or descendants.
-      return this.journal.update(attemptId, { childTurns });
+      return this.journal.update(attemptId, { childTurns,
+        ...(Object.keys(phase).length ? { childObligations: { ...row.childObligations, [key]: { ...child, ...phase } } } : {}) });
     }
     if (['item/started', 'item/completed'].includes(notification?.method) &&
         params?.item?.type === 'collabAgentToolCall' && params.item.tool === 'spawnAgent') {
@@ -356,7 +368,10 @@ export class CodexAdapter {
       }
       const patch = {};
       if (prior !== turn.status) {
-        if (child) patch.childTurns = { ...row.childTurns, [key]: turn.status };
+        if (child) {
+          patch.childTurns = { ...row.childTurns, [key]: turn.status };
+          if (owner.initialInference === 'inProgress') recovered.initialInference = 'completed';
+        }
         else Object.assign(patch, { rootSettled: true, status: 'finishing', nativeOutcome: turn.status,
           ...(row.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) });
       }

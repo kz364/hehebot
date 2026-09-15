@@ -70,6 +70,17 @@ test('initial inference is reported without guessing legacy state or mutating cu
   assert.equal((await inspectCodexRecovery(f.directory)).native, null);
 });
 
+test('child initial phase inspection preserves its clock and rejects missing timing', async t => {
+  const f = await fixture(t), phase = { initialInference: 'inProgress', initialInferenceAt: '2026-09-15T01:02:00.000Z' };
+  await f.journal.write(attemptId, { ...f.native, childObligations: { [childKey]: phase } });
+  const before = await snapshot(f.directory), report = await inspectCodexRecovery(f.directory);
+  assert.equal(report.native.children[0].initialInferenceAt, phase.initialInferenceAt);
+  assert.equal(report.native.children[0].initialInference, 'inProgress');
+  assert.deepEqual(await snapshot(f.directory), before);
+  await f.journal.write(attemptId, { ...f.native, childObligations: { [childKey]: { initialInference: 'inProgress' } } });
+  assert.equal((await inspectCodexRecovery(f.directory)).native, null);
+});
+
 test('recovery includes every recorded tool category with exact root/child and collaboration identity', async t => {
   const f = await fixture(t);
   await f.journal.write(attemptId, { ...f.native, fileChanges: { 'file/19': 'declined' }, dynamicCalls: { 'same-item': 'failed' },

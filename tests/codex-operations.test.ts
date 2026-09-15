@@ -41,7 +41,7 @@ it('persists native invocation states into SQLite without authorizing result pub
   } finally { f.close(); await rm(directory, { recursive: true, force: true }); }
 });
 
-it.each(['tool', 'initial'])('Worker watchdog cancels at the %s phase deadline, not after the hard deadline', async phase => {
+it.each(['tool', 'initial', 'child'])('Worker watchdog cancels at the %s phase deadline, not after the hard deadline', async phase => {
   const f = fixture(true), directory = await mkdtemp(join(tmpdir(), 'hehebot-tool-deadline-'));
   try {
     const life = new LifecycleCore(f.store, f.core);
@@ -51,7 +51,10 @@ it.each(['tool', 'initial'])('Worker watchdog cancels at the %s phase deadline, 
     const claim = life.claim(identity)!; life.submitted(identity, claim.run.id, 1, 'turn');
     const journal = new FileJournal(directory);
     await journal.putIfAbsent('native-attempt', { status: 'running', threadId: 'root', nativeRunId: 'turn',
-      ...(phase === 'initial' ? { initialInference: 'inProgress' } : { commands: { call: 'inProgress' },
+      ...(phase === 'initial' ? { initialInference: 'inProgress' } : phase === 'child' ? {
+        childTurns: { '["child","turn"]': 'inProgress' }, childObligations: { '["child","turn"]': {
+          initialInference: 'inProgress', initialInferenceAt: '2026-09-10T00:07:00.000Z' } },
+      } : { commands: { call: 'inProgress' },
         operationTimes: { '["commands","call"]': { startedAt: '2026-09-10T00:10:00.000Z', lastProgressAt: '2026-09-10T00:10:00.000Z' } } }) });
     const projection = new CodexOperations({ journal, attemptId: 'native-attempt', runId: claim.run.id, attempt: 1,
       startedAt: f.core.now(), deadlineAt: claim.deadline_at });
@@ -62,7 +65,7 @@ it.each(['tool', 'initial'])('Worker watchdog cancels at the %s phase deadline, 
     expect(f.store.run(claim.run.id).status).toBe('running');
     f.setNow(phase === 'initial' ? '2026-09-10T00:05:00.000Z' : '2026-09-10T00:12:00.000Z'); life.watchdog();
     expect(f.store.run(claim.run.id)).toMatchObject({ status: 'cancelling', error_code: 'DEADLINE_EXCEEDED' });
-    expect(f.db.all("SELECT id FROM operations WHERE status='active'")).toHaveLength(2);
+    expect(f.db.all("SELECT id FROM operations WHERE status='active'")).toHaveLength(phase === 'child' ? 3 : 2);
     expect(f.db.all("SELECT status FROM attempts WHERE run_id=?", claim.run.id)).toEqual([{ status: 'running' }]);
   } finally { f.close(); await rm(directory, { recursive: true, force: true }); }
 });
