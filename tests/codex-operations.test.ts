@@ -41,7 +41,7 @@ it('persists native invocation states into SQLite without authorizing result pub
   } finally { f.close(); await rm(directory, { recursive: true, force: true }); }
 });
 
-it.each(['tool', 'initial', 'child'])('Worker watchdog cancels at the %s phase deadline, not after the hard deadline', async phase => {
+it.each(['tool', 'initial', 'child', 'startup'])('Worker watchdog cancels at the %s phase deadline, not after the hard deadline', async phase => {
   const f = fixture(true), directory = await mkdtemp(join(tmpdir(), 'hehebot-tool-deadline-'));
   try {
     const life = new LifecycleCore(f.store, f.core);
@@ -54,6 +54,8 @@ it.each(['tool', 'initial', 'child'])('Worker watchdog cancels at the %s phase d
       ...(phase === 'initial' ? { initialInference: 'inProgress' } : phase === 'child' ? {
         childTurns: { '["child","turn"]': 'inProgress' }, childObligations: { '["child","turn"]': {
           initialInference: 'inProgress', initialInferenceAt: '2026-09-10T00:07:00.000Z' } },
+      } : phase === 'startup' ? { spawns: { spawn: { status: 'completed', receiverThreadIds: ['child'] } },
+        operationTimes: { '["spawns","spawn"]': { startedAt: '2026-09-10T00:09:00.000Z', lastProgressAt: '2026-09-10T00:10:00.000Z' } },
       } : { commands: { call: 'inProgress' },
         operationTimes: { '["commands","call"]': { startedAt: '2026-09-10T00:10:00.000Z', lastProgressAt: '2026-09-10T00:10:00.000Z' } } }) });
     const projection = new CodexOperations({ journal, attemptId: 'native-attempt', runId: claim.run.id, attempt: 1,

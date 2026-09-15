@@ -519,13 +519,17 @@ try {
   if (supervisorMode) {
     await supervisor.maintain();
     const operations = await supervisor.operations();
+    const observed = await eventJournal.get(adapterAttempt);
     check('real heartbeat retains unknown native coverage after observed invocation termination', () => {
       assert.equal(operations.filter(op => op.status === 'unknown').length, 1);
       assert.equal(operations.find(op => op.kind === 'inference').status, 'settled');
       if (supervisorChildMode) {
-        assert.equal(operations.length, 12);
+        assert.equal(operations.length, 13);
         assert.equal(operations.filter(op => op.kind === 'inference' && op.status === 'settled').length, 3);
-        assert.equal(operations.find(op => op.kind === 'child').status, 'settled');
+        assert.equal(operations.filter(op => op.kind === 'child' && op.status === 'settled').length, 2);
+        const startup = operations.filter(op => op.kind === 'child' && Date.parse(op.deadline_at) - Date.parse(op.started_at) === 120000);
+        assert.equal(startup.length, 1);
+        assert.equal(startup[0].started_at, observed.operationTimes[JSON.stringify(['spawns', Object.keys(observed.spawns)[0]])].lastProgressAt);
         assert.equal(operations.filter(op => op.kind === 'tool' && op.status === 'settled').length, 7);
       }
       assert.ok(operations.every(op => op.run_id === runId && op.attempt === attempt));

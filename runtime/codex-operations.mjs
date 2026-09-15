@@ -37,6 +37,14 @@ export class CodexOperations {
     };
     const status = (value, terminal) => value === 'inProgress' ? 'active'
       : terminal.includes(value) ? 'settled' : 'unknown';
+    const observedChildren = new Set();
+    for (const [key, value] of Object.entries(row?.childTurns ?? {})) {
+      if (!['inProgress', 'completed', 'failed', 'interrupted'].includes(value)) continue;
+      let identity;
+      try { identity = JSON.parse(key); } catch { fail('INVALID_CHILD_IDENTITY'); }
+      if (!Array.isArray(identity) || identity.length !== 2 || !identity.every(id => typeof id === 'string' && id.length > 0 && id.length <= 256)) fail('INVALID_CHILD_IDENTITY');
+      observedChildren.add(identity[0]);
+    }
     add(['coverage'], 'tool', 'unknown');
     add(['root'], 'inference', row?.rootSettled === true ? 'settled'
       : row?.status === 'cancelling' ? 'cancelling' : row?.status === 'running' ? 'active' : 'unknown');
@@ -59,7 +67,17 @@ export class CodexOperations {
         for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], field === 'reasoningItems' ? 'inference' : 'tool', status(value, terminal), owner.operationTimes?.[JSON.stringify([field, id])]);
       }
       for (const [id, spawn] of Object.entries(owner.spawns ?? {})) {
-        add([identity, 'spawns', id], 'tool', status(spawn?.status, ['completed', 'failed']), owner.operationTimes?.[JSON.stringify(['spawns', id])]);
+        const timing = owner.operationTimes?.[JSON.stringify(['spawns', id])];
+        add([identity, 'spawns', id], 'tool', status(spawn?.status, ['completed', 'failed']), timing);
+        // A terminal spawn's observed progress time is immutable. Acknowledged
+        // receivers need their own bound before any child turn arrives; observing
+        // that turn ends startup only, never its work or descendants.
+        if (timing && ['completed', 'failed', 'interrupted'].includes(spawn?.status)) {
+          if (!Array.isArray(spawn.receiverThreadIds) || !spawn.receiverThreadIds.every(id => typeof id === 'string' && id.length > 0 && id.length <= 256) ||
+              new Set(spawn.receiverThreadIds).size !== spawn.receiverThreadIds.length) fail('INVALID_CHILD_IDENTITY');
+          for (const receiver of spawn.receiverThreadIds) add([identity, 'childStartup', id, receiver], 'child',
+            observedChildren.has(receiver) ? 'settled' : 'active', { startedAt: timing.lastProgressAt, lastProgressAt: timing.lastProgressAt });
+        }
       }
     };
     items(row, [row.threadId, row.nativeRunId]);

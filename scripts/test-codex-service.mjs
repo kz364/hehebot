@@ -462,10 +462,16 @@ try {
   await service.maintain();
   const operations = await service.supervisor.operations();
   assert.equal(native.initialInference, 'completed');
-  assert.equal(operations.length, childMode ? 7 : expectedToolCalls + 3 + Number(reasoningMode));
+  assert.equal(operations.length, childMode ? 8 : expectedToolCalls + 3 + Number(reasoningMode));
   if (childMode) {
     assert.ok(Object.values(native.childObligations).every(child => child.initialInference === 'completed'));
     assert.equal(operations.filter(operation => operation.kind === 'inference' && operation.status === 'settled').length, 3);
+    const startup = operations.filter(operation => operation.kind === 'child' && operation.deadline_at < dispatched.claim.deadline_at);
+    assert.equal(startup.length, 1); assert.equal(startup[0].status, 'settled');
+    const [spawnId] = Object.keys(native.spawns);
+    assert.equal(startup[0].started_at, native.operationTimes[JSON.stringify(['spawns', spawnId])].lastProgressAt);
+    assert.equal(Date.parse(startup[0].deadline_at) - Date.parse(startup[0].started_at), 120000);
+    report.childStartupClockObserved = true;
   }
   if (reasoningMode) {
     assert.deepEqual(Object.values(native.reasoningItems), ['completed']);

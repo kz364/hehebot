@@ -127,6 +127,36 @@ test('late root and child tools use independent two-minute clocks capped by the 
   assert.deepEqual(await f.journal.get('attempt-a'), before);
 });
 
+test('acknowledged children retain independent startup deadlines until exact turn evidence', async t => {
+  const f = await fixture(t), timing = { startedAt: '2026-09-14T01:09:00.000Z', lastProgressAt: '2026-09-14T01:10:00.000Z' };
+  await f.journal.putIfAbsent('attempt-a', { threadId: 'root', nativeRunId: 'turn', status: 'finishing', rootSettled: true,
+    spawns: { spawn: { status: 'completed', receiverThreadIds: ['child-a', 'child-b'] } },
+    operationTimes: { '["spawns","spawn"]': timing }, childTurns: { '["unrelated","turn"]': 'inProgress' } });
+  const before = await f.journal.get('attempt-a');
+  const first = (await f.operations.snapshot()).filter(op => op.kind === 'child' && op.deadline_at < f.config.deadlineAt);
+  assert.equal(first.length, 2); assert.notEqual(first[0].id, first[1].id);
+  assert.ok(first.every(op => op.status === 'active' && op.started_at === timing.lastProgressAt && op.last_progress_at === timing.lastProgressAt && op.deadline_at === '2026-09-14T01:12:00.000Z'));
+  assert.deepEqual(await f.journal.get('attempt-a'), before);
+  await f.journal.update('attempt-a', { childTurns: { '["child-a","turn"]': 'interrupted', '["child-b","turn"]': 'declined' } });
+  const next = (await new CodexOperations(f.config).snapshot()).filter(op => first.some(prior => prior.id === op.id));
+  assert.deepEqual(next, [{ ...first[0], status: 'settled' }, first[1]]);
+  const capped = await new CodexOperations({ ...f.config, deadlineAt: '2026-09-14T01:11:00.000Z' }).snapshot();
+  assert.ok(capped.filter(op => first.some(prior => prior.id === op.id)).every(op => op.deadline_at === '2026-09-14T01:11:00.000Z'));
+});
+
+test('nested startup uses its own spawn clock; incomplete and legacy spawns invent no clock', async t => {
+  const f = await fixture(t);
+  await f.journal.putIfAbsent('attempt-a', { status: 'running', spawns: {
+    legacy: { status: 'completed', receiverThreadIds: ['legacy-child'] },
+    open: { status: 'inProgress', receiverThreadIds: ['pending-child'] },
+  }, operationTimes: { '["spawns","open"]': { startedAt: '2026-09-14T01:02:00.000Z', lastProgressAt: '2026-09-14T01:02:00.000Z' } },
+  childObligations: { '["child","turn"]': { spawns: { nested: { status: 'failed', receiverThreadIds: ['grandchild'] } },
+    operationTimes: { '["spawns","nested"]': { startedAt: '2026-09-14T01:17:00.000Z', lastProgressAt: '2026-09-14T01:19:00.000Z' } } } } });
+  const startups = (await f.operations.snapshot()).filter(op => op.kind === 'child');
+  assert.equal(startups.length, 1); assert.equal(startups[0].status, 'active');
+  assert.equal(startups[0].started_at, '2026-09-14T01:19:00.000Z'); assert.equal(startups[0].deadline_at, f.config.deadlineAt);
+});
+
 test('initial silence has a replay-stable five-minute bound distinct from root and coverage', async t => {
   const f = await fixture(t);
   await f.journal.putIfAbsent('attempt-a', { status: 'running', initialInference: 'inProgress' });

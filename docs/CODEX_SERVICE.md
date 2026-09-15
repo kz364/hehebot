@@ -147,8 +147,20 @@ or terminal observation/readback, not parent completion. Its independent five-mi
 deadline is capped by the admitted task deadline. Duplicate starts cannot reset
 it; missing legacy timestamps are never reconstructed. The native child fixture
 observes this phase while withholding the child's first model response, after
-the parent has completed. These bounds do not cover time before a child start
-notification, later gaps after tools, or token-progress liveness.
+the parent has completed. Terminal spawn observations with retained host clocks
+also project a two-minute startup operation per acknowledged receiver, capped
+by the task deadline. Its identity includes the spawning owner, spawn item and
+receiver. The clock uses the spawn's last recorded progress instant, never a
+heartbeat/read time; history-only completion conservatively retains the earlier
+live clock rather than inventing completion time. Any exact valid turn observation
+for that receiver ends startup, including terminal readback or a turn observed
+before spawn completion. Parent completion and other children do not end it.
+Nested spawns use the same rule. Failed/interrupted spawns retaining receivers
+do not erase their startup obligations. Legacy spawns without clocks receive no
+invented phase. The spawn invocation remains independently accounted for.
+SQLite watchdog tests distinguish the instant before and at startup expiry;
+native child fixtures check the retained startup timestamp and settled phase.
+These bounds do not cover later gaps after tools or token-progress liveness.
 Those remaining quiet periods, explicit longer transfer/shell allowances and
 progress-based phase extensions remain separate work; this is not full S19 or
 proof of the native operation's true start before its host notification arrived.
@@ -161,7 +173,8 @@ held open. The actual service child facade persists the native-to-Worker mapping
 an owner `run.cancel` command then travels through Worker heartbeat and supervisor
 maintenance to exactly one child `turn/interrupt`, even across repeated maintenance.
 The fixture separately observes the exact interrupted turn and HTTP connection
-closure. Seven root-owned heartbeat operations retain one unknown coverage record.
+closure. Eight root-owned heartbeat operations, including the settled child startup
+phase, retain one unknown coverage record.
 Worker completion returns HTTP 409 `CANCEL_UNCONFIRMED`; the root remains running,
 the child remains cancelling, and supervisor completion/sleep are denied. This is
 not recursive settlement, model judgment, active-work crash recovery, per-child

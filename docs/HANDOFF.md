@@ -209,6 +209,22 @@ all native/service fixtures, typecheck and build. E02 remains partial; existing
 single-executor/provider/OS-lock assumptions remain. No accounts, live provider
 operations, pushes, deployments or production gate changes.
 
+Child-startup checkpoint (2026-09-15): terminal spawns with host clocks project
+one two-minute child startup operation per receiver, capped by the task deadline.
+Start/progress use the retained spawn lastProgressAt, never a heartbeat time.
+Exact valid child-turn evidence settles startup only, even if received before
+spawn completion; parent and sibling completion do not. Nested and failed spawn
+receivers retain independent obligations; legacy missing clocks are not invented.
+History-only completion conservatively uses the earlier retained live clock.
+Two regressions failed first; 41 adapter/projection and 5 SQLite watchdog tests
+passed, including exact expiry. Native fixtures verify clock identity and retained
+startup settlement. Combined verification passed 896 control / 207 runtime tests,
+all native/service fixtures, typecheck and build after correcting an outdated
+native count assertion and a test-update variable error. Production stays off.
+Next quiet-gap work needs explicit ordered journal phases, not inference from
+equal wall-clock timestamps of parallel tool completions. No code for that next
+phase has been added. No accounts, live providers, push or deployment involved.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.
