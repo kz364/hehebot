@@ -165,7 +165,7 @@ test('inspection preserves exact root and child operation clocks without copying
 test('clock lookup preserves nested collaboration keys and same item IDs across categories and owners', async t => {
   const f = await fixture(t), at = '2026-09-15T01:02:00.000Z', later = '2026-09-15T01:03:00.000Z';
   const root = { startedAt: at, lastProgressAt: at }, child = { startedAt: later, lastProgressAt: later };
-  const categories = ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems'];
+  const categories = ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems', 'planItems'];
   const inventory = Object.fromEntries(categories.map(field => [field, { same: 'inProgress' }]));
   inventory.collabCalls = { '["wait","same"]': 'inProgress', '["sendMessage","same"]': 'completed' };
   const clocks = timing => Object.fromEntries([...categories.map(field => [JSON.stringify([field, 'same']), timing]),
@@ -174,7 +174,7 @@ test('clock lookup preserves nested collaboration keys and same item IDs across 
     ...clocks(root), '["spawns","spawn"]': root }, childObligations: { [childKey]: { ...inventory, operationTimes: clocks(child) } } });
   const report = await inspectCodexRecovery(f.directory);
   assert.deepEqual(report.issues, []);
-  assert.equal(report.native.observations.length, 23);
+  assert.equal(report.native.observations.length, 25);
   for (const observation of report.native.observations) assert.deepEqual(observation.timing, observation.threadId === 'root-19' ? root : child);
   assert.deepEqual(report.native.observations.filter(row => row.kind === 'collabCalls').map(row => row.tool), ['wait', 'sendMessage', 'wait', 'sendMessage']);
   await f.journal.write(attemptId, { ...f.native, childObligations: { [childKey]: {

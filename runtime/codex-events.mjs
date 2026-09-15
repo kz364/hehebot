@@ -39,7 +39,7 @@ export class CodexEventRouter {
     }
     const spawn = params?.item?.type === 'collabAgentToolCall' && params.item.tool === 'spawnAgent';
     const collab = params?.item?.type === 'collabAgentToolCall' && OBSERVED_COLLAB_TOOLS.includes(params.item.tool);
-    const boundaryOnly = ['webSearch', 'sleep', 'contextCompaction', 'imageGeneration', 'reasoning', 'agentMessage'].includes(params?.item?.type);
+    const boundaryOnly = ['webSearch', 'sleep', 'contextCompaction', 'imageGeneration', 'reasoning', 'plan', 'agentMessage'].includes(params?.item?.type);
     const turn = ['turn/started', 'turn/completed'].includes(method);
     const message = method === 'item/completed' && params?.item?.type === 'agentMessage';
     if (['item/started', 'item/completed'].includes(method) &&

@@ -378,6 +378,17 @@ VM idle/cost measurement. Verification: 74 focused tests; 901 control / 240 runt
 combined, native/service fixtures, typecheck and build passed. Private logs:
 `.local/quiet-regression-focused.log`, `.local/quiet-regression-combined.log`.
 
+Plan-item checkpoint (2026-09-16): the generated 0.154.0 `PlanThreadItem`
+schema defines experimental `plan` with ID/text and no status enum. The host now
+projects only ID/type at boundaries and stores `planItems` lifetimes/clocks;
+text/deltas are discarded. Root/child/category identities, replay stability,
+five-minute task-capped inference bounds and offline clocks pass synthetic tests.
+Root completion never settles a still-open plan. No Plan/experimental setting,
+tool permission or production gate is enabled. Native Plan-item emission through
+the service is still unverified. Verification: 95 focused tests; 901 control / 242
+runtime combined, all existing native/service fixtures, typecheck/build passed.
+Private logs: `.local/plan-item-focused.log`, `.local/plan-item-combined.log`.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

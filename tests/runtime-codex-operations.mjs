@@ -211,12 +211,13 @@ test('child initial phase is independent, capped, replay stable and refuses inco
   }
 });
 
-test('reasoning uses five-minute independent phase clocks, not tool clocks or root settlement', async t => {
-  const f = await fixture(t), key = '["reasoningItems","same"]';
+for (const field of ['reasoningItems', 'planItems'])
+test(`${field} uses five-minute independent phase clocks, not tool clocks or root settlement`, async t => {
+  const f = await fixture(t), key = JSON.stringify([field, 'same']);
   await f.journal.putIfAbsent('attempt-a', { status: 'finishing', rootSettled: true,
-    reasoningItems: { same: 'inProgress', legacy: 'completed', invalid: 'failed' },
+    [field]: { same: 'inProgress', legacy: 'completed', invalid: 'failed' },
     operationTimes: { [key]: { startedAt: '2026-09-14T01:10:00.000Z', lastProgressAt: '2026-09-14T01:10:00.000Z' } },
-    childObligations: { '["child","turn"]': { reasoningItems: { same: 'completed' },
+    childObligations: { '["child","turn"]': { [field]: { same: 'completed' },
       operationTimes: { [key]: { startedAt: '2026-09-14T01:18:00.000Z', lastProgressAt: '2026-09-14T01:18:30.000Z' } } } } });
   const rows = await f.operations.snapshot();
   assert.deepEqual(rows.slice(2).map(row => [row.kind, row.status, row.deadline_at]), [

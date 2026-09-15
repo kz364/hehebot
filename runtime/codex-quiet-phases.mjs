@@ -1,6 +1,6 @@
 const fail = () => { throw Object.assign(new Error('INVALID_QUIET_PHASE'), { code: 'INVALID_QUIET_PHASE' }); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-export const QUIET_PHASE_FIELDS = Object.freeze(['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems', 'spawns', 'outputItems', 'messageStarts']);
+export const QUIET_PHASE_FIELDS = Object.freeze(['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems', 'planItems', 'spawns', 'outputItems', 'messageStarts']);
 const timestamp = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
   Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
 

@@ -544,11 +544,13 @@ test('host ingress time survives buffering, replay and history without borrowing
   assert.deepEqual(f.recoveries, []);
 });
 
-test('reasoning boundaries retain private content-free clocks and isolate child completion from root tools', async t => {
+for (const [type, field] of [['reasoning', 'reasoningItems'], ['plan', 'planItems']])
+test(`${type} boundaries retain private content-free clocks and isolate child completion from root tools`, async t => {
   let now = Date.parse('2026-09-15T01:03:00.000Z');
   const f = await fixture(t, { now: () => now });
+  const clockKey = JSON.stringify([field, 'same']);
   const reasoning = (threadId, turnId, method = 'item/started') => ({ method, params: { threadId, turnId,
-    item: { type: 'reasoning', id: 'same', summary: ['PRIVATE_REASONING'], content: ['PRIVATE_REASONING'], status: 'completed' } } });
+    item: { type, id: 'same', text: 'PRIVATE_TEXT', summary: ['PRIVATE_REASONING'], content: ['PRIVATE_REASONING'], status: 'completed' } } });
   f.transport.emit('notification', reasoning('parent', 'turn')); await f.router.flush();
   now += 60000; await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
   f.transport.emit('notification', spawn('completed', ['child']));
@@ -557,19 +559,19 @@ test('reasoning boundaries retain private content-free clocks and isolate child 
   f.transport.emit('notification', command('parent', 'turn', 'tool'));
   await f.router.flush();
   const before = await f.journal.get('a');
-  assert.deepEqual(before.reasoningItems, { same: 'inProgress' });
-  assert.equal(before.operationTimes['["reasoningItems","same"]'].startedAt, '2026-09-15T01:03:00.000Z');
-  assert.equal(before.childObligations['["child","child-turn"]'].operationTimes['["reasoningItems","same"]'].startedAt, '2026-09-15T01:04:00.000Z');
+  assert.deepEqual(before[field], { same: 'inProgress' });
+  assert.equal(before.operationTimes[clockKey].startedAt, '2026-09-15T01:03:00.000Z');
+  assert.equal(before.childObligations['["child","child-turn"]'].operationTimes[clockKey].startedAt, '2026-09-15T01:04:00.000Z');
   now += 60000; f.transport.emit('notification', reasoning('parent', 'turn')); await f.router.flush();
   assert.deepEqual(await f.journal.get('a'), before);
   f.transport.emit('notification', reasoning('child', 'child-turn', 'item/completed'));
   f.transport.emit('notification', root('parent', 'turn')); await f.router.flush();
   const after = await f.journal.get('a');
-  assert.equal(after.reasoningItems.same, 'inProgress'); assert.equal(after.commands.tool, 'inProgress');
-  assert.equal(after.childObligations['["child","child-turn"]'].reasoningItems.same, 'completed');
+  assert.equal(after[field].same, 'inProgress'); assert.equal(after.commands.tool, 'inProgress');
+  assert.equal(after.childObligations['["child","child-turn"]'][field].same, 'completed');
   assert.equal(after.childTurns['["child","child-turn"]'], 'inProgress');
-  assert.doesNotMatch(JSON.stringify(after), /PRIVATE_REASONING/);
-  assert.equal(f.router.project(reasoning('parent', 'turn', 'item/reasoning/textDelta')), null);
+  assert.doesNotMatch(JSON.stringify(after), /PRIVATE_/);
+  assert.equal(f.router.project(reasoning('parent', 'turn', `item/${type}/textDelta`)), null);
   assert.deepEqual(f.recoveries, []); assert.deepEqual(f.calls, []);
 });
 

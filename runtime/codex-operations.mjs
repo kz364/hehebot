@@ -74,10 +74,10 @@ export class CodexOperations {
         clocks.delete(key);
         return timing;
       };
-      for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems']) {
-        const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems'].includes(field) ? ['completed']
+      for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems', 'planItems']) {
+        const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems', 'planItems'].includes(field) ? ['completed']
           : ['completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
-        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], field === 'reasoningItems' ? 'inference' : 'tool', status(value, terminal), takeClock(field, id));
+        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], ['reasoningItems', 'planItems'].includes(field) ? 'inference' : 'tool', status(value, terminal), takeClock(field, id));
       }
       for (const [id, spawn] of Object.entries(owner.spawns ?? {})) {
         const timing = takeClock('spawns', id);

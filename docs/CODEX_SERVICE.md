@@ -199,6 +199,18 @@ refuses unsupported paths (including schema-advertised variants without a host
 projection); it does not implement their operation coverage. Recovery retains
 uncertainty and does not prove native termination or permit sleep/replay.
 
+The pinned 0.154.0 schema's experimental `plan` item (`id`, `text`, `type`)
+now has a content-free host projection. Only its ID and start/completion boundary
+are retained under `planItems`; text and deltas are discarded, and native-supplied
+status fields do not determine lifetime. Its clock uses the five-minute inference
+bound capped by the task deadline, with separate root/child/category identity.
+Replay cannot refresh it, root completion cannot erase it, and exact item completion
+ends only that item's lifetime. Post-plan quiet phases and offline inspection use
+the same existing contracts. This does not enable experimental API/Plan mode,
+render plans, execute their text or authorize effects. Synthetic boundary fixtures
+verify this projection; actual Plan-mode item emission through service assembly
+remains unverified, as does full operation coverage.
+
 Completed message phases use `outputItems` and the exact message ID, not message
 text or a new content copy. A live message during an observed active tool opens
 no quiet phase. A message after exact turn termination cannot reopen one. Root
