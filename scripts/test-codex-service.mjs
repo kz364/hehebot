@@ -47,7 +47,7 @@ async function stop(child) {
   try { await wait(() => child.exitCode !== null || child.signalCode !== null, 'worker stop', 5000); }
   catch { child.kill('SIGKILL'); await wait(() => child.exitCode !== null || child.signalCode !== null, 'worker forced stop', 2000); }
 }
-function send(res, output) {
+async function send(res, output, duringPlan = undefined) {
   const response = { id: `resp_${randomUUID()}`, object: 'response', created_at: 1, status: 'completed', error: null,
     incomplete_details: null, model: 'fixture-model', output, parallel_tool_calls: true, tools: [], tool_choice: 'auto',
     usage: { input_tokens: 31, input_tokens_details: { cached_tokens: 7 }, output_tokens: 13,
@@ -60,7 +60,14 @@ function send(res, output) {
     if (item.type === 'function_call') event('response.function_call_arguments.done', { output_index, item_id: item.id, arguments: item.arguments });
     else if (item.type === 'message') {
       event('response.content_part.added', { output_index, item_id: item.id, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } });
-      event('response.output_text.delta', { output_index, item_id: item.id, content_index: 0, delta: item.content[0].text });
+      const text = item.content[0].text;
+      if (duringPlan) {
+        const split = text.indexOf('</proposed_plan>');
+        assert.ok(split > 0);
+        event('response.output_text.delta', { output_index, item_id: item.id, content_index: 0, delta: text.slice(0, split) });
+        await duringPlan();
+        event('response.output_text.delta', { output_index, item_id: item.id, content_index: 0, delta: text.slice(split) });
+      } else event('response.output_text.delta', { output_index, item_id: item.id, content_index: 0, delta: text });
       event('response.output_text.done', { output_index, item_id: item.id, content_index: 0, text: item.content[0].text });
       event('response.content_part.done', { output_index, item_id: item.id, content_index: 0, part: item.content[0] });
     }
@@ -135,7 +142,7 @@ try {
         const result = body.input.find(item => item.type === 'function_call_output' && item.call_id === 'question_call_43');
         assert.deepEqual(JSON.parse(result.output), { answers: questionAnswers });
         report.nativeQuestionAnswerContext = true;
-        send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
+        await send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
           content: [{ type: 'output_text', text: 'SERVICE_ASSEMBLY_OK', annotations: [] }] }]);
         return;
       }
@@ -147,12 +154,12 @@ try {
           if (output) {
             childThreadId = JSON.parse(String(output.output)).agent_id;
             assert.equal(typeof childThreadId, 'string');
-            send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
+            await send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
               content: [{ type: 'output_text', text: 'SERVICE_PARENT_DONE', annotations: [] }] }]);
           } else {
             const tool = body.tools.find(tool => tool.name === 'spawn_agent' || tool.tools?.some(nested => nested.name === 'spawn_agent'));
             assert.ok(tool, 'native spawn tool advertised');
-            send(res, [{ id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
+            await send(res, [{ id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
               ...(tool.type === 'namespace' ? { namespace: tool.name } : {}), name: 'spawn_agent',
               arguments: JSON.stringify({ message: 'SERVICE_CHILD_PROOF', agent_type: 'default' }) }]);
           }
@@ -171,7 +178,7 @@ try {
       if (toolRequests === 1) {
         const tool = body.tools.find(tool => tool.name?.includes('hehebot_list_routines')) ?? body.tools.find(tool => tool.name === 'mcp__hehebot');
         assert.ok(tool);
-        send(res, [...(childMode ? [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant', phase: 'commentary',
+        await send(res, [...(childMode ? [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant', phase: 'commentary',
           content: [{ type: 'output_text', text: 'SERVICE_CHILD_PROGRESS', annotations: [] }] }] : []),
           ...(reasoningMode ? [{ id: 'rs_fixture_43', type: 'reasoning', summary: [{ type: 'summary_text', text: 'PRIVATE_SYNTHETIC_REASONING_43' }] }] : []),
           ...Array.from({ length: expectedToolCalls }, () => ({ id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
@@ -200,7 +207,7 @@ try {
         if (questionsMode) {
           const tool = body.tools.find(tool => tool.name === 'request_user_input' || tool.tools?.some(nested => nested.name === 'request_user_input'));
           assert.ok(tool);
-          send(res, [{ id: 'question_item_43', type: 'function_call', status: 'completed', call_id: 'question_call_43',
+          await send(res, [{ id: 'question_item_43', type: 'function_call', status: 'completed', call_id: 'question_call_43',
             ...(tool.type === 'namespace' ? { namespace: tool.name } : {}), name: 'request_user_input', arguments: JSON.stringify({ questions: [
               { id: 'route43', header: 'Route', question: 'Choose route', options: [{ label: 'West43', description: 'Western' }, { label: 'East19', description: 'Eastern' }] },
               { id: 'timing19', header: 'Timing', question: 'Choose timing', options: [{ label: 'Now19', description: 'Now' }, { label: 'Later43', description: 'Later' }] },
@@ -217,12 +224,28 @@ try {
           res.once('close', () => { if (!res.writableEnded) crashClosed = true; });
           return;
         }
-        send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
-          content: [{ type: 'output_text', text: planMode ? 'SERVICE_ASSEMBLY_OK\n<proposed_plan>\nPRIVATE_PLAN_43\n</proposed_plan>' : 'SERVICE_ASSEMBLY_OK', annotations: [] }] }]);
+        await send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
+          content: [{ type: 'output_text', text: planMode ? 'SERVICE_ASSEMBLY_OK\n<proposed_plan>\nPRIVATE_PLAN_43\n</proposed_plan>' : 'SERVICE_ASSEMBLY_OK', annotations: [] }] }], planMode ? async () => {
+            const row = await wait(async () => {
+              const current = await service.observe();
+              return Object.values(current.planItems ?? {}).includes('inProgress') && current;
+            }, 'open native plan stream');
+            assert.equal(row.rootSettled, false);
+            assert.doesNotMatch(JSON.stringify(row), /PRIVATE_PLAN_43/);
+            const active = (await service.supervisor.operations()).filter(op => op.kind === 'inference' && op.status === 'active' &&
+              Date.parse(op.deadline_at) - Date.parse(op.started_at) === 300000);
+            assert.equal(active.length, 1);
+            const [planId] = Object.keys(row.planItems);
+            assert.equal(active[0].started_at, row.operationTimes[JSON.stringify(['planItems', planId])].startedAt);
+            await sleep(75);
+            const reread = await service.supervisor.operations();
+            assert.deepEqual(reread.find(op => op.id === active[0].id), active[0]);
+            report.planStreamActiveBounded = true;
+          } : undefined);
       }
     } catch (error) {
       errors.push(error.message);
-      if (!res.headersSent) send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
+      if (!res.headersSent) await send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
         content: [{ type: 'output_text', text: 'FIXTURE_FAILED', annotations: [] }] }]);
       else res.end();
     }

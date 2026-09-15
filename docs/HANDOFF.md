@@ -400,6 +400,16 @@ fixtures and typecheck/build. Logs: `.local/plan-native-focused.log` and
 `.local/plan-native-combined.log`. Native child Plan emission and held-stream expiry
 remain open. No runtime configuration or production gate changed.
 
+Open Plan stream follow-up (2026-09-16): the response writer now supports an
+awaited hold before the closing plan tag. While native generation is open, the
+fixture checks active five-minute accounting against the exact plan ID, an
+unsettled root, no retained plan text and unchanged progress on reread. It releases
+the tag and verifies normal completion. Focused fixture passed with two model
+requests; combined passed 901 control / 242 runtime tests, all native/service
+fixtures and typecheck/build. Logs: `.local/plan-stream-focused.log`,
+`.local/plan-stream-combined.log`. This is not watchdog expiry or forced native
+termination evidence; those and child Plan emission remain open.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

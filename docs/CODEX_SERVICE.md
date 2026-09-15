@@ -216,6 +216,12 @@ and preview, and offline clock preservation are verified. The native preview
 retains the newline preceding the plan; the fixture checks it exactly. This closes
 root Plan-item service emission evidence, not child Plan-mode emission, a held
 stream's expiry, authenticated model judgment or complete operation coverage.
+The fixture also withholds the closing tag and response completion until native
+plan start is journaled. While that stream is open, it verifies an active
+five-minute clock tied to the exact plan item, an unsettled root and no retained
+plan text; a later snapshot must preserve the clock unchanged. It then releases
+the closing tag and verifies ordinary completion. This short controlled hold
+tests active accounting, not watchdog expiry or forced native termination.
 
 Completed message phases use `outputItems` and the exact message ID, not message
 text or a new content copy. A live message during an observed active tool opens
