@@ -77,6 +77,13 @@ it('persists native invocation states into SQLite without authorizing result pub
       { kind: 'child', status: 'settled' }, { kind: 'inference', status: 'settled' },
       { kind: 'tool', status: 'active' }, { kind: 'tool', status: 'unknown' },
     ]);
+    const persisted = f.db.all('SELECT * FROM operations ORDER BY id'), lifecycle = life.get();
+    for (const invalid of [null, [], false, 'PRIVATE_INVALID_INVENTORY']) {
+      await journal.update('native-attempt', { childObligations: { [child]: { mcpCalls: invalid } } });
+      await expect(heartbeat()).rejects.toMatchObject({ code: 'INVALID_OPERATION_INVENTORY' });
+      expect(f.db.all('SELECT * FROM operations ORDER BY id')).toEqual(persisted);
+      expect(life.get()).toEqual(lifecycle);
+    }
     await journal.update('native-attempt', { childObligations: { [child]: { mcpCalls: { call: 'completed' } } } });
     await heartbeat(); await heartbeat();
     expect(f.db.all('SELECT id FROM operations')).toHaveLength(4);

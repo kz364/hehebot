@@ -15,6 +15,32 @@ async function fixture(t) {
   return { journal, config, operations: new CodexOperations(config) };
 }
 
+test('malformed root and child inventories cannot silently project as empty work', async t => {
+  const f = await fixture(t), child = '["child","turn"]';
+  const fields = ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions',
+    'collabCalls', 'imageGenerations', 'reasoningItems', 'planItems', 'messageStarts', 'spawns'];
+  for (const field of fields) for (const value of [null, [], ['inProgress'], false, 0, '', 'PRIVATE_INVENTORY']) {
+    for (const nested of [false, true]) {
+      const owner = { [field]: value };
+      await f.journal.write('attempt-a', { status: 'running', ...(nested ? { childObligations: { [child]: owner } } : owner) });
+      const before = await readFile(join(f.journal.directory, 'attempt-a.json'), 'utf8');
+      await assert.rejects(f.operations.snapshot(), { code: 'INVALID_OPERATION_INVENTORY', message: 'INVALID_OPERATION_INVENTORY' });
+      assert.equal(await readFile(join(f.journal.directory, 'attempt-a.json'), 'utf8'), before);
+    }
+  }
+  for (const value of [null, [], false, 0, '', 'PRIVATE_CHILD']) {
+    for (const patch of [{ childTurns: value }, { childObligations: value }, { childObligations: { [child]: value } }]) {
+      await f.journal.write('attempt-a', { status: 'running', ...patch });
+      await assert.rejects(f.operations.snapshot(), { code: 'INVALID_OPERATION_INVENTORY' });
+    }
+  }
+  await f.journal.write('attempt-a', { status: 'running' });
+  const legacy = await f.operations.snapshot();
+  await f.journal.write('attempt-a', { status: 'running', ...Object.fromEntries(fields.map(field => [field, {}])), childTurns: {}, childObligations: {} });
+  assert.deepEqual(await f.operations.snapshot(), legacy);
+  assert.deepEqual(legacy.map(op => op.status), ['unknown', 'active']);
+});
+
 test('only valid exact-owner output completions settle message lifetimes', async t => {
   const f = await fixture(t), child = JSON.stringify(['child-a', 'turn-a']);
   for (const childOwner of [false, true]) {

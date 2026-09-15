@@ -4,6 +4,18 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Operation inventory integrity checkpoint (2026-09-16): heartbeat projection rejects
+null, scalar and array inventories instead of interpreting them as absent work.
+This covers root/child tool and stream maps, spawn maps, child-turn maps and child
+owners. Absent fields and empty maps retain legacy behavior. Errors are fixed,
+content-free `INVALID_OPERATION_INVENTORY`; reads do not repair journal state.
+Verification: 25 runtime tests (200 malformed combinations) and 8 SQLite tests
+passed, including unchanged persisted operations/lease after failed projection.
+Logs: `.local/inventory-focused.log`, `.local/inventory-control.log`. Combined
+verification passed 903 control / 249 runtime tests, all native/service fixtures
+and typecheck/build dry run (`.local/inventory-combined.log`). Structural validation
+does not authenticate journals, prove complete coverage or authorize sleep/replay.
+
 Overlapping-stream watchdog checkpoint (2026-09-16): real FileJournal → operation
 projection → SQLite heartbeat/watchdog tests cover message and plan streams
 starting one minute apart. Either can complete without settling the other; the

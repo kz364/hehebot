@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 import { readQuietPhases } from './codex-quiet-phases.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
+const entries = value => {
+  if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value))) fail('INVALID_OPERATION_INVENTORY');
+  return Object.entries(value ?? {});
+};
 const uuid = value => {
   const hex = createHash('sha256').update(JSON.stringify(value)).digest('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
@@ -39,7 +43,7 @@ export class CodexOperations {
     const status = (value, terminal) => value === 'inProgress' ? 'active'
       : terminal.includes(value) ? 'settled' : 'unknown';
     const observedChildren = new Set();
-    for (const [key, value] of Object.entries(row?.childTurns ?? {})) {
+    for (const [key, value] of entries(row?.childTurns)) {
       if (!['inProgress', 'completed', 'failed', 'interrupted'].includes(value)) continue;
       let identity;
       try { identity = JSON.parse(key); } catch { fail('INVALID_CHILD_IDENTITY'); }
@@ -56,6 +60,7 @@ export class CodexOperations {
       add(['initialInference'], 'inference', status(row.initialInference, ['completed']), { startedAt: start, lastProgressAt: start });
     }
     const items = (owner, identity) => {
+      if (!owner || typeof owner !== 'object' || Array.isArray(owner)) fail('INVALID_OPERATION_INVENTORY');
       for (const [key, phase] of Object.entries(readQuietPhases(owner.quietPhases))) {
         const [field, id] = JSON.parse(key);
         if (!Object.hasOwn(owner[field] ?? {}, id)) fail('INVALID_QUIET_PHASE');
@@ -78,16 +83,16 @@ export class CodexOperations {
       for (const [id, digest] of Object.entries(owner.outputItems ?? {})) {
         if (!id || id.length > 256 || typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest)) fail('INVALID_OUTPUT_COMPLETION');
       }
-      for (const [id, marker] of Object.entries(owner.messageStarts ?? {})) {
+      for (const [id, marker] of entries(owner.messageStarts)) {
         if (marker !== true) fail('INVALID_OPERATION_TIMING');
         add([identity, 'messageStarts', id], 'inference', Object.hasOwn(owner.outputItems ?? {}, id) ? 'settled' : 'active', takeClock('messageStarts', id));
       }
       for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems', 'planItems']) {
         const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems', 'planItems'].includes(field) ? ['completed']
           : ['completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
-        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], ['reasoningItems', 'planItems'].includes(field) ? 'inference' : 'tool', status(value, terminal), takeClock(field, id));
+        for (const [id, value] of entries(owner[field])) add([identity, field, id], ['reasoningItems', 'planItems'].includes(field) ? 'inference' : 'tool', status(value, terminal), takeClock(field, id));
       }
-      for (const [id, spawn] of Object.entries(owner.spawns ?? {})) {
+      for (const [id, spawn] of entries(owner.spawns)) {
         const timing = takeClock('spawns', id);
         add([identity, 'spawns', id], 'tool', status(spawn?.status, ['completed', 'failed']), timing);
         // A terminal spawn's observed progress time is immutable. Acknowledged
@@ -105,8 +110,8 @@ export class CodexOperations {
       if (clocks.size) fail('INVALID_OPERATION_TIMING');
     };
     items(row, [row.threadId, row.nativeRunId]);
-    for (const [key, value] of Object.entries(row.childTurns ?? {})) add(['child', key], 'child', status(value, ['completed', 'failed', 'interrupted']));
-    for (const [key, owner] of Object.entries(row.childObligations ?? {})) items(owner, key);
+    for (const [key, value] of entries(row.childTurns)) add(['child', key], 'child', status(value, ['completed', 'failed', 'interrupted']));
+    for (const [key, owner] of entries(row.childObligations)) items(owner, key);
     return operations;
   }
 }

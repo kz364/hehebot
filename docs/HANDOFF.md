@@ -2,6 +2,19 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Operation inventory integrity checkpoint (2026-09-16)
+
+Codex heartbeat projection now rejects null/scalar/array observation maps and
+malformed child owners with `INVALID_OPERATION_INVENTORY`. Absent legacy fields
+and empty maps remain supported. Runtime tests cover 200 malformed combinations;
+SQLite integration confirms rejected projection leaves operations and lease
+unchanged. Focused results: 25 runtime / 8 control tests, logs
+`.local/inventory-focused.log` and `.local/inventory-control.log`. Combined check
+passed 903 control / 249 runtime tests, all native/service fixtures and typecheck/
+build dry run (`.local/inventory-combined.log`). No repair/replay, native settlement,
+provider operation or production-gate change. E01 and other credential-free work
+remain open; schedule unchanged.
+
 ## Overlapping-stream watchdog checkpoint (2026-09-16)
 
 The SQLite integration suite now checks message/plan streams with distinct
