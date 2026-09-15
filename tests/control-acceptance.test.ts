@@ -6,7 +6,7 @@ import { LifecycleCore } from '../src/core/lifecycle';
 import { NativeTaskLedger } from '../src/core/native-tasks';
 import { ResourceLedger } from '../src/core/resources';
 import { FakeProvider, type RuntimeRef } from '../src/providers';
-import { fixture, bot, routine } from './helpers';
+import { fixture, bot, otherBot, routine } from './helpers';
 
 const ref: RuntimeRef = { provider: 'fake', id: 'seeded-control' };
 const message = (text: string) => ({ schema_version: 1 as const, type: 'message.send' as const, payload: { conversation_id: bot, text } });
@@ -102,6 +102,45 @@ describe('100 reproducible drain/queue interleavings', () => {
       outcomes.push(committed);
     } finally { f.close(); }
   });
+});
+
+it('1000 passive publications persist recipient delivery without provider wake while execution is enabled', async () => {
+  const f = fixture(true), provider = new FakeProvider(), roomId = randomUUID();
+  try {
+    f.db.exec('UPDATE lifecycle SET provider_ref_json=?', JSON.stringify(ref));
+    expect(f.accept({ schema_version: 1, type: 'room.put', payload: { id: roomId, expected_revision: 0,
+      name: 'Passive volume fixture', member_ids: [bot, otherBot], default_responder_id: bot } }).status).toBe('applied');
+    const before = f.db.all('SELECT * FROM lifecycle');
+    for (let i = 0; i < 1000; i++) {
+      const command = { schema_version: 1 as const, type: 'room.publish' as const, payload: {
+        room_id: roomId, kind: 'context_update' as const, recipient_ids: [i % 3 === 0 ? otherBot : bot],
+        text: `Passive update ${i}`, references: [], cause_id: randomUUID(),
+      } };
+      const key = randomUUID(), receipt = f.accept(command, key);
+      expect(receipt.status).toBe('applied');
+      if (i % 100 === 0) {
+        expect(f.accept(command, key)).toEqual(receipt);
+        expect(f.accept(command).resource_id).toBe(receipt.resource_id);
+        // Reconstruct the controller between batches, then exercise its actual
+        // provider driver, rather than asserting an unused spy stayed at zero.
+        const store = new Store(f.db), core = new ControlCore(store, f.core.options);
+        core.tick(); await new LifecycleCore(store, core).drive(provider);
+      }
+    }
+    expect(f.db.all('SELECT * FROM lifecycle')).toEqual(before); expect(provider.calls).toEqual([]);
+    for (const table of ['runs', 'attempts', 'operations', 'effects', 'outbox']) expect(f.db.all(`SELECT * FROM ${table}`)).toEqual([]);
+    expect(f.db.all("SELECT id FROM events WHERE type='room.context_update'")).toHaveLength(1000);
+    expect(f.db.all('SELECT event_id FROM room_publications')).toHaveLength(1000);
+    const cursors = f.db.all<{ consumer_id: string; delivered_sequence: number; consumed_sequence: number }>('SELECT * FROM consumer_cursors');
+    expect(cursors).toHaveLength(2); expect(cursors.every(cursor => cursor.consumed_sequence === 0)).toBe(true);
+    for (const recipient of [bot, otherBot]) {
+      const expected = Array.from({ length: 1000 }, (_, i) => i).filter(i => (i % 3 === 0 ? otherBot : bot) === recipient);
+      expect(f.core.context(recipient, 'Read metadata', null, roomId).context_events.map(event => event.payload.text))
+        .toEqual(expected.slice(0, 100).map(i => `Passive update ${i}`));
+      const last = f.db.all<{ sequence: number }>("SELECT sequence FROM events WHERE type='room.context_update' AND json_extract(payload_json,'$.text')=?", `Passive update ${expected.at(-1)}`)[0].sequence;
+      expect(cursors.find(cursor => cursor.consumer_id === recipient)?.delivered_sequence).toBe(last);
+    }
+  } finally { f.close(); }
 });
 
 it('rejects old-epoch completion after confirmed termination and retry admission without changing the new attempt', async () => {

@@ -238,6 +238,28 @@ build. This is structural consistency, not journal authentication or successful
 recovery. Quiet-period implementation remains next; no new phase state added.
 No accounts, live provider operations, pushes, deployments or gate changes.
 
+Checklist audit checkpoint (2026-09-15): reviewed SPEC §§9–11/21, UX01–15 and
+orchestration/project intent against current code. TODO E06 now explicitly retains
+selected-tokenizer budgets, summaries, retrieval and native scope isolation;
+E09 retains curated install workflows; E10 retention policy/diagnostic expiry and
+forget-everywhere boundaries; E13 idle adapter/version/provider migration. New E15
+records numeric load, crash, privacy, browser and recovery acceptance. No requirement
+was removed or weakened. The 5-writes/s target versus 60 owner writes/minute limit
+needs an explicit workload interpretation, not a disabled limiter.
+
+Implemented the missing local 1,000-publication volume checks: stopped control
+reconstruction/ticks/provider drive retain zero wake calls and no runs; idle and
+busy supervisors retain zero additional native submissions through maintenance
+and dispatch. The busy task/attempt are byte/value-identical, with no cancellation
+or follow-up. Recipient delivery is asymmetric, paginated and deduplicated without
+consumption. Focused control/supervisor tests passed 159; combined verifier passed
+900 control / 210 runtime tests, all native/service fixtures, typecheck and build.
+These are synthetic local checks, not the required staging trace, full latency
+measurements or proof of production model behavior. Runtime code/gates unchanged.
+Continue E01 quiet phases, then E02/E03; context packaging and E15 harnesses are
+also credential-free. Preserve exact external blockers in TODO. No account calls,
+live provider work, push or deployment occurred.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

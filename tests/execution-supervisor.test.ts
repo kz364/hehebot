@@ -3,7 +3,7 @@ import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { fixture, bot } from './helpers';
+import { fixture, bot, otherBot } from './helpers';
 import { LifecycleCore } from '../src/core/lifecycle';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexOperations } from '../runtime/codex-operations.mjs';
@@ -257,6 +257,28 @@ it.each([null, {}, Array(4097).fill({})])('rejects malformed or unbounded operat
   supervisor.operations = async () => operations;
   await expect(supervisor.maintain()).rejects.toThrow();
   expect(calls.length).toBe(before); expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
+});
+
+it.each([false, true])('1000 passive publications add zero native submissions with existing work=%s', async active => {
+  const roomId = randomUUID();
+  expect(f.accept({ schema_version: 1, type: 'room.put', payload: { id: roomId, expected_revision: 0,
+    name: 'Passive supervisor fixture', member_ids: [bot, otherBot], default_responder_id: bot } }).status).toBe('applied');
+  if (active) enqueue();
+  await supervisor.start(); await supervisor.dispatch();
+  expect(nativeCalls).toBe(active ? 1 : 0);
+  const before = f.db.all('SELECT * FROM runs'), originalAttempts = f.db.all('SELECT * FROM attempts');
+  const sequence = life.get().queue_sequence;
+  for (let i = 0; i < 1000; i++) {
+    expect(f.accept({ schema_version: 1, type: 'room.publish', payload: { room_id: roomId,
+      kind: 'context_update', recipient_ids: [i % 3 === 0 ? otherBot : bot], text: `Passive ${i}`,
+      references: [], cause_id: randomUUID() } }).status).toBe('applied');
+    if (i % 100 === 99) { await supervisor.maintain(); await supervisor.dispatch(); }
+  }
+  expect(nativeCalls).toBe(active ? 1 : 0); expect(cancellations).toEqual([]); expect(releases).toBe(0);
+  expect(supervisor.phase).toBe('running'); expect(life.get().queue_sequence).toBe(sequence);
+  expect(f.db.all('SELECT * FROM runs')).toEqual(before); expect(f.db.all('SELECT * FROM attempts')).toEqual(originalAttempts);
+  expect(f.db.all("SELECT id FROM events WHERE type='room.context_update'")).toHaveLength(1000);
+  expect(f.db.all('SELECT * FROM task_followups')).toEqual([]); expect(f.db.all('SELECT * FROM outbox')).toEqual([]);
 });
 
 it('an orphan native clock fences maintenance before heartbeat without releasing or replaying work', async () => {
