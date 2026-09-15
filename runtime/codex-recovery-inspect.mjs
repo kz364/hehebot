@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { lstat, open, realpath } from 'node:fs/promises';
+import { lstat, open, opendir, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -21,16 +21,17 @@ export async function inspectCodexRecovery(directory) {
   const report = { recoveryRequired: true, resumeAllowed: false, sleepAllowed: false,
     snapshotConsistency: 'not-established; stopped executor kernel lock required',
     service: null, dispatch: null, native: null, issues: [],
+    questions: { complete: false, total: 0, unresolved: 0, resolutionObserved: 0, phases: {} },
     coverage: 'unknown; observed terminal events do not settle effects' };
   const issue = code => { if (!report.issues.includes(code)) report.issues.push(code); };
-  const read = async (key, optional = false) => {
+  const read = async (key, optional = false, maxBytes = 1048576) => {
     let fd;
     try {
       require(/^[a-zA-Z0-9_-]{1,128}$/.test(key));
       fd = await open(join(directory, `${key}.json`), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       const before = await fd.stat();
-      require(before.isFile() && before.uid === process.getuid() && (before.mode & 0o077) === 0 && before.size > 0 && before.size <= 1048576);
-      const buffer = Buffer.alloc(1048577); let size = 0;
+      require(before.isFile() && before.uid === process.getuid() && (before.mode & 0o077) === 0 && before.size > 0 && before.size <= maxBytes);
+      const buffer = Buffer.alloc(maxBytes + 1); let size = 0;
       while (size < buffer.length) {
         const { bytesRead } = await fd.read(buffer, size, buffer.length - size, null);
         if (!bytesRead) break;
@@ -50,6 +51,44 @@ export async function inspectCodexRecovery(directory) {
     const stat = await lstat(directory);
     require(stat.isDirectory() && stat.uid === process.getuid() && (stat.mode & 0o077) === 0);
   } catch { issue('PRIVATE_CANONICAL_DIRECTORY_REQUIRED'); return report; }
+  // Question custody outlives the current dispatch. Inspect it even when the
+  // service/cursor is missing; never open grants, auth files, or unrelated rows.
+  try {
+    let scanned = 0, candidates = 0, invalid = false;
+    const text = (value, max) => typeof value === 'string' && value.length > 0 &&
+      value.length <= max * 2 && [...value].length <= max && !/\p{Cs}/u.test(value);
+    const questionUuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value);
+    const exact = (value, keys) => object(value) && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
+    for await (const entry of await opendir(directory)) {
+      if (++scanned > 16384) throw Error('SCAN_LIMIT');
+      if (!entry.name.startsWith('question_')) continue;
+      if (++candidates > 4096) throw Error('SCAN_LIMIT');
+      try {
+        require(/^question_[a-f0-9]{64}\.json$/.test(entry.name));
+        const row = await read(entry.name.slice(0, -5), false, 16384);
+        require(exact(row, ['version', 'questionId', 'connectionId', 'requestId', 'binding', 'threadId', 'turnId', 'itemId', 'inputSha256', 'phase', 'resolutionObserved']));
+        const binding = row.binding;
+        require(row.version === 1 && questionUuid(row.questionId) && questionUuid(row.connectionId) &&
+          (Number.isSafeInteger(row.requestId) || text(row.requestId, 128)) &&
+          ['threadId', 'turnId', 'itemId'].every(key => text(row[key], 256)) && /^[a-f0-9]{64}$/.test(row.inputSha256));
+        require(exact(binding, ['identity', 'run_id', 'attempt', 'attemptId', 'deadline_at']) &&
+          exact(binding.identity, ['epoch', 'boot_id']) && Number.isSafeInteger(binding.identity.epoch) && binding.identity.epoch >= 0 &&
+          questionUuid(binding.identity.boot_id) && questionUuid(binding.run_id) && Number.isSafeInteger(binding.attempt) && binding.attempt > 0 &&
+          /^[a-zA-Z0-9_-]{1,128}$/.test(binding.attemptId) && typeof binding.deadline_at === 'string' &&
+          /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(binding.deadline_at) &&
+          new Date(binding.deadline_at).toISOString() === binding.deadline_at);
+        require(entry.name === `question_${hash([binding.attemptId, row.threadId, row.turnId, row.itemId])}.json` &&
+          ['record_unknown', 'waiting', 'take_unknown', 'handoff_unknown', 'resolve_unknown', 'resolved'].includes(row.phase) &&
+          typeof row.resolutionObserved === 'boolean' && (row.phase !== 'resolved' || row.resolutionObserved));
+        report.questions.total++;
+        report.questions.phases[row.phase] = (report.questions.phases[row.phase] ?? 0) + 1;
+        if (row.phase !== 'resolved') report.questions.unresolved++;
+        if (row.resolutionObserved) report.questions.resolutionObserved++;
+      } catch { invalid = true; issue('QUESTION_RECORD_INVALID_OR_UNREADABLE'); }
+    }
+    report.questions.complete = !invalid;
+  } catch { issue('QUESTION_SCAN_INCOMPLETE'); }
+  if (report.questions.unresolved) issue('QUESTION_CUSTODY_UNRESOLVED');
   const service = await read('service');
   if (!service) return report;
   try {

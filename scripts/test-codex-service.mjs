@@ -393,6 +393,8 @@ try {
   assert.equal((await service.journal.get('service')).phase, 'recovery');
   const diagnostic = await inspectCodexRecovery(join(stateDirectory, 'journal'));
   assert.deepEqual(diagnostic.issues, []);
+  assert.deepEqual(diagnostic.questions, { complete: true, total: questionsMode ? 1 : 0, unresolved: 0,
+    resolutionObserved: questionsMode ? 1 : 0, phases: questionsMode ? { resolved: 1 } : {} });
   assert.equal(diagnostic.dispatch.runId, queued.resource_id);
   assert.equal(diagnostic.dispatch.attemptId, dispatched.attemptId);
   assert.equal(diagnostic.native.root.threadId, native.threadId);

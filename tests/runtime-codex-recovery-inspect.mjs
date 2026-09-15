@@ -58,6 +58,61 @@ test('private real journal projects asymmetric identities and obligations withou
   assert.deepEqual(await snapshot(f.directory), before);
 });
 
+test('question custody survives absent service records and reports only phase counts without writes', async t => {
+  const f = await fixture(t);
+  for (const [index, phase] of ['waiting', 'take_unknown', 'handoff_unknown', 'resolved'].entries()) {
+    const itemId = `private-item-${index}`, key = `question_${hash([attemptId, 'private/thread', 'private/turn', itemId])}`;
+    await f.journal.write(key, { version: 1, questionId: runId, connectionId: boot, requestId: index % 2 ? String(index) : index,
+      binding: { identity: { ...identity, epoch: 3 }, run_id: boot, attempt: 2, attemptId, deadline_at: '2020-01-01T00:00:00.000Z' },
+      threadId: 'private/thread', turnId: 'private/turn', itemId, inputSha256: 'b'.repeat(64), phase,
+      resolutionObserved: ['take_unknown', 'resolved'].includes(phase) });
+  }
+  await rm(join(f.directory, 'service.json'));
+  const before = await snapshot(f.directory), report = await inspectCodexRecovery(f.directory);
+  assert.deepEqual(report.questions, { complete: true, total: 4, unresolved: 3, resolutionObserved: 2,
+    phases: { waiting: 1, take_unknown: 1, handoff_unknown: 1, resolved: 1 } });
+  assert.ok(report.issues.includes('QUESTION_CUSTODY_UNRESOLVED')); assert.ok(report.issues.includes('RECORD_MISSING'));
+  assert.doesNotMatch(JSON.stringify(report), /private|inputSha256|questionId|connectionId/);
+  assert.equal(report.resumeAllowed, false); assert.equal(report.sleepAllowed, false);
+  assert.deepEqual(await snapshot(f.directory), before);
+});
+
+test('invalid question phase, identity, filename, secret fields and links make counts explicitly incomplete', async t => {
+  const f = await fixture(t), key = `question_${hash([attemptId, 'thread', 'turn', 'item'])}`;
+  const row = { version: 1, questionId: runId, connectionId: boot, requestId: '71',
+    binding: { identity, run_id: runId, attempt: 7, attemptId, deadline_at: '2026-09-15T00:00:00.000Z' },
+    threadId: 'thread', turnId: 'turn', itemId: 'item', inputSha256: 'c'.repeat(64), phase: 'resolved', resolutionObserved: true };
+  for (const patch of [{ phase: 'accepted' }, { resolutionObserved: false }, { questionId: 71 }, { questionId: '0'.repeat(36) }, { requestId: {} },
+    { itemId: 'different-item' }, { answers: canary }, { binding: { ...row.binding, attempt: 0 } }]) {
+    await f.journal.write(key, { ...row, ...patch });
+    const report = await inspectCodexRecovery(f.directory);
+    assert.equal(report.questions.complete, false); assert.equal(report.questions.total, 0);
+    assert.ok(report.issues.includes('QUESTION_RECORD_INVALID_OR_UNREADABLE')); assert.doesNotMatch(JSON.stringify(report), /PRIVATE_/);
+  }
+  await f.journal.write(key, row);
+  assert.deepEqual((await inspectCodexRecovery(f.directory)).questions,
+    { complete: true, total: 1, unresolved: 0, resolutionObserved: 1, phases: { resolved: 1 } });
+  await rm(join(f.directory, `${key}.json`));
+  await symlink('/does-not-exist', join(f.directory, `${key}.json`));
+  assert.equal((await inspectCodexRecovery(f.directory)).questions.complete, false);
+  await rm(join(f.directory, `${key}.json`));
+  await writeFile(join(f.directory, `${key}.json`), ' '.repeat(16385), { mode: 0o600 });
+  assert.equal((await inspectCodexRecovery(f.directory)).questions.complete, false);
+  await rm(join(f.directory, `${key}.json`));
+  await writeFile(join(f.directory, 'question_bad.json'), canary, { mode: 0o600 });
+  assert.equal((await inspectCodexRecovery(f.directory)).questions.complete, false);
+});
+
+test('question scan stops at bounded candidate count instead of reporting a complete empty inventory', async t => {
+  const f = await fixture(t);
+  for (let index = 0; index < 4096; index++) await writeFile(join(f.directory, `question_bad_${index}`), '', { mode: 0o600 });
+  assert.equal((await inspectCodexRecovery(f.directory)).issues.includes('QUESTION_SCAN_INCOMPLETE'), false);
+  await writeFile(join(f.directory, 'question_bad_4096'), '', { mode: 0o600 });
+  const report = await inspectCodexRecovery(f.directory);
+  assert.equal(report.questions.complete, false); assert.ok(report.issues.includes('QUESTION_SCAN_INCOMPLETE'));
+  assert.equal(report.resumeAllowed, false); assert.equal(report.sleepAllowed, false);
+});
+
 test('missing records and unknown claim never infer a native binding from stale attempt fields', async t => {
   const f = await fixture(t);
   await f.journal.update(f.cursor, { phase: 'claim_unknown', claim: null });

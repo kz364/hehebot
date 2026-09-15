@@ -24,7 +24,7 @@ verify the lock itself, claim ownership, contact native processes or the Worker,
 load account state, or attempt automatic takeover. Reading without the stopped
 executor's lock is not a coherent operator snapshot.
 
-Exit 2 means missing, unreadable, unsafe, inconsistent or incomplete selected
+Exit 2 means missing, unreadable, unsafe, inconsistent, unresolved or incomplete selected
 records. Exit 64 means invalid CLI usage. Output has stable issue codes, not raw
 exceptions, paths, prompts or arbitrary journal fields. Treat IDs as private
 installation metadata; do not publish reports indiscriminately.
@@ -39,6 +39,18 @@ JSON records contain some excluded fields in memory while being parsed; only an
 explicit typed projection is emitted; context bodies are not inspected or emitted.
 It makes no network/native calls, retries,
 state writes, hold releases or settlement decisions.
+
+It also scans exact `question_<64 lowercase hex>.json` records independently of
+the current dispatch, so missing service metadata cannot hide old question custody.
+Question output contains only total/unresolved/resolution-observed counts and phase
+counts, never question IDs, text, answers, native IDs or input hashes. `resolved`
+means a journaled resolution, not acceptance or consumption. Every other phase,
+including `handoff_unknown`, emits `QUESTION_CUSTODY_UNRESOLVED`.
+Invalid question records make `questions.complete` false; scan limits or directory
+errors emit `QUESTION_SCAN_INCOMPLETE`. Partial counts are not a complete inventory.
+Question scanning is bounded to 16384 directory entries, 4096 candidates and 16 KiB
+per question record. It validates exact fields and filename/custody hash binding;
+this checks local consistency, not authenticity or current Worker authority.
 
 The report includes service epoch/boot, current Worker run/attempt and adapter
 attempt ID, exact observed native root/child thread and turn IDs, command/MCP/spawn
