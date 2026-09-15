@@ -46,6 +46,14 @@ the new `--submission-ack` fixture observed one native launch, two model request
 and two identical HTTPS registration requests after dropping the first reply.
 This does not establish production settlement or restart recovery.
 
+Operation snapshots now retain up to 4096 observations and send all of them in
+100-record heartbeat pages under the original local lease. Partial failures fence
+admission, with no local renewal or hold release. The actual native fixture ran
+101 read-only MCP calls, verified every receipt, and delivered 103 operations in
+pages of 100 and 3. The combined check passed 848 control and 171 runtime tests,
+native/service fixtures and build. Unknown coverage still blocks settlement/sleep;
+this is not unlimited retention or multi-root admission.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

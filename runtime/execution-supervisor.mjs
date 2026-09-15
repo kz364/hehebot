@@ -77,15 +77,24 @@ export class ExecutionSupervisor {
     assertAuthority();
     const operations = await this.operations();
     assertAuthority();
-    const reply = await this.control.request('heartbeat', { identity: this.identity, operations });
-    // Even an on-time server renewal cannot revive a locally expired executor.
-    // Starting has no prior local lease; recovery must still fence its reply.
-    assertAuthority();
-    const until = Date.parse(reply?.lease_until);
-    if (!Number.isFinite(until) || until <= this.now() || !Array.isArray(reply.cancellations) ||
-        !reply.cancellations.every(id => typeof id === 'string')) fail('INVALID_HEARTBEAT');
+    if (!Array.isArray(operations) || operations.length > 4096) fail('INVALID_OPERATION_SNAPSHOT');
+    const cancellations = new Set();
+    let until;
+    // Worker requests remain bounded at 100. Retain every observation, including
+    // settled history; partial delivery cannot authorize completion or local renewal.
+    for (let offset = 0; offset < Math.max(operations.length, 1); offset += 100) {
+      assertAuthority();
+      const reply = await this.control.request('heartbeat', { identity: this.identity, operations: operations.slice(offset, offset + 100) });
+      // Every page must arrive within the original local lease, even if the Worker
+      // already renewed. Starting has no prior lease but still fences disconnect.
+      assertAuthority();
+      until = Date.parse(reply?.lease_until);
+      if (!Number.isFinite(until) || until <= this.now() || !Array.isArray(reply.cancellations) ||
+          !reply.cancellations.every(id => typeof id === 'string')) fail('INVALID_HEARTBEAT');
+      for (const id of reply.cancellations) cancellations.add(id);
+    }
     this.leaseUntil = until;
-    return reply.cancellations;
+    return [...cancellations];
   }
 
   schedule() {

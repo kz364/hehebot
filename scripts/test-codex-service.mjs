@@ -25,8 +25,10 @@ const historyMode = process.argv.includes('--history') || historyChildMode;
 const questionCancelMode = process.argv.includes('--questions-cancel');
 const questionsMode = process.argv.includes('--questions') || questionCancelMode;
 const submissionAckMode = process.argv.includes('--submission-ack');
+const operationPagesMode = process.argv.includes('--operation-pages');
+const expectedToolCalls = operationPagesMode ? 101 : 1;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -154,17 +156,20 @@ try {
         assert.ok(tool);
         send(res, [...(childMode ? [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant', phase: 'commentary',
           content: [{ type: 'output_text', text: 'SERVICE_CHILD_PROGRESS', annotations: [] }] }] : []),
-          { id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
-          ...(tool.name === 'mcp__hehebot' ? { namespace: 'mcp__hehebot', name: 'hehebot_list_routines' } : { name: tool.name }), arguments: '{}' }]);
+          ...Array.from({ length: expectedToolCalls }, () => ({ id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
+          ...(tool.name === 'mcp__hehebot' ? { namespace: 'mcp__hehebot', name: 'hehebot_list_routines' } : { name: tool.name }), arguments: '{}' }))]);
       } else {
         assert.equal(toolRequests, 2);
-        const output = body.input.find(item => item.type === 'function_call_output').output;
-        const decoded = typeof output === 'string' ? JSON.parse(output) : output;
-        const content = Array.isArray(decoded) ? JSON.parse(decoded.at(-1).text) : decoded;
-        const receipt = content.content ? JSON.parse(content.content.find(item => item.type === 'text').text) : content;
-        assert.equal(receipt.next_cursor, null); assert.equal(receipt.routines.length, 1);
-        assert.equal(receipt.routines[0].id, routine.id); assert.equal(receipt.routines[0].revision, 1);
-        assert.deepEqual(receipt.routines[0].body, routine); report.nativeReceipt = true;
+        const outputs = body.input.filter(item => item.type === 'function_call_output');
+        assert.equal(outputs.length, expectedToolCalls);
+        for (const { output } of outputs) {
+          const decoded = typeof output === 'string' ? JSON.parse(output) : output;
+          const content = Array.isArray(decoded) ? JSON.parse(decoded.at(-1).text) : decoded;
+          const receipt = content.content ? JSON.parse(content.content.find(item => item.type === 'text').text) : content;
+          assert.equal(receipt.next_cursor, null); assert.equal(receipt.routines.length, 1);
+          assert.equal(receipt.routines[0].id, routine.id); assert.equal(receipt.routines[0].revision, 1);
+          assert.deepEqual(receipt.routines[0].body, routine); report.nativeReceipt = true;
+        }
         if (questionsMode) {
           const tool = body.tools.find(tool => tool.name === 'request_user_input' || tool.tools?.some(nested => nested.name === 'request_user_input'));
           assert.ok(tool);
@@ -215,9 +220,13 @@ try {
     ...(questionsMode ? { ownerQuestions: true } : {}),
     portalOrigin: origin + '/', runtimeTokenFile, tlsCAFile: cert, installationId: 'service-fixture',
     personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model', allowedTools: ['hehebot_list_routines'] } } };
-  const submissionRequests = [];
+  const submissionRequests = [], heartbeatPages = [];
   const dependencies = { spriteRequest, fetchImpl: async (url, init) => {
     const response = await trustedFetch(url, init);
+    if (operationPagesMode && new URL(url).pathname === '/internal/heartbeat') {
+      assert.equal(response.status, 200);
+      heartbeatPages.push(JSON.parse(init.body).operations);
+    }
     if (submissionAckMode && new URL(url).pathname === '/internal/submitted') {
       assert.equal(response.status, 200);
       submissionRequests.push(JSON.parse(init.body));
@@ -431,11 +440,18 @@ try {
     report.missedMcpCompletionRecovered = true;
   }
   const native = await service.observe();
-  assert.deepEqual(Object.values(native.mcpCalls ?? {}), childMode ? [] : ['completed']);
+  assert.deepEqual(Object.values(native.mcpCalls ?? {}), childMode ? [] : Array(expectedToolCalls).fill('completed'));
   assert.equal(native.effectsSettled, undefined);
   await service.maintain();
   const operations = await service.supervisor.operations();
-  assert.equal(operations.length, childMode ? 5 : 3);
+  assert.equal(operations.length, childMode ? 5 : expectedToolCalls + 2);
+  if (operationPagesMode) {
+    assert.deepEqual(heartbeatPages.slice(-2).map(page => page.length), [100, 3]);
+    assert.deepEqual(heartbeatPages.slice(-2).flat(), operations);
+    assert.equal(new Set(operations.map(operation => operation.id)).size, 103);
+    report.nativeToolCalls = expectedToolCalls;
+    report.completeHeartbeatPages = [100, 3];
+  }
   assert.equal(operations.filter(operation => operation.status === 'unknown').length, 1);
   assert.ok(operations.every(operation => operation.run_id === queued.resource_id && operation.deadline_at === dispatched.claim.deadline_at));
   await assert.rejects(service.supervisor.complete({ attemptId: dispatched.attemptId, nativeRunId: native.nativeRunId, rootSettled: true }), { code: 'NATIVE_SETTLEMENT_INCOMPLETE' });

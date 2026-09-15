@@ -26,7 +26,7 @@ export class CodexOperations {
     const row = await this.journal.get(attemptId);
     const operations = [];
     const add = (key, kind, status) => {
-      if (operations.length === 100) fail('NATIVE_OPERATION_LIMIT');
+      if (operations.length === 4096) fail('NATIVE_OPERATION_LIMIT');
       operations.push({ id: uuid([attemptId, runId, attempt, key]), run_id: runId, attempt,
         kind, status, started_at: startedAt, deadline_at: deadlineAt,
         // Reading the same journal is not fresh native progress.

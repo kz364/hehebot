@@ -139,6 +139,71 @@ it('disconnect while startup awaits heartbeat cannot resurrect admission', async
   expect(supervisor.phase).toBe('recovery'); expect(calls).toEqual(['heartbeat']);
 });
 
+it('reports every operation across bounded pages and preserves earlier cancellation replies', async () => {
+  const id = enqueue(), row = await supervisor.start();
+  const operations = Array.from({ length: 201 }, (_, i) => ({ id: randomUUID(), run_id: id, attempt: 1,
+    kind: 'tool', status: i === 100 ? 'unknown' : 'active', started_at: f.core.now(),
+    deadline_at: row.claim.deadline_at, last_progress_at: f.core.now() }));
+  supervisor.operations = async () => operations;
+  const request = supervisor.control.request, pages: any[][] = [];
+  supervisor.control.request = async (type: string, payload: any) => {
+    const reply = await request(type, payload);
+    if (type === 'heartbeat') {
+      pages.push(payload.operations);
+      // Cancellation can appear in an earlier page, not only the final reply.
+      return { ...reply, cancellations: pages.length === 1 ? [id] : [] };
+    }
+    return reply;
+  };
+  await supervisor.maintain();
+  expect(pages.map(page => page.length)).toEqual([100, 100, 1]);
+  expect(pages.flat()).toEqual(operations);
+  expect(cancellations).toEqual([row.attemptId]);
+  expect(f.db.all('SELECT id FROM operations')).toHaveLength(201);
+  operations.forEach((op, i) => { if (i !== 100 && i !== 200) op.status = 'settled'; });
+  await supervisor.maintain();
+  expect(f.db.all("SELECT id FROM operations WHERE status='unknown'")).toEqual([{ id: operations[100].id }]);
+  expect(f.db.all("SELECT id FROM operations WHERE status='active'")).toEqual([{ id: operations[200].id }]);
+  await expect(supervisor.complete(settlement(row))).rejects.toThrow();
+  expect(f.store.run(id).status).toBe('running'); expect(releases).toBe(0);
+});
+
+it.each(['before', 'after', 'expired', 'disconnected', 'invalid-reply'])('partial heartbeat %s failure stops later pages and retains custody', async boundary => {
+  const id = enqueue(), row = await supervisor.start(), originalLease = supervisor.leaseUntil;
+  const operations = Array.from({ length: 201 }, () => ({ id: randomUUID(), run_id: id, attempt: 1,
+    kind: 'tool', status: 'active', started_at: f.core.now(), deadline_at: row.claim.deadline_at, last_progress_at: f.core.now() }));
+  supervisor.operations = async () => operations;
+  const request = supervisor.control.request; let pages = 0;
+  supervisor.control.request = async (type: string, payload: any) => {
+    if (type !== 'heartbeat') return request(type, payload);
+    pages++;
+    if (pages === 2 && boundary === 'before') throw new Error('not sent');
+    const reply = await request(type, payload);
+    if (pages === 2) {
+      if (boundary === 'expired') f.setNow('2026-09-10T00:01:30.000Z');
+      if (boundary === 'disconnected') supervisor.disconnect();
+      if (boundary === 'after') throw new Error('lost reply');
+      if (boundary === 'invalid-reply') return { ...reply, cancellations: null };
+    }
+    return reply;
+  };
+  f.setNow('2026-09-10T00:00:50.000Z');
+  await expect(supervisor.maintain()).rejects.toThrow();
+  expect(pages).toBe(2);
+  expect(f.db.all('SELECT id FROM operations')).toHaveLength(boundary === 'before' ? 100 : 200);
+  expect(supervisor.leaseUntil).toBe(originalLease);
+  expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0); expect(cancellations).toEqual([]);
+  expect(nativeCalls).toBe(1); expect(f.store.run(id).status).toBe('running');
+  await expect(supervisor.dispatch()).rejects.toThrow(); expect(pages).toBe(2);
+});
+
+it.each([null, {}, Array(4097).fill({})])('rejects malformed or unbounded operation snapshots before sending any page', async operations => {
+  await supervisor.start(); const before = calls.length;
+  supervisor.operations = async () => operations;
+  await expect(supervisor.maintain()).rejects.toThrow();
+  expect(calls.length).toBe(before); expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
+});
+
 it('lease expiration after claim prevents native submission and preserves uncertainty', async () => {
   enqueue();
   const request = supervisor.control.request;

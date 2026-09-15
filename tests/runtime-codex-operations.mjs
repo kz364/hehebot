@@ -42,10 +42,15 @@ test('missing submission remains unknown, and task/attempt identities never shar
   assert.deepEqual((await f.operations.snapshot()).map(op => op.status), ['unknown', 'cancelling']);
 });
 
-test('heartbeat cap fails closed rather than dropping live obligations', async t => {
+test('snapshot spans heartbeat pages but fails closed at its bounded inventory limit', async t => {
   const f = await fixture(t);
-  await f.journal.putIfAbsent('attempt-a', { status: 'running', commands: Object.fromEntries(Array.from({ length: 98 }, (_, i) => [String(i), 'inProgress'])) });
-  assert.equal((await f.operations.snapshot()).length, 100);
+  await f.journal.putIfAbsent('attempt-a', { status: 'running', commands: Object.fromEntries(Array.from({ length: 4094 }, (_, i) => [String(i), i % 3 ? 'completed' : 'inProgress'])) });
+  const rows = await f.operations.snapshot();
+  assert.equal(rows.length, 4096);
+  assert.equal(new Set(rows.map(row => row.id)).size, 4096);
+  assert.equal(rows.at(-1).status, 'settled');
+  assert.equal(rows.at(-2).status, 'active');
+  assert.equal(rows[0].status, 'unknown');
   await f.journal.update('attempt-a', { mcpCalls: { overflow: 'inProgress' } });
   await assert.rejects(f.operations.snapshot(), { code: 'NATIVE_OPERATION_LIMIT' });
 });

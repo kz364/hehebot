@@ -17,6 +17,7 @@ bash scripts/test-codex-service.sh --child
 bash scripts/test-codex-service.sh --child-effects
 bash scripts/test-codex-service.sh --crash
 bash scripts/test-codex-service.sh --submission-ack
+bash scripts/test-codex-service.sh --operation-pages
 ```
 
 The second command builds `src/providers/sprites.ts` into the ignored
@@ -43,6 +44,20 @@ before registration, cancellation/terminal replay without writes, conflicting
 native identity and expired authority. A second failure, disconnect, or local
 lease expiry fences admission and retains the hold; this is not crash recovery
 or permission to retry unknown native submission or effects.
+
+The `--operation-pages` mode runs 101 actual native read-only MCP calls and checks
+every returned routine receipt. The resulting 103 unique operations (including
+root inference and unknown coverage) reach HTTPS Worker heartbeats in pages of
+100 and 3. Two scripted model requests suffice; no connector or paid model runs.
+The host bounds each complete snapshot at 4096 records and retains settled history
+as well as active/unknown obligations. It sends every page on each maintenance,
+not a rotating subset. The Worker request limit remains 100. Cancellation IDs
+from all successful replies are combined. All pages must finish within the prior
+local lease before renewal becomes usable; loss, invalid replies, disconnect or
+expiry fences admission without releasing the provider hold or replaying native
+work. Pages are separate transactions, not an atomic inventory replacement.
+This raises the supported retained-history bound, not unlimited task duration or
+complete operation coverage. Missing coverage still blocks settlement and sleep.
 
 Heartbeat invocation statuses follow the adapter's per-kind terminal enums.
 For example, a declined file change can be settled, but a declined MCP call is
