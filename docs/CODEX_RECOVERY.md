@@ -70,6 +70,12 @@ key, including the nested collaboration tool/item key. Invalid, orphan or
 noncanonical clocks invalidate the entire native projection. Missing legacy
 clocks remain absent. The report does not infer deadlines, expiry, fresh progress
 or permission to resume from these historical timestamps.
+Root/child records also include an optional validated `tokenUsage` snapshot when
+one was retained. Missing usage remains absent. Only the known numeric counters
+and nullable context-window value enter the report; invalid usage invalidates
+the native projection. Values are latest received native context/session snapshots,
+not additive task spend, freshness proof, quota or billing. See
+[service semantics](CODEX_SERVICE.md) for replay and decrease handling.
 The root's optional `initialInference` marker is also reported and validated.
 Child initial-phase markers and their required canonical `initialInferenceAt`
 timestamps are reported alongside each child's exact turn identity. Malformed or

@@ -24,6 +24,58 @@ async function fixture(t, limits = {}) {
   return { journal, transport, recoveries, calls, adapter, router, admit };
 }
 
+test('usage snapshots are exact-turn observations, not additive progress or settlement', async t => {
+  const f = await fixture(t);
+  const counts = { inputTokens: 31, cachedInputTokens: 7, outputTokens: 13, reasoningOutputTokens: 5, totalTokens: 44 };
+  const event = (threadId, turnId, totalTokens = 44) => ({ method: 'thread/tokenUsage/updated', params: {
+    threadId, turnId, tokenUsage: { total: { ...counts, totalTokens }, last: counts, modelContextWindow: 120000, secret: 'PRIVATE_USAGE' },
+  } });
+  f.transport.emit('notification', event('parent', 'turn'));
+  await f.router.flush(); assert.equal(f.router.pending.length, 1);
+  await f.admit('a', 'parent', 'turn');
+  await f.journal.update('a', { initialInference: 'inProgress' });
+  await f.router.bind('a');
+  const initial = await f.journal.get('a');
+  assert.deepEqual(initial.tokenUsage, { total: { ...counts, cacheWriteInputTokens: 0 }, last: { ...counts, cacheWriteInputTokens: 0 }, modelContextWindow: 120000 });
+  assert.equal(initial.initialInference, 'inProgress'); assert.equal(initial.rootSettled, false);
+  const update = f.journal.update.bind(f.journal);
+  f.journal.update = () => assert.fail('identical usage must not write');
+  f.transport.emit('notification', event('parent', 'turn')); await f.router.flush();
+  f.journal.update = update;
+  assert.deepEqual(await f.journal.get('a'), initial);
+  await f.admit('b', 'other-root', 'turn'); await f.router.bind('b');
+  f.transport.emit('notification', event('other-root', 'turn', 71)); await f.router.flush();
+  assert.equal((await f.journal.get('b')).tokenUsage.total.totalTokens, 71);
+  assert.deepEqual(await f.journal.get('a'), initial);
+  f.transport.emit('notification', spawn('completed', ['child']));
+  f.transport.emit('notification', event('child', 'child-turn', 9));
+  await f.router.flush(); assert.equal(f.router.pending.length, 1);
+  f.transport.emit('notification', { method: 'turn/started', params: { threadId: 'child', turn: { id: 'child-turn', status: 'inProgress' } } });
+  await f.router.flush();
+  const child = (await f.journal.get('a')).childObligations['["child","child-turn"]'];
+  assert.equal(child.tokenUsage.total.totalTokens, 9); assert.equal(child.initialInference, 'inProgress');
+  f.transport.emit('notification', event('parent', 'turn', 2)); await f.router.flush();
+  const lowered = await f.journal.get('a');
+  assert.equal(lowered.tokenUsage.total.totalTokens, 2);
+  assert.deepEqual(lowered.childObligations['["child","child-turn"]'], child);
+  assert.equal(lowered.operationTimes, undefined);
+  assert.doesNotMatch(JSON.stringify(lowered), /PRIVATE_USAGE/);
+  await assert.rejects(f.adapter.observe('a', event('parent', 'wrong')), { code: 'SETTLEMENT_IDENTITY_MISMATCH' });
+  assert.deepEqual(await f.journal.get('a'), lowered);
+  assert.deepEqual(f.recoveries, []); assert.deepEqual(f.calls, []);
+});
+
+test('malformed token usage is rejected before buffering rather than replaced by zero', async t => {
+  const f = await fixture(t), count = { inputTokens: 3, cachedInputTokens: 1, outputTokens: 2, reasoningOutputTokens: 0, totalTokens: 5 };
+  const usage = { total: count, last: count };
+  for (const patch of [null, {}, { ...usage, total: { ...count, inputTokens: -1 } },
+    { ...usage, last: { ...count, outputTokens: 1.5 } }, { ...usage, total: { ...count, totalTokens: Number.MAX_SAFE_INTEGER + 1 } },
+    { ...usage, last: { ...count, cacheWriteInputTokens: null } }, { ...usage, modelContextWindow: '100' }]) {
+    assert.throws(() => f.router.project({ method: 'thread/tokenUsage/updated', params: { threadId: 'a', turnId: 'b', tokenUsage: patch } }), { code: 'INVALID_TOKEN_USAGE' });
+  }
+  assert.equal(f.router.pending.length, 0);
+});
+
 test('completed user-visible messages are bounded, exact-turn attributed and independently replay-safe', async t => {
   const f=await fixture(t);await f.admit('a','parent','turn');await f.router.bind('a');
   f.transport.emit('notification',spawn('completed',['child']));

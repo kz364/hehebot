@@ -147,6 +147,23 @@ native/service fixtures, typecheck and build. E01/E02 remain partial; next work
 remains deadline coverage and successful fenced recovery, not merely inspection.
 No accounts, live provider operations, pushes, deployments or gate changes.
 
+Native-usage checkpoint (2026-09-15): supported `thread/tokenUsage/updated`
+notifications retain normalized `tokenUsage` under the exact root or observed
+child turn. `total`/`last` include six nonnegative safe-integer counters; the
+pinned optional cache-write field defaults to zero, context window to null.
+Unknown usage stays absent. Snapshots replace, never sum/max; compaction/replay
+may lower or repeat observations. Identical normalized snapshots do not write.
+Usage never ends initial inference, changes operation clocks or settles work.
+Offline inspection validates/reports the snapshot without extra stored content.
+This is not billing, freshness proof or complete task usage; see pinned-source
+links in CODEX_SERVICE.md. No Worker/UI publication or aggregation yet.
+Focused runtime checks passed 77. Eleven native service scenarios preserve exact
+asymmetric fields (31 input, 7 cached, 13 output, 5 reasoning, 44 total).
+Combined verification passed 879 control / 198 runtime tests, all native/service
+fixtures, typecheck and build. E11 remains partial; E01/E02 gaps remain open.
+No accounts, paid inference, live provider operations, pushes, deployments or
+gate changes were used.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

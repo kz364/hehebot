@@ -3,7 +3,7 @@ import { lstat, open, opendir, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { OBSERVED_COLLAB_TOOLS } from './codex-adapter.mjs';
+import { OBSERVED_COLLAB_TOOLS, projectTokenUsage } from './codex-adapter.mjs';
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -132,6 +132,7 @@ export async function inspectCodexRecovery(directory) {
     const root = { threadId: native.threadId ?? null, turnId: native.nativeRunId ?? null,
       status: native.status, observedTerminal: native.rootSettled,
       ...(native.initialInference === undefined ? {} : { initialInference: native.initialInference }) };
+    if (native.tokenUsage !== undefined) root.tokenUsage = projectTokenUsage(native.tokenUsage);
     const children = [], obligations = [], origins = new Map();
     const items = (owner, threadId, turnId) => {
       require(object(owner));
@@ -177,6 +178,7 @@ export async function inspectCodexRecovery(directory) {
       require(['inProgress', 'completed', 'failed', 'interrupted'].includes(status));
       children.push({ threadId: pair[0], turnId: pair[1], status });
       const owner = native.childObligations?.[key] ?? {};
+      if (owner.tokenUsage !== undefined) children.at(-1).tokenUsage = projectTokenUsage(owner.tokenUsage);
       if (owner.initialInference !== undefined || owner.initialInferenceAt !== undefined) {
         require(['inProgress', 'completed'].includes(owner.initialInference) && typeof owner.initialInferenceAt === 'string' &&
           Number.isFinite(Date.parse(owner.initialInferenceAt)) && new Date(owner.initialInferenceAt).toISOString() === owner.initialInferenceAt);

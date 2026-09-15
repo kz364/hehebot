@@ -7,6 +7,24 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
 const observationOwners = row => [row, ...Object.values(row.childObligations ?? {})];
 const hasReceiver = (row, threadId) => observationOwners(row).some(owner => Object.values(owner.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(threadId)));
 
+/** Latest native context/session observation, never a delta or billing receipt. */
+export function projectTokenUsage(value) {
+  const result = {};
+  for (const group of ['total', 'last']) {
+    result[group] = {};
+    for (const key of ['inputTokens', 'cachedInputTokens', 'cacheWriteInputTokens', 'outputTokens', 'reasoningOutputTokens', 'totalTokens']) {
+      const raw = value?.[group]?.[key];
+      const count = raw === undefined && key === 'cacheWriteInputTokens' ? 0 : raw;
+      if (!Number.isSafeInteger(count) || count < 0) fail('INVALID_TOKEN_USAGE');
+      result[group][key] = count;
+    }
+  }
+  const window = value?.modelContextWindow ?? null;
+  if (window !== null && (!Number.isSafeInteger(window) || window < 0)) fail('INVALID_TOKEN_USAGE');
+  result.modelContextWindow = window;
+  return result;
+}
+
 /** Trusted router projection, not a native receipt or settlement assertion. */
 export function projectOutputMessage(item) {
   if (typeof item.text !== 'string' || ![undefined, null, 'commentary', 'final_answer'].includes(item.phase)) fail('CODEX_PROTOCOL_ERROR');
@@ -180,6 +198,16 @@ export class CodexAdapter {
     const childKey = JSON.stringify([params?.threadId, params?.turnId]);
     const childItem = params?.threadId !== row.threadId && Object.hasOwn(row.childTurns ?? {}, childKey);
     const owner = childItem ? row.childObligations?.[childKey] ?? {} : row;
+    if (notification?.method === 'thread/tokenUsage/updated') {
+      if (!childItem && (params?.threadId !== row.threadId || params?.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      const tokenUsage = projectTokenUsage(params.tokenUsage);
+      if (JSON.stringify(owner.tokenUsage) === JSON.stringify(tokenUsage)) return row;
+      // Replace snapshots (including decreases), without touching activity clocks,
+      // initial inference, terminal state or effect custody.
+      return this.journal.update(attemptId, childItem
+        ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, tokenUsage } } }
+        : { tokenUsage });
+    }
     const save = patch => this.journal.update(attemptId, childItem
       ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, ...patch,
         ...(owner.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) } } }

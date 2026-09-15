@@ -70,6 +70,22 @@ test('initial inference is reported without guessing legacy state or mutating cu
   assert.equal((await inspectCodexRecovery(f.directory)).native, null);
 });
 
+test('usage diagnostics retain separate native snapshots, omit unknown and reject invalid counters', async t => {
+  const f = await fixture(t);
+  assert.equal(Object.hasOwn((await inspectCodexRecovery(f.directory)).native.root, 'tokenUsage'), false);
+  const counts = { inputTokens: 31, cachedInputTokens: 7, cacheWriteInputTokens: 0, outputTokens: 13, reasoningOutputTokens: 5, totalTokens: 44 };
+  const usage = { total: counts, last: counts, modelContextWindow: null };
+  const childUsage = { ...usage, total: { ...counts, totalTokens: 2 } };
+  await f.journal.write(attemptId, { ...f.native, tokenUsage: { ...usage, ignored: canary },
+    childObligations: { [childKey]: { ...f.native.childObligations[childKey], tokenUsage: childUsage } } });
+  const before = await snapshot(f.directory), report = await inspectCodexRecovery(f.directory);
+  assert.deepEqual(report.native.root.tokenUsage, usage);
+  assert.deepEqual(report.native.children[0].tokenUsage, childUsage);
+  assert.deepEqual(await snapshot(f.directory), before); assert.doesNotMatch(JSON.stringify(report), /PRIVATE_/);
+  await f.journal.write(attemptId, { ...f.native, tokenUsage: { ...usage, total: { ...counts, totalTokens: -1 } } });
+  assert.equal((await inspectCodexRecovery(f.directory)).native, null);
+});
+
 test('child initial phase inspection preserves its clock and rejects missing timing', async t => {
   const f = await fixture(t), phase = { initialInference: 'inProgress', initialInferenceAt: '2026-09-15T01:02:00.000Z' };
   await f.journal.write(attemptId, { ...f.native, childObligations: { [childKey]: phase } });

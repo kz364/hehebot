@@ -49,7 +49,8 @@ async function stop(child) {
 function send(res, output) {
   const response = { id: `resp_${randomUUID()}`, object: 'response', created_at: 1, status: 'completed', error: null,
     incomplete_details: null, model: 'fixture-model', output, parallel_tool_calls: true, tools: [], tool_choice: 'auto',
-    usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } };
+    usage: { input_tokens: 31, input_tokens_details: { cached_tokens: 7 }, output_tokens: 13,
+      output_tokens_details: { reasoning_tokens: 5 }, total_tokens: 44 } };
   res.writeHead(200, { 'content-type': 'text/event-stream' });
   const event = (type, fields) => res.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...fields })}\n\n`);
   event('response.created', { response: { ...response, status: 'in_progress', output: [] } });
@@ -543,6 +544,14 @@ try {
   assert.equal(diagnostic.native.root.threadId, native.threadId);
   assert.equal(diagnostic.native.root.turnId, native.nativeRunId);
   assert.equal(diagnostic.native.root.observedTerminal, !crashMode);
+  const expectedLastUsage = { inputTokens: 31, cachedInputTokens: 7, cacheWriteInputTokens: 0,
+    outputTokens: 13, reasoningOutputTokens: 5, totalTokens: 44 };
+  assert.deepEqual(diagnostic.native.root.tokenUsage.last, expectedLastUsage);
+  if (childMode) {
+    assert.equal(diagnostic.native.children.length, 1);
+    assert.deepEqual(diagnostic.native.children[0].tokenUsage.last, expectedLastUsage);
+  }
+  report.nativeUsageSnapshotObserved = true;
   const inspectedCalls = diagnostic.native.observations.filter(observation => observation.kind === 'mcpCalls');
   assert.equal(inspectedCalls.length, expectedToolCalls);
   const stoppedNative = await service.journal.get(dispatched.attemptId);

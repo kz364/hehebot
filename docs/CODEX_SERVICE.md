@@ -103,6 +103,27 @@ reset clocks. Item completion is not root/child/tool/effect settlement, and root
 completion cannot erase an unfinished reasoning item. The offline recovery
 inspector includes these obligations and rejects invalid status values.
 
+Native `thread/tokenUsage/updated` notifications now retain a `tokenUsage`
+snapshot under the exact admitted root or observed child turn. The router strips
+unrecognized fields before buffering. Both `total` and `last` retain input,
+cached input, cache-write input, output, reasoning-output and total counters;
+all must be nonnegative safe integers. The pinned schema defaults absent
+`cacheWriteInputTokens` to zero and an absent model context window to null.
+Missing usage itself remains unknown, not zero. Identical snapshots do not write.
+New snapshots replace old ones, including decreases; they are never summed.
+Usage notifications do not end initial inference, update phase clocks, extend
+deadlines, settle work or grant sleep. Root/child values remain separate.
+
+These are latest received native observations, not measured billing, quota,
+lifetime consumption or a complete per-task model-cost ledger. Native history
+replay has no freshness sequence in this payload; retention does not claim to
+distinguish replay from a live sample. The pinned
+[notification contract](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/schema/typescript/v2/ThreadTokenUsageUpdatedNotification.ts),
+[usage shape](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/schema/typescript/v2/ThreadTokenUsage.ts)
+and [replay implementation](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server/src/request_processors/token_usage_replay.rs)
+are the supported source boundary. Worker/UI usage publication and matched-workload
+overhead measurement remain E11; no account or paid fallback is introduced.
+
 `bash scripts/test-codex-service.sh --reasoning` exercises actual pinned Codex
 reasoning boundaries through the service and an accepted HTTPS Worker heartbeat,
 with two scripted model requests and a read-only MCP receipt. Router/journal tests

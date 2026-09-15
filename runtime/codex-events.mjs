@@ -1,4 +1,4 @@
-import { OBSERVED_COLLAB_TOOLS, projectOutputMessage } from './codex-adapter.mjs';
+import { OBSERVED_COLLAB_TOOLS, projectOutputMessage, projectTokenUsage } from './codex-adapter.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 
@@ -30,6 +30,13 @@ export class CodexEventRouter {
 
   project(value) {
     const method = value?.method, params = value?.params;
+    if (method === 'thread/tokenUsage/updated') {
+      const { threadId, turnId } = params ?? {};
+      if (![threadId, turnId].every(id => typeof id === 'string' && id.length > 0 && id.length <= 256)) fail('INVALID_EVENT_IDENTITY');
+      return { key: JSON.stringify([threadId, turnId]), notification: {
+        method, params: { threadId, turnId, tokenUsage: projectTokenUsage(params.tokenUsage) },
+      } };
+    }
     const spawn = params?.item?.type === 'collabAgentToolCall' && params.item.tool === 'spawnAgent';
     const collab = params?.item?.type === 'collabAgentToolCall' && OBSERVED_COLLAB_TOOLS.includes(params.item.tool);
     const boundaryOnly = ['webSearch', 'sleep', 'contextCompaction', 'imageGeneration', 'reasoning'].includes(params?.item?.type);
