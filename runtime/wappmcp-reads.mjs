@@ -11,7 +11,11 @@ const tools = ['whatsapp_get_chat_messages', 'whatsapp_search_messages'];
  * model arguments or imported text. Caller owns current lease/revocation checks
  * and the one-installation MCP connection. This module grants no runtime access.
  */
-export async function readWappMcp(grant, name, args, call) {
+export async function readWappMcp(grant, name, args, call, options = {}) {
+  if (!object(options) || !Object.keys(options).every(key => ['signal', 'timeoutMs'].includes(key)) ||
+      options.signal !== undefined && !(options.signal instanceof AbortSignal) ||
+      !integer(Object.hasOwn(options, 'timeoutMs') ? options.timeoutMs : 120000, 120000)) fail('WHATSAPP_READ_DENIED');
+  const { signal, timeoutMs = 120000 } = options;
   if (!exact(grant, ['chatIds', 'tools']) || !Array.isArray(grant.chatIds) || grant.chatIds.length > 100 ||
       !grant.chatIds.every(id => string(id, 256)) || new Set(grant.chatIds).size !== grant.chatIds.length ||
       !Array.isArray(grant.tools) || !grant.tools.every(tool => tools.includes(tool)) ||
@@ -26,11 +30,30 @@ export async function readWappMcp(grant, name, args, call) {
   if (!integer(limit, 100) || !integer(page, 100)) fail('WHATSAPP_READ_DENIED');
   // Copy all admitted values before awaiting untrusted upstream code.
   const admitted = { chatId: args.chatId, limit, ...(search ? { query: args.query, page } : {}) };
-  let result;
-  try { result = await call(name, { ...admitted }); }
-  catch { fail('WHATSAPP_READ_FAILED'); }
+  const controller = new AbortController(), deadline = Date.now() + timeoutMs;
+  const result = await new Promise((resolve, reject) => {
+    let done = false;
+    const finish = (fn, value) => {
+      if (done) return;
+      done = true; clearTimeout(timer); signal?.removeEventListener('abort', stop); fn(value);
+    };
+    const stopped = () => Object.assign(new Error('WHATSAPP_READ_STOPPED'), { code: 'WHATSAPP_READ_STOPPED' });
+    const stop = () => { finish(reject, stopped()); controller.abort(); };
+    const timer = setTimeout(stop, timeoutMs);
+    if (signal?.aborted) { stop(); return; }
+    signal?.addEventListener('abort', stop, { once: true });
+    Promise.resolve().then(() => {
+      if (controller.signal.aborted || signal?.aborted || Date.now() >= deadline) { stop(); return; }
+      return call(name, { ...admitted }, { signal: controller.signal });
+    }).then(value => finish(resolve, value), () => finish(reject,
+      Object.assign(new Error('WHATSAPP_READ_FAILED'), { code: 'WHATSAPP_READ_FAILED' })));
+  });
+  if (signal?.aborted || controller.signal.aborted || Date.now() >= deadline) {
+    controller.abort(); fail('WHATSAPP_READ_STOPPED');
+  }
   // Never pass upstream text/error/resource blocks through: only the checked
   // structured JSON crosses the boundary, without inferred complete coverage.
+  let output;
   try {
     if (!object(result) || result.isError === true || !Object.hasOwn(result, 'structuredContent')) fail('WHATSAPP_READ_INVALID');
     const json = JSON.stringify(result.structuredContent);
@@ -48,7 +71,9 @@ export async function readWappMcp(grant, name, args, call) {
           new Date(message.timestamp).toISOString() !== message.timestamp) fail('WHATSAPP_READ_INVALID');
       ids.add(message.id);
     }
-    return { chatId: admitted.chatId, messages: messages.map(({ id, body, timestamp }) => ({ id, body, timestamp })), coverage: 'unknown',
+    output = { chatId: admitted.chatId, messages: messages.map(({ id, body, timestamp }) => ({ id, body, timestamp })), coverage: 'unknown',
       ...(search ? { query: admitted.query, page } : {}) };
   } catch { fail('WHATSAPP_READ_INVALID'); }
+  if (signal?.aborted || Date.now() >= deadline) { controller.abort(); fail('WHATSAPP_READ_STOPPED'); }
+  return output;
 }

@@ -4,7 +4,7 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
-Latest checkpoint (2026-09-16): an unregistered WhatsApp read boundary now validates exact task-granted chats/tools, bounds reads/search and rejects mixed-chat or mismatched results. It returns minimal text records with unknown coverage, not upstream payload/resource blocks. Five focused tests passed, including 16 pre-call denial variants; combined verification passed 901 control / 230 runtime tests, all native/service fixtures, typecheck and build. No upstream code/dependency installation, pairing or live MCP occurred. Trusted grant/lease/revocation/transport wiring and the patch-policy blocker remain; this is not a ready connector. See the source/contracts below, [TODO](../TODO.md) and [handoff](HANDOFF.md). No production gate changed.
+Latest checkpoint (2026-09-16): the unregistered WhatsApp read boundary now bounds local waiting to two minutes, forwards cancellation and suppresses late results. Nine focused tests passed, including exact expiry, cancellation and existing scope checks; combined verification passed 901 control / 234 runtime tests, all native/service fixtures, typecheck and build. No upstream code/dependency installation, pairing or live MCP occurred. Task-deadline capping, trusted grant/lease/revocation/transport wiring and the patch-policy blocker remain; timeout is not remote settlement or safe sleep. See the source/contracts below, [TODO](../TODO.md) and [handoff](HANDOFF.md). No production gate changed.
 
 The owner-selected Mac direction is SwiftUI + WKWebView around the remote portal, not yet implemented. The Electron foundation listed below remains existing code, not a verified Mac release; separate Mac-decision specification edits are awaiting integration.
 
@@ -387,7 +387,7 @@ boundary based on that revision's public MCP schemas in `src/lib/mcp/server.ts`
 dependencies, branding or assets were imported; distribution/license audit remains
 required before shipping the upstream package.
 
-`readWappMcp(grant, name, args, call)` accepts only recent-message reads and scoped
+`readWappMcp(grant, name, args, call, options = {})` accepts only recent-message reads and scoped
 message search. The trusted caller must supply the admitted task's exact chat/tool
 grant; model input cannot supply grants. It must also enforce live lease/revocation,
 bounded transport, one installation connection and the unresolved installation gate.
@@ -396,6 +396,15 @@ or replace these outer checks. Empty scope denies; global search, chat enumerati
 contacts and every mutation are unavailable. Calls inject explicit defaults of 50
 messages/page 1; limits and search pages are capped at 100, query at 1000 UTF-16
 units and grant chat IDs at 100. No automatic paging or retries occur.
+
+Options accept an optional AbortSignal and integer `timeoutMs` from 1 to 120000
+(default 120000). The caller must cap this wait to the task's remaining deadline.
+Cancellation or timeout raises redacted `WHATSAPP_READ_STOPPED`, aborts an owned
+signal passed as the third argument to `call`, and suppresses late results.
+Pre-cancelled requests never call upstream; success and failure remove listeners
+and timers. The deadline is rechecked before returning validated data. This bounds
+local waiting, not upstream execution: a transport may ignore abort. It proves
+neither remote cancellation nor settlement, and does not authorize VM sleep.
 
 Responses require bounded structured JSON (1MiB), exact requested chat on every
 message, distinct nonempty message IDs, canonical timestamps, and matching search

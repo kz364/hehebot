@@ -347,9 +347,13 @@ WhatsApp read-boundary checkpoint (2026-09-16): independently written
 search using host-supplied task grants. Mutations/global search deny before calls;
 mixed-chat or invalid response metadata rejects the entire result. Minimal
 ID/body/timestamp records exclude extra payloads and always report unknown coverage.
-Five focused tests (including 16 denied variants) and combined 901 control / 230
+The optional fifth argument accepts `signal` and `timeoutMs` (1–120000ms,
+default 120000). Upstream receives an owned abort signal; late results are ignored.
+The caller must cap the wait to its task deadline. Local timeout/cancellation is
+not proof of remote cancellation, settlement or safe VM sleep.
+Nine focused tests (including 16 denied variants) and combined 901 control / 234
 runtime tests passed, with all native/service fixtures, typecheck/build. Logs:
-`.local/wappmcp-reads-focused.log`, `.local/wappmcp-reads-combined.log`.
+`.local/wappmcp-timeout-focused.log`, `.local/wappmcp-timeout-combined.log`.
 No tool registration/installation/pairing occurred. Outer trusted authority,
 lease/revocation, bounded transport and setup integration remain; patch policy still
 blocks upstream installation. See IMPLEMENTATION.md for pinned source provenance

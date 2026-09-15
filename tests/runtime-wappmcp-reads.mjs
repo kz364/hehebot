@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { getEventListeners } from 'node:events';
 import { readWappMcp } from '../runtime/wappmcp-reads.mjs';
 
 const recent = 'whatsapp_get_chat_messages', search = 'whatsapp_search_messages';
@@ -68,6 +69,57 @@ test('response mismatch rejects the entire batch without leaking errors or unrel
     await assert.rejects(readWappMcp(grant(), search, { chatId: 'family@g.us', query: 'meeting' }, async () => envelope({ messages: [], meta })),
       { code: 'WHATSAPP_READ_INVALID' });
   }
+});
+
+test('two-minute deadline stops exactly and late upstream completion cannot return data', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+  const controller = new AbortController(); let release, upstreamSignal, calls = 0, stopped = false;
+  const result = readWappMcp(grant(), recent, { chatId: 'family@g.us' }, (_, __, { signal }) => {
+    calls++; upstreamSignal = signal; return new Promise(resolve => { release = resolve; });
+  }, { signal: controller.signal });
+  const checked = assert.rejects(result, { code: 'WHATSAPP_READ_STOPPED' }).then(() => { stopped = true; });
+  await Promise.resolve();
+  t.mock.timers.tick(119999); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(stopped, false); assert.equal(upstreamSignal.aborted, false);
+  t.mock.timers.tick(1); await checked;
+  assert.equal(upstreamSignal.aborted, true); assert.equal(calls, 1);
+  assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+  release(envelope([message()])); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls, 1);
+});
+
+test('pre-call cancellation denies I/O; in-flight cancellation signals upstream and suppresses late failures', async () => {
+  const controller = new AbortController(); controller.abort('PRIVATE_REASON'); let calls = 0;
+  await assert.rejects(readWappMcp(grant(), recent, { chatId: 'family@g.us' }, () => { calls++; }, { signal: controller.signal }),
+    { code: 'WHATSAPP_READ_STOPPED', message: 'WHATSAPP_READ_STOPPED' });
+  assert.equal(calls, 0);
+  const active = new AbortController(); let rejectUpstream, signal;
+  const result = readWappMcp(grant(), recent, { chatId: 'family@g.us' }, (_, __, options) => {
+    signal = options.signal; return new Promise((_, reject) => { rejectUpstream = reject; });
+  }, { signal: active.signal, timeoutMs: 1000 });
+  const checked = assert.rejects(result, { code: 'WHATSAPP_READ_STOPPED' });
+  await Promise.resolve(); active.abort('PRIVATE_REASON'); await checked;
+  assert.equal(signal.aborted, true); assert.equal(getEventListeners(active.signal, 'abort').length, 0);
+  rejectUpstream(Error('PRIVATE_ERROR')); await new Promise(resolve => setImmediate(resolve));
+});
+
+test('invalid timeout options never call upstream and successful reads remove listeners', async () => {
+  for (const options of [null, { timeoutMs: 0 }, { timeoutMs: null }, { timeoutMs: 120001 }, { timeoutMs: 1.5 }, { signal: {} }, { extra: true }]) {
+    await assert.rejects(readWappMcp(grant(), recent, { chatId: 'family@g.us' }, () => assert.fail('invalid call'), options),
+      { code: 'WHATSAPP_READ_DENIED' });
+  }
+  const controller = new AbortController();
+  await readWappMcp(grant(), recent, { chatId: 'family@g.us' }, async () => envelope([]), { signal: controller.signal });
+  assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+});
+
+test('an expired result is refused even before the timer callback runs', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+  let upstreamSignal;
+  await assert.rejects(readWappMcp(grant(), recent, { chatId: 'family@g.us' }, async (_, __, { signal }) => {
+    upstreamSignal = signal; t.mock.timers.setTime(37); return envelope([message()]);
+  }, { timeoutMs: 37 }), { code: 'WHATSAPP_READ_STOPPED' });
+  assert.equal(upstreamSignal.aborted, true);
 });
 
 test('upstream cannot retarget the admitted request; valid maximum bound is accepted', async () => {
