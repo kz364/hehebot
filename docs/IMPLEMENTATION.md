@@ -132,7 +132,7 @@ no mutation requests; native approval/question integration remains incomplete.
 the original task, attempt, epoch, boot, connection and exact question revision.
 The Worker commits response uncertainty before returning answer data; repeated
 takes never resend it. Questions block task completion and sleep until separately
-resolved, even after expiry. Resolution proves neither answer consumption nor
+resolved or explicitly closed after confirmed executor termination, even after expiry. Resolution proves neither answer consumption nor
 task settlement. The portal uses attributed literal question cards and explicit
 answer/skip controls, retains hidden-bot attention, fences stale edits, and leaves
 the ordinary chat composer independent. SQLite, actual local HTTPS Worker and
@@ -141,8 +141,15 @@ binding is now connected through default-off disposable service assembly, includ
 real native answer delivery and cancellation without an answer. Resolved question
 content has bounded 90-day cleanup after resolution and task settlement, guarded
 by retries, operations, effects and locks. Pending/unknown records, native journals
-and backups remain retained. Post-epoch reconciliation and production callback
-admission remain incomplete; production execution remains disabled.
+and backups remain retained. Owner-only `question.close` preserves original
+handoff uncertainty in a versioned closed-custody receipt with native resolution
+left null. It requires the original attempt's confirmed termination and explicit
+revision-checked consent, changes no task/effect/lock, and can reconcile old-epoch
+question custody. Retry, claim and recovery closure reject unresolved questions;
+unrelated fresh work remains eligible. Closed records share guarded 90-day
+retention. SQLite, Worker and Chromium fixtures cover these local contracts.
+Actual provider shutdown, full recovery and production callback admission remain
+unverified; production execution remains disabled.
 
 Observed native child starts are now acknowledged by the service atomically with
 Worker registration. Exact receipt replay recovers a lost acknowledgement without

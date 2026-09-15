@@ -183,6 +183,7 @@ function renderTaskStrip(){
 function renderQuestion(target,question){
  const owner=items('persona').find(bot=>bot.id===question.persona_id)?.body.name??'Unavailable bot';
  const card=node('section',undefined,'task-card question-card');card.dataset.questionId=question.id;card.setAttribute('aria-label',`Questions from ${owner}`);
+ card.dataset.questionRevision=String(question.revision);
  card.append(node('h3',`Questions from ${owner}`));
  const labels={pending:question.answerable?'Waiting for your answer.':'Answer unavailable: this question expired or its task authority changed.',answered:'Answer saved. Native delivery is still pending.',response_unknown:'Answer handed off; delivery and consumption are unverified. Do not resend.',resolved:'Native request resolved. This does not prove answer consumption or task completion.'};
  card.append(node('p',$('connection').textContent==='Connected'?labels[question.state]??'Question state unavailable.':'Question status is stale. Refresh before answering.','review-notice'));
@@ -192,6 +193,19 @@ function renderQuestion(target,question){
  for(const q of question.params.questions){card.append(node('h4',q.header),node('p',q.question,'message-body'));}
  if(question.state==='pending'){
   const answer=button('Review and answer',()=>editQuestion(question),'quiet');answer.disabled=!question.answerable||$('connection').textContent!=='Connected';card.append(answer);
+ }
+ if(question.closeable){
+  card.append(node('p','Original executor termination is confirmed. You may close this request without sending or replaying an answer. Task recovery and external effects remain separate.','hint'));
+  const close=button('Close stopped question',()=>{
+   const key=crypto.randomUUID(),affirmation=node('label',undefined,'check'),check=node('input');check.type='checkbox';check.required=true;
+   affirmation.append(check,document.createTextNode('Close this stopped request; any answer delivery remains unverified.'));
+   openEditor('Close stopped question',[node('p',`Task ${question.run_id} · attempt ${question.attempt}`,'hint message-body'),
+    node('p','This closes only the recorded question custody after confirmed executor termination. It does not record native resolution, send an answer, retry the task, reconcile effects or release locks.','review-notice'),affirmation],()=>{
+     const current=(snapshot.questions??[]).find(q=>q.id===question.id);
+     if($('connection').textContent!=='Connected'||!current?.closeable||current.revision!==question.revision)throw new Error('This question changed or termination is no longer confirmed. Close this editor and refresh.');
+     return command('question.close',{question_id:question.id,expected_revision:question.revision,confirm_stopped_closure:true},key);
+    });
+  },'quiet danger');close.dataset.action='question-close';close.disabled=$('connection').textContent!=='Connected';card.append(close);
  }
  target.append(card);
 }
@@ -266,6 +280,7 @@ function editRoster(){
 $('roster-search').oninput=()=>renderRoster();$('organize-roster').onclick=()=>editRoster();
 function renderRecovery(card,run,recovery,title){
  card.append(node('p',recovery.executor_terminated?(recovery.effects.length?'Executor termination confirmed. External effects still need separate review.':'Executor termination confirmed. No unresolved effects are recorded for this task.'):'Executor termination is not confirmed. Recovery actions are unavailable.','review-notice'));
+ if(recovery.unresolved_questions)card.append(node('p',`${recovery.unresolved_questions} question request(s) remain unresolved. Review their question cards before closing recovery.`,'hint'));
  for(const [blocked,message] of [[recovery.unresolved_operations,'Operation records are unresolved.'],[recovery.descendants_unsettled,'Recover unfinished descendants before this task.'],[recovery.stale_locks,'A retained lock belongs to a different attempt. Administrative reconciliation is required.']])if(blocked)card.append(node('p',message,'hint'));
  card.append(node('p',`${recovery.retained_locks} resource lock(s) retained. Nothing is released by recording an effect outcome.`,'hint'));
  for(const effect of recovery.effects){

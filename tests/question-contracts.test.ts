@@ -15,6 +15,19 @@ const record = { type: 'question-record', payload: {
   } },
 } };
 
+it('requires explicit stopped-custody consent and excludes closure from the model command surface', () => {
+  const close = { schema_version: 1, type: 'question.close', payload: {
+    question_id: bot, expected_revision: 3, confirm_stopped_closure: true,
+  } };
+  expect(validateCommand(close)).toBe(true);
+  for (const change of [{ confirm_stopped_closure: false }, { confirm_stopped_closure: undefined },
+    { expected_revision: 0 }, { question_id: 'bad' }, { resolved: true }, { answers: {} }]) {
+    expect(validateCommand({ ...close, payload: { ...close.payload, ...change } })).toBe(false);
+  }
+  expect(validateRuntime({ type: 'agent-command', payload: { identity: record.payload.identity,
+    run_id: otherBot, attempt: 2, idempotency_key: 'closure-is-owner-only', command: close } })).toBe(false);
+});
+
 it('accepts exact owner answer envelopes including explicit skips and codepoint boundaries', () => {
   expect(validateCommand(answer)).toBe(true);
   expect(validateCommand({ ...answer, payload: { ...answer.payload, answers: { destination: { answers: ['🧭'.repeat(2000)] } } } })).toBe(true);

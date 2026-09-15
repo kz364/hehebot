@@ -324,7 +324,7 @@ it('alarms expire only settled steering audit with execution disabled and no pro
   expect(db.all('SELECT * FROM controller_operations')).toEqual([]);expect(deleteAlarm).toHaveBeenCalled();
 });
 
-it('question retention alarm runs while execution is disabled without wake or task mutation',async()=>{
+it.each(['resolved','closed'])('%s question retention alarm runs while execution is disabled without wake or task mutation',async state=>{
   const run=randomUUID(),id=randomUUID(),now=new Date().toISOString();
   db.exec("INSERT INTO runs(id,persona_id,context_json,status,current_attempt,created_at,updated_at) VALUES(?,?,'{}','completed',1,?,?)",run,bot,now,now);
   db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,settled_at) VALUES(?,1,?,1,?,'completed',?,?)",run,randomUUID(),randomUUID(),now,now);
@@ -332,7 +332,20 @@ it('question retention alarm runs while execution is disabled without wake or ta
     questions:[{id:'choice',header:'Choice',question:'Synthetic text'}]},revision:2,state:'resolved',run_id:run,attempt:1,epoch:1,
     boot_id:randomUUID(),persona_id:bot,conversation_id:bot,created_at:now,expires_at:'2026-09-10T00:15:00.000Z',
     answers:null,answer_owner_id:null,answer_command_id:null,answered_at:null,response_taken_at:null,resolved_at:now};
-  db.exec('INSERT INTO runtime_metadata VALUES(?,?)',`native-question:${id}`,JSON.stringify(row));
+  if(state==='closed'){
+    db.exec("UPDATE attempts SET status='terminated',boot_id=?,native_run_ref='turn' WHERE run_id=?",row.boot_id,run);
+    db.exec('INSERT INTO runtime_metadata VALUES(?,?)',`native-question:${id}`,JSON.stringify({...row,revision:1,state:'pending',resolved_at:null}));
+    const command={schema_version:1,type:'question.close',payload:{question_id:id,expected_revision:1,confirm_stopped_closure:true}};
+    const key=randomUUID();
+    const env={AUTH_MODE:'local',INSTALLATION_ID:'local-only',CONTROL:{getByName:()=>control}} as unknown as Env;
+    const post=(origin:string)=>worker.fetch(new Request(`${origin}/v1/commands`,{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key,Origin:origin},body:JSON.stringify(command)}),env);
+    expect((await post('https://control.invalid')).status).toBe(401);
+    const response=await post('http://127.0.0.1'),receipt=await response.json();
+    expect(response.status).toBe(202);expect(receipt).toMatchObject({status:'applied',resource_id:id});
+    expect(await (await post('http://127.0.0.1')).json()).toEqual(receipt);
+    const closed=JSON.parse(db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`native-question:${id}`)[0].value_json);
+    expect(closed).toMatchObject({version:2,state:'closed',resolved_at:null,closed_at:now,close_owner_id:'local-owner'});
+  }else db.exec('INSERT INTO runtime_metadata VALUES(?,?)',`native-question:${id}`,JSON.stringify(row));
   const before=['runs','attempts','lifecycle','events','controller_operations'].map(table=>db.all(`SELECT * FROM ${table}`));
   await control.getState('owner');expect(setAlarm).toHaveBeenLastCalledWith(Date.parse('2026-12-09T00:00:00.000Z'));
   vi.setSystemTime(new Date('2026-12-09T00:00:00.000Z'));await control.alarm();

@@ -9,11 +9,15 @@ export type NativeQuestionInput = { id: string; connection_id: string; request_i
   params: { threadId: string; turnId: string; itemId: string; isBlocking: boolean; questions: NativeQuestion[]; autoResolutionMs?: number | null } };
 export type NativeQuestionAnswers = Record<string, { answers: string[] }>;
 export type NativeQuestionAnswerCommand = { question_id: string; expected_revision: number; answers: NativeQuestionAnswers };
-export type NativeQuestionRecord = NativeQuestionInput & { version: 1; revision: number; state: 'pending' | 'answered' | 'response_unknown' | 'resolved';
+export type NativeQuestionCloseCommand = { question_id: string; expected_revision: number; confirm_stopped_closure: true };
+export type NativeQuestionRecord = NativeQuestionInput & { revision: number;
   run_id: string; attempt: number; epoch: number; boot_id: string; persona_id: string; conversation_id: string;
   created_at: string; expires_at: string; answers: NativeQuestionAnswers | null; answer_owner_id: string | null; answer_command_id: string | null;
-  answered_at: string | null; response_taken_at: string | null; resolved_at: string | null };
-export type NativeQuestionView = NativeQuestionRecord & { answerable: boolean };
+  answered_at: string | null; response_taken_at: string | null; resolved_at: string | null } &
+  ({ version: 1; state: 'pending' | 'answered' | 'response_unknown' | 'resolved' } |
+   { version: 2; state: 'closed'; closed_at: string; close_owner_id: string; close_command_id: string });
+export type NativeQuestionView = NativeQuestionRecord & { answerable: boolean; closeable: boolean };
+const terminal = (r: NativeQuestionRecord) => r.state === 'resolved' || r.state === 'closed';
 const uuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(v);
 const text = (v: unknown, min: number, max: number): v is string => typeof v === 'string' && v.length <= max * 2 &&
   [...v].length >= min && [...v].length <= max && !/\p{Cs}/u.test(v);
@@ -63,13 +67,13 @@ const inputOf = (r: NativeQuestionRecord): NativeQuestionInput => ({ id: r.id, c
 const retentionCandidates = `FROM runtime_metadata m
  JOIN runs r ON r.id=json_extract(m.value_json,'$.run_id')
  JOIN attempts a ON a.run_id=r.id AND a.attempt=json_extract(m.value_json,'$.attempt')
- WHERE m.key GLOB 'native-question:*' AND json_extract(m.value_json,'$.state')='resolved'
- AND r.status IN ('completed','failed','cancelled') AND a.status IN ('completed','failed','cancelled') AND a.settled_at IS NOT NULL
+ WHERE m.key GLOB 'native-question:*' AND json_extract(m.value_json,'$.state') IN ('resolved','closed')
+ AND r.status IN ('completed','failed','cancelled') AND a.status IN ('completed','failed','cancelled','terminated') AND a.settled_at IS NOT NULL
  AND NOT EXISTS(SELECT 1 FROM retry_queue q WHERE q.run_id=r.id)
  AND NOT EXISTS(SELECT 1 FROM operations o WHERE o.run_id=r.id AND o.status!='settled')
  AND NOT EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=r.id)
  AND NOT EXISTS(SELECT 1 FROM effects e WHERE e.run_id=r.id AND e.status IN ('intent','dispatched','outcome_unknown'))`;
-const retentionOrigin = "MAX(json_extract(m.value_json,'$.resolved_at'),a.settled_at)";
+const retentionOrigin = "MAX(COALESCE(json_extract(m.value_json,'$.resolved_at'),json_extract(m.value_json,'$.closed_at')),a.settled_at)";
 
 /** Trusted runtime custody and owner-answer queue, never approval, dispatch retry or task settlement. */
 export class NativeQuestionLedger {
@@ -102,19 +106,22 @@ export class NativeQuestionLedger {
       invalid(row.value_json.length <= 131072 && new TextEncoder().encode(row.value_json).length <= 131072);
       const r = JSON.parse(row.value_json) as NativeQuestionRecord;
       invalid(fields(r, ['version', 'id', 'connection_id', 'request_id', 'params', 'revision', 'state', 'run_id', 'attempt', 'epoch', 'boot_id', 'persona_id',
-        'conversation_id', 'created_at', 'expires_at', 'answers', 'answer_owner_id', 'answer_command_id', 'answered_at', 'response_taken_at', 'resolved_at']));
+        'conversation_id', 'created_at', 'expires_at', 'answers', 'answer_owner_id', 'answer_command_id', 'answered_at', 'response_taken_at', 'resolved_at',
+        ...(r.version === 2 ? ['closed_at', 'close_owner_id', 'close_command_id'] : [])]));
       normalize(inputOf(r));
-      invalid(r.version === 1 && r.id === id && uuid(r.run_id) && uuid(r.persona_id) && uuid(r.conversation_id) && uuid(r.boot_id) &&
+      invalid((r.version === 1 || r.version === 2 && r.state === 'closed') && r.id === id && uuid(r.run_id) && uuid(r.persona_id) && uuid(r.conversation_id) && uuid(r.boot_id) &&
         Number.isSafeInteger(r.attempt) && r.attempt > 0 && Number.isSafeInteger(r.epoch) && r.epoch >= 0 &&
         timestamp(r.created_at) && timestamp(r.expires_at) && r.expires_at > r.created_at && Date.parse(r.expires_at) - Date.parse(r.created_at) <= 900000);
-      const answered = r.answers !== null, taken = r.response_taken_at !== null, resolved = r.state === 'resolved';
-      invalid(['pending', 'answered', 'response_unknown', 'resolved'].includes(r.state) &&
+      const answered = r.answers !== null, taken = r.response_taken_at !== null, resolved = r.state === 'resolved', closed = r.state === 'closed';
+      invalid((r.version === 1 ? ['pending', 'answered', 'response_unknown', 'resolved'].includes(r.state) : closed) &&
         (answered ? text(r.answer_owner_id, 1, 256) && uuid(r.answer_command_id) && timestamp(r.answered_at) && r.answered_at >= r.created_at && r.answered_at < r.expires_at :
           r.answer_owner_id === null && r.answer_command_id === null && r.answered_at === null) &&
         (taken ? answered && timestamp(r.response_taken_at) && r.response_taken_at >= r.answered_at! && r.response_taken_at < r.expires_at : true) &&
         (resolved ? timestamp(r.resolved_at) && r.resolved_at >= (r.response_taken_at ?? r.answered_at ?? r.created_at) : r.resolved_at === null) &&
+        (r.version === 2 ? timestamp(r.closed_at) && r.closed_at >= (r.response_taken_at ?? r.answered_at ?? r.created_at) &&
+          text(r.close_owner_id, 1, 256) && uuid(r.close_command_id) : true) &&
         (r.state === 'pending' ? !answered && !taken : r.state === 'answered' ? answered && !taken : r.state === 'response_unknown' ? answered && taken : true) &&
-        r.revision === 1 + Number(answered) + Number(taken) + Number(resolved));
+        r.revision === 1 + Number(answered) + Number(taken) + Number(resolved || closed));
       if (answered) answersFor(r.params.questions, r.answers);
       return r;
     } catch { throw new ControlError('NATIVE_QUESTION_CORRUPT', 'Native question metadata requires review.'); }
@@ -126,7 +133,7 @@ export class NativeQuestionLedger {
     for (const { key } of keys) {
       const id = key.slice(NATIVE_QUESTION_PREFIX.length);
       requireThat(uuid(id), 'NATIVE_QUESTION_CORRUPT', 'Native question metadata requires review.');
-      const r = this.get(id); if (r.state !== 'resolved') unresolved++; visit(r);
+      const r = this.get(id); if (!terminal(r)) unresolved++; visit(r);
     }
     requireThat(unresolved <= 64, 'NATIVE_QUESTION_CAPACITY', 'Too many unresolved native questions.');
     return keys.length;
@@ -134,7 +141,7 @@ export class NativeQuestionLedger {
   list(): NativeQuestionView[] {
     const result: NativeQuestionView[] = [];
     this.scan(r => {
-      if (r.state === 'resolved') return;
+      if (terminal(r)) return;
       let answerable = false;
       if (r.state === 'pending') {
         try { this.bound({ epoch: r.epoch, boot_id: r.boot_id }, r, r.connection_id, true); answerable = true; }
@@ -143,7 +150,7 @@ export class NativeQuestionLedger {
             'CONTEXT_INVALIDATED', 'NATIVE_QUESTION_EXPIRED', 'NOT_FOUND'].includes(error.code)) throw error;
         }
       }
-      if (result.length < 64) result.push({ ...r, answerable });
+      if (result.length < 64) result.push({ ...r, answerable, closeable: this.stopped(r) });
     });
     return result.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
   }
@@ -183,7 +190,7 @@ export class NativeQuestionLedger {
       const { run, native } = this.authority(identity, runId, attempt, normalized.params.turnId, true);
       const conversation = this.scope(run); let prior: NativeQuestionRecord | undefined, unresolved = 0;
       const total = this.scan(r => {
-        if (r.state !== 'resolved') unresolved++;
+        if (!terminal(r)) unresolved++;
         if (r.id === input.id) prior = r;
         else requireThat(!(r.connection_id === normalized.connection_id && (r.request_id === normalized.request_id ||
           r.params.threadId === normalized.params.threadId && r.params.turnId === normalized.params.turnId && r.params.itemId === normalized.params.itemId)),
@@ -230,8 +237,39 @@ export class NativeQuestionLedger {
   resolve(identity: Identity, id: string, connectionId: string): void {
     this.store.db.transaction(() => {
       const r = this.get(id); this.bound(identity, r, connectionId, false); if (r.state === 'resolved') return;
+      requireThat(r.state !== 'closed', 'REVISION_CONFLICT', 'Stopped question custody was already closed.');
       const now = this.clock(); requireThat(now >= (r.response_taken_at ?? r.answered_at ?? r.created_at), 'INVALID_INPUT', 'The question clock moved backwards.', 422);
       r.state = 'resolved'; r.resolved_at = now; r.revision++; this.save(r);
+    });
+  }
+
+  private stopped(r: NativeQuestionRecord): boolean {
+    const attempt = this.store.db.all<{ status: string; settled_at: string | null; epoch: number; boot_id: string; native_run_ref: string | null }>(
+      'SELECT status,settled_at,epoch,boot_id,native_run_ref FROM attempts WHERE run_id=? AND attempt=?', r.run_id, r.attempt)[0];
+    return attempt?.status === 'terminated' && attempt.epoch === r.epoch && attempt.boot_id === r.boot_id &&
+      attempt.native_run_ref === r.params.turnId && timestamp(attempt.settled_at) &&
+      attempt.settled_at >= (r.response_taken_at ?? r.answered_at ?? r.created_at) && this.clock() >= attempt.settled_at;
+  }
+
+  /** Owner custody closure after provider-confirmed termination, NOT native
+   * resolution, answer delivery, effect reconciliation, or a retry instruction. */
+  closeStopped(owner: string, commandId: string, input: NativeQuestionCloseCommand): string {
+    return this.store.db.transaction(() => {
+      invalid(fields(input, ['question_id', 'expected_revision', 'confirm_stopped_closure']) && uuid(input.question_id) &&
+        Number.isSafeInteger(input.expected_revision) && input.confirm_stopped_closure === true);
+      const r = this.get(input.question_id);
+      const command = this.store.db.all<{ owner_id: string; type: string; status: string; payload_json: string }>(
+        'SELECT owner_id,type,status,payload_json FROM commands WHERE id=?', commandId)[0];
+      let payload: unknown; try { payload = command && JSON.parse(command.payload_json); } catch { /* reject below */ }
+      requireThat(text(owner, 1, 256) && uuid(commandId) && command?.owner_id === owner && command.type === 'question.close' &&
+        ['accepted', 'applied'].includes(command.status) && fields(payload, ['question_id', 'expected_revision', 'confirm_stopped_closure']) &&
+        payload.question_id === r.id && payload.expected_revision === input.expected_revision && payload.confirm_stopped_closure === true,
+      'FORBIDDEN', 'An accepted matching owner closure command is required.', 403);
+      requireThat(!terminal(r) && r.revision === input.expected_revision, 'REVISION_CONFLICT', 'The native question changed.');
+      requireThat(this.stopped(r), 'CANCEL_UNCONFIRMED', 'The original executor must be confirmed terminated.');
+      this.save({ ...r, version: 2, state: 'closed', revision: r.revision + 1,
+        closed_at: this.clock(), close_owner_id: owner, close_command_id: commandId });
+      return r.id;
     });
   }
 }

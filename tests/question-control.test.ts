@@ -95,3 +95,139 @@ it('permits native resolution after owner cancellation but does not grant an ans
   lifecycle.complete(identity, runId, 1, { status: 'cancelled', text: '' });
   expect(f.store.run(runId).status).toBe('cancelled');
 });
+
+const close = (question_id: string, expected_revision = 1): Command => ({ schema_version: 1, type: 'question.close',
+  payload: { question_id, expected_revision, confirm_stopped_closure: true } });
+function stop() {
+  f.setNow('2026-09-10T00:30:00.000Z'); lifecycle.watchdog();
+  lifecycle.observeStopped({ phase: 'stopped', executionStopped: true, persistentState: 'retained', observedAt: Date.now() });
+}
+
+it.each(['pending', 'answered', 'response_unknown'] as const)('explicit stopped closure preserves %s custody without claiming native resolution', state => {
+  const id = f.core.questions.record(identity, runId, 1, input());
+  if (state !== 'pending') f.accept(answer(id));
+  if (state === 'response_unknown') f.core.questions.takeAnswer(identity, id, connection);
+  const original = f.core.questions.get(id);
+  expect(f.accept(close(id, original.revision))).toMatchObject({ status: 'rejected', error: { code: 'CANCEL_UNCONFIRMED' } });
+  expect(f.core.questions.get(id)).toEqual(original);
+  stop();
+  expect(f.store.run(runId).status).toBe('recovery_required'); expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+  expect(f.core.questions.list()).toMatchObject([{ id, answerable: false, closeable: true }]);
+  expect(f.core.recoveryPage(bot).recovery).toMatchObject([{ unresolved_questions: 1, can_recover: false }]);
+  expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: runId, expected_attempt: 1 } }))
+    .toMatchObject({ status: 'rejected', error: { code: 'CANCEL_UNCONFIRMED' } });
+  const recovery: Command = { schema_version: 1, type: 'run.recover', payload: { run_id: runId, expected_attempt: 1, release_resources: true } };
+  expect(f.accept(recovery)).toMatchObject({ status: 'rejected', error: { code: 'CANCEL_UNCONFIRMED' } });
+  const before = protectedRows(), key = randomUUID(), command = close(id, original.revision), receipt = f.accept(command, key);
+  expect(receipt).toMatchObject({ status: 'applied', resource_id: id });
+  const closed = f.core.questions.get(id);
+  expect(closed).toEqual({ ...original, version: 2, state: 'closed', revision: original.revision + 1,
+    closed_at: f.core.now(), close_owner_id: 'owner', close_command_id: receipt.id });
+  expect(closed.resolved_at).toBeNull(); expect(protectedRows()).toEqual(before);
+  expect(f.core.questions.list()).toEqual([]);
+  const reopened = new ControlCore(f.store, f.core.options);
+  expect(reopened.questions.get(id)).toEqual(closed);
+  expect(() => reopened.questions.takeAnswer(identity, id, connection)).toThrow();
+  expect(() => reopened.questions.resolve(identity, id, connection)).toThrow();
+  expect(f.accept(command, key)).toEqual(receipt); expect(f.core.questions.get(id)).toEqual(closed);
+  expect(f.accept(close(id, closed.revision)).status).toBe('rejected');
+  expect(f.core.recoveryPage(bot).recovery).toMatchObject([{ unresolved_questions: 0, can_recover: true }]);
+  expect(f.accept(recovery).status).toBe('applied'); expect(f.store.run(runId).status).toBe('failed');
+});
+
+it('closure neither reconciles an unknown effect nor releases its resource lock or another question', () => {
+  const id = f.core.questions.record(identity, runId, 1, input());
+  const unrelated = admit(otherBot, 'other-turn'), request = input();
+  request.request_id = 7; request.params.turnId = 'other-turn';
+  const other = f.core.questions.record(identity, unrelated, 1, request);
+  f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','dispatched','policy','digest',?)",
+    randomUUID(), runId, 'synthetic-mutation', f.core.now());
+  f.db.exec('INSERT INTO resource_locks(resource_id,run_id,attempt,acquired_at) VALUES(?,?,1,?)', 'browser:one', runId, f.core.now());
+  stop(); const before = protectedRows(), otherBefore = f.core.questions.get(other);
+  expect(f.accept(close(id)).status).toBe('applied'); expect(protectedRows()).toEqual(before);
+  expect(f.core.questions.get(other)).toEqual(otherBefore);
+  expect(f.core.recoveryPage(bot).recovery).toMatchObject([{ unresolved_questions: 0, can_recover: false, retained_locks: 1 }]);
+  expect(f.core.questions.list()).toMatchObject([{ id: other }]);
+});
+
+it.each(['epoch', 'boot_id', 'native_run_ref', 'settled_at'])('requires original terminated %s identity before owner closure', field => {
+  const id = f.core.questions.record(identity, runId, 1, input()); stop();
+  const wrong = { epoch: 4, boot_id: randomUUID(), native_run_ref: 'other-turn', settled_at: null }[field];
+  f.db.exec(`UPDATE attempts SET ${field}=? WHERE run_id=?`, wrong!, runId);
+  expect(f.core.questions.list()).toMatchObject([{ id, closeable: false }]);
+  expect(f.accept(close(id))).toMatchObject({ status: 'rejected', error: { code: 'CANCEL_UNCONFIRMED' } });
+  expect(f.core.questions.get(id).state).toBe('pending');
+});
+
+it('stale closure revisions and mismatched owner receipts cannot close another question', () => {
+  const id = f.core.questions.record(identity, runId, 1, input()); f.accept(answer(id)); stop();
+  expect(f.accept(close(id))).toMatchObject({ status: 'rejected', error: { code: 'REVISION_CONFLICT' } });
+  const accepted = randomUUID(), payload = close(id, 2).payload;
+  f.db.exec("INSERT INTO commands(id,owner_id,idempotency_key,body_hash,type,payload_json,status,accepted_at) VALUES(?,'owner',?,'hash','question.close',?,'accepted',?)",
+    accepted, randomUUID(), JSON.stringify(payload), f.core.now());
+  expect(() => f.core.questions.closeStopped('other-owner', accepted, payload as any)).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
+  f.db.exec("UPDATE commands SET payload_json=? WHERE id=?", JSON.stringify({ ...payload, question_id: randomUUID() }), accepted);
+  expect(() => f.core.questions.closeStopped('owner', accepted, payload as any)).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
+  expect(f.core.questions.get(id).state).toBe('answered');
+});
+
+it('a retained due retry cannot bypass a question or request a wake', () => {
+  f.core.questions.record(identity, runId, 1, input()); stop();
+  f.db.exec("UPDATE runs SET status='waiting' WHERE id=?", runId);
+  f.db.exec("INSERT INTO retry_queue(run_id,due_at,reason) VALUES(?,?,'STALE_EPOCH')", runId, f.core.now());
+  const before = lifecycle.get(); lifecycle.retryDue();
+  expect(f.store.run(runId)).toMatchObject({ status: 'recovery_required', error_code: 'NATIVE_QUESTION_UNRESOLVED' });
+  expect(lifecycle.get()).toEqual(before); expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+});
+
+it('claim selection skips a retained queued question task before LIMIT without starving fresh work', () => {
+  f.core.questions.record(identity, runId, 1, input()); stop();
+  f.db.exec("UPDATE runs SET status='queued' WHERE id=?", runId);
+  expect(lifecycle.nextClaimableRun()).toBeUndefined();
+  const fresh = f.accept({ schema_version: 1, type: 'message.send', payload: { conversation_id: otherBot, text: 'Unrelated fresh request' } }).resource_id;
+  expect(lifecycle.nextClaimableRun()?.id).toBe(fresh);
+  expect(f.store.run(runId).current_attempt).toBe(1);
+});
+
+it('stopped closure permits guarded retention only after task closure and the full 90 days', () => {
+  const id = f.core.questions.record(identity, runId, 1, input()); stop();
+  f.setNow('2026-09-11T00:00:00.000Z'); f.accept(close(id));
+  expect(f.core.questions.nextExpiry()).toBeNull(); expect(f.core.questions.prune()).toBe(0);
+  expect(f.accept({ schema_version: 1, type: 'run.recover', payload: { run_id: runId, expected_attempt: 1, release_resources: true } }).status).toBe('applied');
+  expect(f.core.questions.nextExpiry()).toBe('2026-12-10T00:00:00.000Z');
+  f.setNow('2026-12-09T23:59:59.999Z'); expect(f.core.questions.prune()).toBe(0);
+  f.setNow('2026-12-10T00:00:00.000Z'); expect(f.core.questions.prune()).toBe(1);
+  expect(f.core.questions.nextExpiry()).toBeNull();
+});
+
+it('closure and its command roll back together on a failed metadata write', () => {
+  const id = f.core.questions.record(identity, runId, 1, input()); stop();
+  const original = f.core.questions.get(id), before = f.db.all('SELECT * FROM commands');
+  f.db.exec("CREATE TRIGGER reject_closure BEFORE UPDATE ON runtime_metadata WHEN NEW.key GLOB 'native-question:*' BEGIN SELECT RAISE(ABORT,'synthetic'); END");
+  expect(() => f.accept(close(id))).toThrow();
+  expect(f.core.questions.get(id)).toEqual(original); expect(f.db.all('SELECT * FROM commands')).toEqual(before);
+});
+
+it.each([{ version: 1 }, { state: 'resolved' }, { resolved_at: '2026-09-10T00:30:00.000Z' },
+  { close_owner_id: '' }, { close_command_id: 'invalid' }, { closed_at: '2026-09-09T00:00:00.000Z' }, { revision: 1 }])
+('rejects malformed closed envelopes without silent repair: %j', change => {
+  const id = f.core.questions.record(identity, runId, 1, input()); stop(); f.accept(close(id));
+  const corrupted = JSON.stringify({ ...f.core.questions.get(id), ...change });
+  f.db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=?', corrupted, `native-question:${id}`);
+  expect(() => f.core.questions.get(id)).toThrowError(expect.objectContaining({ code: 'NATIVE_QUESTION_CORRUPT' }));
+  expect(() => f.core.questions.list()).toThrowError(expect.objectContaining({ code: 'NATIVE_QUESTION_CORRUPT' }));
+  expect(f.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?', `native-question:${id}`)[0].value_json).toBe(corrupted);
+});
+
+it('can close retained old-attempt custody after a new epoch without touching current work', () => {
+  const id = f.core.questions.record(identity, runId, 1, input()); stop();
+  const boot = randomUUID();
+  f.db.exec("UPDATE lifecycle SET epoch=4,boot_id=?,phase='READY',lease_until='2026-09-10T00:40:00.000Z'", boot);
+  f.db.exec("UPDATE runs SET status='running',current_attempt=2 WHERE id=?", runId);
+  f.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,native_run_ref,deadline_at) VALUES(?,2,?,4,?,'running','new-turn','2026-09-10T00:40:00.000Z')",
+    runId, randomUUID(), boot);
+  const request = input(); request.params.turnId = 'new-turn'; request.connection_id = randomUUID();
+  const current = f.core.questions.record({ epoch: 4, boot_id: boot }, runId, 2, request), before = protectedRows();
+  expect(f.accept(close(id)).status).toBe('applied'); expect(protectedRows()).toEqual(before);
+  expect(f.core.questions.list()).toMatchObject([{ id: current, answerable: true, closeable: false }]);
+});

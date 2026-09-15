@@ -30,8 +30,15 @@ const server = createServer(async (req, res) => {
     const json = value => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(value)); };
     if (path === '/v1/commands') {
       let raw = ''; for await (const chunk of req) raw += chunk;
-      const command = JSON.parse(raw); commands.push(command); assert.equal(command.type, 'question.answer');
+      const command = JSON.parse(raw); commands.push(command);
       const q = state.questions.find(q => q.id === command.payload.question_id);
+      if (command.type === 'question.close') {
+        assert.ok(q?.closeable); assert.equal(command.payload.expected_revision, q.revision);
+        assert.equal(command.payload.confirm_stopped_closure, true);
+        state.questions = state.questions.filter(row => row.id !== q.id);
+        return json({ id: randomUUID(), status: 'applied' });
+      }
+      assert.equal(command.type, 'question.answer');
       assert.ok(q?.answerable); assert.equal(command.payload.expected_revision, q.revision);
       q.state = 'answered'; q.answerable = false; q.revision++; return json({ id: randomUUID(), status: 'applied' });
     }
@@ -90,7 +97,25 @@ try {
   offline = true; await browser('eval', 'document.querySelector("#refresh").click()');
   await wait('document.querySelector(".question-card").textContent.includes("status is stale")');
   assert.equal(await evaluate('document.querySelector(".question-card button").disabled'), true); await capture('offline');
-  offline = false; state.questions = []; await refresh(); await wait('document.querySelectorAll(".question-card").length===0');
-  assert.equal(commands.length, 1); assert.equal(await evaluate('document.querySelectorAll(".message.bot").length'), 0);
-  console.log('PASS: exact scoped answer/skip including prototype-like ID, literal text, no answer draft in browser storage, hidden attention, answered/unknown/reload, stale editor and offline fences, narrow bounds; only one explicit question.answer, no inferred completion.');
+  offline = false; hidden.answerable = false; hidden.closeable = true; hidden.revision++; await refresh();
+  await wait('document.querySelector("[data-action=question-close]")?.disabled===false');
+  await capture('stopped-narrow');
+  await click('[data-action=question-close]');
+  assert.match(await evaluate('document.querySelector("#editor").textContent'), /does not record native resolution/);
+  await click('#editor-form button[type=submit]'); assert.equal(commands.length, 1);
+  await browser('check', '#editor input[type=checkbox]');
+  hidden.revision++; await refresh(); await wait(`document.querySelector('.question-card').dataset.questionRevision==='${hidden.revision}'`);
+  await click('#editor-form button[type=submit]'); await wait('!document.querySelector("#editor-error").hidden');
+  assert.equal(commands.length, 1); await capture('closure-stale-narrow');
+  await click('#cancel-editor'); await click('[data-action=question-close]');
+  await browser('check', '#editor input[type=checkbox]');
+  await browser('set', 'viewport', '1280', '900', '2'); await browser('eval', 'new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+  await capture('closure-confirm'); await click('#editor-form button[type=submit]');
+  await wait('!document.querySelector("#editor").open&&document.querySelectorAll(".question-card").length===0');
+  assert.deepEqual(commands[1], { schema_version: 1, type: 'question.close', payload: {
+    question_id: hidden.id, expected_revision: hidden.revision, confirm_stopped_closure: true,
+  } });
+  assert.equal(state.questions[0].id, first.id); assert.equal(state.questions[0].state, 'response_unknown');
+  assert.equal(commands.length, 2); assert.equal(await evaluate('document.querySelectorAll(".message.bot").length'), 0);
+  console.log('PASS: exact scoped answer/skip, literal text, private drafts, hidden attention, unknown/reload, stale/offline and narrow checks; stopped-question consent and stale revision; unrelated custody preserved; one answer and one explicit closure, no inferred completion.');
 } finally { await browser('close').catch(() => {}); await new Promise(ok => server.close(ok)); }

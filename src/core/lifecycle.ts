@@ -22,7 +22,8 @@ export class LifecycleCore {
  nextClaimableRun():Run|undefined {
   return this.store.db.transaction(()=>{
    const cutoff=new Date(this.core.options.now().getTime()-90*86400000).toISOString(),budget=this.core.budget.admissionPredicate();
-   return this.store.db.all<Run>(`SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) AND (${nativeDescendantsSettledSql}) ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings)[0];
+   const questions=[...new Set(this.core.questions.list().map(question=>question.run_id))];
+   return this.store.db.all<Run>(`SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) AND (${nativeDescendantsSettledSql}) ${questions.length?`AND r.id NOT IN (${questions.map(()=>'?').join(',')})`:''} ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings,...questions)[0];
   });
  }
  private touch():void{this.store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('last_activity',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(this.core.now()));}
@@ -151,6 +152,7 @@ export class LifecycleCore {
  }
  private scheduleRetry(run:Run,reason:string):void {
   if(run.role==='background'||run.current_attempt>=3 || !['TEMPORARY_UNAVAILABLE','DEADLINE_EXCEEDED','STALE_EPOCH','CANCEL_UNCONFIRMED'].includes(reason))return;
+  if(this.core.questions.list().some(question=>question.run_id===run.id))return;
   const effects=this.store.db.all<{classification:string;status:string;receipt_json:string|null}>('SELECT classification,status,receipt_json FROM effects WHERE run_id=?',run.id);
   if(effects.some(x=>['intent','dispatched','outcome_unknown'].includes(x.status)||x.classification==='mutation'||x.classification==='idempotent'&&!x.receipt_json))return;
   if(this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled'",run.id).length)return;
@@ -162,7 +164,9 @@ export class LifecycleCore {
   this.store.db.transaction(()=>{
    for(const retry of this.store.db.all<{run_id:string}>('SELECT run_id FROM retry_queue WHERE due_at<=?',this.core.now())){
     const run=this.store.run(retry.run_id);
-    if(run.status==='waiting'&&this.core.options.executionEnabled){
+    if(run.status==='waiting'&&this.core.questions.list().some(question=>question.run_id===run.id)){
+     this.store.db.exec("UPDATE runs SET status='recovery_required',error_code='NATIVE_QUESTION_UNRESOLVED',updated_at=? WHERE id=?",this.core.now(),run.id);
+    }else if(run.status==='waiting'&&this.core.options.executionEnabled){
      this.store.db.exec("UPDATE runs SET status='queued',updated_at=? WHERE id=?",this.core.now(),run.id);
      this.store.db.exec("UPDATE lifecycle SET queue_sequence=queue_sequence+1,desired_state='RUN',phase=CASE WHEN phase='DRAINING' THEN 'READY' ELSE phase END,stop_token=CASE WHEN phase='DRAINING' THEN NULL ELSE stop_token END,wake_after_stop=CASE WHEN phase IN ('STOP_COMMITTED','STOPPING') THEN 1 ELSE wake_after_stop END WHERE singleton=1");
     }

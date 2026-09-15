@@ -57,6 +57,11 @@ try {
   const custody = { identity, question_id: question.id, connection_id: question.connection_id };
   assert.deepEqual(await control.request('question-take', custody), { state: 'pending', answer: null });
   let state = await getState(); assert.equal(state.questions[0].answerable, true);
+  const closePayload = { question_id: question.id, expected_revision: 1, confirm_stopped_closure: true };
+  assert.equal((await owner('question.close', closePayload, randomUUID(), 'https://untrusted.invalid')).status, 403);
+  const prematureClose = await owner('question.close', closePayload);
+  assert.equal(prematureClose.body.status, 'rejected'); assert.equal(prematureClose.body.error.code, 'CANCEL_UNCONFIRMED');
+  assert.equal((await getState()).questions[0].state, 'pending');
   const cursor = state.next_cursor, payload = { question_id: question.id, expected_revision: 1,
     answers: Object.fromEntries([['__proto__', { answers: ['West'] }], ['timing', { answers: [] }]]) };
   const commandKey = randomUUID();

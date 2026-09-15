@@ -81,6 +81,7 @@ export class ControlCore {
     requireThat(run.current_attempt===p.expected_attempt&&run.status==='recovery_required','REVISION_CONFLICT','Select the current recovery-required attempt.');
     const attempt=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,p.expected_attempt)[0];
     requireThat(attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before closing recovery.');
+    requireThat(!this.questions.list().some(question=>question.run_id===run.id),'CANCEL_UNCONFIRMED','Close unresolved stopped-executor questions before closing recovery.');
     requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length,'CANCEL_UNCONFIRMED','The old execution has not settled.');
     requireThat(!this.store.db.all("SELECT id FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown') LIMIT 1",run.id).length,'OUTCOME_UNKNOWN','Reconcile every external effect before closing recovery.');
     requireThat(!this.store.db.all(`SELECT r.id FROM runs r WHERE r.id=? AND NOT (${nativeDescendantsSettledSql})`,run.id).length,'CANCEL_UNCONFIRMED','Recover descendants before their parent.');
@@ -99,6 +100,7 @@ export class ControlCore {
      {run_id:p.run_id,effect_id:id,attempt:p.expected_attempt,outcome:p.outcome},now);return id;
    }
    case 'question.answer':return this.questions.answer(owner,commandId,command.payload);
+   case 'question.close':return this.questions.closeStopped(owner,commandId,command.payload);
    case 'roster.set':return new RosterLedger(this.store,()=>this.now()).set(owner,commandId,command.payload);
    case 'budget.set':{
     const id=this.budget.set(owner,commandId,command.payload);this.reconcileBudget();return id;
@@ -225,6 +227,7 @@ export class ControlCore {
     requireThat(run.current_attempt<3,'DEADLINE_EXCEEDED','This run has reached its retry limit.');
     const unsettledAttempt=this.store.db.all("SELECT run_id FROM attempts WHERE run_id=? AND status IN ('claimed','running')",run.id);
     requireThat(!unsettledAttempt.length,'CANCEL_UNCONFIRMED','The native attempt must settle before retrying.');
+    requireThat(!this.questions.list().some(question=>question.run_id===run.id),'CANCEL_UNCONFIRMED','Close unresolved stopped-executor questions before retrying.');
     requireThat(!this.store.db.all('SELECT resource_id FROM resource_locks WHERE run_id=?',run.id).length,'RESOURCE_BUSY','The prior task still owns a shared resource.');
     requireThat(run.role!=='background','CAPABILITY_UNAVAILABLE','Use a task follow-up after native settlement to ask the coordinator for a new background task.');
     const uncertain=this.store.db.all("SELECT id FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown')",run.id);
@@ -460,10 +463,11 @@ export class ControlCore {
   const runs=this.store.db.all<Run>('SELECT * FROM runs ORDER BY created_at DESC LIMIT 100');
   const steering=new TaskSteering(this.store,()=>now);
   const previews=new OutputPreviews(this.store,()=>now);
+  const questions=this.questions.list();
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
    settings:{timezone:'Asia/Jakarta'},
    budget:this.budget.summary(),
-   questions:this.questions.list(),
+   questions,
    roster:new RosterLedger(this.store,()=>now).summary(),
    roster_activity:{observed_at:now,personas:this.store.db.all<{persona_id:string;unfinished:number;active:number;waiting:number;recovery:number}>(`SELECT persona_id,COUNT(*) AS unfinished,
     SUM(status IN ('claimed','running','finishing','cancelling')) AS active,SUM(status='waiting') AS waiting,SUM(status='recovery_required') AS recovery
@@ -474,7 +478,7 @@ export class ControlCore {
    skill_proposals:after===undefined?this.store.db.all<{id:string;skill_id:string;proposal_revision:number;expected_skill_revision:number;body_json:string;provenance_json:string;status:string;executable_files_changed:number;created_at:string;reviewed_at:string|null}>("SELECT id,skill_id,proposal_revision,expected_skill_revision,body_json,provenance_json,status,executable_files_changed,created_at,reviewed_at FROM skill_proposals ORDER BY created_at,id").map(({body_json,provenance_json,executable_files_changed,...row})=>({...row,body:JSON.parse(body_json),provenance:JSON.parse(provenance_json),executable_files_changed:Boolean(executable_files_changed)})):undefined,
    steering:runs.flatMap(run=>steering.receipts({run_id:run.id,attempt:run.current_attempt})),
    output_previews:runs.flatMap(run=>{const value=previews.read(run.id,run.current_attempt);return value?[value]:[];}),
-   recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run)),
+   recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run,questions)),
    runs:runs.map(({context_json,checkpoint_json,...rest})=>rest),
    summary:{phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},
    timeline:after===undefined?this.store.latestEvents(now):undefined};
@@ -489,10 +493,11 @@ export class ControlCore {
   const counts=this.store.db.all<{total:number;waiting:number;recovery:number}>(`SELECT COUNT(*) AS total,COALESCE(SUM(r.status='waiting'),0) AS waiting,COALESCE(SUM(r.status='recovery_required'),0) AS recovery FROM runs r WHERE ${eligible}`,conversationId)[0];
   const rows=this.store.db.all<Run & {request_status:string|null}>(`SELECT r.*,c.status AS request_status FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE ${eligible} AND r.id>? ORDER BY r.id LIMIT ?`,conversationId,after??'',limit+1);
   const runs=rows.slice(0,limit),previews=new OutputPreviews(this.store,()=>this.now()),steering=new TaskSteering(this.store,()=>this.now());
+  const questions=this.questions.list();
   return {observed_at:this.now(),counts,runs:runs.map(({context_json,checkpoint_json,...run})=>run),
    output_previews:runs.flatMap(run=>{const value=previews.read(run.id,run.current_attempt);return value?[value]:[];}),
    steering:runs.flatMap(run=>steering.receipts({run_id:run.id,attempt:run.current_attempt})),
-   recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run)),
+   recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run,questions)),
    next_cursor:rows.length>limit?runs.at(-1)!.id:null};
  }
  recoveryPage(conversationId:string,after?:string,limit=20){
@@ -503,17 +508,18 @@ export class ControlCore {
   // Keyset by immutable ID, independent of timeline retention and newest-run
   // windows. Restart pagination to see concurrent arrivals before the cursor.
   const rows=this.store.db.all<Run>(`SELECT * FROM runs WHERE status='recovery_required' AND ${object.kind==='persona'?'persona_id':"json_extract(context_json,'$.room_id')"}=? AND id>? ORDER BY id LIMIT ?`,conversationId,after??'',limit+1);
-  const runs=rows.slice(0,limit);
-  return {runs:runs.map(({context_json,checkpoint_json,...run})=>run),recovery:runs.map(run=>this.recoveryMetadata(run)),next_cursor:rows.length>limit?runs.at(-1)!.id:null};
+  const runs=rows.slice(0,limit),questions=this.questions.list();
+  return {runs:runs.map(({context_json,checkpoint_json,...run})=>run),recovery:runs.map(run=>this.recoveryMetadata(run,questions)),next_cursor:rows.length>limit?runs.at(-1)!.id:null};
  }
- private recoveryMetadata(run:Run){
+ private recoveryMetadata(run:Run,unresolvedQuestions:ReadonlyArray<{run_id:string}>){
   const terminated=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,run.current_attempt)[0]?.status==='terminated';
   const operations=this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length>0;
   const effects=this.store.db.all<{id:string;status:string;classification:string;action_key:string;request_digest:string}>("SELECT id,status,classification,action_key,request_digest FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown') ORDER BY id LIMIT 21",run.id);
   const descendants=this.store.db.all(`SELECT r.id FROM runs r WHERE r.id=? AND NOT (${nativeDescendantsSettledSql})`,run.id).length>0;
   const locks=this.store.db.all<{n:number;stale:number}>('SELECT count(*) AS n,COALESCE(SUM(attempt!=?),0) AS stale FROM resource_locks WHERE run_id=?',run.current_attempt,run.id)[0];
+  const questions=unresolvedQuestions.filter(question=>question.run_id===run.id).length;
   return {run_id:run.id,attempt:run.current_attempt,executor_terminated:terminated,unresolved_operations:operations,
-   descendants_unsettled:descendants,retained_locks:locks.n,stale_locks:locks.stale>0,effects:effects.slice(0,20),effects_truncated:effects.length>20,
-   can_decide_effects:terminated&&!operations,can_recover:terminated&&!operations&&!effects.length&&!descendants&&!locks.stale};
+   unresolved_questions:questions,descendants_unsettled:descendants,retained_locks:locks.n,stale_locks:locks.stale>0,effects:effects.slice(0,20),effects_truncated:effects.length>20,
+   can_decide_effects:terminated&&!operations,can_recover:terminated&&!operations&&!effects.length&&!descendants&&!locks.stale&&!questions};
  }
 }
