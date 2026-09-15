@@ -67,6 +67,15 @@ Order is dependency-oriented, not a promise to complete an external gate before 
 
 Do not perform these implicitly. [AUTH_SETUP.md](docs/AUTH_SETUP.md) contains detailed setup steps.
 
+**E09 selected WhatsApp integration:** owner-selected `wappmcp` 0.4.0 at
+`9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8` is now specified in SPEC.md. Setup/catalog
+and host-scoped adapter work remain unimplemented. Installation is blocked by its
+`postinstall: patch-package` dependency mutation; no exception is authorized.
+Credential-free authorization/compatibility fixtures can proceed independently.
+Pairing, reconnect/history coverage and sleep/cost measurements require separate
+live authorization. Notification allowlists are not tool permissions; mutations
+must remain unavailable by default. Source findings are in docs/IMPLEMENTATION.md.
+
 - [ ] **Codex:** supported owner login on the executing runtime, then bounded subscription inference, eligibility/quota/no-paid-fallback, restart and later refresh tests. Do not copy auth caches.
 - [ ] **Sprites/Cloudflare:** authorize the concrete deployment/lifecycle test and establish appropriate runtime/Access configuration. Existing Sprite status/token availability is not blanket authorization to wake, deploy or mutate it.
 - [ ] **Budget evidence:** obtain actual billing/usage/credits and enforce an agreed limit where supported. The $10 testing instruction is not a verified provider-enforced cap; approximately $5/month is a target, not a measured result.

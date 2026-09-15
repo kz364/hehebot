@@ -357,6 +357,29 @@ For focused checks use `npm test`, `npm run test:runtime`, `npm run test:e2e`, a
 
 ## Remaining gates
 
+WhatsApp selection review (2026-09-16): the exact owner-selected wappmcp subsection
+was merged from the coordinating thread without replacing other specification
+sections. No package/code was imported or installed. At selected revision
+[9a0a39e](https://github.com/vaibhavpandeyvpz/wappmcp/tree/9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8),
+`package.json` ships `patches/` and runs `patch-package` on installation. The patch
+`patches/whatsapp-web.js+1.34.7.patch` changes Reaction.js and injected Utils.js:
+it normalizes WhatsApp Web `$1` message keys to `_serialized` and repairs send/edit
+and last-message lookups. Omitting it can leave undefined message IDs and invalid
+IndexedDB lookups on affected Web versions; ignoring install scripts is not a
+verified compatibility solution. Require an unmodified supported dependency path
+or explicit reviewed policy exception before adoption. Neither exists here yet.
+
+`src/lib/mcp/server.ts` registers reads and mutations unconditionally;
+`src/lib/whatsapp/channel.ts` applies its allowlist only to incoming channel events,
+with empty lists allowing all and user/chat matches combined by OR. This is not
+selected-chat tool authorization. Permission-notification relay is not permission
+for these tools. Host-scoped read enforcement and default-denied mutations remain
+required engineering. Baseline is MIT, with Apache-2.0 whatsapp-web.js and further
+transitive licenses requiring audit before redistribution. Node 24+, Chromium,
+QR LocalAuth persistence, account terms, history coverage and sleep cost remain
+separate prerequisites/evidence. This static review grants no live pairing,
+installation, routine activation, provider provisioning or production readiness.
+
 1. Promote the disposable service composition only after complete operation coverage, safe recovery/resume and warm/cold lifecycle evidence. Disconnect, lease-loss and uncertain-admission fixtures do not establish production recovery.
 2. Complete owner-authorized Codex login in the executing environment and verify model eligibility, no paid fallback, bounded inference, restart continuity, refresh ownership, and concurrent-turn behavior.
 3. Establish authoritative recursive child/tool/effect settlement and exact cancellation. Root completion or cancellation acknowledgment is insufficient.
