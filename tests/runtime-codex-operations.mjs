@@ -157,6 +157,25 @@ test('nested startup uses its own spawn clock; incomplete and legacy spawns inve
   assert.equal(startups[0].started_at, '2026-09-14T01:19:00.000Z'); assert.equal(startups[0].deadline_at, f.config.deadlineAt);
 });
 
+test('post-tool quiet phases have independent capped five-minute deadlines without replay progress', async t => {
+  const f = await fixture(t), key = '["commands","same"]';
+  await f.journal.write('attempt-a', { status: 'finishing', rootSettled: true, commands: { same: 'completed' },
+    quietPhases: { [key]: { status: 'completed', startedAt: '2026-09-14T01:10:00.000Z' } },
+    childObligations: { '["child","turn"]': { commands: { same: 'completed' },
+      quietPhases: { [key]: { status: 'inProgress', startedAt: '2026-09-14T01:18:00.000Z' } } } } });
+  const before = await f.journal.get('attempt-a');
+  const phases = (await f.operations.snapshot()).filter(op => op.kind === 'inference').slice(1);
+  assert.deepEqual(phases.map(op => [op.status, op.started_at, op.deadline_at, op.last_progress_at]), [
+    ['settled', '2026-09-14T01:10:00.000Z', '2026-09-14T01:15:00.000Z', '2026-09-14T01:10:00.000Z'],
+    ['active', '2026-09-14T01:18:00.000Z', f.config.deadlineAt, '2026-09-14T01:18:00.000Z'],
+  ]);
+  assert.notEqual(phases[0].id, phases[1].id);
+  assert.deepEqual((await new CodexOperations(f.config).snapshot()).filter(op => op.kind === 'inference').slice(1), phases);
+  assert.deepEqual(await f.journal.get('attempt-a'), before);
+  await f.journal.update('attempt-a', { commands: {} });
+  await assert.rejects(f.operations.snapshot(), { code: 'INVALID_QUIET_PHASE' });
+});
+
 test('initial silence has a replay-stable five-minute bound distinct from root and coverage', async t => {
   const f = await fixture(t);
   await f.journal.putIfAbsent('attempt-a', { status: 'running', initialInference: 'inProgress' });

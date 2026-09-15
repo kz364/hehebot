@@ -524,8 +524,10 @@ try {
       assert.equal(operations.filter(op => op.status === 'unknown').length, 1);
       assert.equal(operations.find(op => op.kind === 'inference').status, 'settled');
       if (supervisorChildMode) {
-        assert.equal(operations.length, 13);
-        assert.equal(operations.filter(op => op.kind === 'inference' && op.status === 'settled').length, 3);
+        const quiet = [observed, ...Object.values(observed.childObligations ?? {})].flatMap(owner => Object.values(owner.quietPhases ?? {}));
+        assert.ok(quiet.every(phase => phase.status === 'completed'));
+        assert.equal(operations.length, 13 + quiet.length);
+        assert.equal(operations.filter(op => op.kind === 'inference' && op.status === 'settled').length, 3 + quiet.length);
         assert.equal(operations.filter(op => op.kind === 'child' && op.status === 'settled').length, 2);
         const startup = operations.filter(op => op.kind === 'child' && Date.parse(op.deadline_at) - Date.parse(op.started_at) === 120000);
         assert.equal(startup.length, 1);

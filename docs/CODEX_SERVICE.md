@@ -46,9 +46,11 @@ lease expiry fences admission and retains the hold; this is not crash recovery
 or permission to retry unknown native submission or effects.
 
 The `--operation-pages` mode runs 101 actual native read-only MCP calls and checks
-every returned routine receipt. The resulting 104 unique operations (including
-root inference, initial-response phase and unknown coverage) reach HTTPS Worker heartbeats in pages of
-100 and 4. Two scripted model requests suffice; no connector or paid model runs.
+every returned routine receipt. Its 104 base operations (including root inference,
+initial-response phase and unknown coverage), plus observed quiet phases, reach
+HTTPS Worker heartbeats in complete pages of at most 100. Parallel completions
+need not create one quiet phase per call; the fixture checks exact page coverage
+against retained observations. Two scripted model requests suffice; no connector or paid model runs.
 The host bounds each complete snapshot at 4096 records and retains settled history
 as well as active/unknown obligations. It sends every page on each maintenance,
 not a rotating subset. The Worker request limit remains 100. Cancellation IDs
@@ -160,13 +162,13 @@ do not erase their startup obligations. Legacy spawns without clocks receive no
 invented phase. The spawn invocation remains independently accounted for.
 SQLite watchdog tests distinguish the instant before and at startup expiry;
 native child fixtures check the retained startup timestamp and settled phase.
-These bounds do not cover later gaps after tools or token-progress liveness.
-Those remaining quiet periods, explicit longer transfer/shell allowances and
+These bounds do not establish token-progress liveness.
+Remaining quiet periods, explicit longer transfer/shell allowances and
 progress-based phase extensions remain separate work; this is not full S19 or
 proof of the native operation's true start before its host notification arrived.
 Timeout still requests cancellation, not settlement or automatic replay.
 
-Quiet-phase journaling is now an additional preparatory observation boundary.
+Quiet-phase journaling supplies additional bounded inference operations.
 When a new live tool/reasoning/spawn completion leaves no observed item active
 in its exact owner, the adapter records a `quietPhases` entry keyed by category
 and item ID with immutable `startedAt` and `inProgress`/`completed` state. A new
@@ -180,10 +182,13 @@ does not close child phases. Completed phase IDs never reopen.
 The bounded, content-free shape allows at most one active phase and 4096 retained
 phases per owner; malformed/orphan records fail rather than being repaired.
 Offline inspection includes their original identities/timestamps without writing
-state. **These records are not yet heartbeat operations or enforced five-minute
-deadlines.** Connecting projection, exact watchdog expiry, human-wait interactions
-and complete post-message/unknown-item coverage remains E01. No sleep/production
-gate is relaxed by this journal stage.
+state. Heartbeats project each phase with an independent identity and a deadline
+five minutes after its original host observation, capped by the task hard deadline.
+Reopening or rereading the journal never advances progress. SQLite tests verify
+cancellation exactly at expiry, not one millisecond before; native fixtures inspect
+the active bound while holding the next model response. Human-wait interactions
+and complete post-message/unknown-item coverage remain E01. No sleep/production
+gate is relaxed; timeout does not prove native termination or permit replay.
 
 The `--child` mode uses four scripted requests. The native root spawns a child,
 finishes, and the child uses its inherited root MCP grant to retrieve the exact
@@ -192,8 +197,8 @@ held open. The actual service child facade persists the native-to-Worker mapping
 an owner `run.cancel` command then travels through Worker heartbeat and supervisor
 maintenance to exactly one child `turn/interrupt`, even across repeated maintenance.
 The fixture separately observes the exact interrupted turn and HTTP connection
-closure. Eight root-owned heartbeat operations, including the settled child startup
-phase, retain one unknown coverage record.
+closure. Eight base root-owned heartbeat operations, including the settled child startup
+phase, plus observed quiet phases retain one unknown coverage record.
 Worker completion returns HTTP 409 `CANCEL_UNCONFIRMED`; the root remains running,
 the child remains cancelling, and supervisor completion/sleep are denied. This is
 not recursive settlement, model judgment, active-work crash recovery, per-child

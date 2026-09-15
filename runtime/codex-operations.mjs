@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readQuietPhases } from './codex-quiet-phases.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const uuid = value => {
@@ -55,6 +56,12 @@ export class CodexOperations {
       add(['initialInference'], 'inference', status(row.initialInference, ['completed']), { startedAt: start, lastProgressAt: start });
     }
     const items = (owner, identity) => {
+      for (const [key, phase] of Object.entries(readQuietPhases(owner.quietPhases))) {
+        const [field, id] = JSON.parse(key);
+        if (!Object.hasOwn(owner[field] ?? {}, id)) fail('INVALID_QUIET_PHASE');
+        add([identity, 'quietInference', key], 'inference', status(phase.status, ['completed']),
+          { startedAt: phase.startedAt, lastProgressAt: phase.startedAt });
+      }
       if (owner !== row && (owner.initialInference !== undefined || owner.initialInferenceAt !== undefined)) {
         if (!['inProgress', 'completed'].includes(owner.initialInference) || typeof owner.initialInferenceAt !== 'string') fail('INVALID_OPERATION_TIMING');
         add([identity, 'initialInference'], 'inference', status(owner.initialInference, ['completed']),

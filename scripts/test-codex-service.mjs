@@ -187,6 +187,15 @@ try {
           assert.equal(receipt.routines[0].id, routine.id); assert.equal(receipt.routines[0].revision, 1);
           assert.deepEqual(receipt.routines[0].body, routine); report.nativeReceipt = true;
         }
+        if (!historyMode) {
+          await wait(async () => {
+            const row = await service.observe();
+            return [row, ...Object.values(row.childObligations ?? {})].some(owner => Object.values(owner.quietPhases ?? {}).some(phase => phase.status === 'inProgress'));
+          }, 'post-tool quiet phase');
+          const phases = (await service.supervisor.operations()).filter(operation => operation.kind === 'inference' &&
+            operation.status === 'active' && Date.parse(operation.deadline_at) - Date.parse(operation.started_at) === 300000);
+          assert.equal(phases.length, 1); report.postToolSilenceBounded = true;
+        }
         if (questionsMode) {
           const tool = body.tools.find(tool => tool.name === 'request_user_input' || tool.tools?.some(nested => nested.name === 'request_user_input'));
           assert.ok(tool);
@@ -462,6 +471,7 @@ try {
   await service.maintain();
   const operations = await service.supervisor.operations();
   assert.equal(native.initialInference, 'completed');
+  const quietPhases = [native, ...Object.values(native.childObligations ?? {})].flatMap(owner => Object.values(owner.quietPhases ?? {}));
   if (!crashMode && !historyMode) {
     const owners = [native, ...Object.values(native.childObligations ?? {})];
     const phases = owners.flatMap(owner => Object.values(owner.quietPhases ?? {}));
@@ -469,10 +479,10 @@ try {
     assert.ok(phases.every(phase => new Date(phase.startedAt).toISOString() === phase.startedAt));
     report.quietPhaseJournalObserved = true;
   }
-  assert.equal(operations.length, childMode ? 8 : expectedToolCalls + 3 + Number(reasoningMode));
+  assert.equal(operations.length, (childMode ? 8 : expectedToolCalls + 3 + Number(reasoningMode)) + quietPhases.length);
   if (childMode) {
     assert.ok(Object.values(native.childObligations).every(child => child.initialInference === 'completed'));
-    assert.equal(operations.filter(operation => operation.kind === 'inference' && operation.status === 'settled').length, 3);
+    assert.equal(operations.filter(operation => operation.kind === 'inference' && operation.status === 'settled').length, 3 + quietPhases.length);
     const startup = operations.filter(operation => operation.kind === 'child' && operation.deadline_at < dispatched.claim.deadline_at);
     assert.equal(startup.length, 1); assert.equal(startup[0].status, 'settled');
     const [spawnId] = Object.keys(native.spawns);
@@ -484,17 +494,18 @@ try {
     assert.deepEqual(Object.values(native.reasoningItems), ['completed']);
     assert.doesNotMatch(JSON.stringify(native), /PRIVATE_SYNTHETIC_REASONING_43/);
     const phases = operations.filter(operation => operation.kind === 'inference' && operation.deadline_at < dispatched.claim.deadline_at);
-    assert.equal(phases.length, 2); assert.ok(phases.every(phase => phase.status === 'settled'));
+    assert.equal(phases.length, 2 + quietPhases.length); assert.ok(phases.every(phase => phase.status === 'settled'));
     assert.ok(phases.every(phase => Date.parse(phase.deadline_at) - Date.parse(phase.started_at) === 300000));
     assert.deepEqual(heartbeatPages.at(-1), operations);
     report.reasoningPhaseObserved = true; report.reasoningContentExcluded = true;
   }
   if (operationPagesMode) {
-    assert.deepEqual(heartbeatPages.slice(-2).map(page => page.length), [100, 4]);
-    assert.deepEqual(heartbeatPages.slice(-2).flat(), operations);
-    assert.equal(new Set(operations.map(operation => operation.id)).size, 104);
+    const total = 104 + quietPhases.length, pageCount = Math.ceil(total / 100);
+    assert.deepEqual(heartbeatPages.slice(-pageCount).flat(), operations);
+    assert.equal(new Set(operations.map(operation => operation.id)).size, total);
+    assert.ok(heartbeatPages.slice(-pageCount).every((page, i) => page.length === Math.min(100, total - i * 100)));
     report.nativeToolCalls = expectedToolCalls;
-    report.completeHeartbeatPages = [100, 4];
+    report.completeHeartbeatPages = heartbeatPages.slice(-pageCount).map(page => page.length);
   }
   assert.equal(operations.filter(operation => operation.status === 'unknown').length, 1);
   assert.ok(operations.every(operation => operation.run_id === queued.resource_id && operation.deadline_at <= dispatched.claim.deadline_at));

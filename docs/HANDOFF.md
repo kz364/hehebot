@@ -273,6 +273,20 @@ deadlines; next work connects those records to capped five-minute inference
 operations and exact-expiry tests. Post-message/unknown-item and human-wait coverage
 remain explicit gaps. No accounts, live provider work, push/deploy or gate changes.
 
+Quiet-phase projection checkpoint (2026-09-15): those journal observations now
+produce independent inference heartbeat operations, capped at original start plus
+five minutes or the task hard deadline. Replay/reopen never refreshes progress.
+Focused tests passed 26 runtime plus 6 SQLite projection/watchdog tests, including
+exact expiry and distinct root/child bounds. `bash scripts/verify-codex.sh` passed
+901 control / 216 runtime tests, all native/service fixtures, typecheck and build.
+Private logs are `.local/quiet-projection-focused.log` and
+`.local/quiet-projection-combined.log`. Native fixtures withhold model responses
+to inspect active post-tool bounds and account for variable parallel-completion
+quiet counts in complete heartbeat pages. No new progress is inferred from reads.
+Continue E01 human-wait interactions and post-message/unknown-item coverage;
+explicit longer operations and progress policy remain open. Unknown coverage
+still blocks completion/sleep; no provider/account calls or gate changes.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.
