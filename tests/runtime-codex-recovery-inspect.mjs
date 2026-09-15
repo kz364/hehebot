@@ -108,6 +108,13 @@ test('quiet phases are content-free, owner-bound observations and malformed stat
   });
   assert.deepEqual(await snapshot(f.directory), before); assert.equal(report.resumeAllowed, false);
   assert.doesNotMatch(JSON.stringify(report), /PRIVATE_/);
+  const endedAt = '2026-09-15T01:04:17.321Z';
+  await f.journal.write(attemptId, { ...f.native, childObligations: { [childKey]: {
+    ...owner, quietPhases: { [key]: { ...owner.quietPhases[key], endedAt } },
+  } } });
+  const measured = (await inspectCodexRecovery(f.directory)).native.observations.find(row => row.kind === 'quietInference');
+  assert.equal(measured.endedAt, endedAt); assert.equal(measured.durationMs, 137321);
+  assert.equal(measured.timing.lastProgressAt, startedAt);
   for (const quietPhases of [null, { '["mcpCalls","missing"]': owner.quietPhases[key] },
     { [key]: { ...owner.quietPhases[key], secret: canary } }]) {
     await f.journal.write(attemptId, { ...f.native, childObligations: { [childKey]: { ...owner, quietPhases } } });

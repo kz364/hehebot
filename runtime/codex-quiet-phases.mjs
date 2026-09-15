@@ -14,10 +14,12 @@ export function readQuietPhases(value) {
     let pair;
     try { pair = JSON.parse(key); } catch { fail(); }
     if (!Array.isArray(pair) || pair.length !== 2 || !QUIET_PHASE_FIELDS.includes(pair[0]) || !pair.every(id => typeof id === 'string' && id.length > 0 && id.length <= 1024) ||
-        JSON.stringify(pair) !== key || !object(phase) || Object.keys(phase).length !== 2 ||
+        JSON.stringify(pair) !== key || !object(phase) || !Object.keys(phase).every(key => ['status', 'startedAt', 'endedAt'].includes(key)) ||
         !['inProgress', 'completed'].includes(phase.status) || !timestamp(phase.startedAt)) fail();
+    if (phase.endedAt !== undefined && (phase.status !== 'completed' || !timestamp(phase.endedAt) || phase.endedAt < phase.startedAt)) fail();
     if (phase.status === 'inProgress' && ++active > 1) fail();
-    phases[key] = { status: phase.status, startedAt: phase.startedAt };
+    phases[key] = { status: phase.status, startedAt: phase.startedAt,
+      ...(phase.endedAt === undefined ? {} : { endedAt: phase.endedAt }) };
   }
   return phases;
 }
@@ -28,7 +30,10 @@ export function readQuietPhases(value) {
 export function advanceQuietPhases(value, at, after = undefined) {
   const phases = readQuietPhases(value);
   if (at !== undefined && (!timestamp(at) || Object.values(phases).some(phase => phase.startedAt > at))) fail();
-  for (const phase of Object.values(phases)) phase.status = 'completed';
+  for (const phase of Object.values(phases)) {
+    if (phase.status === 'inProgress' && at !== undefined) phase.endedAt = at;
+    phase.status = 'completed';
+  }
   if (after !== undefined && at !== undefined && !Object.hasOwn(phases, after)) {
     phases[after] = { status: 'inProgress', startedAt: at };
   }

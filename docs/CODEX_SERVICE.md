@@ -197,6 +197,18 @@ termination leaves child message phases intact. Native fixtures observe these
 records; focused tests verify their original five-minute projection and replay
 isolation. This does not account for partial streamed-message liveness.
 
+Quiet-window activity diagnostics retain an optional immutable `endedAt` when
+the first closing boundary has a live host timestamp. The offline inspector
+exports that timestamp and `durationMs` alongside the existing owner, preceding
+item/category and start. Historical closure without a timestamp and old journal
+rows remain unmeasured; later replay never invents an end. These additions contain
+no prompts, answers or tool payloads, create no timer/polling/provider calls and
+do not change heartbeat progress or deadlines. Inspect only under the existing
+stopped-executor/kernel-lock procedure. They measure observed native-event silence,
+not CPU idleness, billing or safe-to-sleep time. Use representative real workload
+durations before proposing a shorter timeout; the five-minute value is a maximum
+silence bound, not a mandatory delay. No live VM rollout is implied.
+
 The `--child` mode uses four scripted requests. The native root spawns a child,
 finishes, and the child uses its inherited root MCP grant to retrieve the exact
 paused routine from Worker/SQLite. Its next model HTTP response is deliberately

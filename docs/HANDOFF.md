@@ -298,6 +298,16 @@ Private evidence: `.local/message-quiet-focused.log` and
 `.local/message-quiet-combined.log`. Continue with human-wait handling and
 streaming/unknown-item coverage; no full E01 or production acceptance is claimed.
 
+Owner-requested activity timing (2026-09-16): quiet phases now optionally retain
+their first live `endedAt`; offline inspection exports `durationMs`. Legacy and
+history-only closures remain unmeasured. Replay cannot overwrite an end or refresh
+heartbeat progress. Tests passed 72 focused and 901 control / 220 runtime combined,
+with all native/service fixtures, typecheck and build. Evidence lives in ignored
+`.local/quiet-activity-focused.log` and `.local/quiet-activity-combined.log`.
+No added polling or provider calls; no rollout, shorter timeout or gate changes.
+These measurements are native-event silence, not CPU idle or billing. Real workload
+collection and safe timeout/sleep analysis remain explicit E11 work.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

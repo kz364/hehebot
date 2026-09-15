@@ -141,7 +141,9 @@ export async function inspectCodexRecovery(directory) {
         const [field, itemId] = JSON.parse(key);
         require(Object.hasOwn(owner[field] ?? {}, itemId) && obligations.length < 4096);
         obligations.push({ threadId, turnId, kind: 'quietInference', itemId: key,
-          status: phase.status, timing: { startedAt: phase.startedAt, lastProgressAt: phase.startedAt } });
+          status: phase.status, timing: { startedAt: phase.startedAt, lastProgressAt: phase.startedAt },
+          ...(phase.endedAt === undefined ? {} : { endedAt: phase.endedAt,
+            durationMs: Date.parse(phase.endedAt) - Date.parse(phase.startedAt) }) });
       }
       const clocks = new Map(entries(owner.operationTimes));
       for (const field of ['commands', 'mcpCalls', 'spawns', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'collabCalls', 'reasoningItems']) for (const [key, item] of entries(owner[field])) {

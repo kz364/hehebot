@@ -27,7 +27,7 @@ test('phase order survives equal timestamps and cannot reopen an old completed p
   const one = advanceQuietPhases(undefined, at, first);
   const two = advanceQuietPhases(one, at, second);
   assert.deepEqual(one, { [first]: { status: 'inProgress', startedAt: at } });
-  assert.deepEqual(two, { [first]: { status: 'completed', startedAt: at }, [second]: { status: 'inProgress', startedAt: at } });
+  assert.deepEqual(two, { [first]: { status: 'completed', startedAt: at, endedAt: at }, [second]: { status: 'inProgress', startedAt: at } });
   const closed = advanceQuietPhases(two, undefined);
   assert.deepEqual(advanceQuietPhases(closed, later, first), closed);
   assert.deepEqual(readQuietPhases(undefined), {});
@@ -56,7 +56,7 @@ test('only the last parallel tool completion opens quiet time; duplicate/history
   await f.item('history', 'completed', undefined);
   assert.deepEqual((await f.journal.get('attempt')).quietPhases, phases);
   await f.item('next', 'inProgress', later);
-  assert.deepEqual((await f.journal.get('attempt')).quietPhases, { [second]: { status: 'completed', startedAt: later } });
+  assert.deepEqual((await f.journal.get('attempt')).quietPhases, { [second]: { status: 'completed', startedAt: later, endedAt: later } });
   await f.item('next', 'completed', later);
   const next = (await f.journal.get('attempt')).quietPhases;
   assert.equal(next['["commands","next"]'].status, 'inProgress');
@@ -84,7 +84,22 @@ for (const threadId of ['root', 'child']) test(`live ${threadId} message silence
   assert.equal(owner(await f.journal.get('attempt')).quietPhases[phaseKey].status, threadId === 'root' ? 'completed' : 'inProgress');
   if (threadId === 'child') await f.adapter.observe('attempt', { method: 'turn/completed', params: { threadId, turn: { id: 'turn', status: 'completed' } } });
   await message('late', later);
-  assert.deepEqual(owner(await f.journal.get('attempt')).quietPhases, { [phaseKey]: { status: 'completed', startedAt: at } });
+  assert.deepEqual(owner(await f.journal.get('attempt')).quietPhases, { [phaseKey]: { status: 'completed', startedAt: at,
+    ...(threadId === 'root' ? { endedAt: later } : {}) } });
+});
+
+test('activity duration preserves the first live end and never invents history-only durations', () => {
+  const open = advanceQuietPhases(undefined, at, first);
+  const end = '2026-09-15T01:02:17.321Z';
+  const closed = advanceQuietPhases(open, end);
+  assert.equal(Date.parse(closed[first].endedAt) - Date.parse(closed[first].startedAt), 137321);
+  assert.deepEqual(advanceQuietPhases(closed, '2026-09-15T01:04:00.000Z'), closed);
+  const historical = advanceQuietPhases(open, undefined);
+  assert.equal(advanceQuietPhases(historical, end)[first].endedAt, undefined);
+  for (const value of [{ ...open[first], endedAt: end }, { ...closed[first], endedAt: 'bad' },
+    { ...closed[first], endedAt: '2026-09-15T00:59:59.999Z' }]) {
+    assert.throws(() => readQuietPhases({ [first]: value }), { code: 'INVALID_QUIET_PHASE' });
+  }
 });
 
 test('a message during an active tool does not invent idle inference', async t => {

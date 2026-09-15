@@ -1,14 +1,14 @@
 # Hehebot progress and TODO
 
-**Last reviewed: 2026-09-15 (Asia/Jakarta). Not operational; production gates remain false.**
+**Last reviewed: 2026-09-16 (Asia/Jakarta). Not operational; production gates remain false.**
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
 ## Current checkpoint
 
-- **Latest checkpoint:** post-message quiet-inference deadlines, 2026-09-15. Local, not pushed. Live completed messages now start the same bounded per-owner quiet phase when no observed tool remains active. E01 remains partial.
-- **Verified:** **71 focused tests passed**, including root/child message clocks, duplicate/history isolation, terminal closure and concurrent-tool exclusion. Seven native service cases observed post-message phases.
-- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 219 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/message-quiet-focused.log`, `.local/message-quiet-combined.log`.
+- **Latest checkpoint:** owner-requested quiet-window activity timing, 2026-09-16. Local, not pushed or deployed. Journal records first live end; offline diagnostics expose elapsed milliseconds. No added polling/inference/provider calls or timeout change.
+- **Verified:** **72 focused tests passed**, including exact duration, immutable first end, history-only unknown duration and read-only inspection. These measure native-event silence, not CPU idle time or safe sleep.
+- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 220 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/quiet-activity-focused.log`, `.local/quiet-activity-combined.log`.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
 - **Next implementation priority:** E01, complete deadline/activity accounting; then E02 recovery and E03 responsive orchestration. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
@@ -39,6 +39,7 @@ These are useful foundations that should not be rebuilt simply because their ful
 - [x] Application logical export/reconstruction, selected authority-stripped templates and offline restore inspection including question custody. Evidence: [export/import](docs/CONTROL_EXPORT_IMPORT.md), [templates](docs/PORTABLE_TEMPLATES.md), [inspection](docs/CONTROL_RESTORE_INSPECTION.md).
 - [x] Optional-routine budget admission and content-free monitoring projections. Evidence: [budget](docs/BUDGET.md), [implementation](docs/IMPLEMENTATION.md). Not actual billing or an enforced provider spending cap.
 - [x] Credential-free 1,000-publication passive-update volume cases with execution enabled: stopped provider driver receives zero wake calls; idle/busy supervisor receives zero additional native submissions; active task/attempt and recipient delivery remain intact. Evidence: `tests/control-acceptance.test.ts`, `tests/execution-supervisor.test.ts`. Staging trace and full E15 acceptance remain open.
+- [x] Content-free quiet-window start/end/duration diagnostics for timeout analysis. Evidence: `tests/runtime-codex-quiet-phases.mjs`, `tests/runtime-codex-recovery-inspect.mjs`. Real workload collection and VM CPU/billing/safe-sleep analysis remain E11; no shorter timeout is justified yet.
 
 ## Remaining implementation and acceptance
 
