@@ -169,11 +169,11 @@ proof of the native operation's true start before its host notification arrived.
 Timeout still requests cancellation, not settlement or automatic replay.
 
 Quiet-phase journaling supplies additional bounded inference operations.
-When a new live tool/reasoning/spawn completion leaves no observed item active
+When a new live tool/reasoning/spawn or assistant-message completion leaves no observed item active
 in its exact owner, the adapter records a `quietPhases` entry keyed by category
 and item ID with immutable `startedAt` and `inProgress`/`completed` state. A new
 live item boundary or exact turn termination closes the prior phase. Duplicate
-items and history-only tool reads neither create nor advance phases; terminal
+items and history-only tool/message reads neither create nor advance phases; terminal
 turn readback can close them. Token-usage snapshots are not progress. Parallel
 items do not create quiet time until the last one terminates; equal timestamps
 use journal observation order rather than lexical sorting. Root termination
@@ -187,8 +187,15 @@ five minutes after its original host observation, capped by the task hard deadli
 Reopening or rereading the journal never advances progress. SQLite tests verify
 cancellation exactly at expiry, not one millisecond before; native fixtures inspect
 the active bound while holding the next model response. Human-wait interactions
-and complete post-message/unknown-item coverage remain E01. No sleep/production
+and complete streaming/unknown-item coverage remain E01. No sleep/production
 gate is relaxed; timeout does not prove native termination or permit replay.
+
+Completed message phases use `outputItems` and the exact message ID, not message
+text or a new content copy. A live message during an observed active tool opens
+no quiet phase. A message after exact turn termination cannot reopen one. Root
+termination leaves child message phases intact. Native fixtures observe these
+records; focused tests verify their original five-minute projection and replay
+isolation. This does not account for partial streamed-message liveness.
 
 The `--child` mode uses four scripted requests. The native root spawns a child,
 finishes, and the child uses its inherited root MCP grant to retrieve the exact

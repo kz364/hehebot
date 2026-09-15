@@ -262,7 +262,7 @@ export class CodexAdapter {
           !owner.outputPreview && observationOwners(row).filter(value => value.outputPreview).length >= 101) fail('OUTPUT_TRACKING_LIMIT');
       return save({ outputItems: { ...seen, [id]: message.outputDigest }, outputPreview: {
         version: (owner.outputPreview?.version ?? 0) + 1, text: message.text, truncated: message.truncated,
-      } });
+      } }, JSON.stringify(['outputItems', id]));
     }
     if (['turn/started', 'turn/completed'].includes(notification?.method) && params?.threadId !== row.threadId) {
       if (!hasReceiver(row, params?.threadId)) fail('SETTLEMENT_IDENTITY_MISMATCH');

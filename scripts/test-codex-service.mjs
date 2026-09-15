@@ -477,6 +477,10 @@ try {
     const phases = owners.flatMap(owner => Object.values(owner.quietPhases ?? {}));
     assert.ok(phases.length > 0); assert.ok(phases.every(phase => phase.status === 'completed'));
     assert.ok(phases.every(phase => new Date(phase.startedAt).toISOString() === phase.startedAt));
+    if (!questionCancelMode) {
+      assert.ok(owners.some(owner => Object.keys(owner.quietPhases ?? {}).some(key => JSON.parse(key)[0] === 'outputItems')));
+      report.postMessagePhaseObserved = true;
+    }
     report.quietPhaseJournalObserved = true;
   }
   assert.equal(operations.length, (childMode ? 8 : expectedToolCalls + 3 + Number(reasoningMode)) + quietPhases.length);

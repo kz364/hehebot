@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
+import { CodexOperations } from '../runtime/codex-operations.mjs';
 import { advanceQuietPhases, readQuietPhases } from '../runtime/codex-quiet-phases.mjs';
 
 const at = '2026-09-15T01:00:00.000Z', later = '2026-09-15T01:01:00.000Z';
@@ -61,6 +62,40 @@ test('only the last parallel tool completion opens quiet time; duplicate/history
   assert.equal(next['["commands","next"]'].status, 'inProgress');
   assert.equal(next[second].status, 'completed');
   assert.deepEqual((await new CodexAdapter({ journal: f.journal, cwd: f.journal.directory, rpc: () => {} }).requireRun('attempt')).quietPhases, next);
+});
+
+for (const threadId of ['root', 'child']) test(`live ${threadId} message silence is bounded; replay and history cannot refresh it`, async t => {
+  const f = await fixture(t), key = '["child","turn"]', phaseKey = '["outputItems","message"]';
+  if (threadId === 'child') await f.journal.update('attempt', {
+    spawns: { s: { status: 'completed', receiverThreadIds: ['child'] } }, childTurns: { [key]: 'inProgress' },
+  });
+  const message = (id, time) => f.adapter.observe('attempt', { method: 'item/completed',
+    params: { threadId, turnId: 'turn', item: { id, type: 'agentMessage', text: 'Still working' } } }, time);
+  const owner = row => threadId === 'root' ? row : row.childObligations[key];
+  await message('message', at);
+  assert.deepEqual(owner(await f.journal.get('attempt')).quietPhases, { [phaseKey]: { status: 'inProgress', startedAt: at } });
+  await message('message', later); await message('history', undefined);
+  assert.deepEqual(owner(await f.journal.get('attempt')).quietPhases, { [phaseKey]: { status: 'inProgress', startedAt: at } });
+  const operations = new CodexOperations({ journal: f.journal, attemptId: 'attempt',
+    runId: '01234567-0123-4123-a123-012345678901', attempt: 1, startedAt: at, deadlineAt: '2026-09-15T01:20:00.000Z' });
+  const phase = (await operations.snapshot()).find(op => op.deadline_at === '2026-09-15T01:05:00.000Z');
+  assert.equal(phase.status, 'active'); assert.equal(phase.last_progress_at, at);
+  await f.adapter.observe('attempt', { method: 'turn/completed', params: { threadId: 'root', turn: { id: 'turn', status: 'completed' } } }, later);
+  assert.equal(owner(await f.journal.get('attempt')).quietPhases[phaseKey].status, threadId === 'root' ? 'completed' : 'inProgress');
+  if (threadId === 'child') await f.adapter.observe('attempt', { method: 'turn/completed', params: { threadId, turn: { id: 'turn', status: 'completed' } } });
+  await message('late', later);
+  assert.deepEqual(owner(await f.journal.get('attempt')).quietPhases, { [phaseKey]: { status: 'completed', startedAt: at } });
+});
+
+test('a message during an active tool does not invent idle inference', async t => {
+  const f = await fixture(t);
+  await f.item('tool', 'inProgress', at);
+  await f.adapter.observe('attempt', { method: 'item/completed', params: {
+    threadId: 'root', turnId: 'turn', item: { id: 'message', type: 'agentMessage', text: 'Tool is running' },
+  } }, later);
+  assert.equal((await f.journal.get('attempt')).quietPhases, undefined);
+  await f.item('tool', 'completed', later);
+  assert.deepEqual((await f.journal.get('attempt')).quietPhases, { '["commands","tool"]': { status: 'inProgress', startedAt: later } });
 });
 
 test('root completion leaves child quiet time intact; exact child terminal readback closes it', async t => {

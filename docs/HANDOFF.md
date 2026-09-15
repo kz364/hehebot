@@ -287,6 +287,17 @@ Continue E01 human-wait interactions and post-message/unknown-item coverage;
 explicit longer operations and progress policy remain open. Unknown coverage
 still blocks completion/sleep; no provider/account calls or gate changes.
 
+Post-message deadline checkpoint (2026-09-15): live completed assistant messages
+now open quiet phases keyed by outputItems/message ID, using the existing capped
+five-minute projection. Duplicate/history messages do not refresh clocks, active
+tools prevent false idle phases, and terminal owners cannot reopen phases. Root
+completion does not settle a child's message phase. Focused checks passed 71;
+combined verification passed 901 control / 219 runtime tests, all native/service
+fixtures, typecheck and build. Seven native service cases observed message phases.
+Private evidence: `.local/message-quiet-focused.log` and
+`.local/message-quiet-combined.log`. Continue with human-wait handling and
+streaming/unknown-item coverage; no full E01 or production acceptance is claimed.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.
