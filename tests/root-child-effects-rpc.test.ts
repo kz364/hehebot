@@ -79,6 +79,23 @@ beforeEach(async () => {
 });
 afterEach(() => { db.close(); vi.useRealTimers(); });
 
+it('normalizes authenticated child heartbeat clocks and rejects changed custody without affecting effects or siblings', async () => {
+ const input = intent(); await http('root-child-effect-intent', input);
+ const beforeEffects = effects(), beforeLocks = locks(), beforeRuns = db.all('SELECT * FROM runs ORDER BY id');
+ const op = { id: randomUUID(), run_id: child, attempt: 1, kind: 'tool', status: 'active',
+  started_at: '2026-09-10T07:00:00+07:00', deadline_at: '2026-09-09T23:02:00-01:00', last_progress_at: '2026-09-10T00:00:01Z' };
+ expect((await http('heartbeat', { identity, operations: [op] }, 'wrong-token')).status).toBe(401);
+ expect(db.all('SELECT * FROM operations')).toEqual([]);
+ expect((await http('heartbeat', { identity, operations: [op] })).status).toBe(200);
+ const stored = db.all('SELECT * FROM operations');
+ expect(stored).toEqual([{ ...op, started_at: '2026-09-10T00:00:00.000Z', deadline_at: '2026-09-10T00:02:00.000Z', last_progress_at: '2026-09-10T00:00:01.000Z' }]);
+ expect(await http('heartbeat', { identity, operations: [{ ...op, deadline_at: '2026-09-10T00:03:00Z' }] }))
+  .toMatchObject({ status: 422, body: { error: { code: 'INVALID_INPUT' } } });
+ expect(db.all('SELECT * FROM operations')).toEqual(stored);
+ expect(effects()).toEqual(beforeEffects); expect(locks()).toEqual(beforeLocks);
+ expect(db.all('SELECT * FROM runs ORDER BY id')).toEqual(beforeRuns);
+});
+
 it('routes child-owned intent/replay and cancellation reconciliation without settlement or lock release', async () => {
  await rpc('complete', { identity, run_id: root, attempt: 1, result: { status: 'completed', text: 'Root output only' } });
  const input = intent();

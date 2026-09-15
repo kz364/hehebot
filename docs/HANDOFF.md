@@ -74,6 +74,18 @@ Legacy/history-only records keep the hard-deadline fallback. Quiet inference,
 explicit longer shell/transfer windows and progress-based extensions remain
 unimplemented; do not call this full S19, settlement or production readiness.
 
+Heartbeat operation timestamps now canonicalize to UTC milliseconds before
+storage. Equivalent offset replays preserve original instants; changed kind,
+start/deadline or backwards progress rejects the whole page without renewing the
+lease. Retained offset rows canonicalize only on authorized equivalent replay;
+this is not a bulk repair or restore migration. Seven new regressions failed
+before the fix. Final focused lifecycle/Worker HTTP checks passed 59 tests;
+the final control suite passed 877 tests and typecheck passed. The combined
+credential-free verifier passed 872 control and 183 runtime tests plus all
+native/service fixtures and build before five additional boundary tests were
+added and included in the final control run. Production gates remain false.
+No account calls, live provider changes, pushes or deployments were made.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

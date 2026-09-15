@@ -8,6 +8,13 @@ export type Phase='STOPPED'|'START_REQUESTED'|'BOOTING'|'READY'|'DRAINING'|'STOP
 export type Lifecycle={singleton:number;provider_ref_json:string;boot_id:string|null;epoch:number;phase:Phase;desired_state:'RUN'|'STOP';lease_until:string|null;last_heartbeat:string|null;queue_sequence:number;stop_token:string|null;provider_operation_id:string|null;wake_after_stop:number};
 export type Identity={epoch:number;boot_id:string};
 export type HeartbeatOperation=Operation & {run_id:string;attempt:number};
+function operationTime(value:string):string {
+ const instant=Date.parse(value);
+ requireThat(Number.isFinite(instant),'INVALID_INPUT','Invalid operation timestamp.',422);
+ const canonical=new Date(instant).toISOString();
+ requireThat(canonical.length===24,'INVALID_INPUT','Operation timestamp is outside the supported UTC range.',422);
+ return canonical;
+}
 export class LifecycleCore {
  constructor(public store:Store,public core:ControlCore,private options:{idleMode?:boolean}={}){}
  get():Lifecycle{return this.store.db.all<Lifecycle>('SELECT * FROM lifecycle WHERE singleton=1')[0];}
@@ -56,15 +63,18 @@ export class LifecycleCore {
   requireThat(operations.length<=100,'INVALID_INPUT','Too many operation records.',422);
   return this.store.db.transaction(()=>{
    this.identity(identity);
-   for(const op of operations){
+   for(const input of operations){
+    const op={...input,started_at:operationTime(input.started_at),deadline_at:operationTime(input.deadline_at),last_progress_at:operationTime(input.last_progress_at)};
     const run=this.store.run(op.run_id);
     requireThat(run.current_attempt===op.attempt&&['claimed','running','finishing','cancelling','recovery_required'].includes(run.status),'STALE_EPOCH','Operation does not belong to an active attempt.');
     const attempt=this.store.db.all<{epoch:number;boot_id:string}>('SELECT epoch,boot_id FROM attempts WHERE run_id=? AND attempt=?',run.id,op.attempt)[0];
     requireThat(attempt?.epoch===identity.epoch&&attempt.boot_id===identity.boot_id,'STALE_EPOCH','Attempt belongs to a different executor.');
-    const old=this.store.db.all<{run_id:string;attempt:number;status:string}>('SELECT run_id,attempt,status FROM operations WHERE id=?',op.id)[0];
+    const old=this.store.db.all<HeartbeatOperation>('SELECT * FROM operations WHERE id=?',op.id)[0];
     requireThat(!old||old.run_id===run.id&&old.attempt===op.attempt,'INVALID_INPUT','Operation identity was reused.',422);
+    requireThat(!old||old.kind===op.kind&&operationTime(old.started_at)===op.started_at&&operationTime(old.deadline_at)===op.deadline_at,'INVALID_INPUT','Operation custody changed.',422);
+    requireThat(!old||operationTime(old.last_progress_at)<=op.last_progress_at,'INVALID_INPUT','Operation progress moved backwards.',422);
     requireThat(old?.status!=='settled'||op.status==='settled','INVALID_INPUT','A settled operation cannot become active.',422);
-    this.store.db.exec('INSERT INTO operations(id,run_id,attempt,kind,status,started_at,deadline_at,last_progress_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,last_progress_at=excluded.last_progress_at',op.id,run.id,op.attempt,op.kind,op.status,op.started_at,op.deadline_at,op.last_progress_at);
+    this.store.db.exec('INSERT INTO operations(id,run_id,attempt,kind,status,started_at,deadline_at,last_progress_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,started_at=excluded.started_at,deadline_at=excluded.deadline_at,last_progress_at=excluded.last_progress_at',op.id,run.id,op.attempt,op.kind,op.status,op.started_at,op.deadline_at,op.last_progress_at);
    }
    const lease=new Date(this.core.options.now().getTime()+90000).toISOString();
    this.store.db.exec('UPDATE lifecycle SET lease_until=?,last_heartbeat=? WHERE singleton=1',lease,this.core.now());

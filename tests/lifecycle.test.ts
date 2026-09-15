@@ -76,6 +76,48 @@ describe('executor leases and attempts', () => {
     expect(() => life.heartbeat(identity, [op])).toThrowError(expect.objectContaining({ code: 'INVALID_INPUT' }));
     expect(() => life.complete(identity, claim.run.id, 2, { status: 'completed', text: '' })).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
   });
+  it.each(['2026-09-10T01:02:00+01:00', '2026-09-09T23:02:00-01:00'])('canonicalizes offset deadlines before watchdog comparisons: %s', deadline => {
+    const claim = claimed(), op = { ...operation(claim.run.id, 'tool'), deadline_at: deadline,
+      started_at: '2026-09-10T07:00:00+07:00', last_progress_at: '2026-09-10T07:00:01+07:00' };
+    life.heartbeat(identity, [op]);
+    expect(f.db.all('SELECT started_at,deadline_at,last_progress_at FROM operations WHERE id=?', op.id)).toEqual([
+      { started_at: '2026-09-10T00:00:00.000Z', deadline_at: '2026-09-10T00:02:00.000Z', last_progress_at: '2026-09-10T00:00:01.000Z' },
+    ]);
+    f.db.exec("UPDATE lifecycle SET lease_until='2026-09-10T00:10:00.000Z'");
+    f.setNow('2026-09-10T00:01:59.999Z'); life.watchdog(); expect(f.store.run(claim.run.id).status).toBe('claimed');
+    f.setNow('2026-09-10T00:02:00.000Z'); life.watchdog(); expect(f.store.run(claim.run.id).status).toBe('cancelling');
+  });
+  it.each([
+    { kind: 'node' }, { started_at: '2026-09-10T00:00:00.001Z' }, { deadline_at: '2026-09-10T00:19:59.999Z' },
+    { last_progress_at: '2026-09-09T23:59:59.999Z' },
+  ])('rejects changed operation custody or regressing progress atomically: %j', patch => {
+    const claim = claimed(), op = operation(claim.run.id); life.heartbeat(identity, [op]);
+    const before = f.db.all('SELECT * FROM operations'), lease = life.get();
+    f.setNow('2026-09-10T00:00:10.000Z');
+    expect(() => life.heartbeat(identity, [operation(claim.run.id), { ...op, ...patch } as HeartbeatOperation]))
+      .toThrowError(expect.objectContaining({ code: 'INVALID_INPUT' }));
+    expect(f.db.all('SELECT * FROM operations')).toEqual(before); expect(life.get()).toEqual(lease);
+  });
+  it('accepts equivalent offset replay and advances progress without changing the deadline', () => {
+    const claim = claimed(), op = operation(claim.run.id); life.heartbeat(identity, [op]);
+    life.heartbeat(identity, [{ ...op, started_at: '2026-09-10T07:00:00+07:00', deadline_at: '2026-09-10T07:20:00+07:00', last_progress_at: '2026-09-10T07:00:10+07:00' }]);
+    expect(f.db.all('SELECT started_at,deadline_at,last_progress_at FROM operations WHERE id=?', op.id)).toEqual([
+      { started_at: op.started_at, deadline_at: op.deadline_at, last_progress_at: '2026-09-10T00:00:10.000Z' },
+    ]);
+  });
+  it('canonicalizes retained offset custody only on equivalent authorized replay', () => {
+    const claim = claimed(), op = operation(claim.run.id); life.heartbeat(identity, [op]);
+    f.db.exec('UPDATE operations SET started_at=?,deadline_at=?,last_progress_at=? WHERE id=?',
+      '2026-09-10T07:00:00+07:00', '2026-09-10T07:20:00+07:00', '2026-09-10T07:00:00+07:00', op.id);
+    life.heartbeat(identity, [op]);
+    expect(f.db.all('SELECT * FROM operations WHERE id=?', op.id)).toEqual([op]);
+  });
+  it.each(['invalid', '2016-12-31T23:59:60Z', '9999-12-31T23:59:59-01:00'])('rejects nonrepresentable operation time without page writes: %s', deadline_at => {
+    const claim = claimed(), before = life.get();
+    expect(() => life.heartbeat(identity, [operation(claim.run.id), { ...operation(claim.run.id), deadline_at }]))
+      .toThrowError(expect.objectContaining({ code: 'INVALID_INPUT', status: 422 }));
+    expect(f.db.all('SELECT * FROM operations')).toEqual([]); expect(life.get()).toEqual(before);
+  });
   it.each(['running','cancelling','completed','waiting','recovery_required'])('identical submission receipt replay leaves %s work and every table unchanged', status => {
     const id = claimed().run.id;
     life.submitted(identity, id, 1, 'native-receipt-71');

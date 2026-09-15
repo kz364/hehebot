@@ -79,6 +79,18 @@ admitted task's hard deadline. Reopening a journal or sending another heartbeat
 does not extend them. Worker tests cover the exact timeout boundary for a tool
 starting ten minutes into a task; native service fixtures check the MCP deadlines.
 
+Worker heartbeat admission canonicalizes operation timestamps to UTC milliseconds
+before persistence, so valid timezone offsets cannot distort lexical watchdog or
+monitoring comparisons. Replays must retain the same run, attempt, kind, start and
+deadline instants, and progress cannot move backwards. Equivalent offset spellings
+are accepted; retained offset rows are canonicalized on an authorized equivalent
+replay, not by a bulk migration. Nonrepresentable dates (including leap seconds
+and UTC years outside four digits) fail with `INVALID_INPUT`. A bad record rolls
+back the entire heartbeat page, including earlier records and lease renewal.
+SQLite and authenticated in-process Worker HTTP tests cover offset boundaries,
+custody conflicts and unchanged child effects/locks. This does not extend deadlines
+or repair retained rows that receive no heartbeat.
+
 Spawn invocation completion does not stop its child clock or settle child work;
 the child retains its independent turn and tool observations.
 Legacy/history-only observations without clocks retain their existing hard-deadline
