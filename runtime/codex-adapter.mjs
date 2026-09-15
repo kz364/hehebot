@@ -100,6 +100,9 @@ export class CodexAdapter {
   async requireRun(attemptId) {
     const row = await this.journal.get(attemptId);
     if (!row?.threadId || !row.nativeRunId) fail('SUBMISSION_OUTCOME_UNKNOWN');
+    for (const owner of observationOwners(row)) if (owner.messageStarts !== undefined &&
+        (!owner.messageStarts || typeof owner.messageStarts !== 'object' || Array.isArray(owner.messageStarts) ||
+          Object.keys(owner.messageStarts).length > 1024 || Object.entries(owner.messageStarts).some(([id, value]) => !id || id.length > 256 || value !== true))) fail('INVALID_QUIET_PHASE');
     for (const owner of observationOwners(row)) for (const key of Object.keys(readQuietPhases(owner.quietPhases))) {
       const [field, id] = JSON.parse(key);
       if (!Object.hasOwn(owner[field] ?? {}, id)) fail('INVALID_QUIET_PHASE');
@@ -246,6 +249,15 @@ export class CodexAdapter {
       return save({ ...patch, ...(operationTimes ? { operationTimes } : {}) },
         status !== 'inProgress' ? timingKey : undefined, prior !== status);
     };
+    if (notification?.method === 'item/started' && params?.item?.type === 'agentMessage') {
+      if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      const { id } = params.item;
+      if (typeof id !== 'string' || !id || id.length > 256) fail('CODEX_PROTOCOL_ERROR');
+      const seen = owner.messageStarts ?? {};
+      if (Object.hasOwn(seen, id) || Object.hasOwn(owner.outputItems ?? {}, id)) return row;
+      if (Object.keys(seen).length >= 1024) fail('OUTPUT_TRACKING_LIMIT');
+      return save({ messageStarts: { ...seen, [id]: true } }, JSON.stringify(['messageStarts', id]));
+    }
     if (notification?.method === 'item/completed' && params?.item?.type === 'agentMessage') {
       if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const { id } = params.item;

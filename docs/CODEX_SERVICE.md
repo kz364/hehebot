@@ -195,7 +195,17 @@ text or a new content copy. A live message during an observed active tool opens
 no quiet phase. A message after exact turn termination cannot reopen one. Root
 termination leaves child message phases intact. Native fixtures observe these
 records; focused tests verify their original five-minute projection and replay
-isolation. This does not account for partial streamed-message liveness.
+isolation.
+
+Live `agentMessage` starts now retain a bounded `messageStarts` ID-only marker and
+open the same five-minute phase when no observed tool remains active. The router
+discards start text and all message deltas; neither deltas nor duplicate starts
+refresh a clock. A start replayed after completion is a no-op. History-only starts
+never backfill timestamps, and malformed marker maps fail admission reads. The
+next live item boundary or exact turn termination closes the phase; completion
+can then open its separate post-message phase. This bounds the otherwise silent
+interval after a message starts, not the full lifetime of overlapping streams or
+progress-based extensions. Native-operation coverage remains unknown.
 
 Quiet-window activity diagnostics retain an optional immutable `endedAt` when
 the first closing boundary has a live host timestamp. The offline inspector

@@ -479,6 +479,8 @@ try {
     assert.ok(phases.every(phase => new Date(phase.startedAt).toISOString() === phase.startedAt));
     if (!questionCancelMode) {
       assert.ok(owners.some(owner => Object.keys(owner.quietPhases ?? {}).some(key => JSON.parse(key)[0] === 'outputItems')));
+      assert.ok(owners.some(owner => Object.keys(owner.messageStarts ?? {}).length > 0));
+      report.messageStartObserved = true;
       report.postMessagePhaseObserved = true;
     }
     report.quietPhaseJournalObserved = true;

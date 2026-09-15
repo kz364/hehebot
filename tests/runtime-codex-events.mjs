@@ -24,6 +24,41 @@ async function fixture(t, limits = {}) {
   return { journal, transport, recoveries, calls, adapter, router, admit };
 }
 
+test('message starts bound the next silent interval without retaining text or refreshing on deltas/replay', async t => {
+  let now = Date.parse('2026-09-16T01:00:00.000Z');
+  const f = await fixture(t, { now: () => now });
+  await f.admit('a', 'parent', 'turn'); await f.router.bind('a');
+  const start = { method: 'item/started', params: { threadId: 'parent', turnId: 'turn',
+    item: { type: 'agentMessage', id: 'message', text: 'PRIVATE_START' } } };
+  f.transport.emit('notification', start); await f.router.flush();
+  const initial = await f.journal.get('a'), key = '["messageStarts","message"]';
+  assert.deepEqual(initial.messageStarts, { message: true });
+  assert.deepEqual(initial.quietPhases[key], { status: 'inProgress', startedAt: '2026-09-16T01:00:00.000Z' });
+  assert.equal(initial.outputPreview, undefined); assert.doesNotMatch(JSON.stringify(initial), /PRIVATE_START/);
+  now += 79000;
+  f.transport.emit('notification', start);
+  f.transport.emit('notification', { method: 'item/agentMessage/delta', params: { ...start.params, delta: 'PRIVATE_DELTA' } });
+  await f.router.flush(); assert.deepEqual(await f.journal.get('a'), initial);
+  f.transport.emit('notification', message('parent', 'turn', 'message', 'Visible completion')); await f.router.flush();
+  const done = await f.journal.get('a');
+  assert.deepEqual(done.quietPhases[key], { status: 'completed', startedAt: '2026-09-16T01:00:00.000Z', endedAt: '2026-09-16T01:01:19.000Z' });
+  assert.equal(done.quietPhases['["outputItems","message"]'].status, 'inProgress');
+  now += 1000; f.transport.emit('notification', start); await f.router.flush();
+  assert.deepEqual(await f.journal.get('a'), done); assert.deepEqual(f.recoveries, []);
+});
+
+test('history-only message starts cannot backfill clocks and malformed markers fence reads', async t => {
+  const f = await fixture(t); await f.admit('a', 'parent', 'turn');
+  const event = { method: 'item/started', params: { threadId: 'parent', turnId: 'turn', item: { id: 'old', type: 'agentMessage' } } };
+  await f.adapter.observe('a', event);
+  await f.adapter.observe('a', event, '2026-09-16T01:00:00.000Z');
+  assert.equal((await f.journal.get('a')).quietPhases, undefined);
+  for (const messageStarts of [null, [], { old: false }, { '': true }]) {
+    await f.journal.update('a', { messageStarts });
+    await assert.rejects(f.adapter.requireRun('a'), { code: 'INVALID_QUIET_PHASE' });
+  }
+});
+
 test('usage snapshots are exact-turn observations, not additive progress or settlement', async t => {
   const f = await fixture(t);
   const counts = { inputTokens: 31, cachedInputTokens: 7, outputTokens: 13, reasoningOutputTokens: 5, totalTokens: 44 };
@@ -94,7 +129,7 @@ test('completed user-visible messages are bounded, exact-turn attributed and ind
   row=await f.journal.get('a');f.transport.emit('notification',first);await f.router.flush();
   assert.deepEqual(await f.journal.get('a'),row);assert.equal(row.outputPreview.version,2);
   assert.equal(f.router.project({...first,method:'item/agentMessage/delta'}),null);
-  assert.equal(f.router.project({...first,method:'item/started'}),null);
+  assert.deepEqual(f.router.project({...first,method:'item/started'}).notification.params.item,{id:'same-id',type:'agentMessage'});
   assert.equal(f.adapter.sleepReadiness().allowed,false);assert.deepEqual(f.calls,[]);
   f.transport.emit('notification',message('child','child-turn','same-id','x'.repeat(8191)+'😀different suffix'));
   await f.router.flush();assert.deepEqual(f.recoveries,['NATIVE_EVENT_RECONCILIATION_FAILED']);
