@@ -45,6 +45,22 @@ test('persists thread before inference; duplicate submission and changed input a
   assert.equal((await journal.get(input.attemptId)).status, 'running');
 });
 
+test('initial inference survives acknowledgment and child events until exact root activity', async t => {
+  const f = await fixture(t); await f.adapter.submit(input);
+  assert.equal((await f.journal.get(input.attemptId)).initialInference, 'inProgress');
+  await f.adapter.observe(input.attemptId, { method: 'turn/started', params: { threadId: 'thread-a', turn: { id: 'turn-b', status: 'inProgress' } } });
+  assert.equal((await f.journal.get(input.attemptId)).initialInference, 'inProgress');
+  await f.journal.update(input.attemptId, { spawns: { s: { status: 'completed', receiverThreadIds: ['child'] } }, childTurns: { '["child","turn"]': 'inProgress' } });
+  await f.adapter.observe(input.attemptId, { method: 'item/started', params: { threadId: 'child', turnId: 'turn', item: { id: 'r', type: 'reasoning' } } });
+  assert.equal((await f.journal.get(input.attemptId)).initialInference, 'inProgress');
+  await assert.rejects(f.adapter.observe(input.attemptId, { method: 'item/started', params: { threadId: 'thread-a', turnId: 'wrong', item: { id: 'r', type: 'reasoning' } } }), { code: 'SETTLEMENT_IDENTITY_MISMATCH' });
+  await f.adapter.observe(input.attemptId, { method: 'item/started', params: { threadId: 'thread-a', turnId: 'turn-b', item: { id: 'r', type: 'reasoning' } } });
+  const row = await f.journal.get(input.attemptId);
+  assert.equal(row.initialInference, 'completed'); assert.equal(row.reasoningItems.r, 'inProgress'); assert.equal(row.rootSettled, false);
+  await f.adapter.submit(input); assert.equal(f.calls.length, 2);
+  assert.equal((await f.journal.get(input.attemptId)).initialInference, 'completed');
+});
+
 test('host dynamic definitions are snapshotted and changes cannot reuse a submitted attempt', async t => {
   const f = await fixture(t);
   const definitions = [{ type: 'function', name: 'read_fixture', description: 'Read fixture', inputSchema: { type: 'object' } }];
@@ -260,6 +276,7 @@ test('interrupt acknowledgement and root completion do not authorize sleep or co
   await adapter.submit(input);
   const cancelled = await adapter.cancel(input.attemptId);
   assert.equal(cancelled.cancelAcknowledged, true); assert.equal(cancelled.rootSettled, false);
+  assert.equal(cancelled.initialInference, 'inProgress');
   await adapter.cancel(input.attemptId); assert.equal(calls.length, 3);
   await assert.rejects(adapter.observe(input.attemptId, { method: 'turn/completed', params: {
     threadId: 'wrong-thread', turn: { id: 'turn-b', status: 'interrupted' },
@@ -268,6 +285,7 @@ test('interrupt acknowledgement and root completion do not authorize sleep or co
     threadId: 'thread-a', turn: { id: 'turn-b', status: 'interrupted' },
   } });
   assert.equal(settled.status, 'finishing'); assert.equal(settled.rootSettled, true);
+  assert.equal(settled.initialInference, 'completed');
   assert.equal(adapter.sleepReadiness().allowed, false);
 });
 
@@ -307,6 +325,7 @@ test('reopened adapter recovers only the exact acknowledged turn without replay 
   } });
   const recovered = await restored.reconcile(input.attemptId);
   assert.equal(recovered.rootSettled, true); assert.equal(recovered.nativeOutcome, 'completed');
+  assert.equal(recovered.initialInference, 'completed');
   assert.equal(recovered.status, 'finishing'); assert.equal(restored.sleepReadiness().allowed, false);
   assert.deepEqual(await restored.reconcile(input.attemptId), recovered);
   turns = [{ id: 'turn-b', status: 'interrupted' }];
@@ -426,5 +445,5 @@ test('invalid command history cannot partially settle a turn or overwrite a newe
   } });
   release({ thread: { id: 'thread-a', turns: [{ id: 'turn-b', status: 'completed', items: [command('first'), command('second')] }] } });
   await assert.rejects(pending, { code: 'SETTLEMENT_CONFLICT' });
-  assert.deepEqual(await journal.get(input.attemptId), { ...before, commands: { first: 'inProgress', second: 'failed' } });
+  assert.deepEqual(await journal.get(input.attemptId), { ...before, initialInference: 'completed', commands: { first: 'inProgress', second: 'failed' } });
 });

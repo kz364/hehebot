@@ -41,6 +41,11 @@ export class CodexOperations {
     add(['root'], 'inference', row?.rootSettled === true ? 'settled'
       : row?.status === 'cancelling' ? 'cancelling' : row?.status === 'running' ? 'active' : 'unknown');
     if (!row) return operations;
+    if (row.initialInference !== undefined) {
+      if (!['inProgress', 'completed'].includes(row.initialInference)) fail('INVALID_OPERATION_TIMING');
+      const start = new Date(startedAt).toISOString();
+      add(['initialInference'], 'inference', status(row.initialInference, ['completed']), { startedAt: start, lastProgressAt: start });
+    }
     const items = (owner, identity) => {
       if (owner.operationTimes !== undefined && (!owner.operationTimes || typeof owner.operationTimes !== 'object' || Array.isArray(owner.operationTimes))) fail('INVALID_OPERATION_TIMING');
       for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems']) {

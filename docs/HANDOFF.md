@@ -101,6 +101,21 @@ shell/transfer bounds and complete coverage. Native reasoning history is not
 erased by host projection. Production gates remain false; no live accounts,
 provider operations, pushes or deployments were used.
 
+Initial-response checkpoint (2026-09-15): new acknowledged submissions persist
+`initialInference`, projected as a five-minute phase from original claim, capped
+by the task deadline. Root acknowledgment and child events do not end it; exact
+root item/terminal observations do, atomically with the observation. Reopen and
+duplicate submission never restart it. Legacy markers are not invented.
+Two regressions failed before implementation. Focused runtime checks passed 83;
+Worker/lifecycle checks passed 54, including the exact five-minute boundary.
+The first combined run found a stale native-fixture count; the added initial phase
+was verified as an independent settled inference record, and the targeted rerun
+passed. Final combined verification passed 878 control / 188 runtime tests, all
+native/service fixtures, typecheck and build. The 101-MCP-call fixture now delivers
+104 operations in 100+4 pages. Initial root silence is bounded, not every later
+quiet interval or child startup. E01 remains partial; production stays disabled.
+No accounts, live provider operations, pushes or deployments were used.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

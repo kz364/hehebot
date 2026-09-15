@@ -46,9 +46,9 @@ lease expiry fences admission and retains the hold; this is not crash recovery
 or permission to retry unknown native submission or effects.
 
 The `--operation-pages` mode runs 101 actual native read-only MCP calls and checks
-every returned routine receipt. The resulting 103 unique operations (including
-root inference and unknown coverage) reach HTTPS Worker heartbeats in pages of
-100 and 3. Two scripted model requests suffice; no connector or paid model runs.
+every returned routine receipt. The resulting 104 unique operations (including
+root inference, initial-response phase and unknown coverage) reach HTTPS Worker heartbeats in pages of
+100 and 4. Two scripted model requests suffice; no connector or paid model runs.
 The host bounds each complete snapshot at 4096 records and retains settled history
 as well as active/unknown obligations. It sends every page on each maintenance,
 not a rotating subset. The Worker request limit remains 100. Cancellation IDs
@@ -109,8 +109,19 @@ with two scripted model requests and a read-only MCP receipt. Router/journal tes
 cover root/child isolation, buffering, replay and retained unfinished reasoning;
 projection tests cover five-minute versus two-minute bounds and hard-deadline caps.
 This does not measure authenticated model behavior or erase native-owned reasoning
-history. Quiet inference before any reasoning-item start, token-progress-based
-extensions, explicit longer transfer/shell allowances and
+history. New acknowledged submissions also persist an `initialInference` phase:
+five minutes from the original Worker claim, capped by the task deadline. Native
+`turn/start` acknowledgment and `turn/started` do not end it. The first validated
+root item handled by the adapter (including completed visible messages), or exact
+root terminal observation/readback, ends it atomically with the observation.
+Child events and unrelated turn IDs cannot end the root's initial phase. Reopen,
+duplicate submission and repeated heartbeats never restart or extend this clock.
+Legacy rows without the marker are not backfilled; the diagnostic reports the
+marker only when present. Initial-phase completion is not task settlement.
+The native fixtures inspect the active phase before returning their first model
+response and its completion after native work. This bounds initial root silence,
+not every later gap after a tool, child startup silence or token-progress liveness.
+Those remaining quiet periods, explicit longer transfer/shell allowances and
 progress-based phase extensions remain separate work; this is not full S19 or
 proof of the native operation's true start before its host notification arrived.
 Timeout still requests cancellation, not settlement or automatic replay.
@@ -122,7 +133,7 @@ held open. The actual service child facade persists the native-to-Worker mapping
 an owner `run.cancel` command then travels through Worker heartbeat and supervisor
 maintenance to exactly one child `turn/interrupt`, even across repeated maintenance.
 The fixture separately observes the exact interrupted turn and HTTP connection
-closure. Five root-owned heartbeat operations retain one unknown coverage record.
+closure. Six root-owned heartbeat operations retain one unknown coverage record.
 Worker completion returns HTTP 409 `CANCEL_UNCONFIRMED`; the root remains running,
 the child remains cancelling, and supervisor completion/sleep are denied. This is
 not recursive settlement, model judgment, active-work crash recovery, per-child

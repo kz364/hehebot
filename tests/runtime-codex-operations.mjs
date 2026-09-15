@@ -127,6 +127,22 @@ test('late root and child tools use independent two-minute clocks capped by the 
   assert.deepEqual(await f.journal.get('attempt-a'), before);
 });
 
+test('initial silence has a replay-stable five-minute bound distinct from root and coverage', async t => {
+  const f = await fixture(t);
+  await f.journal.putIfAbsent('attempt-a', { status: 'running', initialInference: 'inProgress' });
+  const rows = await f.operations.snapshot();
+  assert.equal(rows.length, 3); assert.equal(rows[2].kind, 'inference'); assert.equal(rows[2].status, 'active');
+  assert.equal(rows[2].deadline_at, '2026-09-14T01:05:00.000Z'); assert.equal(rows[1].deadline_at, f.config.deadlineAt);
+  assert.deepEqual(await new CodexOperations(f.config).snapshot(), rows);
+  await f.journal.update('attempt-a', { initialInference: 'completed' });
+  const completed = await f.operations.snapshot();
+  assert.deepEqual(completed[2], { ...rows[2], status: 'settled' }); assert.equal(completed[1].status, 'active');
+  const capped = await new CodexOperations({ ...f.config, deadlineAt: '2026-09-14T01:03:00.000Z' }).snapshot();
+  assert.equal(capped[2].deadline_at, '2026-09-14T01:03:00.000Z');
+  await f.journal.update('attempt-a', { initialInference: 'failed' });
+  await assert.rejects(f.operations.snapshot(), { code: 'INVALID_OPERATION_TIMING' });
+});
+
 test('reasoning uses five-minute independent phase clocks, not tool clocks or root settlement', async t => {
   const f = await fixture(t), key = '["reasoningItems","same"]';
   await f.journal.putIfAbsent('attempt-a', { status: 'finishing', rootSettled: true,

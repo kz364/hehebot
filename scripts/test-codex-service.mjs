@@ -122,6 +122,13 @@ try {
       report.modelRequests++;
       assert.ok(report.modelRequests <= (childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2), 'Unexpected model continuation');
       await wait(() => bound, 'service acknowledged root');
+      if (report.modelRequests === 1) {
+        assert.equal((await service.observe()).initialInference, 'inProgress');
+        const initial = (await service.supervisor.operations()).filter(operation => operation.kind === 'inference' &&
+          Date.parse(operation.deadline_at) - Date.parse(operation.started_at) === 300000);
+        assert.equal(initial.length, 1); assert.equal(initial[0].status, 'active');
+        report.initialSilenceBounded = true;
+      }
       if (questionsMode && report.modelRequests === 3) {
         const result = body.input.find(item => item.type === 'function_call_output' && item.call_id === 'question_call_43');
         assert.deepEqual(JSON.parse(result.output), { answers: questionAnswers });
@@ -446,22 +453,23 @@ try {
   assert.equal(native.effectsSettled, undefined);
   await service.maintain();
   const operations = await service.supervisor.operations();
-  assert.equal(operations.length, childMode ? 5 : expectedToolCalls + 2 + Number(reasoningMode));
+  assert.equal(native.initialInference, 'completed');
+  assert.equal(operations.length, childMode ? 6 : expectedToolCalls + 3 + Number(reasoningMode));
   if (reasoningMode) {
     assert.deepEqual(Object.values(native.reasoningItems), ['completed']);
     assert.doesNotMatch(JSON.stringify(native), /PRIVATE_SYNTHETIC_REASONING_43/);
     const phases = operations.filter(operation => operation.kind === 'inference' && operation.deadline_at < dispatched.claim.deadline_at);
-    assert.equal(phases.length, 1); assert.equal(phases[0].status, 'settled');
-    assert.equal(Date.parse(phases[0].deadline_at) - Date.parse(phases[0].started_at), 300000);
+    assert.equal(phases.length, 2); assert.ok(phases.every(phase => phase.status === 'settled'));
+    assert.ok(phases.every(phase => Date.parse(phase.deadline_at) - Date.parse(phase.started_at) === 300000));
     assert.deepEqual(heartbeatPages.at(-1), operations);
     report.reasoningPhaseObserved = true; report.reasoningContentExcluded = true;
   }
   if (operationPagesMode) {
-    assert.deepEqual(heartbeatPages.slice(-2).map(page => page.length), [100, 3]);
+    assert.deepEqual(heartbeatPages.slice(-2).map(page => page.length), [100, 4]);
     assert.deepEqual(heartbeatPages.slice(-2).flat(), operations);
-    assert.equal(new Set(operations.map(operation => operation.id)).size, 103);
+    assert.equal(new Set(operations.map(operation => operation.id)).size, 104);
     report.nativeToolCalls = expectedToolCalls;
-    report.completeHeartbeatPages = [100, 3];
+    report.completeHeartbeatPages = [100, 4];
   }
   assert.equal(operations.filter(operation => operation.status === 'unknown').length, 1);
   assert.ok(operations.every(operation => operation.run_id === queued.resource_id && operation.deadline_at <= dispatched.claim.deadline_at));

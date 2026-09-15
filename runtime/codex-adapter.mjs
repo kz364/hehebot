@@ -71,7 +71,7 @@ export class CodexAdapter {
         input: [{ type: 'text', text: input.message }], clientUserMessageId: input.attemptId });
       if (typeof reply?.turn?.id !== 'string' || !reply.turn.id) fail('CODEX_PROTOCOL_ERROR');
       return await this.journal.update(input.attemptId, {
-        nativeRunId: reply.turn.id, status: 'running',
+        nativeRunId: reply.turn.id, status: 'running', initialInference: 'inProgress',
       });
     } catch {
       return this.journal.update(input.attemptId, { status: 'recovery_required', recoveryRequired: true,
@@ -81,6 +81,7 @@ export class CodexAdapter {
   async requireRun(attemptId) {
     const row = await this.journal.get(attemptId);
     if (!row?.threadId || !row.nativeRunId) fail('SUBMISSION_OUTCOME_UNKNOWN');
+    if (row.initialInference !== undefined && !['inProgress', 'completed'].includes(row.initialInference)) fail('INVALID_OPERATION_TIMING');
     return row;
   }
   async steer(attemptId, instruction) {
@@ -174,7 +175,8 @@ export class CodexAdapter {
     const childItem = params?.threadId !== row.threadId && Object.hasOwn(row.childTurns ?? {}, childKey);
     const owner = childItem ? row.childObligations?.[childKey] ?? {} : row;
     const save = patch => this.journal.update(attemptId, childItem
-      ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, ...patch } } } : patch);
+      ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, ...patch } } }
+      : { ...patch, ...(row.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) });
     const saveOperation = (field, itemKey, prior, status, patch) => {
       const timingKey = JSON.stringify([field, itemKey]);
       if (owner.operationTimes !== undefined && (!owner.operationTimes || typeof owner.operationTimes !== 'object' || Array.isArray(owner.operationTimes))) fail('INVALID_OPERATION_TIMING');
@@ -291,7 +293,7 @@ export class CodexAdapter {
       return row;
     }
     // A terminal root is deliberately not a complete receipt or permission to sleep.
-    return this.journal.update(attemptId, { rootSettled: true, status: 'finishing', nativeOutcome: params.turn.status });
+    return save({ rootSettled: true, status: 'finishing', nativeOutcome: params.turn.status });
   }
 
   /** Read-only recovery for a durably acknowledged turn. Never infer a missing turn
@@ -355,7 +357,8 @@ export class CodexAdapter {
       const patch = {};
       if (prior !== turn.status) {
         if (child) patch.childTurns = { ...row.childTurns, [key]: turn.status };
-        else Object.assign(patch, { rootSettled: true, status: 'finishing', nativeOutcome: turn.status });
+        else Object.assign(patch, { rootSettled: true, status: 'finishing', nativeOutcome: turn.status,
+          ...(row.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) });
       }
       if (Object.keys(recovered).length) {
         if (child) patch.childObligations = { ...row.childObligations, [key]: { ...owner, ...recovered } };

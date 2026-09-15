@@ -62,6 +62,9 @@ the adapter's persisted enums. For search/wait/compaction/image generation/reaso
 `completed` means an observed item termination, not verified success. The report
 accepts at most 4096 observations across all categories and descendants; overflow
 rejects the native projection rather than silently truncating it.
+The root's optional `initialInference` marker is also reported and validated.
+Absent legacy markers remain absent; neither inspection nor root-terminal status
+invents a completed initial phase. This is diagnostic data, not resume authority.
 Unknown claim custody never
 borrows a stale native attempt left in a reused bridge cursor. Missing child turns,
 conflicting root IDs, child ancestry and cancellation identities remain unknown.

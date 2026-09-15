@@ -128,8 +128,10 @@ export async function inspectCodexRecovery(directory) {
     require(typeof native.rootSettled === 'boolean');
     require(!native.rootSettled || (id(native.threadId) && id(native.nativeRunId) && ['completed', 'failed', 'interrupted'].includes(native.nativeOutcome)));
     require(native.rootSettled || (native.nativeOutcome === undefined && native.status !== 'finishing'));
+    require(native.initialInference === undefined || ['inProgress', 'completed'].includes(native.initialInference));
     const root = { threadId: native.threadId ?? null, turnId: native.nativeRunId ?? null,
-      status: native.status, observedTerminal: native.rootSettled };
+      status: native.status, observedTerminal: native.rootSettled,
+      ...(native.initialInference === undefined ? {} : { initialInference: native.initialInference }) };
     const children = [], obligations = [], origins = new Map();
     const items = (owner, threadId, turnId) => {
       require(object(owner));
