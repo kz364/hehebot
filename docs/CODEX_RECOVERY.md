@@ -105,8 +105,14 @@ root completion; exact supported history recovers the invocation, with identical
 replay and no additional model request. The real local HTTPS Worker receipt is
 verified independently. This fixture uses synthetic loopback model responses and
 a read-only routine-list tool; it does not prove external mutation recovery.
-Dynamic-tool/file-change and root/child isolation have adapter contract tests,
-not equivalent live recovery evidence. Statusless observations remain untouched.
+`--history-child` withholds the child's MCP completion after its parent has
+finished. Supported child history verifies native ancestry and recovers only
+the recorded child invocation while the child's next model request stays open.
+The parent record and child turn status remain unchanged; identical readback
+issues no additional model request. The same fixture then exercises exact child
+cancellation and continued sleep denial. Dynamic-tool/file-change recovery has
+adapter contract tests, not equivalent live recovery evidence. Statusless
+observations remain untouched. Neither case proves active-work crash recovery.
 
 `node scripts/test-codex-native.mjs` preserves an open command receipt while
 withholding its actual late completion from that receipt. After the FIFO-backed

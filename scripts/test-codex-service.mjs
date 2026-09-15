@@ -18,13 +18,14 @@ import { inspectCodexRecovery } from '../runtime/codex-recovery-inspect.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const effectsMode = process.argv.includes('--child-effects');
-const childMode = process.argv.includes('--child') || effectsMode;
+const historyChildMode = process.argv.includes('--history-child');
+const childMode = process.argv.includes('--child') || effectsMode || historyChildMode;
 const crashMode = process.argv.includes('--crash');
-const historyMode = process.argv.includes('--history');
+const historyMode = process.argv.includes('--history') || historyChildMode;
 const questionCancelMode = process.argv.includes('--questions-cancel');
 const questionsMode = process.argv.includes('--questions') || questionCancelMode;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -287,10 +288,24 @@ try {
   if (childMode) {
     await wait(() => childHeld, 'child inherited MCP receipt and open model request');
     await service.maintain();
-    const observed = await service.observe();
+    let observed = await service.observe();
     const [[childKey, childStatus]] = Object.entries(observed.childTurns);
     const [targetThread, targetTurn] = JSON.parse(childKey);
     assert.equal(targetThread, childThreadId); assert.equal(childStatus, 'inProgress');
+    if (historyChildMode) {
+      assert.equal(report.withheldMcpCompletions, 1); assert.equal(observed.rootSettled, true);
+      const before = observed, requests = report.modelRequests;
+      assert.deepEqual(Object.values(before.childObligations[childKey].mcpCalls), ['inProgress']);
+      const target = { threadId: targetThread, turnId: targetTurn };
+      observed = await service.adapter.reconcileChild(dispatched.attemptId, target);
+      assert.deepEqual(Object.keys(observed.childObligations[childKey].mcpCalls), Object.keys(before.childObligations[childKey].mcpCalls));
+      assert.deepEqual(observed.childTurns, before.childTurns);
+      const rootOnly = row => Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'childObligations'));
+      assert.deepEqual(rootOnly(observed), rootOnly(before));
+      assert.deepEqual(await service.adapter.reconcileChild(dispatched.attemptId, target), observed);
+      assert.equal(report.modelRequests, requests); assert.equal(childClosed, false);
+      report.missedChildMcpCompletionRecovered = true;
+    }
     assert.deepEqual(Object.values(observed.childObligations[childKey].mcpCalls), ['completed']);
     const registered = await (await trustedFetch(`${origin}/v1/state`)).json();
     const children = registered.runs.filter(run => run.parent_run_id === queued.resource_id);
@@ -381,7 +396,7 @@ try {
         nativeSubmissionIdentityPreserved: true, effectReconciledDuringCancellation: true, effectReplayPreserved: true, connectorDispatches: 0 });
     }
   }
-  if (historyMode) {
+  if (historyMode && !historyChildMode) {
     const before = await service.observe();
     assert.equal(report.withheldMcpCompletions, 1);
     assert.deepEqual(Object.values(before.mcpCalls), ['inProgress']);
