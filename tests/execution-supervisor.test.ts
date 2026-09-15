@@ -281,20 +281,37 @@ it.each([false, true])('1000 passive publications add zero native submissions wi
   expect(f.db.all('SELECT * FROM task_followups')).toEqual([]); expect(f.db.all('SELECT * FROM outbox')).toEqual([]);
 });
 
-it('an orphan native clock fences maintenance before heartbeat without releasing or replaying work', async () => {
+it.each([
+  { name: 'orphan clock', patch: { operationTimes: { '["commands","missing"]': { startedAt: '2026-09-10T00:00:00.000Z', lastProgressAt: '2026-09-10T00:00:00.000Z' } } }, code: 'INVALID_OPERATION_TIMING', heartbeatCalls: 0 },
+  { name: 'null inventory', patch: { commands: null }, code: 'INVALID_OPERATION_INVENTORY', heartbeatCalls: 0 },
+  { name: 'invalid completion', patch: { outputItems: { message: false } }, code: 'INVALID_OUTPUT_COMPLETION', heartbeatCalls: 0 },
+  { name: 'start beyond hard deadline', patch: { commands: { valid: 'inProgress', late: 'inProgress' }, operationTimes: { '["commands","late"]': { startedAt: '2026-09-10T00:21:00.000Z', lastProgressAt: '2026-09-10T00:21:00.000Z' } } }, code: 'INVALID_INPUT', heartbeatCalls: 1 },
+])('$name fences maintenance without losing prior custody or replaying work', async ({ patch, code, heartbeatCalls }) => {
   const id = enqueue(); await supervisor.start(); await supervisor.dispatch();
   const journal = new FileJournal(directory), now = f.core.now();
-  await journal.putIfAbsent('orphan-proof', { status: 'running', commands: { valid: 'inProgress' },
-    operationTimes: { '["commands","missing"]': { startedAt: now, lastProgressAt: now } } });
-  const projection = new CodexOperations({ journal, attemptId: 'orphan-proof', runId: id, attempt: 1,
+  await journal.putIfAbsent('snapshot-proof', { status: 'running', commands: { valid: 'inProgress' } });
+  const projection = new CodexOperations({ journal, attemptId: 'snapshot-proof', runId: id, attempt: 1,
     startedAt: now, deadlineAt: '2026-09-10T00:20:00.000Z' });
   supervisor.operations = () => projection.snapshot();
-  const before = calls.length, original = await readFile(journal.path('orphan-proof'));
-  await expect(supervisor.maintain()).rejects.toMatchObject({ code: 'INVALID_OPERATION_TIMING' });
-  expect(calls.length).toBe(before); expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
+  await supervisor.maintain();
+  const operations = f.db.all('SELECT * FROM operations ORDER BY id'), attempts = f.db.all('SELECT * FROM attempts'),
+    runs = f.db.all('SELECT * FROM runs'), lease = life.get(), localLease = supervisor.leaseUntil;
+  expect(operations).toHaveLength(3);
+  await journal.update('snapshot-proof', patch);
+  const before = calls.length, original = await readFile(journal.path('snapshot-proof'));
+  f.setNow('2026-09-10T00:00:10.000Z');
+  await expect(supervisor.maintain()).rejects.toMatchObject({ code });
+  expect(calls.slice(before)).toEqual(Array(heartbeatCalls).fill('heartbeat'));
+  expect(supervisor.phase).toBe('recovery'); expect(supervisor.timer).toBeNull(); expect(releases).toBe(0);
+  expect(f.db.all('SELECT * FROM operations ORDER BY id')).toEqual(operations);
+  expect(f.db.all('SELECT * FROM attempts')).toEqual(attempts); expect(f.db.all('SELECT * FROM runs')).toEqual(runs);
+  expect(life.get()).toEqual(lease); expect(supervisor.leaseUntil).toBe(localLease);
   expect(nativeCalls).toBe(1); expect(cancellations).toEqual([]); expect(f.store.run(id).status).toBe('running');
-  expect(await readFile(journal.path('orphan-proof'))).toEqual(original);
-  await expect(supervisor.dispatch()).rejects.toThrow(); expect(nativeCalls).toBe(1);
+  expect(await readFile(journal.path('snapshot-proof'))).toEqual(original);
+  const fencedCalls = calls.length;
+  await expect(supervisor.dispatch()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  await expect(supervisor.maintain()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  expect(calls.length).toBe(fencedCalls); expect(nativeCalls).toBe(1); expect(releases).toBe(0);
 });
 
 it('lease expiration after claim prevents native submission and preserves uncertainty', async () => {

@@ -4,6 +4,18 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Snapshot-fencing checkpoint (2026-09-16): the real FileJournal/projection/supervisor/
+SQLite integration now first persists valid live operations, then injects orphan
+timing, a null inventory, invalid completion evidence or a new late-start operation.
+The first three fail before heartbeat; the last reaches the Worker and is rejected
+by its timing envelope. Every path retains prior operations, attempts, runs,
+journal bytes and local/Worker leases, clears the supervisor timer and fences
+subsequent dispatch/maintenance. No cancellation, native replay or activity release
+occurs. Focused supervisor suite: 55 passed (`.local/snapshot-fencing-focused.log`).
+Combined verification passed 910 control / 251 runtime tests, all native/service
+fixtures and typecheck/build dry run (`.local/snapshot-fencing-combined.log`). Runtime
+behavior is unchanged; this proves refusal, not repair/resume or native termination.
+
 Worker operation envelope checkpoint (2026-09-16): after existing attempt/epoch
 authentication and UTC normalization, heartbeat requires start ≤ operation deadline
 ≤ admitted attempt deadline and progress ≥ start. The hard limit comes from the

@@ -2,6 +2,18 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Snapshot-fencing checkpoint (2026-09-16)
+
+Expanded supervisor integration verifies real journal/projection/SQLite rejection
+after valid work was already persisted. Orphan timing, null inventories, malformed
+completion and a new start beyond the hard deadline all fence execution without
+altering prior runs/attempts/operations, journal bytes or leases. Timer stops;
+further dispatch/maintenance reject without native replay, cancel or hold release.
+Focused suite: 55 passed (`.local/snapshot-fencing-focused.log`); combined check
+passed 910 control / 251 runtime tests, all native/service fixtures and typecheck/
+build dry run (`.local/snapshot-fencing-combined.log`). Tests only; successful recovery,
+provider termination and E01/E02 acceptance remain open. Schedule/gates unchanged.
+
 ## Worker operation envelope checkpoint (2026-09-16)
 
 Heartbeat now enforces start ≤ operation deadline ≤ authenticated attempt deadline
