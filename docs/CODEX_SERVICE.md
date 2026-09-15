@@ -239,9 +239,15 @@ discards start text and all message deltas; neither deltas nor duplicate starts
 refresh a clock. A start replayed after completion is a no-op. History-only starts
 never backfill timestamps, and malformed marker maps fail admission reads. The
 next live item boundary or exact turn termination closes the phase; completion
-can then open its separate post-message phase. This bounds the otherwise silent
-interval after a message starts, not the full lifetime of overlapping streams or
-progress-based extensions. Native-operation coverage remains unknown.
+can then open its separate post-message phase. Independently, each live message
+start now records an operation clock under `messageStarts` and the exact item ID.
+That five-minute, task-capped stream lifetime survives overlapping tool activity
+and root/child turn termination; only the matching output-item completion ends it.
+Its live completion updates last progress without changing the original deadline.
+History-only/legacy markers do not acquire invented clocks and retain the task
+hard deadline. Offline inspection preserves these independent obligations.
+This closes the observed message/tool overlap gap, not progress-based extensions,
+unobserved stream coverage or verified cancellation. Native coverage remains unknown.
 
 Quiet-window activity diagnostics retain an optional immutable `endedAt` when
 the first closing boundary has a live host timestamp. The offline inspector

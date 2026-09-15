@@ -236,17 +236,22 @@ try {
             assert.doesNotMatch(JSON.stringify(row), /PRIVATE_PLAN_43/);
             const active = (await service.supervisor.operations()).filter(op => op.kind === 'inference' && op.status === 'active' &&
               Date.parse(op.deadline_at) - Date.parse(op.started_at) === 300000);
-            assert.equal(active.length, 1);
+            assert.equal(active.length, 2); // The enclosing message and plan are both still streaming.
+            assert.equal(new Set(active.map(op => op.id)).size, 2);
             const [planId] = Object.keys(row.planItems);
-            assert.equal(active[0].started_at, row.operationTimes[JSON.stringify(['planItems', planId])].startedAt);
+            const [messageId] = Object.keys(row.messageStarts);
+            assert.deepEqual(active.map(op => op.started_at).sort(), [
+              row.operationTimes[JSON.stringify(['planItems', planId])].startedAt,
+              row.operationTimes[JSON.stringify(['messageStarts', messageId])].startedAt,
+            ].sort());
             continuePlan();
             await wait(() => notifications.some(n => n.method === 'item/plan/delta' && n.params.threadId === row.threadId &&
               n.params.turnId === row.nativeRunId && n.params.itemId === planId && n.params.delta.includes('PRIVATE_PLAN_43')), 'attributed native plan delta');
             assert.deepEqual(await service.observe(), row);
             const reread = await service.supervisor.operations();
-            assert.deepEqual(reread.find(op => op.id === active[0].id), active[0]);
+            for (const op of active) assert.deepEqual(reread.find(candidate => candidate.id === op.id), op);
             await service.maintain();
-            assert.deepEqual(heartbeatPages.at(-1).find(op => op.id === active[0].id), active[0]);
+            for (const op of active) assert.deepEqual(heartbeatPages.at(-1).find(candidate => candidate.id === op.id), op);
             report.planDeltaClockUnchanged = true;
             report.activePlanHeartbeatAccepted = true;
             report.planStreamActiveBounded = true;
@@ -508,6 +513,8 @@ try {
   const operations = await service.supervisor.operations();
   assert.equal(native.initialInference, 'completed');
   const quietPhases = [native, ...Object.values(native.childObligations ?? {})].flatMap(owner => Object.values(owner.quietPhases ?? {}));
+  const messageCount = childMode ? 2 : crashMode || questionCancelMode ? 0 : 1;
+  assert.equal([native, ...Object.values(native.childObligations ?? {})].reduce((n, owner) => n + Object.keys(owner.messageStarts ?? {}).length, 0), messageCount);
   if (!crashMode && !historyMode) {
     const owners = [native, ...Object.values(native.childObligations ?? {})];
     const phases = owners.flatMap(owner => Object.values(owner.quietPhases ?? {}));
@@ -521,10 +528,10 @@ try {
     }
     report.quietPhaseJournalObserved = true;
   }
-  assert.equal(operations.length, (childMode ? 8 : expectedToolCalls + 3 + Number(reasoningMode) + Number(planMode)) + quietPhases.length);
+  assert.equal(operations.length, (childMode ? 8 : expectedToolCalls + 3 + Number(reasoningMode) + Number(planMode)) + quietPhases.length + messageCount);
   if (childMode) {
     assert.ok(Object.values(native.childObligations).every(child => child.initialInference === 'completed'));
-    assert.equal(operations.filter(operation => operation.kind === 'inference' && operation.status === 'settled').length, 3 + quietPhases.length);
+    assert.equal(operations.filter(operation => operation.kind === 'inference' && operation.status === 'settled').length, 3 + quietPhases.length + messageCount);
     const startup = operations.filter(operation => operation.kind === 'child' && operation.deadline_at < dispatched.claim.deadline_at);
     assert.equal(startup.length, 1); assert.equal(startup[0].status, 'settled');
     const [spawnId] = Object.keys(native.spawns);
@@ -536,7 +543,7 @@ try {
     assert.deepEqual(Object.values(native[planMode ? 'planItems' : 'reasoningItems']), ['completed']);
     assert.doesNotMatch(JSON.stringify(native), /PRIVATE_SYNTHETIC_REASONING_43|PRIVATE_PLAN_43/);
     const phases = operations.filter(operation => operation.kind === 'inference' && operation.deadline_at < dispatched.claim.deadline_at);
-    assert.equal(phases.length, 2 + quietPhases.length); assert.ok(phases.every(phase => phase.status === 'settled'));
+    assert.equal(phases.length, 2 + quietPhases.length + messageCount); assert.ok(phases.every(phase => phase.status === 'settled'));
     assert.ok(phases.every(phase => Date.parse(phase.deadline_at) - Date.parse(phase.started_at) === 300000));
     assert.deepEqual(heartbeatPages.at(-1), operations);
     if (planMode) {
@@ -546,7 +553,7 @@ try {
     } else { report.reasoningPhaseObserved = true; report.reasoningContentExcluded = true; }
   }
   if (operationPagesMode) {
-    const total = 104 + quietPhases.length, pageCount = Math.ceil(total / 100);
+    const total = 104 + quietPhases.length + messageCount, pageCount = Math.ceil(total / 100);
     assert.deepEqual(heartbeatPages.slice(-pageCount).flat(), operations);
     assert.equal(new Set(operations.map(operation => operation.id)).size, total);
     assert.ok(heartbeatPages.slice(-pageCount).every((page, i) => page.length === Math.min(100, total - i * 100)));

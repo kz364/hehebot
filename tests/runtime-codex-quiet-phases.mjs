@@ -133,6 +133,31 @@ test('activity duration preserves the first live end and never invents history-o
   }
 });
 
+for (const threadId of ['root', 'child']) for (const toolFirst of [false, true])
+test(`${threadId} message lifetime survives overlapping tool and root completion (toolFirst=${toolFirst})`, async t => {
+  const f = await fixture(t), childKey = '["child","turn"]';
+  if (threadId === 'child') await f.journal.update('attempt', {
+    spawns: { s: { status: 'completed', receiverThreadIds: ['child'] } }, childTurns: { [childKey]: 'inProgress' },
+  });
+  const start = { method: 'item/started', params: { threadId, turnId: 'turn', item: { type: 'agentMessage', id: 'stream', text: 'PRIVATE_START' } } };
+  if (toolFirst) await f.item('tool', 'inProgress', at, threadId);
+  await f.adapter.observe('attempt', start, later);
+  if (!toolFirst) await f.item('tool', 'inProgress', later, threadId);
+  await f.adapter.observe('attempt', { method: 'turn/completed', params: { threadId: 'root', turn: { id: 'turn', status: 'completed' } } }, later);
+  const operations = new CodexOperations({ journal: f.journal, attemptId: 'attempt',
+    runId: '01234567-0123-4123-a123-012345678901', attempt: 1, startedAt: at, deadlineAt: '2026-09-15T01:20:00.000Z' });
+  const active = (await operations.snapshot()).filter(op => op.kind === 'inference' && op.status === 'active');
+  assert.equal(active.length, 1);
+  assert.equal(active[0].started_at, later); assert.equal(active[0].deadline_at, '2026-09-15T01:06:00.000Z');
+  await f.adapter.observe('attempt', start, '2026-09-15T01:03:00.000Z');
+  assert.deepEqual((await operations.snapshot()).find(op => op.id === active[0].id), active[0]);
+  await f.adapter.observe('attempt', { method: 'item/completed', params: { threadId, turnId: 'turn',
+    item: { type: 'agentMessage', id: 'stream', text: 'Visible' } } }, '2026-09-15T01:04:00.000Z');
+  const done = (await operations.snapshot()).find(op => op.id === active[0].id);
+  assert.deepEqual(done, { ...active[0], status: 'settled', last_progress_at: '2026-09-15T01:04:00.000Z' });
+  assert.doesNotMatch(JSON.stringify(await f.journal.get('attempt')), /PRIVATE_START/);
+});
+
 test('a message during an active tool does not invent idle inference', async t => {
   const f = await fixture(t);
   await f.item('tool', 'inProgress', at);

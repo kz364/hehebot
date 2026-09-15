@@ -230,7 +230,8 @@ export class CodexAdapter {
           ...(owner.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) } } }
         : { ...patch, ...(row.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) });
     };
-    const saveOperation = (field, itemKey, prior, status, patch) => {
+    const saveOperation = (field, itemKey, prior, status, patch,
+      after = status !== 'inProgress' ? JSON.stringify([field, itemKey]) : undefined) => {
       const timingKey = JSON.stringify([field, itemKey]);
       if (owner.operationTimes !== undefined && (!owner.operationTimes || typeof owner.operationTimes !== 'object' || Array.isArray(owner.operationTimes))) fail('INVALID_OPERATION_TIMING');
       const timing = owner.operationTimes?.[timingKey];
@@ -247,7 +248,7 @@ export class CodexAdapter {
         } };
       }
       return save({ ...patch, ...(operationTimes ? { operationTimes } : {}) },
-        status !== 'inProgress' ? timingKey : undefined, prior !== status);
+        after, prior !== status);
     };
     if (notification?.method === 'item/started' && params?.item?.type === 'agentMessage') {
       if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
@@ -256,7 +257,8 @@ export class CodexAdapter {
       const seen = owner.messageStarts ?? {};
       if (Object.hasOwn(seen, id) || Object.hasOwn(owner.outputItems ?? {}, id)) return row;
       if (Object.keys(seen).length >= 1024) fail('OUTPUT_TRACKING_LIMIT');
-      return save({ messageStarts: { ...seen, [id]: true } }, JSON.stringify(['messageStarts', id]));
+      return saveOperation('messageStarts', id, undefined, 'inProgress',
+        { messageStarts: { ...seen, [id]: true } }, JSON.stringify(['messageStarts', id]));
     }
     if (notification?.method === 'item/completed' && params?.item?.type === 'agentMessage') {
       if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
@@ -272,7 +274,8 @@ export class CodexAdapter {
       }
       if (observationOwners(row).reduce((n, value) => n + Object.keys(value.outputItems ?? {}).length, 0) >= 1024 ||
           !owner.outputPreview && observationOwners(row).filter(value => value.outputPreview).length >= 101) fail('OUTPUT_TRACKING_LIMIT');
-      return save({ outputItems: { ...seen, [id]: message.outputDigest }, outputPreview: {
+      return saveOperation('messageStarts', id, Object.hasOwn(owner.messageStarts ?? {}, id) ? 'inProgress' : undefined,
+        'completed', { outputItems: { ...seen, [id]: message.outputDigest }, outputPreview: {
         version: (owner.outputPreview?.version ?? 0) + 1, text: message.text, truncated: message.truncated,
       } }, JSON.stringify(['outputItems', id]));
     }

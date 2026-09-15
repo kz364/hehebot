@@ -526,8 +526,9 @@ try {
       if (supervisorChildMode) {
         const quiet = [observed, ...Object.values(observed.childObligations ?? {})].flatMap(owner => Object.values(owner.quietPhases ?? {}));
         assert.ok(quiet.every(phase => phase.status === 'completed'));
-        assert.equal(operations.length, 13 + quiet.length);
-        assert.equal(operations.filter(op => op.kind === 'inference' && op.status === 'settled').length, 3 + quiet.length);
+        assert.equal(Object.keys(observed.messageStarts).length, 1); // SHARED_PARENT_DONE; child is interrupted before its final message.
+        assert.equal(operations.length, 14 + quiet.length);
+        assert.equal(operations.filter(op => op.kind === 'inference' && op.status === 'settled').length, 4 + quiet.length);
         assert.equal(operations.filter(op => op.kind === 'child' && op.status === 'settled').length, 2);
         const startup = operations.filter(op => op.kind === 'child' && Date.parse(op.deadline_at) - Date.parse(op.started_at) === 120000);
         assert.equal(startup.length, 1);

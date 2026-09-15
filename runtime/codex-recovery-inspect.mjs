@@ -154,14 +154,15 @@ export async function inspectCodexRecovery(directory) {
             durationMs: Date.parse(phase.endedAt) - Date.parse(phase.startedAt) }) });
       }
       const clocks = new Map(entries(owner.operationTimes));
-      for (const field of ['commands', 'mcpCalls', 'spawns', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'collabCalls', 'reasoningItems', 'planItems']) for (const [key, item] of entries(owner[field])) {
+      for (const field of ['commands', 'mcpCalls', 'spawns', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'collabCalls', 'reasoningItems', 'planItems', 'messageStarts']) for (const [key, item] of entries(owner[field])) {
         let itemId = key, tool;
         if (field === 'collabCalls') {
           const pair = JSON.parse(key);
           require(Array.isArray(pair) && pair.length === 2 && OBSERVED_COLLAB_TOOLS.includes(pair[0]) && JSON.stringify(pair) === key);
           [tool, itemId] = pair;
         }
-        const status = field === 'spawns' ? item?.status : item;
+        if (field === 'messageStarts') require(item === true);
+        const status = field === 'messageStarts' ? Object.hasOwn(owner.outputItems ?? {}, key) ? 'completed' : 'inProgress' : field === 'spawns' ? item?.status : item;
         const states = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems', 'planItems'].includes(field) ? ['inProgress', 'completed']
           : ['inProgress', 'completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
         require(typeof itemId === 'string' && itemId.length > 0 && itemId.length <= 256 && states.includes(status) && obligations.length < 4096);

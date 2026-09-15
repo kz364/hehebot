@@ -74,6 +74,10 @@ export class CodexOperations {
         clocks.delete(key);
         return timing;
       };
+      for (const [id, marker] of Object.entries(owner.messageStarts ?? {})) {
+        if (marker !== true) fail('INVALID_OPERATION_TIMING');
+        add([identity, 'messageStarts', id], 'inference', Object.hasOwn(owner.outputItems ?? {}, id) ? 'settled' : 'active', takeClock('messageStarts', id));
+      }
       for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems', 'planItems']) {
         const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems', 'planItems'].includes(field) ? ['completed']
           : ['completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];

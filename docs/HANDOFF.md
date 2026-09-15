@@ -419,6 +419,20 @@ corrected. Verification: 42 router tests, two-request native Plan fixture, combi
 passed. Logs: `.local/plan-delta-unit.log`, `.local/plan-delta-focused.log`,
 `.local/plan-delta-combined.log`. No expiry/forced-termination claim or gate change.
 
+Message lifetime checkpoint (2026-09-16): live `agentMessage` starts now use
+`operationTimes[JSON.stringify(['messageStarts', id])]` independently of quiet
+phases. Exact output completion ends the stream and updates last progress; tool
+activity, turn completion and replay do not. Legacy/history-only starts invent no
+clock. Heartbeat and offline inspection retain per-owner obligations. Four overlap
+fixtures cover root/child and both tool/message start orders. Native Plan confirms
+two active clocks (message + plan); older count assertions in supervisor-child
+and Plan fixtures were corrected after observed failures. Verification: 99 focused
+tests; targeted native reruns; combined 901 control / 246 runtime tests plus all
+native/service fixtures and typecheck/build passed. Logs:
+`.local/message-lifetime-focused.log`, `.local/message-lifetime-child.log`,
+`.local/message-lifetime-plan-rerun.log`, `.local/message-lifetime-combined-rerun.log`.
+Unknown coverage, progress extensions and verified termination remain open.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.
