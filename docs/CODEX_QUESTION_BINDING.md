@@ -58,7 +58,12 @@ Journal phases are record_unknown → waiting → take_unknown → handoff_unkno
 New records also retain immutable `wait: {startedAt, deadlineAt}` in canonical UTC
 milliseconds. Start is callback entry, including admission latency; deadline is
 the earlier configured callback limit or original task deadline. Polling and
-resolution do not refresh it. Offline inspection validates and exposes timing
+resolution do not refresh it. Once scoped admission supplies the task deadline,
+the abort timer is shortened to that same effective deadline before initial
+journal/control work. A held initial write or record request cannot keep the
+callback pending until the longer dependency timeout. Already-started I/O may
+still finish; its late result cannot trigger a take or synthesize resolution.
+Offline inspection validates and exposes timing
 and phase without question/connection IDs or content; old records remain readable
 without invented timing. The reusable binding still permits explicit fixture
 limits up to 15 minutes, but service assembly uses five. Worker custody expiry

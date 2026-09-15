@@ -171,6 +171,43 @@ test('persisted callback deadline is capped by the original task, not by a fresh
   f.notify(); await until(async () => (await f.rows())[0].phase === 'resolved');
   assert.deepEqual((await f.rows())[0].wait, row.wait);
 });
+for (const held of ['journal', 'record']) test(`task deadline aborts initial ${held} wait exactly, without replaying late results`, async t => {
+  const now = Date.parse('2026-09-16T02:00:00.000Z');
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now });
+  const entered = deferred(), release = deferred(), rows = new Map(), calls = [];
+  const claim = { identity: { epoch: 7, boot_id: uuid(7) }, run_id: uuid(20), attempt: 2,
+    attemptId: 'attempt-one', deadline_at: new Date(now + 500).toISOString() };
+  rows.set(claim.attemptId, { threadId: 'root/one', nativeRunId: 'turn/one', rootSettled: false, status: 'running' });
+  const journal = {
+    get: async key => rows.get(key),
+    putIfAbsent: async (key, row) => {
+      if (held === 'journal') { entered.resolve(); await release.promise; }
+      rows.set(key, row); return null;
+    },
+    update: async (key, patch) => { rows.set(key, { ...rows.get(key), ...patch }); },
+  };
+  const binding = new CodexQuestionBinding({ journal, resolveBinding: async () => claim,
+    timeoutMs: 5000, controlTimeoutMs: 2000, control: { request: async (type, payload) => {
+      calls.push(type); assert.equal(type, 'question-record');
+      entered.resolve(); await release.promise; return { id: payload.question.id };
+    } } });
+  let stopped = false;
+  const callback = binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 })
+    .then(() => assert.fail('late answer'), cause => { assert.equal(cause.code, 'QUESTION_CALLBACK_STOPPED'); stopped = true; });
+  try {
+    await entered.promise;
+    t.mock.timers.tick(499); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(stopped, false);
+    t.mock.timers.tick(1); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(stopped, true); await callback;
+    release.resolve(); await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(calls, held === 'record' ? ['question-record'] : []);
+    const row = [...rows.values()].find(row => row.questionId);
+    assert.equal(row.wait.deadlineAt, claim.deadline_at);
+    assert.equal(row.resolutionObserved, false); assert.notEqual(row.phase, 'resolved');
+  } finally { release.resolve(); binding.close(); t.mock.timers.reset(); await callback; }
+});
+
 test('failed resolution retains observed/unknown evidence and never retries duplicate notification', async t => {
   const f = await fixture(t); f.setTake(async () => ({ state: 'response_unknown', answer: answer() }));
   await f.binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 });

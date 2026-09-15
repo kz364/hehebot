@@ -6,9 +6,9 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest checkpoint:** bounded human-question callback, 2026-09-16. Local, not pushed or deployed. Disposable service binding/transport both cap waits at five minutes, with immutable callback/task-capped timing in the journal. E01 remains partial.
-- **Verified:** **60 focused tests passed**, including service limit agreement, original-task capping, timeout without false resolution, legacy compatibility and malformed timing refusal. Native answer/cancel fixtures verify persisted five-minute windows.
-- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 223 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/question-wait-focused.log`, `.local/question-wait-combined.log`.
+- **Latest checkpoint:** exact task-deadline abort during question initialization, 2026-09-16. Local, not pushed or deployed. A held initial journal/control operation no longer keeps the callback pending past its effective task deadline. E01 remains partial.
+- **Verified:** **66 focused tests passed**. Deterministic tests distinguish 499ms from the 500ms task deadline during both journal and record waits, then release late I/O and verify no take/replay/false resolution.
+- **Combined:** `bash scripts/verify-codex.sh` passed **901 control / 225 runtime tests**, all native/service fixtures, typecheck and build dry run. Private logs: `.local/question-deadline-focused.log`, `.local/question-deadline-combined.log`.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
 - **Next implementation priority:** E01, complete deadline/activity accounting; then E02 recovery and E03 responsive orchestration. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.

@@ -112,10 +112,13 @@ export class CodexQuestionBinding {
       this.#entries.set(requestId, e);
       const abort = () => e.controller.abort();
       if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true });
-      const timer = setTimeout(abort, this.timeoutMs);
+      let timer = setTimeout(abort, this.timeoutMs);
       e.initialized = this.#serial(e, async () => {
         this.#alive(e); e.binding = await this.#binding(e, true); this.#alive(e);
         e.deadline = Math.min(e.deadline, Date.parse(e.binding.deadline_at));
+        clearTimeout(timer);
+        timer = setTimeout(abort, Math.max(0, e.deadline - Date.now()));
+        this.#alive(e);
         e.key = `question_${hash([e.binding.attemptId, e.params.threadId, e.params.turnId, e.params.itemId])}`;
         const existing = await bounded(this.journal.putIfAbsent(e.key, { version: 1, questionId: e.id, connectionId: this.connectionId,
           requestId, binding: e.binding, threadId: e.params.threadId, turnId: e.params.turnId, itemId: e.params.itemId,

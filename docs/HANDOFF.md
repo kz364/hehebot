@@ -332,6 +332,16 @@ Worker custody may outlive the callback. Explicit restart-required UI, checkpoin
 parking, coordinated cancellation and compute release remain E01/E02. No gates,
 account/provider deployment or replay permissions changed.
 
+Question initialization deadline correction (2026-09-16): the abort timer now
+uses the effective task-capped deadline immediately after binding, before initial
+journal/record awaits. Previously the stored deadline was capped but those awaits
+could leave the callback pending until a longer timeout. Deterministic held-I/O
+tests assert pending at 499ms, aborted at 500ms, and no take/false resolution after
+late release. Verification: 66 focused tests; 901 control / 225 runtime combined,
+all native/service fixtures, typecheck/build. Private logs are
+`.local/question-deadline-focused.log`, `.local/question-deadline-combined.log`.
+This does not cancel already-started I/O, settle native work or enable sleep.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.
