@@ -124,6 +124,19 @@ export class PersonalControl extends DurableObject<Env> {
   requireThat(this.core.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified.');
   let result:unknown={ok:true};
   switch(command.type){
+   case 'question-record':{
+    const p=command.payload;result={id:this.core.questions.record(p.identity,p.run_id,p.attempt,p.question)};break;
+   }
+   case 'question-take':{
+    const p=command.payload;
+    result=this.store.db.transaction(()=>{
+     const answer=this.core.questions.takeAnswer(p.identity,p.question_id,p.connection_id);
+     return {state:this.core.questions.get(p.question_id).state,answer};
+    });break;
+   }
+   case 'question-resolve':{
+    const p=command.payload;this.core.questions.resolve(p.identity,p.question_id,p.connection_id);break;
+   }
    case 'output-preview':{
     const {identity,...preview}=command.payload;
     try {

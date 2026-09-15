@@ -62,6 +62,28 @@
     {
       "type":"object","additionalProperties":false,
       "properties": {
+        "schema_version":{"const":1},"type":{"const":"question.answer"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "question_id":{"$ref":"#/$defs/uuid"},
+            "expected_revision":{"type":"integer","minimum":1,"maximum":9007199254740990},
+            "answers":{
+              "type":"object","minProperties":1,"maxProperties":3,
+              "propertyNames":{"type":"string","minLength":1,"maxLength":128},
+              "additionalProperties":{
+                "type":"object","additionalProperties":false,
+                "properties":{"answers":{"type":"array","maxItems":1,"items":{"type":"string","maxLength":2000}}},
+                "required":["answers"]
+              }
+            }
+          },"required":["question_id","expected_revision","answers"]
+        }
+      },"required":["schema_version","type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
         "schema_version":{"const":1},"type":{"const":"roster.set"},
         "payload": {
           "type":"object","additionalProperties":false,

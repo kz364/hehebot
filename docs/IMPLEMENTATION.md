@@ -128,6 +128,18 @@ labels do not replace current task attention or prove family settlement. The
 isolation, empty failures/cancellations, unknown status and narrow wrapping with
 no mutation requests; native approval/question integration remains incomplete.
 
+[Native-question custody](NATIVE_QUESTION_CUSTODY.md) now binds owner answers to
+the original task, attempt, epoch, boot, connection and exact question revision.
+The Worker commits response uncertainty before returning answer data; repeated
+takes never resend it. Questions block task completion and sleep until separately
+resolved, even after expiry. Resolution proves neither answer consumption nor
+task settlement. The portal uses attributed literal question cards and explicit
+answer/skip controls, retains hidden-bot attention, fences stale edits, and leaves
+the ordinary chat composer independent. SQLite, actual local HTTPS Worker and
+inspected Chromium fixtures cover these boundaries. Runtime thread-journal
+binding, post-epoch reconciliation, bounded retention and production callback
+assembly remain incomplete; production execution remains disabled.
+
 Observed native child starts are now acknowledged by the service atomically with
 Worker registration. Exact receipt replay recovers a lost acknowledgement without
 resubmitting inference or resurrecting a cancelling/terminal task. Legacy journal

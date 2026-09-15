@@ -6,6 +6,8 @@ import { dueOccurrences, nextDue, preview, validateSchedule } from './schedule';
 import {SkillCatalog} from './skills';
 import {BudgetLedger} from './budget';
 import {RosterLedger} from './roster';
+import {NativeQuestionLedger} from './native-questions';
+import {LifecycleCore} from './lifecycle';
 import {controlMonitoring} from './monitoring';
 import {TaskSteering} from './task-steering';
 import {nativeDescendantsSettledSql} from './native-tasks';
@@ -30,7 +32,11 @@ export function parseCommand(value:unknown):Command {
 }
 export class ControlCore {
  readonly budget:BudgetLedger;
- constructor(public store:Store,public options:Options){this.budget=new BudgetLedger(store,()=>this.now(),options.uuid);}
+ readonly questions:NativeQuestionLedger;
+ constructor(public store:Store,public options:Options){
+  this.budget=new BudgetLedger(store,()=>this.now(),options.uuid);
+  this.questions=new NativeQuestionLedger(store,new LifecycleCore(store,this),()=>this.now());
+ }
  now(){return this.options.now().toISOString();}
  schedulePreview(cron:string,timezone:string){
   requireThat(typeof cron==='string'&&cron.length>=1&&cron.length<=128&&typeof timezone==='string'&&timezone.length>=1&&timezone.length<=80,'INVALID_INPUT','Provide a bounded cron expression and timezone.',422);
@@ -92,6 +98,7 @@ export class ControlCore {
     this.store.event(this.options.uuid(),this.store.run(p.run_id).persona_id,'effect.owner_reconciled',owner,commandId,
      {run_id:p.run_id,effect_id:id,attempt:p.expected_attempt,outcome:p.outcome},now);return id;
    }
+   case 'question.answer':return this.questions.answer(owner,commandId,command.payload);
    case 'roster.set':return new RosterLedger(this.store,()=>this.now()).set(owner,commandId,command.payload);
    case 'budget.set':{
     const id=this.budget.set(owner,commandId,command.payload);this.reconcileBudget();return id;
@@ -456,6 +463,7 @@ export class ControlCore {
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
    settings:{timezone:'Asia/Jakarta'},
    budget:this.budget.summary(),
+   questions:this.questions.list(),
    roster:new RosterLedger(this.store,()=>now).summary(),
    roster_activity:{observed_at:now,personas:this.store.db.all<{persona_id:string;unfinished:number;active:number;waiting:number;recovery:number}>(`SELECT persona_id,COUNT(*) AS unfinished,
     SUM(status IN ('claimed','running','finishing','cancelling')) AS active,SUM(status='waiting') AS waiting,SUM(status='recovery_required') AS recovery

@@ -70,7 +70,8 @@ function render(){
  const steering=(view?.kind==='tasks'?view.page?.steering??[]:snapshot.steering??[]).filter(x=>runs.some(run=>run.id===x.run_id));
  const recovery=(view?(view.page?.recovery??[]):snapshot.recovery??[]).filter(x=>runs.some(run=>run.id===x.run_id));
  const previews=(view?.kind==='tasks'?view.page?.output_previews??[]:snapshot.output_previews??[]).filter(x=>runs.some(run=>run.id===x.run_id&&run.current_attempt===x.attempt&&['running','finishing','recovery_required'].includes(run.status)&&!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code)));
- const signature=JSON.stringify([selected,conversation,runs,steering,recovery,previews,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
+ const questions=(snapshot.questions??[]).filter(q=>q.conversation_id===selected||q.persona_id===selected);
+ const signature=JSON.stringify([selected,conversation,runs,steering,recovery,previews,questions,$('connection').textContent,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;const expanded=new Set([...timeline.querySelectorAll('.task-card[open]')].map(card=>card.dataset.runId));timeline.replaceChildren();
   if(view){
    const taskMode=view.kind==='tasks',label=taskMode?'task':'recovery';
@@ -89,7 +90,8 @@ function render(){
    if(selected!==conversationId)return;
    events=olderEvents.get(conversationId);lastSignature='';render();
   }catch(e){if(selected===conversationId)report(e.message);}},'quiet'));}
-  if(!view&&!conversation.length){const empty=node('div',undefined,'empty');empty.append(node('h2',`A place to work with ${object?.body.name??'your assistant'}`),node('p','Ask for help, share an update, or describe something you’d like done on a schedule.'));timeline.append(empty);}
+  if(!view&&!conversation.length&&!questions.length){const empty=node('div',undefined,'empty');empty.append(node('h2',`A place to work with ${object?.body.name??'your assistant'}`),node('p','Ask for help, share an update, or describe something you’d like done on a schedule.'));timeline.append(empty);}
+  for(const question of questions)renderQuestion(timeline,question);
   for(const event of conversation){
    if(event.type==='message.user'||event.type==='run.result'){
     const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot'));const h=node('div',undefined,'message-head');h.append(node('strong',event.type==='message.user'?'You':object?.body.name??'Assistant'),node('time',time(event.created_at)));m.append(h);
@@ -178,23 +180,64 @@ function renderTaskStrip(){
  if(!page.runs.length)target.append(node('p','No unfinished tasks are recorded here. This is not native settlement or safe-sleep evidence.','hint'));
  target.append(button(page.next_cursor?'Browse all task pages':'Review task details',()=>{strip.open=false;loadRecovery(null,[],'tasks');},'quiet'));
 }
+function renderQuestion(target,question){
+ const owner=items('persona').find(bot=>bot.id===question.persona_id)?.body.name??'Unavailable bot';
+ const card=node('section',undefined,'task-card question-card');card.dataset.questionId=question.id;card.setAttribute('aria-label',`Questions from ${owner}`);
+ card.append(node('h3',`Questions from ${owner}`));
+ const labels={pending:question.answerable?'Waiting for your answer.':'Answer unavailable: this question expired or its task authority changed.',answered:'Answer saved. Native delivery is still pending.',response_unknown:'Answer handed off; delivery and consumption are unverified. Do not resend.',resolved:'Native request resolved. This does not prove answer consumption or task completion.'};
+ card.append(node('p',$('connection').textContent==='Connected'?labels[question.state]??'Question state unavailable.':'Question status is stale. Refresh before answering.','review-notice'));
+ const scope=snapshot.objects.find(object=>object.id===question.conversation_id)?.body.name??'Unavailable conversation';
+ card.append(node('p',`${scope} · Requested ${time(question.created_at)} · Answer window ends ${time(question.expires_at)}`,'hint'));
+ const task=node('details');task.append(node('summary','Question task'),node('p',`${snapshot.runs.find(run=>run.id===question.run_id)?.title??'Conversation task'} · ${question.run_id} · attempt ${question.attempt}`,'hint message-body'));card.append(task);
+ for(const q of question.params.questions){card.append(node('h4',q.header),node('p',q.question,'message-body'));}
+ if(question.state==='pending'){
+  const answer=button('Review and answer',()=>editQuestion(question),'quiet');answer.disabled=!question.answerable||$('connection').textContent!=='Connected';card.append(answer);
+ }
+ target.append(card);
+}
+function editQuestion(question){
+ const key=crypto.randomUUID(),fields=[node('p','Reply only to these questions. This is not tool approval or permission to change another task. Do not enter passwords, authentication codes or other secrets. Nothing is sent until Save.','review-notice')];
+ fields.push(node('p',`Task ${question.run_id} · attempt ${question.attempt}`,'hint message-body'));
+ const responses=question.params.questions.map((q,index)=>{
+  const choices=[['','Choose a response'],...(q.options??[]).map((o,i)=>[String(i),o.label])];
+  if(!q.options?.length||q.isOther)choices.push(['text','Write another answer']);choices.push(['skip','Skip this question']);
+  const response=selectField(`Response for ${q.header}`,`question-${index}`,choices,''),select=response.querySelector('select');select.required=true;
+  const free=field(`Written answer for ${q.header}`,`written-${index}`,'','textarea'),textarea=free.querySelector('textarea');textarea.maxLength=4000;
+  const update=()=>{free.hidden=select.value!=='text';free.style.display=free.hidden?'none':'';textarea.disabled=free.hidden;textarea.required=!free.hidden;};select.onchange=update;update();
+  fields.push(node('h3',q.header),node('p',q.question,'message-body'));
+  for(const option of q.options??[])fields.push(node('p',`${option.label} — ${option.description}`,'hint'));
+  fields.push(response,free);return {q,select,textarea};
+ });
+ $('editor').classList.add('roster-editor');openEditor('Answer native questions',fields,()=>{
+  const current=(snapshot.questions??[]).find(q=>q.id===question.id);
+  if($('connection').textContent!=='Connected'||!current?.answerable||current.revision!==question.revision)throw new Error('This question is stale or no longer answerable. Close this editor and refresh.');
+  const answers=Object.fromEntries(responses.map(({q,select,textarea})=>{
+   const choice=select.value;if(!choice)throw new Error('Choose an answer or explicitly skip each question.');
+   const value=choice==='text'?textarea.value:choice==='skip'?null:q.options[Number(choice)].label;
+   if(value!==null&&[...value].length>2000)throw new Error('Each answer must be at most 2000 characters.');
+   return [q.id,{answers:value===null?[]:[value]}];
+  }));
+  return command('question.answer',{question_id:question.id,expected_revision:question.revision,answers},key);
+ });
+}
 function renderRoster(){
  const layout=snapshot.roster??{revision:0,sections:[],hidden_persona_ids:[]},hidden=new Set(layout.hidden_persona_ids),bots=items('persona').filter(bot=>!bot.body.archived),query=$('roster-search').value.toLocaleLowerCase();
  const observation=snapshot.roster_activity,stale=$('connection').textContent!=='Connected'||!observation||Date.now()-Date.parse(observation.observed_at)>=30000;
  const activity=id=>observation?.personas.find(row=>row.persona_id===id);
  const attention=ids=>ids.reduce((sum,id)=>{const row=activity(id);return sum+(row?.waiting??0)+(row?.recovery??0);},0);
- const row=bot=>{const b=button('',()=>choose(bot.id),'nav-item');b.dataset.personaId=bot.id;b.setAttribute('aria-current',String(bot.id===selected));const text=node('span',bot.body.name),a=activity(bot.id);if(a)text.append(node('small',stale?'Activity stale':`${a.unfinished} unfinished · ${a.waiting} waiting · ${a.recovery} recovery`));b.append(node('span',bot.body.name.slice(0,1),'avatar'),text);return b;};
+ const questionCount=ids=>(snapshot.questions??[]).filter(q=>ids.includes(q.persona_id)).length;
+ const row=bot=>{const b=button('',()=>choose(bot.id),'nav-item');b.dataset.personaId=bot.id;b.setAttribute('aria-current',String(bot.id===selected));const text=node('span',bot.body.name),a=activity(bot.id);if(a)text.append(node('small',stale?'Activity stale':`${a.unfinished} unfinished · ${a.waiting} waiting · ${a.recovery} recovery`));if(questionCount([bot.id]))text.append(node('small',`${questionCount([bot.id])} unresolved question request(s)${stale?' · stale':''}`));b.append(node('span',bot.body.name.slice(0,1),'avatar'),text);return b;};
  const visible=bots.filter(bot=>!hidden.has(bot.id)&&bot.body.name.toLocaleLowerCase().includes(query)),assigned=new Set(layout.sections.flatMap(section=>section.persona_ids));
  $('bots').replaceChildren();
  for(const section of layout.sections){
   const members=section.persona_ids.flatMap(id=>visible.filter(bot=>bot.id===id));if(query&&!members.length)continue;
-  const group=node('div',undefined,'roster-section'),toggle=button(`${section.collapsed&&!query?'▸':'▾'} ${section.name} · ${stale?'attention stale':attention(section.persona_ids)+' waiting/recovery'}`,()=>act(()=>command('roster.set',{expected_revision:layout.revision,sections:layout.sections.map(s=>s.id===section.id?{...s,collapsed:!s.collapsed}:s),hidden_persona_ids:layout.hidden_persona_ids})),'roster-section-toggle');
+  const group=node('div',undefined,'roster-section'),toggle=button(`${section.collapsed&&!query?'▸':'▾'} ${section.name} · ${stale?'attention stale':attention(section.persona_ids)+' waiting/recovery'}${questionCount(section.persona_ids)?` · ${questionCount(section.persona_ids)} question request(s)`:''}`,()=>act(()=>command('roster.set',{expected_revision:layout.revision,sections:layout.sections.map(s=>s.id===section.id?{...s,collapsed:!s.collapsed}:s),hidden_persona_ids:layout.hidden_persona_ids})),'roster-section-toggle');
   toggle.setAttribute('aria-expanded',String(!section.collapsed||Boolean(query)));group.append(toggle);if(!section.collapsed||query)group.append(...members.map(row));$('bots').append(group);
  }
  const unassigned=visible.filter(bot=>!assigned.has(bot.id));if(layout.sections.length&&unassigned.length)$('bots').append(node('p','Unassigned','roster-observation'));$('bots').append(...unassigned.map(row));
  if(!visible.length)$('bots').append(node('p',query?'No visible bots match. Hidden bots remain below.':'No visible bots. Review hidden bots or add one.','roster-observation'));
  const hiddenBots=items('persona').filter(bot=>hidden.has(bot.id));$('hidden-bots').hidden=!hiddenBots.length;
- $('hidden-bots-summary').textContent=`Hidden ${hiddenBots.length} · ${stale?'attention stale':attention(hiddenBots.map(bot=>bot.id))+' waiting/recovery'}`;
+ $('hidden-bots-summary').textContent=`Hidden ${hiddenBots.length} · ${stale?'attention stale':attention(hiddenBots.map(bot=>bot.id))+' waiting/recovery'}${questionCount(hiddenBots.map(bot=>bot.id))?` · ${questionCount(hiddenBots.map(bot=>bot.id))} question request(s)`:''}`;
  $('hidden-bots-list').replaceChildren(...hiddenBots.map(row));
  $('roster-observation').textContent=stale?'Task observations unavailable or stale.':'Recorded tasks only; native approval/question coverage is unverified.';
 }

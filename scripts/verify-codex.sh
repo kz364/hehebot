@@ -15,6 +15,7 @@ node scripts/probe-codex.mjs
 npm test
 npm run test:runtime
 npm run test:e2e
+node scripts/test-control-questions.mjs
 node scripts/test-codex-native.mjs
 node scripts/test-codex-capacity.mjs
 node scripts/test-codex-permissions.mjs

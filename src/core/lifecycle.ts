@@ -14,6 +14,9 @@ export class LifecycleCore {
  initialize(ref:RuntimeRef|Record<string,never>):void{this.store.db.exec("INSERT OR IGNORE INTO lifecycle(singleton,provider_ref_json,epoch,phase,desired_state,queue_sequence,wake_after_stop) VALUES(1,?,0,'STOPPED','STOP',0,0)",JSON.stringify(ref));}
  private active():boolean{
   const budget=this.core.budget.admissionPredicate();
+  // Expiry and answer handoff do not settle the native request. Even stale
+  // obligations need explicit reconciliation before the runtime may sleep.
+  if(this.core.questions.list().length)return true;
   return this.store.db.all("SELECT resource_id FROM resource_locks LIMIT 1").length>0 || this.store.db.all(`SELECT r.id FROM runs r WHERE r.status IN ('claimed','running','finishing','cancelling','recovery_required') OR (r.status='queued' AND (${budget.sql})) LIMIT 1`,...budget.bindings).length>0 || this.store.db.all("SELECT id FROM operations WHERE status!='settled' LIMIT 1").length>0 || this.store.db.all("SELECT e.id FROM effects e JOIN runs r ON r.id=e.run_id WHERE e.status IN ('intent','dispatched') OR (e.status='outcome_unknown' AND r.status IN ('claimed','running','finishing','cancelling')) LIMIT 1").length>0;
  }
  nextClaimableRun():Run|undefined {
@@ -111,6 +114,7 @@ export class LifecycleCore {
    }
    requireThat(['claimed','running','finishing','cancelling','recovery_required'].includes(run.status),'REVISION_CONFLICT','Run is not active.');
    requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND attempt=? AND status!='settled'",runId,attempt).length,'CANCEL_UNCONFIRMED','Live operations have not settled.');
+   requireThat(!this.core.questions.list().some(question=>question.run_id===runId),'CANCEL_UNCONFIRMED','A native question remains unresolved.');
    requireThat(!this.store.db.all('SELECT resource_id FROM resource_locks WHERE run_id=?',runId).length,'RESOURCE_BUSY','Release scoped resources after tool settlement before completing.');
    requireThat(!this.store.db.all("SELECT id FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown')",runId).length,'OUTCOME_UNKNOWN','An external effect needs reconciliation.');
    requireThat(result.status!=='waiting'||result.checkpoint,'INVALID_INPUT','Waiting requires a durable checkpoint.',422);
