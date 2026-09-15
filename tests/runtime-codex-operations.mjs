@@ -71,3 +71,37 @@ test('statusless and collaboration lifetimes remain separate from coverage and i
   assert.deepEqual(rows.map(row => row.status), ['unknown', 'active', 'settled', 'active', 'settled', 'settled', 'active']);
   assert.ok(rows.every(row => row.last_progress_at === f.config.startedAt));
 });
+
+for (const child of [false, true]) test(`invalid ${child ? 'child' : 'root'} tool statuses remain unknown rather than borrowing another kind's terminal enum`, async t => {
+  const f = await fixture(t), key = '["child","turn"]';
+  const owner = {
+    commands: { valid: 'declined', invalid: 'interrupted' },
+    mcpCalls: { valid: 'failed', invalid: 'declined' },
+    fileChanges: { valid: 'declined', invalid: 'interrupted' },
+    dynamicCalls: { valid: 'completed', invalid: 'interrupted' },
+    webSearches: { valid: 'completed', invalid: 'failed' },
+    sleeps: { valid: 'completed', invalid: 'declined' },
+    compactions: { valid: 'completed', invalid: 'failed' },
+    collabCalls: { '["wait","valid"]': 'interrupted', '["wait","invalid"]': 'declined' },
+    imageGenerations: { valid: 'completed', invalid: 'interrupted' },
+    spawns: { valid: { status: 'failed' }, invalid: { status: 'interrupted' }, missing: null },
+  };
+  await f.journal.putIfAbsent('attempt-a', { status: 'running', threadId: 'root', nativeRunId: 'turn', rootSettled: false,
+    ...(child ? { childObligations: { [key]: owner } } : owner) });
+  const before = await f.journal.get('attempt-a');
+  const rows = await f.operations.snapshot();
+  assert.deepEqual(rows.slice(2).map(row => row.status), [...Array.from({ length: 10 }, () => ['settled', 'unknown']).flat(), 'unknown']);
+  assert.equal(new Set(rows.map(row => row.id)).size, rows.length);
+  assert.deepEqual(await f.journal.get('attempt-a'), before);
+  assert.deepEqual(await f.operations.snapshot(), rows);
+  assert.equal(rows[0].status, 'unknown');
+});
+
+test('child turn status accepts interruption but never tool-only decline', async t => {
+  const f = await fixture(t);
+  await f.journal.putIfAbsent('attempt-a', { status: 'running', childTurns: {
+    '["child-a","turn"]': 'interrupted', '["child-b","turn"]': 'declined', '["child-c","turn"]': 'inProgress',
+  } });
+  assert.deepEqual((await f.operations.snapshot()).slice(2).map(row => [row.kind, row.status]),
+    [['child', 'settled'], ['child', 'unknown'], ['child', 'active']]);
+});

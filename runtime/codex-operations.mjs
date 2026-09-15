@@ -32,22 +32,24 @@ export class CodexOperations {
         // Reading the same journal is not fresh native progress.
         last_progress_at: startedAt });
     };
-    const status = value => value === 'inProgress' ? 'active'
-      : ['completed', 'failed', 'declined', 'interrupted'].includes(value) ? 'settled' : 'unknown';
+    const status = (value, terminal) => value === 'inProgress' ? 'active'
+      : terminal.includes(value) ? 'settled' : 'unknown';
     add(['coverage'], 'tool', 'unknown');
     add(['root'], 'inference', row?.rootSettled === true ? 'settled'
       : row?.status === 'cancelling' ? 'cancelling' : row?.status === 'running' ? 'active' : 'unknown');
     if (!row) return operations;
     const items = (owner, identity) => {
       for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations']) {
-        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], 'tool', status(value));
+        const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations'].includes(field) ? ['completed']
+          : ['completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
+        for (const [id, value] of Object.entries(owner[field] ?? {})) add([identity, field, id], 'tool', status(value, terminal));
       }
       for (const [id, spawn] of Object.entries(owner.spawns ?? {})) {
-        add([identity, 'spawns', id], 'tool', status(spawn.status));
+        add([identity, 'spawns', id], 'tool', status(spawn?.status, ['completed', 'failed']));
       }
     };
     items(row, [row.threadId, row.nativeRunId]);
-    for (const [key, value] of Object.entries(row.childTurns ?? {})) add(['child', key], 'child', status(value));
+    for (const [key, value] of Object.entries(row.childTurns ?? {})) add(['child', key], 'child', status(value, ['completed', 'failed', 'interrupted']));
     for (const [key, owner] of Object.entries(row.childObligations ?? {})) items(owner, key);
     return operations;
   }

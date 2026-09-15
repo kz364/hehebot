@@ -33,6 +33,15 @@ socket transport are composed, but `http.request` is synthetic: PUT/GET checks
 **do not prove a live Sprite hold**. Successful cleanup removes fixture homes,
 SQLite and certificates. Failures retain private diagnostics for inspection.
 
+Heartbeat invocation statuses follow the adapter's per-kind terminal enums.
+For example, a declined file change can be settled, but a declined MCP call is
+unknown; an interrupted collaboration call can be settled, but an interrupted
+spawn is unknown. Search/wait/compaction/image records accept only observed
+completion as terminal. Unexpected statuses remain explicit unknown operations
+for both root and child records, preserving stable operation IDs and original
+progress timestamps without rewriting the journal. This does not validate all
+journal structure or remove the separate unknown-coverage blocker.
+
 The `--child` mode uses four scripted requests. The native root spawns a child,
 finishes, and the child uses its inherited root MCP grant to retrieve the exact
 paused routine from Worker/SQLite. Its next model HTTP response is deliberately
