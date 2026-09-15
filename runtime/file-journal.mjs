@@ -4,6 +4,20 @@ import { randomUUID } from 'node:crypto';
 
 const queues = new Map();
 
+const invalidRecord = () => { throw Object.assign(new Error('INVALID_JOURNAL_RECORD'), { code: 'INVALID_JOURNAL_RECORD' }); };
+function parseRecord(text) {
+  let row;
+  try { row = JSON.parse(text); } catch { invalidRecord(); }
+  if (!row || typeof row !== 'object' || Array.isArray(row)) invalidRecord();
+  return row;
+}
+function encodeRecord(row) {
+  let text;
+  try { text = JSON.stringify(row); } catch { invalidRecord(); }
+  parseRecord(text);
+  return text;
+}
+
 /** Single executor process only. A separate provider fence and OS ownership lock are required.
  * Serialized, fsynced intent journal. No native DB access. Directory must be private persistent disk.
  * Use one canonical directory path, not symlink aliases, across reconstructed instances.
@@ -15,7 +29,7 @@ export class FileJournal {
     return join(this.directory, `${id}.json`);
   }
   async get(id) {
-    try { return JSON.parse(await readFile(this.path(id), 'utf8')); }
+    try { return parseRecord(await readFile(this.path(id), 'utf8')); }
     catch (error) { if (error.code === 'ENOENT') return null; throw error; }
   }
   serial(fn) {
@@ -27,11 +41,12 @@ export class FileJournal {
     return result;
   }
   async write(id, row) {
+    const contents = encodeRecord(row);
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     const target = this.path(id);
     const temporary = `${target}.${randomUUID()}.tmp`;
     const fd = await open(temporary, 'wx', 0o600);
-    try { await fd.writeFile(JSON.stringify(row)); await fd.sync(); }
+    try { await fd.writeFile(contents); await fd.sync(); }
     finally { await fd.close(); }
     await rename(temporary, target);
     const directory = await open(this.directory, 'r');
@@ -48,6 +63,7 @@ export class FileJournal {
   }
   update(id, patch) {
     return this.serial(async () => {
+      encodeRecord(patch);
       const current = await this.get(id);
       if (!current) throw new Error('UNKNOWN_ATTEMPT');
       return this.write(id, { ...current, ...patch });

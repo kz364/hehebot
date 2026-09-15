@@ -98,6 +98,16 @@ durable prefix. The report therefore never certifies snapshot consistency or
 permission to resume. Ordinary reads may update filesystem access times; content,
 modification times and journal records are not written.
 
+The live `FileJournal` also distinguishes absence from malformed stored content:
+only `ENOENT` returns null. Parsed null, scalar or array rows and malformed JSON
+raise the fixed `INVALID_JOURNAL_RECORD` code without echoing file contents.
+Consequently `putIfAbsent` and `update` cannot treat corrupt falsey records as
+permission to overwrite them. Writes and patches must serialize as JSON objects;
+validation precedes temporary-file creation. Nested null/false/zero remain valid,
+and undefined patch fields retain their existing JSON omission behavior. There is
+no automatic repair/deletion. This structural check does not authenticate records,
+add cross-process locks or replace each consumer's schema/custody validation.
+
 After inspection, retain the state and reconcile uncertain Worker/native/effect
 outcomes through separately supported procedures. This tool supplies evidence
 only; safe resume, recursive settlement and production sleep gates stay open work.

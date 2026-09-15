@@ -195,6 +195,20 @@ fixtures, typecheck and build. This remains single-executor FileJournal behavior
 not successful native recovery or live provider sleep. E02 stays partial.
 No accounts, live provider operations, pushes, deployments or gate changes.
 
+Journal-record checkpoint (2026-09-15): live FileJournal now returns null only
+for ENOENT; malformed JSON and parsed null/scalar/array records raise fixed
+`INVALID_JOURNAL_RECORD` without echoing contents. This closes falsey existing
+intent overwrite through putIfAbsent. Writes and patches must encode as JSON
+objects before file creation; nested null/false/zero and undefined update-field
+omission remain valid. There is no schema/authenticity proof or automatic repair.
+Seven regressions failed before implementation. Nine journal tests passed with
+unchanged corrupt bytes/mtime and no new temporary artifacts; 49 supervisor tests
+passed, including null drain corruption retaining recovery and blocking commit
+and release. Final combined verifier passed 895 control / 205 runtime tests,
+all native/service fixtures, typecheck and build. E02 remains partial; existing
+single-executor/provider/OS-lock assumptions remain. No accounts, live provider
+operations, pushes, deployments or production gate changes.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

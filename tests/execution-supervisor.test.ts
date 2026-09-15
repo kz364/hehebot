@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -80,6 +80,17 @@ it.each(['commit_unknown', 'committed'])('prior %s drain intent cannot be overwr
   expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
   expect(calls).not.toContain('commit-sleep');
   expect(await supervisor.journal.get(key)).toEqual(prior);
+  expect(f.db.all("SELECT value_json FROM runtime_metadata WHERE key='checkpoint'")).toHaveLength(0);
+});
+
+it('a null drain record is corruption, not permission to insert a fresh intent', async () => {
+  await supervisor.start(); f.setNow('2026-09-10T00:01:00.000Z');
+  const path = join(directory, `drain-${supervisor.bridge.cursor}.json`);
+  await writeFile(path, 'null', { mode: 0o600 });
+  await expect(supervisor.drain({ snapshot: 'replacement' })).rejects.toMatchObject({ code: 'INVALID_JOURNAL_RECORD' });
+  expect(await readFile(path, 'utf8')).toBe('null');
+  expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
+  expect(calls).not.toContain('commit-sleep');
   expect(f.db.all("SELECT value_json FROM runtime_metadata WHERE key='checkpoint'")).toHaveLength(0);
 });
 

@@ -6,9 +6,9 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest implementation:** [drain checkpoint custody](docs/CODEX_SERVICE.md), 2026-09-15. Local, not pushed. Drain snapshots the checkpoint before its first await and refuses any prior intent returned by exclusive insertion. Old intent contents survive; no commit/release follows refusal. E02 remains partial.
-- **Verified:** three initial regressions failed before the fix; **205 focused supervisor/lifecycle/seeded-control tests passed**, including nested mutation during journal-read/prepare/commit, unknown/committed intent preservation and invalid serialization before preparation.
-- **Combined:** `bash scripts/verify-codex.sh` passed **894 control / 198 runtime tests**, all native/service fixtures, typecheck and build dry run.
+- **Latest implementation:** [journal corruption refusal](docs/CODEX_RECOVERY.md), 2026-09-15. Local, not pushed. Only missing files return null; malformed/non-object records cannot become fresh intents. Invalid writes/patches reject before temporary-file creation, with fixed content-free errors. E02 remains partial.
+- **Verified:** seven regressions failed before implementation; **9 journal and 49 supervisor tests passed**, including byte/mtime preservation, queue recovery, nested valid values and a null drain record blocking commit/release.
+- **Combined:** `bash scripts/verify-codex.sh` passed **895 control / 205 runtime tests**, all native/service fixtures, typecheck and build dry run.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
 - **Next implementation priority:** E01, complete deadline/activity accounting; then E02 recovery and E03 responsive orchestration. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
