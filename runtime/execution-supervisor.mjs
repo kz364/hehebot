@@ -69,7 +69,18 @@ export class ExecutionSupervisor {
   }
 
   async heartbeat() {
-    const reply = await this.control.request('heartbeat', { identity: this.identity, operations: await this.operations() });
+    const phase = this.phase, previousLease = this.leaseUntil;
+    const assertAuthority = () => {
+      if (this.phase !== phase || !['starting', 'running'].includes(phase) ||
+          (phase === 'running' && this.now() >= previousLease)) fail('EXECUTOR_FENCED');
+    };
+    assertAuthority();
+    const operations = await this.operations();
+    assertAuthority();
+    const reply = await this.control.request('heartbeat', { identity: this.identity, operations });
+    // Even an on-time server renewal cannot revive a locally expired executor.
+    // Starting has no prior local lease; recovery must still fence its reply.
+    assertAuthority();
     const until = Date.parse(reply?.lease_until);
     if (!Number.isFinite(until) || until <= this.now() || !Array.isArray(reply.cancellations) ||
         !reply.cancellations.every(id => typeof id === 'string')) fail('INVALID_HEARTBEAT');

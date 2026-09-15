@@ -91,6 +91,48 @@ it('expired warm-resume lease cannot renew or admit another task', async () => {
   expect(calls.length).toBe(before); expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
 });
 
+it.each(['activity', 'operations', 'reply'])('lease expiry during %s cannot revive local admission', async boundary => {
+  await supervisor.start();
+  const originalLease = supervisor.leaseUntil, before = calls.length;
+  f.setNow('2026-09-10T00:00:50.000Z');
+  const expire = () => f.setNow('2026-09-10T00:01:30.000Z');
+  if (boundary === 'activity') supervisor.activity.ensure = async () => { expire(); };
+  if (boundary === 'operations') supervisor.operations = async () => { expire(); return []; };
+  if (boundary === 'reply') {
+    const request = supervisor.control.request;
+    supervisor.control.request = async (type: string, p: any) => {
+      const reply = await request(type, p);
+      expire(); // Server renewed on time; delivery resumes after the old local lease.
+      return reply;
+    };
+  }
+  await expect(supervisor.maintain()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  expect(calls.slice(before)).toEqual(boundary === 'reply' ? ['heartbeat'] : []);
+  expect(life.get().lease_until).toBe(boundary === 'reply'
+    ? '2026-09-10T00:02:20.000Z' : '2026-09-10T00:01:30.000Z');
+  expect(supervisor.leaseUntil).toBe(originalLease);
+  expect(supervisor.phase).toBe('recovery');
+  await expect(supervisor.dispatch()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  expect(nativeCalls).toBe(0); expect(releases).toBe(0);
+});
+
+it.each(['activity', 'operations', 'reply'])('startup disconnect during %s preserves the local fence', async boundary => {
+  if (boundary === 'activity') supervisor.activity.ensure = async () => { supervisor.disconnect(); };
+  if (boundary === 'operations') supervisor.operations = async () => { supervisor.disconnect(); return []; };
+  if (boundary === 'reply') {
+    const request = supervisor.control.request;
+    supervisor.control.request = async (type: string, p: any) => {
+      const reply = await request(type, p);
+      supervisor.disconnect();
+      return reply;
+    };
+  }
+  await expect(supervisor.start()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  expect(calls).toEqual(boundary === 'reply' ? ['heartbeat'] : []);
+  expect(supervisor.leaseUntil).toBe(0);
+  expect(supervisor.phase).toBe('recovery'); expect(releases).toBe(0);
+});
+
 it('disconnect while startup awaits heartbeat cannot resurrect admission', async () => {
   hook = async type => { if (type === 'heartbeat') supervisor.disconnect(); };
   await expect(supervisor.start()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });

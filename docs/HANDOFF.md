@@ -29,6 +29,14 @@ Owner question custody, explicit portal answers, and default-off disposable serv
 | supervisor/bridge and Sprite modules | Claim/submission custody and provider activity; production assembly remains unfinished |
 | `public/`, `desktop/` | Portal and remote-only Electron shell; desktop is not an execution authority |
 
+Heartbeat renewal now rechecks local authority before and after operation
+collection and after the control response. A response received at or after the
+previous local lease expiry cannot revive admission, even if the Worker renewed
+on time. Startup permits initial lease acquisition but rejects replies after
+disconnect. SQLite supervisor tests cover expiry during activity, collection and
+response delivery; recovery retains the provider hold. This conservative local
+fence does not implement successful warm-resume or alter Worker lease authority.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.
