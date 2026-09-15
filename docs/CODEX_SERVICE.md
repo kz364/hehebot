@@ -166,6 +166,25 @@ progress-based phase extensions remain separate work; this is not full S19 or
 proof of the native operation's true start before its host notification arrived.
 Timeout still requests cancellation, not settlement or automatic replay.
 
+Quiet-phase journaling is now an additional preparatory observation boundary.
+When a new live tool/reasoning/spawn completion leaves no observed item active
+in its exact owner, the adapter records a `quietPhases` entry keyed by category
+and item ID with immutable `startedAt` and `inProgress`/`completed` state. A new
+live item boundary or exact turn termination closes the prior phase. Duplicate
+items and history-only tool reads neither create nor advance phases; terminal
+turn readback can close them. Token-usage snapshots are not progress. Parallel
+items do not create quiet time until the last one terminates; equal timestamps
+use journal observation order rather than lexical sorting. Root termination
+does not close child phases. Completed phase IDs never reopen.
+
+The bounded, content-free shape allows at most one active phase and 4096 retained
+phases per owner; malformed/orphan records fail rather than being repaired.
+Offline inspection includes their original identities/timestamps without writing
+state. **These records are not yet heartbeat operations or enforced five-minute
+deadlines.** Connecting projection, exact watchdog expiry, human-wait interactions
+and complete post-message/unknown-item coverage remains E01. No sleep/production
+gate is relaxed by this journal stage.
+
 The `--child` mode uses four scripted requests. The native root spawns a child,
 finishes, and the child uses its inherited root MCP grant to retrieve the exact
 paused routine from Worker/SQLite. Its next model HTTP response is deliberately

@@ -97,6 +97,24 @@ test('child initial phase inspection preserves its clock and rejects missing tim
   assert.equal((await inspectCodexRecovery(f.directory)).native, null);
 });
 
+test('quiet phases are content-free, owner-bound observations and malformed state invalidates inspection', async t => {
+  const f = await fixture(t), startedAt = '2026-09-15T01:02:00.000Z', key = '["mcpCalls","child-call"]';
+  const owner = { ...f.native.childObligations[childKey], quietPhases: { [key]: { startedAt, status: 'completed' } } };
+  await f.journal.write(attemptId, { ...f.native, childObligations: { [childKey]: owner } });
+  const before = await snapshot(f.directory), report = await inspectCodexRecovery(f.directory);
+  assert.deepEqual(report.native.observations.find(row => row.kind === 'quietInference'), {
+    threadId: 'child-43', turnId: 'turn-71', kind: 'quietInference', itemId: key,
+    status: 'completed', timing: { startedAt, lastProgressAt: startedAt },
+  });
+  assert.deepEqual(await snapshot(f.directory), before); assert.equal(report.resumeAllowed, false);
+  assert.doesNotMatch(JSON.stringify(report), /PRIVATE_/);
+  for (const quietPhases of [null, { '["mcpCalls","missing"]': owner.quietPhases[key] },
+    { [key]: { ...owner.quietPhases[key], secret: canary } }]) {
+    await f.journal.write(attemptId, { ...f.native, childObligations: { [childKey]: { ...owner, quietPhases } } });
+    assert.equal((await inspectCodexRecovery(f.directory)).native, null);
+  }
+});
+
 test('recovery includes every recorded tool category with exact root/child and collaboration identity', async t => {
   const f = await fixture(t);
   await f.journal.write(attemptId, { ...f.native, fileChanges: { 'file/19': 'declined' }, dynamicCalls: { 'same-item': 'failed' },

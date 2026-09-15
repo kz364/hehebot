@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { OBSERVED_COLLAB_TOOLS, projectTokenUsage } from './codex-adapter.mjs';
+import { readQuietPhases } from './codex-quiet-phases.mjs';
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -136,6 +137,12 @@ export async function inspectCodexRecovery(directory) {
     const children = [], obligations = [], origins = new Map();
     const items = (owner, threadId, turnId) => {
       require(object(owner));
+      for (const [key, phase] of Object.entries(readQuietPhases(owner.quietPhases))) {
+        const [field, itemId] = JSON.parse(key);
+        require(Object.hasOwn(owner[field] ?? {}, itemId) && obligations.length < 4096);
+        obligations.push({ threadId, turnId, kind: 'quietInference', itemId: key,
+          status: phase.status, timing: { startedAt: phase.startedAt, lastProgressAt: phase.startedAt } });
+      }
       const clocks = new Map(entries(owner.operationTimes));
       for (const field of ['commands', 'mcpCalls', 'spawns', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'collabCalls', 'reasoningItems']) for (const [key, item] of entries(owner[field])) {
         let itemId = key, tool;

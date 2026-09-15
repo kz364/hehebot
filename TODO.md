@@ -6,9 +6,9 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest checkpoint:** specification/checklist audit and passive-publication volume verification, 2026-09-15. Local, not pushed. Explicit context-budget, retention/install/switch and numeric acceptance gaps added below; no requirement removed or weakened. Runtime quiet-period engineering remains open.
-- **Verified:** **159 focused tests passed**, including 1,000 publications each in stopped, idle-supervisor and active-supervisor cases. Zero provider wakes/additional native submissions; exact recipient delivery, dedupe and existing task/attempt preserved. This is local synthetic evidence, not the required staging trace.
-- **Combined:** `bash scripts/verify-codex.sh` passed **900 control / 210 runtime tests**, all native/service fixtures, typecheck and build dry run.
+- **Latest checkpoint:** ordered quiet-phase journal observations, 2026-09-15. Local, not pushed. Per-owner content-free records survive replay/equal timestamps and appear in offline inspection. E01 remains partial: these are not yet enforced heartbeat deadlines.
+- **Verified:** **82 focused tests passed**, including parallel items, replay/history isolation, child/root termination and invalid/orphan state. Eight native service cases observed quiet-phase journal records.
+- **Combined:** `bash scripts/verify-codex.sh` passed **900 control / 215 runtime tests**, all native/service fixtures, typecheck and build dry run.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
 - **Next implementation priority:** E01, complete deadline/activity accounting; then E02 recovery and E03 responsive orchestration. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.

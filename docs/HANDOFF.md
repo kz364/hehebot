@@ -260,6 +260,19 @@ Continue E01 quiet phases, then E02/E03; context packaging and E15 harnesses are
 also credential-free. Preserve exact external blockers in TODO. No account calls,
 live provider work, push or deployment occurred.
 
+Quiet-phase journal stage (2026-09-15): adapter records content-free quietPhases
+per exact root/child owner after the last observed live item finishes. Native
+observation order handles equal timestamps; duplicate/history item reads do not
+advance phases. Exact turn termination/readback closes that owner's phases, never
+a child's through parent completion. Shapes, canonical IDs/times, one active phase,
+4096 retained phases and owner references validate without repair. Inspector adds
+quietInference observations. Tests passed 82 focused; combined passed 900 control /
+215 runtime tests, all native/service fixtures, typecheck and build. Eight native
+service cases observed the new records. This stage does NOT project heartbeat
+deadlines; next work connects those records to capped five-minute inference
+operations and exact-expiry tests. Post-message/unknown-item and human-wait coverage
+remain explicit gaps. No accounts, live provider work, push/deploy or gate changes.
+
 ## Next work
 
 The owner permits a root and native descendants to share one admitted task's grant. The pinned `--child` native fixture verifies inherited MCP tools and real task-scoped Worker receipts after parent completion; dynamic-tool inheritance remains unavailable. Child command/MCP observations now use exact thread/turn namespaces. Do not confuse task-level authorization with per-child caller authentication or completed invocation observations with effect settlement. See `docs/NATIVE_ORCHESTRATION.md` and `docs/CODEX_RUNTIME_SETUP.md`.

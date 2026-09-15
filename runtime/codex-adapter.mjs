@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { advanceQuietPhases, readQuietPhases, QUIET_PHASE_FIELDS } from './codex-quiet-phases.mjs';
 
 export const PINNED_CODEX = '0.154.0';
 export const OBSERVED_COLLAB_TOOLS = Object.freeze(['sendInput', 'resumeAgent', 'wait', 'closeAgent', 'sendMessage', 'followupTask', 'interruptAgent', 'listAgents']);
@@ -99,6 +100,10 @@ export class CodexAdapter {
   async requireRun(attemptId) {
     const row = await this.journal.get(attemptId);
     if (!row?.threadId || !row.nativeRunId) fail('SUBMISSION_OUTCOME_UNKNOWN');
+    for (const owner of observationOwners(row)) for (const key of Object.keys(readQuietPhases(owner.quietPhases))) {
+      const [field, id] = JSON.parse(key);
+      if (!Object.hasOwn(owner[field] ?? {}, id)) fail('INVALID_QUIET_PHASE');
+    }
     if (row.initialInference !== undefined && !['inProgress', 'completed'].includes(row.initialInference)) fail('INVALID_OPERATION_TIMING');
     for (const child of Object.values(row.childObligations ?? {})) {
       if (child.initialInference !== undefined || child.initialInferenceAt !== undefined) {
@@ -208,10 +213,20 @@ export class CodexAdapter {
         ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, tokenUsage } } }
         : { tokenUsage });
     }
-    const save = patch => this.journal.update(attemptId, childItem
-      ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, ...patch,
-        ...(owner.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) } } }
-      : { ...patch, ...(row.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) });
+    const save = (patch, after = undefined, progress = true) => {
+      if (progress && (observedAt !== undefined || patch.rootSettled === true)) {
+        const next = { ...owner, ...patch };
+        const terminal = childItem ? row.childTurns[childKey] !== 'inProgress' : next.rootSettled === true;
+        const busy = QUIET_PHASE_FIELDS
+          .some(field => Object.values(next[field] ?? {}).some(value => (field === 'spawns' ? value.status : value) === 'inProgress'));
+        const phases = advanceQuietPhases(owner.quietPhases, observedAt, !terminal && !busy ? after : undefined);
+        if (Object.keys(phases).length) patch = { ...patch, quietPhases: phases };
+      }
+      return this.journal.update(attemptId, childItem
+        ? { childObligations: { ...row.childObligations, [childKey]: { ...owner, ...patch,
+          ...(owner.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) } } }
+        : { ...patch, ...(row.initialInference === 'inProgress' ? { initialInference: 'completed' } : {}) });
+    };
     const saveOperation = (field, itemKey, prior, status, patch) => {
       const timingKey = JSON.stringify([field, itemKey]);
       if (owner.operationTimes !== undefined && (!owner.operationTimes || typeof owner.operationTimes !== 'object' || Array.isArray(owner.operationTimes))) fail('INVALID_OPERATION_TIMING');
@@ -228,7 +243,8 @@ export class CodexAdapter {
           startedAt: timing?.startedAt ?? observedAt, lastProgressAt: observedAt,
         } };
       }
-      return save({ ...patch, ...(operationTimes ? { operationTimes } : {}) });
+      return save({ ...patch, ...(operationTimes ? { operationTimes } : {}) },
+        status !== 'inProgress' ? timingKey : undefined, prior !== status);
     };
     if (notification?.method === 'item/completed' && params?.item?.type === 'agentMessage') {
       if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
@@ -262,6 +278,7 @@ export class CodexAdapter {
       const phase = !prior && status === 'inProgress' && observedAt !== undefined
         ? { initialInference: 'inProgress', initialInferenceAt: observedAt }
         : status !== 'inProgress' && child.initialInference === 'inProgress' ? { initialInference: 'completed' } : {};
+      if (status !== 'inProgress' && child.quietPhases !== undefined) phase.quietPhases = advanceQuietPhases(child.quietPhases, observedAt);
       // This settles only an observed child turn, never its tools or descendants.
       return this.journal.update(attemptId, { childTurns,
         ...(Object.keys(phase).length ? { childObligations: { ...row.childObligations, [key]: { ...child, ...phase } } } : {}) });
