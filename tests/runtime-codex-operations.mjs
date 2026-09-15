@@ -15,6 +15,26 @@ async function fixture(t) {
   return { journal, config, operations: new CodexOperations(config) };
 }
 
+test('only valid exact-owner output completions settle message lifetimes', async t => {
+  const f = await fixture(t), child = JSON.stringify(['child-a', 'turn-a']);
+  for (const childOwner of [false, true]) {
+    const write = owner => f.journal.write('attempt-a', { threadId: 'root', nativeRunId: 'turn-a', status: 'running',
+      ...(childOwner ? { childTurns: { [child]: 'inProgress' }, childObligations: { [child]: owner }, outputItems: { same: 'a'.repeat(64) } } : owner) });
+    for (const outputItems of [null, [], 'text', { same: null }, { same: true }, { same: 'a'.repeat(63) }, { same: 'A'.repeat(64) }, { '': 'a'.repeat(64) }]) {
+      await write({ messageStarts: { same: true }, outputItems });
+      await assert.rejects(f.operations.snapshot(), { code: 'INVALID_OUTPUT_COMPLETION' });
+    }
+    await write({ messageStarts: { same: true }, outputItems: { other: 'b'.repeat(64) } });
+    const active = await f.operations.snapshot();
+    assert.equal(active.at(-1).status, 'active');
+    await write({ messageStarts: { same: true }, outputItems: { same: 'b'.repeat(64) } });
+    const settled = await f.operations.snapshot();
+    assert.equal(settled.at(-1).id, active.at(-1).id);
+    assert.equal(settled.at(-1).status, 'settled');
+    assert.equal(settled[0].status, 'unknown');
+  }
+});
+
 test('root and child terminal observations never erase open tools or settle coverage', async t => {
   const f = await fixture(t), child = JSON.stringify(['child-a', 'same-turn']);
   await f.journal.putIfAbsent('attempt-a', { threadId: 'root', nativeRunId: 'same-turn', status: 'finishing', rootSettled: true,

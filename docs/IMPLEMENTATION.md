@@ -4,7 +4,18 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
-Latest checkpoint (2026-09-16): live agent messages now have independent five-minute, task-capped lifetime clocks, so tool/plan overlap and turn termination cannot erase a still-open stream. Only exact output completion ends that lifetime; deltas/replay cannot refresh it. Offline inspection includes these clocks. Verification passed 99 focused tests, targeted native supervisor-child/Plan reruns, and combined 901 control / 246 runtime tests, all native/service fixtures and typecheck/build. Old fixture-count assumptions failed and were corrected: native Plan generation keeps both its enclosing message and plan open. This is not complete native coverage, watchdog termination or safe sleep. See [service contracts](CODEX_SERVICE.md), [TODO](../TODO.md) and [handoff](HANDOFF.md). No production gate changed.
+Message completion integrity checkpoint (2026-09-16): live heartbeat projection and
+offline inspection reject non-object output maps, invalid item IDs and noncanonical
+SHA-256 digest values. Previously, key presence alone could classify a malformed
+completion as settled. Root/child same-ID isolation and exact-item matching remain
+intact; valid-looking hashes do not authenticate journal contents. All 44 focused
+operation/inspection tests passed (`.local/output-completion-focused-final.log`),
+including read-only offline checks. Combined verification passed 901 control / 248
+runtime tests, all native/service fixtures and typecheck/build dry run; evidence:
+`.local/output-completion-combined.log`. No native protocol, deadline, recovery
+authority, provider action or production gate changed.
+
+Previous checkpoint (2026-09-16): live agent messages now have independent five-minute, task-capped lifetime clocks, so tool/plan overlap and turn termination cannot erase a still-open stream. Only exact output completion ends that lifetime; deltas/replay cannot refresh it. Offline inspection includes these clocks. Verification passed 99 focused tests, targeted native supervisor-child/Plan reruns, and combined 901 control / 246 runtime tests, all native/service fixtures and typecheck/build. Old fixture-count assumptions failed and were corrected: native Plan generation keeps both its enclosing message and plan open. This is not complete native coverage, watchdog termination or safe sleep. See [service contracts](CODEX_SERVICE.md), [TODO](../TODO.md) and [handoff](HANDOFF.md). No production gate changed.
 
 The owner-selected Mac direction is SwiftUI + WKWebView around the remote portal, not yet implemented. The Electron foundation listed below remains existing code, not a verified Mac release; separate Mac-decision specification edits are awaiting integration.
 

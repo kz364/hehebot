@@ -154,6 +154,9 @@ export async function inspectCodexRecovery(directory) {
             durationMs: Date.parse(phase.endedAt) - Date.parse(phase.startedAt) }) });
       }
       const clocks = new Map(entries(owner.operationTimes));
+      for (const [itemId, digest] of entries(owner.outputItems)) {
+        require(itemId.length > 0 && itemId.length <= 256 && typeof digest === 'string' && /^[0-9a-f]{64}$/.test(digest));
+      }
       for (const field of ['commands', 'mcpCalls', 'spawns', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'collabCalls', 'reasoningItems', 'planItems', 'messageStarts']) for (const [key, item] of entries(owner[field])) {
         let itemId = key, tool;
         if (field === 'collabCalls') {

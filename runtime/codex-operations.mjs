@@ -74,6 +74,10 @@ export class CodexOperations {
         clocks.delete(key);
         return timing;
       };
+      if (owner.outputItems !== undefined && (!owner.outputItems || typeof owner.outputItems !== 'object' || Array.isArray(owner.outputItems))) fail('INVALID_OUTPUT_COMPLETION');
+      for (const [id, digest] of Object.entries(owner.outputItems ?? {})) {
+        if (!id || id.length > 256 || typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest)) fail('INVALID_OUTPUT_COMPLETION');
+      }
       for (const [id, marker] of Object.entries(owner.messageStarts ?? {})) {
         if (marker !== true) fail('INVALID_OPERATION_TIMING');
         add([identity, 'messageStarts', id], 'inference', Object.hasOwn(owner.outputItems ?? {}, id) ? 'settled' : 'active', takeClock('messageStarts', id));

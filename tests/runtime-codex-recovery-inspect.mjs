@@ -202,6 +202,9 @@ test('invalid or orphan phase clocks reject the entire native report without mod
 test('malformed extended observations reject the native projection instead of hiding active work', async t => {
   const f = await fixture(t);
   for (const patch of [{ dynamicCalls: { item: 'declined' } }, { webSearches: { item: 'failed' } },
+    ...[null, [], 'text', { item: null }, { item: true }, { item: 'a'.repeat(63) }, { item: 'A'.repeat(64) }, { '': 'a'.repeat(64) }]
+      .flatMap(outputItems => [{ messageStarts: { item: true }, outputItems },
+        { childObligations: { [childKey]: { messageStarts: { item: true }, outputItems } } }]),
     { reasoningItems: { item: 'failed' } },
     { imageGenerations: { item: 'success' } }, { fileChanges: { item: { status: 'completed', secret: canary } } },
     { collabCalls: { '["unknownTool","item"]': 'completed' } }, { collabCalls: { '["wait", "item"]': 'completed' } },
@@ -210,6 +213,21 @@ test('malformed extended observations reject the native projection instead of hi
     const report = await inspectCodexRecovery(f.directory);
     assert.equal(report.native, null); assert.ok(report.issues.includes('NATIVE_RECORD_INVALID_OR_CONTRADICTORY'));
     assert.doesNotMatch(JSON.stringify(report), /PRIVATE_/);
+  }
+});
+
+test('offline message completion is exact-item and exact-owner, never sleep authority', async t => {
+  const f = await fixture(t);
+  for (const completed of [false, true]) {
+    await f.journal.write(attemptId, { ...f.native, messageStarts: { item: true }, outputItems: { item: 'a'.repeat(64) },
+      childObligations: { [childKey]: { messageStarts: { item: true }, outputItems: { [completed ? 'item' : 'other']: 'b'.repeat(64) } } } });
+    const before = await snapshot(f.directory), report = await inspectCodexRecovery(f.directory);
+    assert.deepEqual(report.issues, []);
+    assert.deepEqual(report.native.observations.filter(row => row.kind === 'messageStarts').map(row => [row.threadId, row.status]),
+      [['root-19', 'completed'], ['child-43', completed ? 'completed' : 'inProgress']]);
+    assert.equal(report.sleepAllowed, false);
+    assert.equal(report.resumeAllowed, false);
+    assert.deepEqual(await snapshot(f.directory), before);
   }
 });
 

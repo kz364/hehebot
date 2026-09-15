@@ -2,6 +2,19 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Message completion integrity checkpoint (2026-09-16)
+
+Live operation projection and offline inspection now reject malformed completion
+maps and digests instead of treating an output key as sufficient settlement.
+Root/child and exact-item isolation, unknown coverage and read-only inspection
+remain intact. This validates structure, not journal authenticity or safe recovery.
+Verification: 44 focused tests; `bash scripts/verify-codex.sh` passed 901 control /
+248 runtime tests, all native/service fixtures and typecheck/build dry run. Logs:
+`.local/output-completion-focused-final.log`, `.local/output-completion-combined.log`.
+Local only; no provider activity or production-gate change. E01 remains next:
+complete streaming/recursive coverage, declared longer windows, progress policy
+and verified termination. Credential-free work remains; no auth boundary reached.
+
 ## Resume
 
 1. Read `AGENTS.md`, `README.md`, `TODO.md`, `SPEC.md`, `PRODUCT_UX_SPEC.md`, `docs/PROJECT_INTENT.md`, and `docs/IMPLEMENTATION.md`.
