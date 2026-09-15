@@ -20,7 +20,9 @@ const root = resolve(import.meta.dirname, '..');
 const effectsMode = process.argv.includes('--child-effects');
 const childMode = process.argv.includes('--child') || effectsMode;
 const crashMode = process.argv.includes('--crash');
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects'].includes(arg)), 'Unknown fixture option');
+const questionsMode = process.argv.includes('--questions');
+const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -111,8 +113,16 @@ try {
       const chunks = []; for await (const chunk of req) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString());
       report.modelRequests++;
-      assert.ok(report.modelRequests <= (childMode ? 4 : 2), 'Unexpected model continuation');
+      assert.ok(report.modelRequests <= (childMode ? 4 : questionsMode ? 3 : 2), 'Unexpected model continuation');
       await wait(() => bound, 'service acknowledged root');
+      if (questionsMode && report.modelRequests === 3) {
+        const result = body.input.find(item => item.type === 'function_call_output' && item.call_id === 'question_call_43');
+        assert.deepEqual(JSON.parse(result.output), { answers: questionAnswers });
+        report.nativeQuestionAnswerContext = true;
+        send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
+          content: [{ type: 'output_text', text: 'SERVICE_ASSEMBLY_OK', annotations: [] }] }]);
+        return;
+      }
       if (childMode) {
         const isChild = body.input.some(item => item.role === 'user' && JSON.stringify(item.content).includes('SERVICE_CHILD_PROOF'));
         if (!isChild) {
@@ -151,6 +161,16 @@ try {
         assert.equal(receipt.next_cursor, null); assert.equal(receipt.routines.length, 1);
         assert.equal(receipt.routines[0].id, routine.id); assert.equal(receipt.routines[0].revision, 1);
         assert.deepEqual(receipt.routines[0].body, routine); report.nativeReceipt = true;
+        if (questionsMode) {
+          const tool = body.tools.find(tool => tool.name === 'request_user_input' || tool.tools?.some(nested => nested.name === 'request_user_input'));
+          assert.ok(tool);
+          send(res, [{ id: 'question_item_43', type: 'function_call', status: 'completed', call_id: 'question_call_43',
+            ...(tool.type === 'namespace' ? { namespace: tool.name } : {}), name: 'request_user_input', arguments: JSON.stringify({ questions: [
+              { id: 'route43', header: 'Route', question: 'Choose route', options: [{ label: 'West43', description: 'Western' }, { label: 'East19', description: 'Eastern' }] },
+              { id: 'timing19', header: 'Timing', question: 'Choose timing', options: [{ label: 'Now19', description: 'Now' }, { label: 'Later43', description: 'Later' }] },
+            ] }) }]);
+          return;
+        }
         if (childMode) {
           childHeld = true;
           res.once('close', () => { if (!res.writableEnded) childClosed = true; });
@@ -188,6 +208,7 @@ try {
     return req;
   };
   const config = { disposableTest: true, stateDirectory, binary: join(root, '.local/codex-runtime/node_modules/.bin/codex'),
+    ...(questionsMode ? { ownerQuestions: true } : {}),
     portalOrigin: origin + '/', runtimeTokenFile, tlsCAFile: cert, installationId: 'service-fixture',
     personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model', allowedTools: ['hehebot_list_routines'] } } };
   const dependencies = { spriteRequest, fetchImpl: trustedFetch,
@@ -201,10 +222,23 @@ try {
       };
       return transport;
     },
-    prepareNative: home => writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\n[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) };
+    prepareNative: home => writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\n${questionsMode ? 'default_mode_request_user_input = true\n' : ''}[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) };
   service = createSpriteCodexService(config, dependencies);
   const dispatched = await service.start(); bound = true;
   assert.equal(dispatched.phase, 'running'); assert.equal(dispatched.claim.run.id, queued.resource_id);
+  if (questionsMode) {
+    const question = await wait(async () => (await (await trustedFetch(`${origin}/v1/state`)).json()).questions?.[0], 'durable native question');
+    assert.equal(question.run_id, queued.resource_id); assert.equal(question.attempt, dispatched.claim.run.current_attempt);
+    assert.equal(question.state, 'pending'); assert.equal(question.answerable, true);
+    assert.equal(report.modelRequests, 2);
+    const response = await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
+      'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
+    }, body: JSON.stringify({ schema_version: 1, type: 'question.answer', payload: {
+      question_id: question.id, expected_revision: question.revision, answers: questionAnswers } }) });
+    assert.equal(response.status, 202); assert.equal((await response.json()).status, 'applied');
+    await wait(async () => (await (await trustedFetch(`${origin}/v1/state`)).json()).questions.length === 0, 'native resolved custody');
+    report.ownerQuestionResolved = true;
+  }
   if (crashMode) await wait(() => crashHeld, 'active root inference after verified MCP receipt');
   else await wait(async () => (await service.observe())?.rootSettled, 'root completion');
   if (childMode) {
@@ -354,7 +388,7 @@ try {
     Object.assign(report, { interrupts: interrupts.length, childInterrupted: true, childHttpClosed: childClosed,
       heartbeatOperations: operations.length, unknownCoverage: 1, rootWorkerStatus: 'running', childWorkerStatus: 'cancelling', sleepDenied: true });
   }
-  assert.deepEqual(taskRequests, ['PUT', 'GET']); assert.equal(report.modelRequests, childMode ? 4 : 2); assert.deepEqual(errors, []);
+  assert.deepEqual(taskRequests, ['PUT', 'GET']); assert.equal(report.modelRequests, childMode ? 4 : questionsMode ? 3 : 2); assert.deepEqual(errors, []);
   await service.stop();
   assert.equal((await service.journal.get('service')).phase, 'recovery');
   const diagnostic = await inspectCodexRecovery(join(stateDirectory, 'journal'));

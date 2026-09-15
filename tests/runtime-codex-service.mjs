@@ -215,3 +215,67 @@ test('assembly delivers explicit steering during maintenance and replays only it
   assert.equal(deliveries, 1);assert.equal(reports, 2);
   assert.equal((await f.service.observe()).rootSettled, false);
 });
+
+test('owner questions are default-off and reject nonboolean configuration before launch', async t => {
+  const f = await fixture(t); let launched;
+  f.dependencies.launch = options => { launched = options; return f.transport; };
+  const service = createCodexService(f.config, f.dependencies); t.after(() => service.stop());
+  await service.start();
+  assert.equal(launched.onUserInput, undefined); assert.equal(launched.userInputTimeoutMs, undefined);
+  for (const ownerQuestions of [null, 1, 'true', {}]) {
+    await assert.rejects(createCodexService({ ...f.config, ownerQuestions }, f.dependencies).start(), { code: 'INVALID_SERVICE_CONFIGURATION' });
+  }
+  await service.stop();
+});
+
+test('opt-in question waits for acknowledged admission, takes once, and resolves after root termination', async t => {
+  const f = await fixture(t), originalControl = f.dependencies.control.request, native = f.transport.request;
+  const runId = '77777777-0000-4000-8000-000000000043';
+  const params = { threadId: 'native-thread', turnId: 'native-turn', itemId: 'question-item', isBlocking: false,
+    questions: [{ id: 'route', header: 'Route', question: 'Select a route', options: [
+      { label: 'West43', description: 'Western route' }, { label: 'East19', description: 'Eastern route' }] }] };
+  const expected = { answers: { route: { answers: ['West43'] } } };
+  let launched, answer, submitted = false, recorded, takes = 0, resolves = 0;
+  const service = createCodexService({ ...f.config, ownerQuestions: true }, {
+    ...f.dependencies,
+    launch: options => { launched = options; return f.transport; },
+    control: { request: async (type, payload) => {
+      if (type === 'claim') return { submission_key: `${runId}:1`, deadline_at: new Date(Date.now() + 600000).toISOString(),
+        run: { id: runId, current_attempt: 1, persona_id: 'bot', context_json: '{"instruction":"fixture"}' } };
+      if (type === 'submitted') {
+        await new Promise(resolve => setTimeout(resolve, 60)); assert.equal(recorded, undefined); submitted = true; return {};
+      }
+      if (type === 'question-record') {
+        assert.equal(submitted, true); assert.equal(payload.run_id, runId); assert.equal(payload.attempt, 1);
+        assert.deepEqual(payload.question.params, params); recorded = payload.question; return { id: recorded.id };
+      }
+      if (type === 'question-take') {
+        takes++; assert.equal(payload.question_id, recorded.id); assert.equal(payload.connection_id, recorded.connection_id);
+        return { state: 'response_unknown', answer: expected };
+      }
+      if (type === 'question-resolve') { resolves++; assert.equal(payload.question_id, recorded.id); return { ok: true }; }
+      return originalControl(type, payload);
+    } },
+  });
+  t.after(() => service.stop());
+  f.transport.request = async (method, payload) => {
+    if (method === 'turn/start') {
+      answer = launched.onUserInput(params, { signal: new AbortController().signal, requestId: 71 });
+      // Attach immediately so a regression does not become an unhandled rejection.
+      answer.catch(() => {});
+    }
+    return native(method, payload);
+  };
+  await service.start(); assert.deepEqual(await answer, expected); assert.equal(takes, 1);
+  assert.equal(launched.timeoutMs, 10000); assert.equal(launched.userInputTimeoutMs, 900000);
+  const row = await service.journal.get(service.supervisor.bridge.cursor);
+  await service.journal.update(row.attemptId, { rootSettled: true, status: 'completed' });
+  f.transport.emit('notification', { method: 'serverRequest/resolved', params: { threadId: params.threadId, requestId: 71 } });
+  for (let i = 0; i < 100 && resolves === 0; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(resolves, 1); assert.equal(takes, 1);
+  await assert.rejects(launched.onUserInput({ ...params, itemId: 'another', threadId: 'unrelated-thread' },
+    { signal: new AbortController().signal, requestId: 72 }), { code: 'QUESTION_CALLBACK_STOPPED' });
+  await service.stop();
+  assert.equal(f.transport.listenerCount('notification'), 0);
+  await assert.rejects(launched.onUserInput(params, { signal: new AbortController().signal, requestId: 73 }), { code: 'QUESTION_CALLBACK_REJECTED' });
+});

@@ -16,6 +16,10 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 3. Report current output without carrying forward old test totals. Scripted model fixtures are execution-contract evidence only.
 
+## Native question checkpoint (2026-09-15)
+
+Owner question custody, explicit portal answers, and default-off disposable service binding are integrated; see [binding contracts](CODEX_QUESTION_BINDING.md). The combined verifier passed 781 control tests and 162 runtime tests, including pristine native → service → HTTPS Worker/SQLite → owner answer → exact next-context delivery. Independent question/RPC deadlines preserve the short RPC bound. Native resolution remains distinct from answer consumption and task settlement. Unknown take outcomes never replay; old-epoch reconciliation, journal retention, authenticated inference, and production admission remain unproved. No production flags changed.
+
 ## Boundary ownership
 
 | Boundary | Ownership |

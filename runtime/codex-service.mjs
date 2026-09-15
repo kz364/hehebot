@@ -12,6 +12,7 @@ import { CodexEventRouter } from './codex-events.mjs';
 import { CodexTaskControl } from './codex-tasks.mjs';
 import { CodexOperations } from './codex-operations.mjs';
 import { spawnCodex } from './codex-transport.mjs';
+import { CodexQuestionBinding } from './codex-questions.mjs';
 import { ExecutionSupervisor } from './execution-supervisor.mjs';
 import { SpritesActivityGuard } from './sprites-activity-guard.mjs';
 
@@ -37,7 +38,7 @@ export function createCodexService(config, dependencies) {
       if (result.stdout.trim() !== `codex-cli ${PINNED_CODEX}`) fail('CODEX_VERSION_MISMATCH');
     } } = dependencies;
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
-  let ownsIntent = false, stopping, currentTasks, currentAttempt;
+  let ownsIntent = false, stopping, currentTasks, currentAttempt, questions, questionNotification;
   const starting = async promise => {
     const result = await promise;
     if (phase !== 'starting') fail('SERVICE_RECOVERY_REQUIRED');
@@ -53,7 +54,7 @@ export function createCodexService(config, dependencies) {
   });
   const recover = () => {
     if (phase === 'recovery') return;
-    phase = 'recovery'; supervisor?.disconnect();
+    phase = 'recovery'; questions?.close(); supervisor?.disconnect();
     onRecovery({ code: 'SERVICE_RECOVERY_REQUIRED' });
   };
   const service = {
@@ -66,7 +67,8 @@ export function createCodexService(config, dependencies) {
       // No environment variable or persisted compatibility flag enables this.
       if (config.disposableTest !== true) fail('NATIVE_COMPATIBILITY_GATE_BLOCKED');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile'].includes(key))) fail('INVALID_SERVICE_CONFIGURATION');
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions'].includes(key)) ||
+        config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean') fail('INVALID_SERVICE_CONFIGURATION');
       if (!tasks?.hold || !tasks?.release || typeof operations !== 'function' ||
           !isAbsolute(config.binary) || !config.personas || !isAbsolute(config.stateDirectory)) fail('INVALID_SERVICE_CONFIGURATION');
       for (const persona of Object.values(config.personas)) {
@@ -96,7 +98,35 @@ export function createCodexService(config, dependencies) {
         const home = join(config.stateDirectory, 'codex-home'), workspace = join(config.stateDirectory, 'workspace');
         await mkdir(home, { mode: 0o700 }); await mkdir(workspace, { mode: 0o700 });
         await starting(prepareNative(home));
-        transport = launch({ binary: config.binary, home, cwd: workspace, timeoutMs: 10000 });
+        if (config.ownerQuestions === true) questions = new CodexQuestionBinding({ journal, control, timeoutMs: 900000,
+          resolveBinding: async ({ threadId, turnId }) => {
+            // A server question can precede the turn/start reply and Worker ACK.
+            // Wait only for that same in-flight admission; never infer its success.
+            for (let tries = 0; tries < 400; tries++) {
+              if (!['starting', 'running'].includes(phase) || !supervisor) return null;
+              supervisor.assertLease();
+              const row = await journal.get(supervisor.bridge.cursor);
+              if (!row?.attemptId) return null;
+              const nativeRow = await journal.get(row.attemptId);
+              if (nativeRow?.threadId !== threadId || nativeRow.nativeRunId && nativeRow.nativeRunId !== turnId) return null;
+              if (row.phase === 'running') {
+                supervisor.assertLease();
+                if (row.nativeRunId !== turnId) return null;
+                return { identity, run_id: row.claim.run.id, attempt: row.claim.run.current_attempt,
+                  attemptId: row.attemptId, deadline_at: row.claim.deadline_at };
+              }
+              if (!['submission_unknown', 'submitted_unknown'].includes(row.phase)) return null;
+              await new Promise(resolve => setTimeout(resolve, 25));
+            }
+            return null;
+          } });
+        transport = launch({ binary: config.binary, home, cwd: workspace, timeoutMs: 10000,
+          ...(questions ? { onUserInput: questions.onUserInput, userInputTimeoutMs: 900000 } : {}) });
+        if (questions) {
+          questionNotification = message => { void questions.onNotification(message).catch(recover); };
+          transport.on('notification', questionNotification);
+          transport.on('disconnect', recover);
+        }
         // Native diagnostics may contain task data; callers must not log them.
         transport.child.stderr?.resume();
         await starting(transport.initialize());
@@ -169,6 +199,8 @@ export function createCodexService(config, dependencies) {
     stop() {
       return stopping ??= (async () => {
         phase = 'recovery';
+        questions?.close();
+        if (questionNotification) { transport?.off('notification', questionNotification); transport?.off('disconnect', recover); }
         supervisor?.disconnect(); router?.close(); transport?.close();
         if (router) await router.tail;
         if (transport) {
