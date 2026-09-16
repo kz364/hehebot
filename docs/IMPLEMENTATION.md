@@ -4,6 +4,19 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Recovery-cancellation checkpoint (2026-09-16): `run.cancel` previously moved an
+already recovery-required run back to cancelling. It now preserves recovery while
+recording owner cancellation intent and a current event. Heartbeat already includes
+recovery-required IDs, so interruption delivery needs no state regression. The new
+SQLite test starts with an unconfirmed cancellation and unknown mutation effect,
+then verifies active operations, running attempt, effects and locks are unchanged
+by another cancel; retry/sleep remain blocked and event status stays truthful.
+Focused recovery/lifecycle/control acceptance: 170 passed
+(`.local/recovery-cancel-focused.log`). Combined verification passed 914 control /
+251 runtime tests, all native/service fixtures and typecheck/build dry run
+(`.local/recovery-cancel-combined.log`). No settlement, provider action or production
+gate change; successful recovery remains unverified.
+
 Cancellation-grace checkpoint (2026-09-16): repeated distinct owner cancellation
 commands and later memory purge/expiry used to reset an already-cancelling run's
 `updated_at`, postponing the watchdog indefinitely. Both paths now preserve that

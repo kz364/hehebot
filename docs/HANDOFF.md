@@ -2,6 +2,18 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Recovery-cancellation checkpoint (2026-09-16)
+
+Owner cancel now leaves recovery-required work in recovery rather than starting
+another cancelling grace period. Heartbeat already delivers these cancellation IDs.
+The owner intent/event still records; active operation, attempt, unknown effect and
+lock custody stay untouched. Focused recovery/lifecycle/control tests: 170 passed;
+log `.local/recovery-cancel-focused.log`. Combined check passed 914 control / 251
+runtime tests, all native/service fixtures and typecheck/build dry run
+(`.local/recovery-cancel-combined.log`). No settlement/replay, provider activity or
+production gates changed. Successful recovery and other credential-free work
+remain open; schedule unchanged.
+
 ## Cancellation-grace checkpoint (2026-09-16)
 
 Owner cancel and captured-memory purge/expiry now preserve `updated_at` when a run

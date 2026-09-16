@@ -12,6 +12,29 @@ function running(){
  return {life,identity,runId:claim.run.id};
 }
 describe('bounded recovery',()=>{
+ it('owner cancellation preserves recovery and unresolved custody while remaining deliverable',()=>{
+  const {life,identity,runId}=running();
+  life.heartbeat(identity,[{id:randomUUID(),run_id:runId,attempt:1,kind:'tool',status:'active',
+   started_at:f.core.now(),last_progress_at:f.core.now(),deadline_at:'2026-09-10T08:02:00.000Z'}]);
+  f.db.exec('INSERT INTO resource_locks VALUES(?,?,1,?)','external-record',runId,f.core.now());
+  f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','dispatched','policy','digest',?)",randomUUID(),runId,randomUUID(),f.core.now());
+  f.accept({schema_version:1,type:'run.cancel',payload:{run_id:runId,reason:'Stop'}});
+  f.setNow('2026-09-10T08:00:30.000Z');life.watchdog();
+  expect(f.store.run(runId).status).toBe('recovery_required');
+  const before=Object.fromEntries(['operations','attempts','effects','resource_locks'].map(table=>[table,f.db.all(`SELECT * FROM ${table}`)]));
+  expect(before.effects).toEqual([expect.objectContaining({status:'outcome_unknown'})]);
+  f.setNow('2026-09-10T08:00:35.000Z');
+  expect(f.accept({schema_version:1,type:'run.cancel',payload:{run_id:runId,reason:'Still stop'}}).status).toBe('applied');
+  expect(f.store.run(runId)).toMatchObject({status:'recovery_required',error_code:'OWNER_CANCELLED'});
+  for(const table of Object.keys(before))expect(f.db.all(`SELECT * FROM ${table}`)).toEqual(before[table]);
+  expect(life.heartbeat(identity,[]).cancellations).toContain(runId);
+  expect(f.accept({schema_version:1,type:'run.retry',payload:{run_id:runId,expected_attempt:1}}))
+   .toMatchObject({status:'rejected',error:{code:'CANCEL_UNCONFIRMED'}});
+  expect(()=>life.prepareSleep(identity)).toThrow(expect.objectContaining({code:'SLEEP_DENIED'}));
+  expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0);
+  const events=f.db.all<{payload_json:string}>("SELECT payload_json FROM events WHERE type='run.cancellation_requested' ORDER BY sequence");
+  expect(events.map(event=>JSON.parse(event.payload_json).status)).toEqual(['cancelling','recovery_required']);
+ });
  it('distinct owner cancel commands do not restart the original cancellation grace',()=>{
   const {life,runId}=running();
   const cancel=()=>f.accept({schema_version:1,type:'run.cancel',payload:{run_id:runId,reason:'Stop'}});
