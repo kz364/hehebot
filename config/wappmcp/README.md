@@ -26,6 +26,13 @@ that ignores cancellation can remain pending. The journal retains unknown intent
 and rejects replay even after the handler later returns. This is actual SDK
 in-memory evidence, not stdio, Chromium descendant termination or safe sleep.
 
+The verifier additionally starts a bounded synthetic stdio server and descendant
+on Linux. It independently confirms the direct server stopped after SDK close,
+then observes the descendant still making progress. The retained read remains
+unknown and cannot replay. Fixture cleanup separately stops that descendant and
+checks its PID/start-time is no longer executing. No real plugin or browser starts;
+this negative contract does not verify a production process-tree supervisor.
+
 Pins: wappmcp 0.4.0, source revision
 `9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8`; whatsapp-web.js exactly 1.34.7.
 The only approved patch is that revision's

@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+The pinned verifier now also exercises actual SDK stdio with a bounded synthetic
+server/descendant (`scripts/test-wappmcp-stdio.mjs`). SDK close stops the direct
+process, independently checked by Linux PID/start-time, but the same descendant
+continues incrementing its heartbeat. Unknown journal intent survives and cannot
+replay. Private stop-file cleanup confirms both identities no longer execute;
+no browser or real plugin is launched. Focused run passed in
+`.local/wapp-stdio-focused.log`; combined rerun passed in
+`.local/wapp-stdio-combined.log` (1,154 control / 270 runtime tests and all fixture/
+build checks, production admission false). The final process scan found no fixture
+survivors. Next lifecycle work
+must own and verify the descendant boundary, not infer it from SDK close/pid=null.
+This fixture's cooperative cleanup is not a production supervisor or safe-sleep gate.
+
 Actual SDK follow-through found a new E09 blocker: recent messages are an array
 in the pinned plugin's `structuredContent`, rejected by SDK 1.30.0's object schema.
 Do not confuse earlier direct-callback read tests with MCP compatibility. The

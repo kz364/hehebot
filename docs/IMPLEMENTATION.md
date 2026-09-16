@@ -82,6 +82,35 @@ Combined rerun passed in `.local/wapp-sdk-combined.log`: 1,154 control / 270 run
 tests, all SDK positive/negative, compatibility/native/service and build checks.
 Production admission remains false; the negative compatibility result is preserved.
 
+Actual SDK stdio descendant evidence (2026-09-16):
+`scripts/test-wappmcp-stdio.mjs` extends the disposable pinned verifier with a real
+Node MCP server and one bounded synthetic descendant. Only public SDK Client,
+StdioClientTransport, McpServer and StdioServerTransport APIs are used. No real
+plugin CLI, Chrome, account, native model or provider is started. Child modes run
+only when this fixture file is invoked directly; import alone launches nothing.
+
+After an admitted journaled search dispatch, the descendant publishes an atomic
+counter heartbeat. SDK client close returns with its public pid getter null.
+The fixture independently checks the direct PID plus Linux /proc start-time identity
+is no longer executing, then observes a strictly newer heartbeat from the same
+still-running descendant identity. Thus direct-child termination and stdio closure
+do not imply descendant termination. The re-opened journal retains unknown intent;
+retry of the same operation cannot call the transport again.
+
+Cleanup uses a private stop file for the cooperative synthetic descendant and
+verifies both captured identities are gone or terminal (Z/X), not executing; it
+does not claim every OS zombie was reaped. Independent 15-second backstops bound
+the synthetic processes. The fixture does not signal arbitrary PIDs or implement
+a production process-tree supervisor. Temporary state is removed; a subsequent
+process scan found no fixture survivors. Focused command
+`node scripts/verify-wappmcp.mjs` passed (`.local/wapp-stdio-focused.log`).
+The combined verifier passed in `.local/wapp-stdio-combined.log`: 1,154 control /
+270 runtime tests and all compatibility/native/service/build checks, including the
+stdio fixture. Final admission is false and the recent-read incompatibility remains.
+This is stronger than in-memory cancellation evidence but still not Chromium,
+Sprite lifecycle, complete descendant containment or safe-sleep acceptance.
+An owned service/descendant boundary remains required before connector admission.
+
 WhatsApp invocation-journal follow-through (2026-09-16):
 `readJournaledWappMcp` is a trusted, unregistered assembly around the scoped read
 boundary. It requires host attempt/operation IDs, a deadline and an authorization
