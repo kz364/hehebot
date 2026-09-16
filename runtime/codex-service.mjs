@@ -97,7 +97,7 @@ export function createCodexService(config, dependencies) {
     async start() {
       if (phase !== 'stopped') fail('SERVICE_ALREADY_STARTED');
       // Hosted composition requires a pinned owner and real activity custody.
-      // This does not enable hosted alpha admission in the control plane.
+      // Control admission needs its separate explicit hosted policy and marker.
       if (hosted && (typeof config.hostedOwnerBindingSha256 !== 'string' ||
           !/^[a-f0-9]{64}$/.test(config.hostedOwnerBindingSha256) || config.ownerAlpha === undefined ||
           typeof config.accessClientIdFile !== 'string' || typeof config.accessClientSecretFile !== 'string' ||
@@ -143,6 +143,7 @@ export function createCodexService(config, dependencies) {
         assertStarting();
         const status = await starting(() => control.request('status', {}));
         if (hosted && status?.owner_binding_sha256 !== config.hostedOwnerBindingSha256) fail('OWNER_BINDING_MISMATCH');
+        if (hosted ? status?.owner_alpha_hosted !== true : Object.hasOwn(status ?? {}, 'owner_alpha_hosted')) fail('CONTROL_NOT_BOOTABLE');
         if (alpha) {
           if (status?.phase !== 'STOPPED' || status.epoch !== 0 || status.execution_enabled !== false ||
               JSON.stringify(ownerAlphaPolicy(status.owner_alpha)) !== JSON.stringify(alpha)) fail('CONTROL_NOT_BOOTABLE');

@@ -423,7 +423,7 @@ async function hostedFixture(t) {
     launch: input => { overrides = input.configOverrides; return f.dependencies.launch(input); },
     control: { request: async (type, payload) => {
       if (type === 'status') return { epoch: 0, phase: 'STOPPED', execution_enabled: false,
-        owner_alpha: ownerAlpha, owner_binding_sha256: bindingSha256 };
+        owner_alpha: ownerAlpha, owner_binding_sha256: bindingSha256, owner_alpha_hosted: true };
       if (type === 'claim') return { submission_key: 'hosted-run:1', deadline_at: new Date(f.dependencies.now() + 179000).toISOString(),
         run: { id: 'hosted-run', current_attempt: 1, persona_id: ownerAlpha.persona_id,
           role: 'coordinator', context_json: '{"instruction":"hosted fixture 43"}' } };
@@ -468,6 +468,27 @@ for (const readback of ['missing', 'mismatch']) test(`hosted owner ${readback} s
   assert.equal(f.calls.includes('boot'), false); assert.equal(f.calls.includes('hold'), false);
   assert.equal(f.calls.includes('version'), false); assert.equal(f.calls.includes('launch'), false);
   assert.equal((await service.journal.get('service')).hostedOwner.bindingSha256, f.bindingSha256);
+});
+
+for (const mode of ['missing', 'false', 'local']) test(`hosted handshake rejects ${mode} mode before boot`, async t => {
+  const f = await hostedFixture(t), request = f.dependencies.control.request;
+  if (mode === 'local') {
+    delete f.config.hostedOwnerBindingSha256;
+    f.config.portalOrigin = 'https://127.0.0.1:4319/';
+  }
+  f.dependencies.control.request = async (type, payload) => {
+    const result = await request(type, payload);
+    if (type === 'status' && mode !== 'local') {
+      if (mode === 'missing') delete result.owner_alpha_hosted;
+      else result.owner_alpha_hosted = false;
+    }
+    return result;
+  };
+  const service = createCodexService(f.config, f.dependencies);
+  await assert.rejects(service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  assert.equal(f.calls.includes('boot'), false);
+  assert.equal(f.calls.includes('hold'), false);
+  assert.equal(f.calls.includes('launch'), false);
 });
 
 test('hosted owner validates pin, Access references and Task functions before side effects', async t => {

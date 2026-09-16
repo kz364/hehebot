@@ -4,6 +4,30 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Hosted bounded control composition (2026-09-17 Asia/Jakarta): distinct default-off
+HEHEBOT_HOSTED_OWNER_ALPHA accepts the exact owner pin/policy envelope under Access
+only, both production flags false and no provider/local-alpha config. Shared policy
+validation preserves local serialization. Worker checks the independent pin inside
+the owner-binding transaction before seed; a wrong fresh pin leaves no binding or
+objects. Internal owner_alpha_hosted:true is mandatory for hosted runtime, refused
+by local/test runtime, and absent from public state. Quota and attempt custody use
+the existing alpha ledger without reset. Real SQLite plus bearer-authenticated
+Worker ingress proves boot/claim/submission, one-run exhaustion, exact preview
+reconstruction, denial of mutations/effects/complete/sleep, changed/removed-policy
+refusal and used-boot refusal. Owner commands use canonical control.accept in this
+fixture; it is not a new signed-JWT/browser or deployed Access test.
+runHostedOwnerAlpha composes the existing Sprite Tasks client with the shared
+supervised account/model checks and independent expiry+grace watchdog. No hosted
+CLI/HTTP wake route is exposed; its caller must hold the kernel executor lock.
+71 focused backend and54 runtime tests plus typecheck pass; logs
+`.local/hosted-admission-{control,runtime}.log`. Full combined verification exits0
+with1,359 backend/426 runtime plus native/browser/service/build checks in
+`.local/hosted-admission-combined.log`; desktop16 pass. Delegated parser and Worker tests are
+reviewed/integrated. No live provider/model/account action or deployment occurred.
+Next is a launcher holding native-home and session-state locks and complete private scripted Access/Worker/native/Tasks
+composition; live provider and account eligibility remain separate. This supersedes
+the previous checkpoint's absence of a hosted Worker policy, not production gates.
+
 Hosted runtime composition prerequisite (2026-09-17 Asia/Jakarta): optional
 `hostedOwnerBindingSha256` requires an exact lowercase digest, owner-alpha policy,
 both private Access credential files and Tasks hold/release functions. Existing

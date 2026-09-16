@@ -32,9 +32,23 @@ export async function checkAlphaAccount(transport, model) {
 }
 
 /** Explicitly supervised local entrypoint; never called by the Sprite wake service. */
-export async function runOwnerAlpha(config, { createService = createCodexService, launch = spawnCodex,
+export async function runOwnerAlpha(config, options = {}) {
+  if (Object.hasOwn(config, 'hostedOwnerBindingSha256')) fail('INVALID_OWNER_ALPHA_CONFIGURATION');
+  return runBoundedOwnerAlpha(config, options, false);
+}
+
+/** Supervised hosted composition only. Caller must hold the kernel executor lock
+ * for the complete native process tree. No HTTP wake or CLI activation route. */
+export async function runHostedOwnerAlpha(config, options = {}) {
+  config = structuredClone(config);
+  if (typeof config.hostedOwnerBindingSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(config.hostedOwnerBindingSha256)) fail('INVALID_OWNER_ALPHA_CONFIGURATION');
+  const createService = options.createService ?? (await import('./sprites-codex-service.mjs')).createSpriteCodexService;
+  return runBoundedOwnerAlpha(config, { ...options, createService }, true);
+}
+
+async function runBoundedOwnerAlpha(config, { createService = createCodexService, launch = spawnCodex,
   report = value => console.info(JSON.stringify(value)), signal, now = Date.now,
-  wait = ms => new Promise(resolveWait => setTimeout(resolveWait, ms)) } = {}) {
+  wait = ms => new Promise(resolveWait => setTimeout(resolveWait, ms)) } = {}, hosted) {
   config = structuredClone(config);
   const policy = ownerAlphaPolicy(config.ownerAlpha);
   // Explicit background opt-in uses the service's restricted V2 selected-root
@@ -76,7 +90,8 @@ export async function runOwnerAlpha(config, { createService = createCodexService
     await service.start();
     if (timedOut || signal?.aborted) fail('OWNER_ALPHA_STOPPED');
     report({ event: 'owner-alpha.ready', session_id: policy.session_id, expires_at: policy.expires_at,
-      max_runs: policy.max_runs, productionEnabled: false, providerHold: false, outputIsProvisional: true });
+      max_runs: policy.max_runs, productionEnabled: false, providerHold: hosted, outputIsProvisional: true,
+      ...(hosted ? { hosted: true } : {}) });
     // Keep reconciliation alive through the existing 30s cancellation grace.
     // Stopping the app-server afterward is not recursive/effect settlement.
     while (!timedOut && !signal?.aborted && service.phase === 'running' && now() < Date.parse(policy.expires_at) + 30000) {

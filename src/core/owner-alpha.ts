@@ -5,17 +5,36 @@ import type { Run } from './types';
 export type OwnerAlphaPolicy = { session_id:string; persona_id:string; expires_at:string; max_runs:number; max_task_seconds:number; background_first_root?:true };
 const key='owner_alpha';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export function parseOwnerAlpha(value:string|undefined,env:{AUTH_MODE?:string;EXECUTION_ENABLED?:string;NATIVE_VERIFIED?:string;PROVIDER_CONFIG?:string}):OwnerAlphaPolicy|undefined {
- if(value===undefined||value==='')return undefined;
- let p:Record<string,unknown>|undefined,provider:unknown;
- try{p=JSON.parse(value);provider=JSON.parse(env.PROVIDER_CONFIG??'{}');}catch{requireThat(false,'INVALID_CONFIGURATION','Invalid owner-alpha configuration.',503);}
- requireThat(env.AUTH_MODE==='local'&&env.EXECUTION_ENABLED==='false'&&env.NATIVE_VERIFIED==='false'&&provider&&typeof provider==='object'&&!Array.isArray(provider)&&Object.keys(provider).length===0,'INVALID_CONFIGURATION','Owner alpha requires local auth, false production gates and no provider.',503);
+type OwnerAlphaEnv={AUTH_MODE?:string;EXECUTION_ENABLED?:string;NATIVE_VERIFIED?:string;PROVIDER_CONFIG?:string};
+type HostedOwnerAlphaEnv=OwnerAlphaEnv&{HEHEBOT_OWNER_ALPHA?:string};
+function parsePolicy(value:unknown):OwnerAlphaPolicy {
+ const p=value as Record<string,unknown>|undefined;
  requireThat(p&&typeof p==='object'&&!Array.isArray(p)&&Object.keys(p).sort().join(',')===(Object.hasOwn(p,'background_first_root')?'background_first_root,expires_at,max_runs,max_task_seconds,persona_id,session_id':'expires_at,max_runs,max_task_seconds,persona_id,session_id')&&(!Object.hasOwn(p,'background_first_root')||p.background_first_root===true)&&
   typeof p.session_id==='string'&&uuid.test(p.session_id)&&typeof p.persona_id==='string'&&uuid.test(p.persona_id)&&
   typeof p.expires_at==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(p.expires_at)&&Number.isFinite(Date.parse(p.expires_at))&&new Date(p.expires_at).toISOString()===p.expires_at&&
   Number.isInteger(p.max_runs)&&Number(p.max_runs)>=1&&Number(p.max_runs)<=3&&Number.isInteger(p.max_task_seconds)&&Number(p.max_task_seconds)>=1&&Number(p.max_task_seconds)<=300,
   'INVALID_CONFIGURATION','Invalid owner-alpha policy.',503);
  return {session_id:p.session_id as string,persona_id:p.persona_id as string,expires_at:p.expires_at as string,max_runs:p.max_runs as number,max_task_seconds:p.max_task_seconds as number,...(p.background_first_root===true?{background_first_root:true as const}:{})};
+}
+function emptyProvider(provider:unknown):boolean {
+ return !!provider&&typeof provider==='object'&&!Array.isArray(provider)&&Object.keys(provider).length===0;
+}
+export function parseOwnerAlpha(value:string|undefined,env:{AUTH_MODE?:string;EXECUTION_ENABLED?:string;NATIVE_VERIFIED?:string;PROVIDER_CONFIG?:string}):OwnerAlphaPolicy|undefined {
+ if(value===undefined||value==='')return undefined;
+ let parsed:unknown,provider:unknown;
+ try{parsed=JSON.parse(value);provider=JSON.parse(env.PROVIDER_CONFIG??'{}');}catch{requireThat(false,'INVALID_CONFIGURATION','Invalid owner-alpha configuration.',503);}
+ requireThat(env.AUTH_MODE==='local'&&env.EXECUTION_ENABLED==='false'&&env.NATIVE_VERIFIED==='false'&&emptyProvider(provider),'INVALID_CONFIGURATION','Owner alpha requires local auth, false production gates and no provider.',503);
+ return parsePolicy(parsed);
+}
+export function parseHostedOwnerAlpha(value:string|undefined,env:HostedOwnerAlphaEnv):{policy:OwnerAlphaPolicy;ownerBindingSha256:string}|undefined {
+ if(value===undefined||value==='')return undefined;
+ let envelope:Record<string,unknown>|undefined,provider:unknown;
+ try{envelope=JSON.parse(value);provider=JSON.parse(env.PROVIDER_CONFIG??'{}');}catch{requireThat(false,'INVALID_CONFIGURATION','Invalid hosted owner-alpha configuration.',503);}
+ requireThat(env.AUTH_MODE==='access'&&env.EXECUTION_ENABLED==='false'&&env.NATIVE_VERIFIED==='false'&&emptyProvider(provider)&&
+  (env.HEHEBOT_OWNER_ALPHA===undefined||env.HEHEBOT_OWNER_ALPHA===''),'INVALID_CONFIGURATION','Hosted owner alpha requires Access auth, false production gates, no provider and no local owner alpha.',503);
+ requireThat(envelope&&typeof envelope==='object'&&!Array.isArray(envelope)&&Object.keys(envelope).sort().join(',')==='owner_binding_sha256,policy'&&
+  typeof envelope.owner_binding_sha256==='string'&&/^[0-9a-f]{64}$/.test(envelope.owner_binding_sha256),'INVALID_CONFIGURATION','Invalid hosted owner-alpha envelope.',503);
+ return {policy:parsePolicy(envelope.policy),ownerBindingSha256:envelope.owner_binding_sha256};
 }
 type Custody={policy:OwnerAlphaPolicy;admitted_run_ids:string[]};
 /** Immutable local-session policy; each durable admitted ID consumes one run forever. */

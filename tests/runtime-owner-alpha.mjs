@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ownerAlphaPolicy } from '../runtime/owner-alpha-policy.mjs';
-import { runOwnerAlpha, checkAlphaAccount } from '../runtime/owner-alpha-entry.mjs';
+import { runHostedOwnerAlpha, runOwnerAlpha, checkAlphaAccount } from '../runtime/owner-alpha-entry.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 
@@ -80,11 +80,12 @@ test('alpha adapter is separate from test mode and rejects expiry across journal
   }
 });
 
-for (const background of [false, true]) test(`entrypoint preserves explicit background=${background}, host account selection and bounded grace`, async t => {
+for (const hosted of [false, true]) for (const background of [false, true]) test(`entrypoint preserves hosted=${hosted} background=${background}, account selection and bounded grace`, async t => {
   const stateDirectory = await directory(t), reports = [], calls = [];
   let now = at, stopped = 0;
-  const config = { stateDirectory, ownerAlpha: { ...policy, ...(background ? { background_first_root: true } : {}) }, personas: { [policy.persona_id]: { model: 'chosen' } } };
-  await runOwnerAlpha(config, { now: () => now, report: value => reports.push(value), wait: async () => { now += 45000; },
+  const config = { stateDirectory, ownerAlpha: { ...policy, ...(background ? { background_first_root: true } : {}) }, personas: { [policy.persona_id]: { model: 'chosen' } },
+    ...(hosted ? { hostedOwnerBindingSha256: '19'.repeat(32) } : {}) };
+  await (hosted ? runHostedOwnerAlpha : runOwnerAlpha)(config, { now: () => now, report: value => reports.push(value), wait: async () => { now += 45000; },
     launch: options => {
       assert.deepEqual(options.configOverrides, { 'features.apps': false, model_provider: 'openai' });
       return { initialize: async () => ({}), request: async method => {
@@ -103,7 +104,16 @@ for (const background of [false, true]) test(`entrypoint preserves explicit back
   });
   assert.equal(stopped, 1); assert.deepEqual(calls, ['config/read', 'account/read', 'model/list', 'maintain', 'maintain']);
   assert.equal(reports[0].productionEnabled, false); assert.equal(reports[1].settlementProved, false);
+  assert.equal(reports[0].providerHold, hosted);
+  assert.equal(reports[0].hosted, hosted ? true : undefined);
   assert.equal(reports[1].replayAllowed, false);
+});
+
+test('local and hosted entrypoints reject absent, malformed or crossed mode before service/filesystem work', async () => {
+  const options = { createService: () => assert.fail('must not create service') };
+  for (const value of [undefined, false, 'AA'.repeat(32), '19'.repeat(31)])
+    await assert.rejects(runHostedOwnerAlpha({ hostedOwnerBindingSha256: value }, options), { code: 'INVALID_OWNER_ALPHA_CONFIGURATION' });
+  await assert.rejects(runOwnerAlpha({ hostedOwnerBindingSha256: '19'.repeat(32) }, options), { code: 'INVALID_OWNER_ALPHA_CONFIGURATION' });
 });
 
 test('entrypoint refuses test flags and preexisting custody before launch', async t => {
@@ -136,12 +146,13 @@ test('existing home keeps its store selection and rejects custom provider before
   assert.deepEqual(calls, ['config/read', 'stop']);
 });
 
-test('session watchdog stops native work at the grace boundary during held maintenance', async t => {
+for (const hosted of [false, true]) test(`session watchdog hosted=${hosted} stops native work at grace boundary during held maintenance`, async t => {
   const stateDirectory = await directory(t);
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: at });
   const entered = Promise.withResolvers(), held = Promise.withResolvers();
   let stops = 0;
-  const result = runOwnerAlpha({ stateDirectory, ownerAlpha: policy,
+  const result = (hosted ? runHostedOwnerAlpha : runOwnerAlpha)({ stateDirectory, ownerAlpha: policy,
+    ...(hosted ? { hostedOwnerBindingSha256: '19'.repeat(32) } : {}),
     personas: { [policy.persona_id]: { model: 'chosen' } } }, {
     report: () => {}, createService: () => ({ phase: 'running', start: async () => {},
       maintain: () => { entered.resolve(); return held.promise; },

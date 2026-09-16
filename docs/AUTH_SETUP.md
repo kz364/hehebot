@@ -70,11 +70,30 @@ requires confirmed activity custody before version checks, native preparation,
 launch and subsequent admission. Hold expiry refuses reacquisition; stop retains
 the Task and unknown work. The expected digest must be computed independently as
 above. Configuration is captured before awaits; retained state cannot reboot.
-This is a tested composition prerequisite, **not a hosted launcher**: the Worker
-still rejects owner-alpha policies under Access auth, and the Sprite HTTP
-entrypoint remains transport-only. The local launcher supplies no Tasks client
-and cannot use this option. No deployment, live hold or account use follows from
-setting the field. Local alpha remains loopback-only and provider-free.
+The Worker has a distinct, default-absent `HEHEBOT_HOSTED_OWNER_ALPHA` binding:
+
+```json
+{"owner_binding_sha256":"<independently computed lowercase 64-hex digest>","policy":{"session_id":"<fresh UUID>","persona_id":"<selected persona UUID>","expires_at":"<canonical UTC deadline>","max_runs":1,"max_task_seconds":120}}
+```
+
+It requires Access auth, both production flags false, `PROVIDER_CONFIG:{}` and
+no local `HEHEBOT_OWNER_ALPHA`. The policy has the same bounds and optional
+`background_first_root:true` as local alpha. Pin mismatch rolls back initial owner
+binding before seeding. Existing quota/attempt custody remains immutable: changing
+or removing the policy does not reset it. Internal status adds
+`owner_alpha_hosted:true`; hosted runtime requires it, while local/test runtime
+rejects it. Public/local status shapes remain unchanged. The empty provider config
+deliberately disables automatic wake; Sprite holds are owned by the runtime.
+
+`runHostedOwnerAlpha` is a supervised composition API using the existing Sprite
+Tasks client and the same account/model checks, no-paid-fallback restrictions and
+deadline watchdog as local alpha. Build the provider module with
+`bash scripts/build-codex-service.sh` before composing it. Its caller must hold the
+kernel executor lock for the complete process tree. No hosted CLI or HTTP wake
+activation route is provided yet; the Sprite HTTP entrypoint stays transport-only.
+The local entrypoint rejects the hosted field. No deployed binding or default
+configuration selects this mode. Local alpha stays loopback-only/provider-free.
+This is local fixture evidence, not permission to launch a hosted trial.
 
 Source check, 2026-09-17 Asia/Jakarta: the official
 [authentication documentation, CLI/headless section](https://developers.openai.com/codex/auth.md)
@@ -87,8 +106,8 @@ supported login on the actual executing runtime; verify its account/model/limits
 separately. Current web documentation is not proof every new feature exists in
 the pinned 0.154.0 binary.
 
-The smallest future hosted bounded mode should reuse the existing command,
-quota, deadline and native-custody paths, while making these changes explicit:
+The bounded hosted composition reuses command, quota, deadline and native-custody
+paths. Its invariants and remaining live gates are:
 
 - Bind the operator's expected owner/installation and exact control origin into
   the runtime's fresh session intent and verify them against authenticated control
@@ -96,7 +115,7 @@ quota, deadline and native-custody paths, while making these changes explicit:
   owner. Do not expose credentials in the status response.
 - Retain the owner-alpha no-replay/no-sleep/no-effects limits and immutable quota.
   Keep this mode distinct from both local alpha and production; merely permitting
-  Access in the local parser is insufficient. No hosted mode is enabled today.
+  Access in the local parser is insufficient. No hosted deployment is enabled.
 - Require the existing Sprite activity guard instead of the local alpha's no-op
   guard. Verify hold receipt/renewal before admission and reconcile a lost/expired
   hold without restarting inference. A hold prevents idle freeze; it is not a

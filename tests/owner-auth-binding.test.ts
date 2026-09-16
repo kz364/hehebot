@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +10,8 @@ import worker from '../src/worker/index';
 import { exportControl } from '../src/core/control-export';
 import { importControlExport } from '../scripts/import-control-export.mjs';
 import { TestDatabase } from './helpers';
+import { bot, routine } from './helpers';
+import type { OwnerAlphaPolicy } from '../src/core/owner-alpha';
 
 vi.mock('cloudflare:workers', () => ({ DurableObject: class {
   constructor(public ctx: unknown, public env: unknown) {}
@@ -34,7 +37,7 @@ const ownerRows = (db: TestDatabase) => db.all<{ value_json: string }>(
   "SELECT value_json FROM runtime_metadata WHERE key='installation_owner'",
 );
 
-function construct(db: TestDatabase, auth: AuthConfig) {
+function construct(db: TestDatabase, auth: AuthConfig, overrides: Partial<Env> = {}) {
   let initialized: Promise<unknown> = Promise.resolve();
   const ctx = {
     storage: {
@@ -52,10 +55,24 @@ function construct(db: TestDatabase, auth: AuthConfig) {
     ...auth,
     EXECUTION_ENABLED: 'false', NATIVE_VERIFIED: 'false', PROVIDER_CONFIG: '{}',
     ACTION_POLICY_IDS: '[]', TOOL_POLICY_IDS: '[]', TRIGGER_CONFIG: '{}',
+    ...overrides,
   } as unknown as Env;
   const control = new PersonalControl(ctx as unknown as DurableObjectState, env);
   return { control, initialized };
 }
+
+const hostedDigest = 'd167d266bdd34b51eb916816899830e9810c2d32283e61ebd0a6b5dc7bfe7897';
+const hostedPolicy = (): OwnerAlphaPolicy => ({
+  session_id: randomUUID(), persona_id: bot, expires_at: '2026-09-16T00:01:00.000Z',
+  max_runs: 1, max_task_seconds: 45,
+});
+const hostedConfig = (policy: OwnerAlphaPolicy, digest = hostedDigest) => JSON.stringify({
+  owner_binding_sha256: digest, policy,
+});
+const custodyTables = (db: TestDatabase) => Object.fromEntries([
+  'runtime_metadata', 'objects', 'commands', 'runs', 'attempts', 'operations', 'effects',
+  'resource_locks', 'controller_operations', 'lifecycle',
+].map(table => [table, db.all(`SELECT * FROM ${table} ORDER BY rowid`)]));
 
 const databases: TestDatabase[] = [];
 const database = () => { const db = new TestDatabase(); databases.push(db); return db; };
@@ -175,4 +192,151 @@ it('retains the installation owner through application export and import', async
     } finally { restored.close(); }
     expect(JSON.parse(await readFile(join(destination, 'manifest.json'), 'utf8'))).toMatchObject({ counts: { runtime_metadata: 1 } });
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('runs the hosted owner alpha through Worker runtime HTTP, persists its preview, and enforces the one-run quota', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-16T00:00:00.000Z'));
+  const network = vi.fn(() => { throw new Error('Unexpected provider call'); });
+  vi.stubGlobal('fetch', network);
+  try {
+    const db = database(), config = access(), policy = hostedPolicy(), token = 'hosted-runtime-token';
+    let host = construct(db, config, { HEHEBOT_HOSTED_OWNER_ALPHA: hostedConfig(policy) });
+    await host.initialized;
+    let env = { ...config, RUNTIME_TOKEN: token, CONTROL: { getByName: () => host.control } } as unknown as Env;
+    const runtime = async (type: string, payload: unknown, expected = 200) => {
+      const response = await worker.fetch(new Request(`https://portal.example/internal/${type}`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }), env);
+      expect(response.status, type).toBe(expected);
+      return response.json() as Promise<any>;
+    };
+    expect(await runtime('status', {})).toEqual({ phase: 'STOPPED', epoch: 0, execution_enabled: false,
+      owner_alpha: policy, owner_alpha_hosted: true, owner_binding_sha256: hostedDigest });
+    expect(JSON.stringify((await host.control.getState(config.OWNER_SUB)))).not.toContain('owner_alpha_hosted');
+    expect(db.all<{ value_json: string }>("SELECT value_json FROM runtime_metadata WHERE key='owner_alpha'")).toEqual([
+      { value_json: JSON.stringify({ policy, admitted_run_ids: [] }) },
+    ]);
+
+    const identity = await runtime('boot', { boot_id: randomUUID() });
+    await runtime('ready', { identity });
+    const accepted = await host.control.accept(config.OWNER_SUB, randomUUID(), randomUUID(), {
+      schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Hosted bounded request' },
+    });
+    expect(accepted).toMatchObject({ ok: true, value: { status: 'applied' } });
+    const claim = await runtime('claim', { identity });
+    expect(claim).toMatchObject({ run: { id: (accepted as any).value.resource_id }, deadline_at: '2026-09-16T00:00:45.000Z' });
+    const scope = { identity, run_id: claim.run.id, attempt: 1, native_ref: 'native:hosted-owner-alpha' };
+    await runtime('submitted', scope);
+    const exactPreview = { ...scope, version: 7, text: 'Exact hosted provisional reply', truncated: true };
+    expect(await runtime('output-preview', exactPreview)).toEqual({ accepted: true });
+
+    host = construct(db, config, { HEHEBOT_HOSTED_OWNER_ALPHA: hostedConfig(policy) });
+    await host.initialized;
+    env = { ...env, CONTROL: { getByName: () => host.control } } as unknown as Env;
+    expect(await host.control.getState(config.OWNER_SUB)).toMatchObject({ ok: true, value: { output_previews: [{
+      run_id: claim.run.id, attempt: 1, version: 7, text: exactPreview.text, truncated: true,
+    }] } });
+    expect(await runtime('status', {})).toMatchObject({ phase: 'READY', owner_alpha_hosted: true });
+    const extra = await host.control.accept(config.OWNER_SUB, randomUUID(), randomUUID(), {
+      schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Over quota' },
+    });
+    expect(db.all('SELECT status FROM runs WHERE id=?', (extra as any).value.resource_id)).toEqual([{ status: 'waiting' }]);
+    expect(await runtime('claim', { identity })).toBeNull();
+    expect(network).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('denies hosted owner-alpha mutation, effects, completion and sleep without provider calls', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-16T00:00:00.000Z'));
+  const network = vi.fn(() => { throw new Error('Unexpected provider call'); });
+  vi.stubGlobal('fetch', network);
+  try {
+    const db = database(), config = access(), policy = hostedPolicy(), token = 'hosted-denial-token';
+    const host = construct(db, config, { HEHEBOT_HOSTED_OWNER_ALPHA: hostedConfig(policy) });
+    await host.initialized;
+    const env = { ...config, RUNTIME_TOKEN: token, CONTROL: { getByName: () => host.control } } as unknown as Env;
+    const call = async (type: string, payload: unknown) => worker.fetch(new Request(`https://portal.example/internal/${type}`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    }), env);
+    const identity = await (await call('boot', { boot_id: randomUUID() })).json() as any;
+    expect((await call('ready', { identity })).status).toBe(200);
+    const accepted = await host.control.accept(config.OWNER_SUB, randomUUID(), randomUUID(), {
+      schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'No effects' },
+    }) as any;
+    const claim = await (await call('claim', { identity })).json() as any;
+    const scope = { identity, run_id: accepted.value.resource_id, attempt: 1 };
+    expect(claim.run.id).toBe(scope.run_id);
+    for (const [type, payload] of [
+      ['complete', { ...scope, result: { status: 'completed', text: 'Denied final' } }],
+      ['effect-intent', { identity, effect: { id: randomUUID(), run_id: scope.run_id, attempt: 1,
+        action_key: 'synthetic:hosted-denied', classification: 'idempotent', authorization_ref: randomUUID(),
+        request_digest: 'sha256:hosted-denied', provider_idempotency_key: 'hosted-denied' } }],
+      ['effect-result', { ...scope, effect_id: randomUUID(), status: 'confirmed', receipt: {} }],
+      ['agent-command', { ...scope, idempotency_key: randomUUID(), command: { schema_version: 1, type: 'routine.put', payload: routine() } }],
+      ['prepare-sleep', { identity }],
+      ['commit-sleep', { identity, stop_token: randomUUID(), queue_sequence: 1, checkpoint: { ok: true } }],
+    ] as const) {
+      const response = await call(type, payload);
+      expect(response.status, type).toBe(409);
+      expect(await response.json(), type).toMatchObject({ error: { code: 'CAPABILITY_UNAVAILABLE' } });
+    }
+    expect(db.all('SELECT * FROM effects')).toEqual([]);
+    expect(db.all('SELECT result_json FROM attempts')).toEqual([{ result_json: null }]);
+    expect(network).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});
+
+it('rolls back a wrong hosted pin on fresh data and preserves every existing custody table', async () => {
+  const config = access(), policy = hostedPolicy();
+  const fresh = database();
+  await expect(construct(fresh, config, { HEHEBOT_HOSTED_OWNER_ALPHA: hostedConfig(policy, '0'.repeat(64)) }).initialized)
+    .rejects.toMatchObject({ code: 'OWNER_BINDING_MISMATCH' });
+  expect(ownerRows(fresh)).toEqual([]);
+  expect(fresh.all('SELECT * FROM objects')).toEqual([]);
+  expect(fresh.all("SELECT * FROM runtime_metadata WHERE key='owner_alpha'")).toEqual([]);
+
+  const existing = database(), valid = construct(existing, config, { HEHEBOT_HOSTED_OWNER_ALPHA: hostedConfig(policy) });
+  await valid.initialized;
+  await valid.control.accept(config.OWNER_SUB, randomUUID(), randomUUID(), {
+    schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Retained custody' },
+  });
+  const before = custodyTables(existing);
+  await expect(construct(existing, config, { HEHEBOT_HOSTED_OWNER_ALPHA: hostedConfig(policy, 'f'.repeat(64)) }).initialized)
+    .rejects.toMatchObject({ code: 'OWNER_BINDING_MISMATCH' });
+  expect(custodyTables(existing)).toEqual(before);
+});
+
+it('fails reconstruction for removed or changed hosted policy and cannot restart used boot state', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-16T00:00:00.000Z'));
+  try {
+    const db = database(), config = access(), policy = hostedPolicy();
+    const first = construct(db, config, { HEHEBOT_HOSTED_OWNER_ALPHA: hostedConfig(policy) });
+    await first.initialized;
+    const identity = (await first.control.runtime({ type: 'boot', payload: { boot_id: randomUUID() } }) as any).value;
+    const before = custodyTables(db);
+    await expect(construct(db, config).initialized).rejects.toMatchObject({ code: 'INVALID_CONFIGURATION' });
+    await expect(construct(db, config, { HEHEBOT_HOSTED_OWNER_ALPHA: hostedConfig({ ...policy, max_task_seconds: 44 }) }).initialized)
+      .rejects.toMatchObject({ code: 'INVALID_CONFIGURATION' });
+    expect(custodyTables(db)).toEqual(before);
+    const restored = construct(db, config, { HEHEBOT_HOSTED_OWNER_ALPHA: hostedConfig(policy) });
+    await restored.initialized;
+    expect((await restored.control.runtime({ type: 'boot', payload: { boot_id: randomUUID() } }) as any)).toMatchObject({
+      ok: false, error: { code: 'STALE_EPOCH' },
+    });
+    expect((await restored.control.runtime({ type: 'status', payload: {} }) as any).value).toMatchObject({
+      phase: 'BOOTING', epoch: identity.epoch, owner_alpha_hosted: true,
+    });
+  } finally {
+    vi.useRealTimers();
+  }
 });

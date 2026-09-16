@@ -4,6 +4,23 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest: default-absent HEHEBOT_HOSTED_OWNER_ALPHA now supports the strict pin/policy
+envelope under Access with false production flags and empty provider config. Wrong
+pin rolls back owner binding before seed; runtime requires owner_alpha_hosted:true
+and rejects crossed local/hosted modes. Existing quota/attempt custody and denial
+paths are reused. runHostedOwnerAlpha composes Sprite Tasks with shared account/
+model checks and expiry watchdog; no hosted CLI or wake activation exists. Caller
+must hold the executor lock.71 focused SQLite/control and54 runtime tests/typecheck
+pass; full combined exits0 with1,359 backend/426 runtime plus native/browser/service/
+build checks in `.local/hosted-admission-combined.log`; desktop16 pass.
+Both delegated units are integrated; no active subagent. No account/provider/model
+or deployment action. Next: supervised launcher with both native-home/session-state
+locks (reuse scripts/with-executor-lock.sh, see owner-alpha-session.mjs:148-150),
+and complete private scripted
+Access/Worker/native/Tasks composition. Default deployment is unchanged; live
+containment/account eligibility/authorization remain open. Earlier absence-of-hosted-
+policy notes below are historical; production/replay/sleep restrictions remain.
+
 Newest: createCodexService has explicit hostedOwnerBindingSha256 composition.
 It requires ownerAlpha, Access files and a Tasks client, persists the captured
 digest/canonical origin before status, and checks ownership before boot. Mandatory
