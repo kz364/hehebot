@@ -319,11 +319,24 @@ function renderRecovery(card,run,recovery,title){
 function lines(value){return String(value??'').split('\n').map(x=>x.trim()).filter(Boolean);}
 function detail(label,value){const wrap=node('section',undefined,'skill-detail');wrap.append(node('h4',label));if(Array.isArray(value)){const list=node('ul');for(const item of value)list.append(node('li',item));wrap.append(list);}else wrap.append(node('p',value||'Not specified'));return wrap;}
 function enablement(skillId,personaId){return (snapshot.skill_enablements??[]).find(x=>x.skill_id===skillId&&x.persona_id===personaId);}
+const skillFields=[['name','Name'],['description','Purpose'],['when_to_use','When to use'],['inputs_access','Inputs and access'],['steps','Procedure'],['decision_rules','Decision rules'],['validation','Validation'],['output','Output'],['failure_handling','Failure handling'],['approval_boundaries','Approval boundaries']];
+function proposalSkill(proposal){return items('skill').find(x=>x.id===proposal.skill_id&&!x.deleted_at);}
+function renderSkillComparison(target,proposal,skill){
+ target.append(node('p',`Skill ${proposal.skill_id} · Proposal revision ${proposal.proposal_revision} · Base revision ${proposal.expected_skill_revision}`,'message-body'));
+ target.append(node('p',skill?`Current approved revision ${skill.revision}`:proposal.expected_skill_revision===0?'New skill — no prior approved version.':'Prior approved version is unavailable. Approval is blocked.','review-notice'));
+ if(skill&&skill.revision!==proposal.expected_skill_revision)target.append(node('p','The approved skill changed after this proposal was staged. Approval is blocked; reject this proposal and draft an update from the current revision.','review-notice'));
+ for(const [key,label] of skillFields){
+  const section=node('section',undefined,'card message-body');section.dataset.skillField=key;
+  section.append(node('h4',`${label} · ${skill?(JSON.stringify(skill.body[key])===JSON.stringify(proposal.body[key])?'Unchanged':'Changed'):'Proposed'}`));
+  if(skill)section.append(detail('Current approved',Array.isArray(skill.body[key])&&!skill.body[key].length?'None':skill.body[key]));
+  section.append(detail('Proposed',Array.isArray(proposal.body[key])&&!proposal.body[key].length?'None':proposal.body[key]));target.append(section);
+ }
+}
 function renderSkillBody(target,body){
  target.append(detail('Purpose',body.description),detail('When to use',body.when_to_use),detail('Inputs and access',body.inputs_access),detail('Procedure',body.steps),detail('Decision rules',body.decision_rules),detail('Validation',body.validation),detail('Output',body.output),detail('Failure handling',body.failure_handling),detail('Approval boundaries',body.approval_boundaries));
 }
 function renderSkills(){
- const signature=JSON.stringify(['skills',items('skill'),items('persona'),snapshot.skill_proposals,snapshot.skill_enablements]);
+ const signature=JSON.stringify(['skills',items('skill'),items('persona'),snapshot.skill_proposals,snapshot.skill_enablements,$('connection').textContent]);
  if(lastSignature===signature)return;
  lastSignature=signature;
  const openSummaries=new Set([...$('timeline').querySelectorAll('details[open] > summary')].map(x=>x.textContent));
@@ -332,7 +345,17 @@ function renderSkills(){
  timeline.replaceChildren();const intro=node('div',undefined,'skills-intro');const heading=node('div',undefined,'skills-heading');const copy=node('div');copy.append(node('h2','Reviewed procedures'),node('p','Drafts stay proposals until you explicitly approve them. Enabling a skill is a separate per-bot choice.','muted'));heading.append(copy,button('+ Draft skill',()=>editSkillProposal(),'primary'));intro.append(heading);timeline.append(intro);
  const pending=(snapshot.skill_proposals??[]).filter(x=>x.status==='pending');timeline.append(node('h2',`Pending proposals (${pending.length})`,'subheading'));
  if(!pending.length)timeline.append(node('p','No proposals are waiting for review.','muted'));
- for(const proposal of pending){const card=node('details',undefined,'skill-card proposal');const summary=node('summary');summary.append(node('span',proposal.body.name),node('span',proposal.provenance?.kind==='owner'?'Owner draft':`${proposal.provenance?.kind??'Unknown'} content`,'status'));card.append(summary,node('p',`Source: ${proposal.provenance?.source_ref??'Not recorded'} · Proposal revision ${proposal.proposal_revision}`,'hint'));renderSkillBody(card,proposal.body);const notice=node('p','Approval confirms this procedure contains no private facts. Imported or model-written content is never approved automatically.','review-notice');const actions=node('div',undefined,'actions');actions.append(button('Approve',()=>reviewProposal(proposal,'approve'),'primary'),button('Reject',()=>reviewProposal(proposal,'reject'),'quiet danger'));card.append(notice,actions);timeline.append(card);}
+ for(const proposal of pending){
+  const skill=proposalSkill(proposal),connected=$('connection').textContent==='Connected';
+  const card=node('details',undefined,'skill-card proposal');card.dataset.proposalId=proposal.id;
+  const summary=node('summary');summary.append(node('span',proposal.body.name),node('span',proposal.provenance?.kind==='owner'?'Owner draft':`${proposal.provenance?.kind??'Unknown'} content`,'status'));
+  card.append(summary,node('p',`Source: ${proposal.provenance?.source_ref??'Not recorded'}`,'message-body'));renderSkillComparison(card,proposal,skill);
+  card.append(node('p','Approval confirms this procedure contains no private facts. Imported or model-written content is never approved automatically.','review-notice'));
+  if(!connected)card.append(node('p','Review actions are unavailable offline. Refresh before reviewing.','review-notice'));
+  const actions=node('div',undefined,'actions');
+  for(const decision of ['approve','reject']){const action=button(decision==='approve'?'Approve':'Reject',()=>reviewProposal(proposal,decision),decision==='approve'?'primary':'quiet danger');action.dataset.action=`skill-${decision}`;action.disabled=!connected||(decision==='approve'&&(skill?.revision??0)!==proposal.expected_skill_revision);actions.append(action);}
+  card.append(actions);timeline.append(card);
+ }
  const catalog=items('skill').filter(x=>!x.deleted_at);timeline.append(node('h2',`Approved catalog (${catalog.length})`,'subheading'));
  if(!catalog.length)timeline.append(node('p','No skills have been approved yet.','muted'));
  for(const skill of catalog){const card=node('details',undefined,'skill-card');const summary=node('summary');summary.append(node('span',skill.body.name),node('span',`Revision ${skill.revision}`,'status'));card.append(summary,node('p',skill.body.description,'skill-description'));renderSkillBody(card,skill.body);const bots=node('div',undefined,'skill-bots');bots.append(node('h4','Bot access'));for(const persona of items('persona').filter(x=>!x.body.archived)){const record=enablement(skill.id,persona.id),enabled=record?.enabled===true;const row=node('div',undefined,'skill-bot-row');row.append(node('span',persona.body.name),button(enabled?'Disable':'Enable',()=>act(()=>command('skill.enable',{skill_id:skill.id,expected_skill_revision:skill.revision,persona_id:persona.id,enabled:!enabled})),enabled?'quiet danger':'quiet'));bots.append(row);}const actions=node('div',undefined,'actions');actions.append(button('Propose an update',()=>editSkillProposal(skill),'quiet'));card.append(bots,actions);timeline.append(card);}
@@ -340,9 +363,15 @@ function renderSkills(){
  timeline.scrollTop=scrollTop;
 }
 function reviewProposal(proposal,decision){
- const fields=[node('p',decision==='approve'?'Review the complete procedure above before approving. Approval does not enable it for any bot.':'Reject this proposal without changing the approved catalog.','hint')];
+ const skill=proposalSkill(proposal),key=crypto.randomUUID(),comparison=node('div',undefined,'message-body');renderSkillComparison(comparison,proposal,skill);
+ const fields=[node('p',decision==='approve'?'Approval updates already-enabled bots for future tasks. It does not enable additional bots or rewrite context captured by already-admitted tasks. Review every field before confirming.':'Reject this proposal without changing the approved catalog or bot access.','review-notice'),comparison];
  if(decision==='approve'){const label=node('label',undefined,'check affirmation');const check=node('input');check.type='checkbox';check.name='affirm';check.required=true;label.append(check,document.createTextNode('I affirm this draft contains no private facts.'));fields.push(label);}
- openEditor(`${decision==='approve'?'Approve':'Reject'} ${proposal.body.name}`,fields,()=>command('skill.review',{proposal_id:proposal.id,expected_proposal_revision:proposal.proposal_revision,decision}));
+ $('editor').classList.add('roster-editor');
+ openEditor(`${decision==='approve'?'Approve':'Reject'} ${proposal.body.name}`,fields,()=>{
+  const latest=(snapshot.skill_proposals??[]).find(x=>x.id===proposal.id),currentSkill=proposalSkill(proposal);
+  if($('connection').textContent!=='Connected'||latest?.status!=='pending'||latest.proposal_revision!==proposal.proposal_revision||latest.skill_id!==proposal.skill_id||latest.expected_skill_revision!==proposal.expected_skill_revision||(currentSkill?.revision??0)!==(skill?.revision??0)||(decision==='approve'&&(currentSkill?.revision??0)!==proposal.expected_skill_revision))throw new Error('This proposal or approved skill is stale, changed, or offline. Close this editor and refresh before reviewing again.');
+  return command('skill.review',{proposal_id:proposal.id,expected_proposal_revision:proposal.proposal_revision,decision},key);
+ },decision==='approve'?'Approve proposal':'Reject proposal');
 }
 function editSkillProposal(skill){
  const draftId=skill?.id??crypto.randomUUID(),body=skill?.body??{};const existing=items('skill');const options=[['new','Create a new stable skill'],...existing.map(x=>[x.id,`Update ${x.body.name} (revision ${x.revision})`])];
