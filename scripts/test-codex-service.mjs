@@ -29,9 +29,12 @@ const submissionAckMode = process.argv.includes('--submission-ack');
 const operationPagesMode = process.argv.includes('--operation-pages');
 const reasoningMode = process.argv.includes('--reasoning');
 const planMode = process.argv.includes('--plan') || planChildMode;
+const portalMode = process.argv.includes('--portal-readback');
+const browserSession = `service-${randomUUID().slice(0, 8)}`;
+const browser = (...args) => promisify(execFile)('agent-browser', ['--session', browserSession, '--ignore-https-errors', ...args], { timeout: 30000 });
 const expectedToolCalls = operationPagesMode ? 101 : 1;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -119,7 +122,21 @@ try {
     'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
   }, body: JSON.stringify({ schema_version: 1, type: 'routine.put', payload: routine }) })).json();
   assert.equal(saved.status, 'applied');
-  const queued = await (await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
+  let queued;
+  if (portalMode) {
+    await browser('open', origin); await browser('set', 'viewport', '1280', '900', '2');
+    await browser('wait', '--fn', 'document.querySelector("#connection").textContent === "Connected"');
+    await browser('click', `[data-persona-id="${persona.id}"]`);
+    // Observe the real UI's receipt, without replacing its transport or server response.
+    await browser('eval', `window.fixtureReceipts=[];window.fixtureFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.fixtureFetch(...args);if(args[0]==='/v1/commands'&&args[1]?.method==='POST')window.fixtureReceipts.push({request:JSON.parse(args[1].body),key:args[1].headers['Idempotency-Key'],receipt:await response.clone().json()});return response;}`);
+    await browser('fill', '#message', 'SERVICE_ASSEMBLY_19_43'); await browser('click', '#send');
+    await browser('wait', '--fn', 'window.fixtureReceipts.length === 1');
+    const [observed] = JSON.parse((await browser('eval', 'window.fixtureReceipts')).stdout);
+    assert.deepEqual(observed.request, { schema_version: 1, type: 'message.send', payload: { conversation_id: persona.id, text: 'SERVICE_ASSEMBLY_19_43' } });
+    assert.match(observed.key, /^[0-9a-f-]{36}$/); queued = observed.receipt;
+    await browser('close');
+    report.portalMessageSubmitted = true;
+  } else queued = await (await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
     'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
   }, body: JSON.stringify(effectsMode
     ? { schema_version: 1, type: 'routine.run', payload: { id: routine.id, expected_revision: 1 } }
@@ -678,6 +695,36 @@ try {
       version: 1, text: childMode ? 'SERVICE_PARENT_DONE' : planMode ? 'SERVICE_ASSEMBLY_OK\n' : 'SERVICE_ASSEMBLY_OK', truncated: false }]);
     report.nativeProvisionalOutputWithoutSettlement = true;
   }
+  if (portalMode) {
+    const beforeRequests = report.modelRequests;
+    const history = await (await trustedFetch(`${origin}/v1/conversations/${persona.id}/events`)).json();
+    assert.equal(history.events.filter(event => event.type === 'message.user' && event.payload.text === 'SERVICE_ASSEMBLY_19_43').length, 1);
+    assert.equal(history.events.filter(event => event.type === 'run.accepted' && event.payload.run_id === queued.resource_id).length, 1);
+    assert.equal(history.events.filter(event => event.type === 'run.result').length, 0);
+    await browser('open', origin); await browser('set', 'viewport', '1280', '900', '2');
+    await browser('wait', '--fn', 'document.querySelector("#connection").textContent === "Connected"');
+    await browser('click', `[data-persona-id="${persona.id}"]`);
+    const card = `[data-run-id="${queued.resource_id}"]`;
+    await browser('wait', '--fn', `document.querySelector('${card} .output-preview')?.textContent.includes('SERVICE_ASSEMBLY_OK')`);
+    await browser('eval', `document.querySelector('${card}').open=true`);
+    assert.match((await browser('get', 'text', `${card} .output-preview`)).stdout, /provisional.*not a completed result/);
+    await browser('reload');
+    await browser('wait', '--fn', `document.querySelector('${card} .output-preview')?.textContent.includes('SERVICE_ASSEMBLY_OK')`);
+    await browser('eval', `document.querySelector('${card}').open=true;document.querySelector('${card}').scrollIntoView({block:'center'})`);
+    assert.equal(JSON.parse((await browser('eval', 'document.querySelectorAll(".result-outcome").length')).stdout), 0);
+    assert.equal(report.modelRequests, beforeRequests);
+    const reread = await (await trustedFetch(`${origin}/v1/state`)).json();
+    assert.deepEqual(reread.output_previews, final.output_previews);
+    assert.deepEqual(reread.runs.map(run => [run.id, run.current_attempt, run.status]), final.runs.map(run => [run.id, run.current_attempt, run.status]));
+    await mkdir(join(root, '.amp/in/artifacts'), { recursive: true });
+    assert.equal(JSON.parse((await browser('eval', 'devicePixelRatio')).stdout), 2);
+    await browser('eval', 'new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+    await browser('screenshot', join(root, '.amp/in/artifacts/portal-native-readback.png'));
+    await browser('close');
+    Object.assign(report, { portalReconnectPreview: true, completedResultObserved: false, unknownCoverage: 1,
+      receiptRunId: queued.resource_id, conversationId: persona.id, attemptId: dispatched.attemptId,
+      nativeThreadId: native.threadId, nativeTurnId: native.nativeRunId, p02Complete: false });
+  }
   if (childMode) {
     assert.equal(final.runs.find(run => run.parent_run_id === queued.resource_id).status, 'cancelling');
     assert.equal(interrupts.length, 1);
@@ -739,6 +786,7 @@ try {
   await writeFile(join(directory, 'diagnostics.log'), workerLogs + '\n' + errors.join('\n') + '\n' + error.stack, { mode: 0o600 });
   process.exitCode = 1;
 } finally {
+  if (portalMode) await browser('close').catch(() => {});
   try { await service?.stop(); await stop(worker); }
   catch { report.status = 'failed'; report.cleanupError = 'PROCESS_STOP_UNCONFIRMED'; process.exitCode = 1; }
   if (model) { model.closeAllConnections(); await new Promise(ok => model.close(ok)); }
