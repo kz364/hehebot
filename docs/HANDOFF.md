@@ -4,6 +4,22 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest: createCodexService has explicit hostedOwnerBindingSha256 composition.
+It requires ownerAlpha, Access files and a Tasks client, persists the captured
+digest/canonical origin before status, and checks ownership before boot. Mandatory
+Sprite holds fence version checks, preparation, launch and normal admission;
+expiry refuses reacquisition and stop retains unknown Task custody. Local alpha
+is unchanged. Worker Access alpha admission is STILL DISABLED and Sprite HTTP is
+still preflight-only.57 focused tests pass; combined verification exits0 with
+1,335 backend/419 runtime plus native/browser/service/build checks in
+`.local/hosted-owner-combined.log`; desktop16 pass. Delegated tests are integrated,
+no worker active. Official docs confirm a remote/headless device-login mechanism,
+not blanket subscription/managed-hosting eligibility; AUTH_SETUP records the source.
+No account/model/provider/shared-state action occurred. Next is the distinct
+hosted control admission/launcher contract with private fixture integration, not
+deploying or relaxing the local parser. Preserve production gates, retained live
+sessions, explicit provider authorization and supported-account eligibility.
+
 Newest: Sprite transport-only preflight now requires an independently pinned
 ownerBindingSha256, captures config before awaits, and compares authenticated
 status.owner_binding_sha256 before reporting owner_binding_verified. Worker adds

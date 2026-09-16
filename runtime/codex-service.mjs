@@ -41,6 +41,7 @@ export function createCodexService(config, dependencies) {
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
   let ownsIntent = false, stopping, questions, questionNotification, admission;
   let alpha = null;
+  const hosted = Object.hasOwn(config, 'hostedOwnerBindingSha256');
   const taskControllers = new Map();
   const assertStarting = () => {
     if (phase !== 'starting') fail('SERVICE_RECOVERY_REQUIRED');
@@ -95,19 +96,25 @@ export function createCodexService(config, dependencies) {
     get journal() { return journal; },
     async start() {
       if (phase !== 'stopped') fail('SERVICE_ALREADY_STARTED');
-      // Supervised local alpha is explicit and separate from test/production gates.
+      // Hosted composition requires a pinned owner and real activity custody.
+      // This does not enable hosted alpha admission in the control plane.
+      if (hosted && (typeof config.hostedOwnerBindingSha256 !== 'string' ||
+          !/^[a-f0-9]{64}$/.test(config.hostedOwnerBindingSha256) || config.ownerAlpha === undefined ||
+          typeof config.accessClientIdFile !== 'string' || typeof config.accessClientSecretFile !== 'string' ||
+          typeof tasks?.hold !== 'function' || typeof tasks?.release !== 'function')) fail('INVALID_SERVICE_CONFIGURATION');
+      // Supervised alpha is explicit and separate from test/production gates.
       if (config.ownerAlpha !== undefined) {
         alpha = ownerAlphaPolicy(config.ownerAlpha);
         const remaining = Date.parse(alpha.expires_at) - now();
         let origin; try { origin = new URL(config.portalOrigin); } catch { fail('INVALID_SERVICE_CONFIGURATION'); }
         if (config.disposableTest === true || remaining <= 0 || remaining > 300000 ||
-            !['127.0.0.1', '[::1]', 'localhost'].includes(origin.hostname) ||
+            !hosted && !['127.0.0.1', '[::1]', 'localhost'].includes(origin.hostname) ||
             Object.keys(config.personas ?? {}).length !== 1 || !config.personas?.[alpha.persona_id] ||
             config.ownerQuestions === true || config.restrictedPermissions === false) fail('INVALID_SERVICE_CONFIGURATION');
         config.restrictedPermissions = true;
       } else if (config.disposableTest !== true) fail('NATIVE_COMPATIBILITY_GATE_BLOCKED');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'nativeHome'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'nativeHome', 'hostedOwnerBindingSha256'].includes(key)) ||
         config.nativeHome !== undefined && (!alpha || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean') fail('INVALID_SERVICE_CONFIGURATION');
@@ -129,10 +136,13 @@ export function createCodexService(config, dependencies) {
         journal = new FileJournal(join(config.stateDirectory, 'journal'));
         const bootId = randomUUID();
         assertStarting();
-        if (await journal.putIfAbsent('service', { phase: 'boot_unknown', bootId, ...(alpha ? { ownerAlpha: alpha } : {}) })) fail('SERVICE_RECOVERY_REQUIRED');
+        if (await journal.putIfAbsent('service', { phase: 'boot_unknown', bootId, ...(alpha ? { ownerAlpha: alpha } : {}),
+          ...(hosted ? { hostedOwner: { bindingSha256: config.hostedOwnerBindingSha256,
+            origin: new URL(config.portalOrigin).origin } } : {}) })) fail('SERVICE_RECOVERY_REQUIRED');
         ownsIntent = true;
         assertStarting();
         const status = await starting(() => control.request('status', {}));
+        if (hosted && status?.owner_binding_sha256 !== config.hostedOwnerBindingSha256) fail('OWNER_BINDING_MISMATCH');
         if (alpha) {
           if (status?.phase !== 'STOPPED' || status.epoch !== 0 || status.execution_enabled !== false ||
               JSON.stringify(ownerAlphaPolicy(status.owner_alpha)) !== JSON.stringify(alpha)) fail('CONTROL_NOT_BOOTABLE');
@@ -140,8 +150,9 @@ export function createCodexService(config, dependencies) {
         const identity = await starting(() => control.request('boot', { boot_id: bootId }));
         if (identity?.epoch !== (alpha ? 1 : status.epoch) || identity.boot_id !== bootId) fail('INVALID_BOOT_IDENTITY');
         await starting(() => journal.update('service', { phase: 'starting', identity }));
-        // Local supervised execution has no provider hold or automatic sleep.
-        activity = alpha ? { ensure: async () => {}, releaseAfterDrain: async () => fail('OWNER_ALPHA_SLEEP_DENIED') }
+        // Only local supervised execution has no provider hold. Hosted alpha
+        // retains the provider Task on stop/uncertainty; it cannot prove sleep.
+        activity = alpha && !hosted ? { ensure: async () => {}, releaseAfterDrain: async () => fail('OWNER_ALPHA_SLEEP_DENIED') }
           : new SpritesActivityGuard({ tasks, id: `hehe-${identity.epoch}-${bootId}`, now, onUnsafe: recover });
         await starting(() => activity.ensure());
         await starting(() => checkVersion(config.binary));
@@ -152,6 +163,7 @@ export function createCodexService(config, dependencies) {
           await starting(() => privatePath(home, true));
         } else await starting(() => mkdir(home, { mode: 0o700 }));
         await starting(() => mkdir(workspace, { mode: 0o700 }));
+        if (hosted) await starting(() => activity.ensure());
         await starting(() => prepareNative(home));
         const configOverrides = config.restrictedPermissions ? {
           web_search: 'disabled',
@@ -210,6 +222,7 @@ export function createCodexService(config, dependencies) {
             }
             return null;
           } });
+        if (hosted) await starting(() => activity.ensure());
         transport = launch({ binary: config.binary, home, cwd: workspace, timeoutMs: 10000, configOverrides,
           ...(questions ? { onUserInput: questions.onUserInput, userInputTimeoutMs: 300000 } : {}) });
         if (questions) {

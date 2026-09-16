@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCodexService } from '../runtime/codex-service.mjs';
@@ -392,6 +392,144 @@ const restrictedReadback = {
     image_generation: false, standalone_web_search: false, token_budget: false, sleep_tool: false,
     request_permissions_tool: false, exec_permission_approvals: false },
 };
+
+async function hostedFixture(t) {
+  const f = await fixture(t), bindingSha256 = '19'.repeat(32);
+  const accessClientIdFile = join(f.directory, 'hosted-access-id');
+  const accessClientSecretFile = join(f.directory, 'hosted-access-secret');
+  await writeFile(accessClientIdFile, 'hosted-id-19\n', { mode: 0o600 });
+  await writeFile(accessClientSecretFile, 'hosted-secret-43\n', { mode: 0o600 });
+  const nativeHome = join(f.directory, 'hosted-native-home');
+  await mkdir(nativeHome, { mode: 0o700 });
+  await writeFile(join(nativeHome, 'config.toml'), 'cli_auth_credentials_store = "keyring"\n', { mode: 0o600 });
+  const ownerAlpha = { session_id: 'aaaaaaaa-1111-4111-8111-111111111119',
+    persona_id: '11111111-1111-4111-8111-111111111119', expires_at: new Date(f.dependencies.now() + 240000).toISOString(),
+    max_runs: 1, max_task_seconds: 180 };
+  const { disposableTest, ...base } = f.config;
+  const config = { ...base, portalOrigin: 'https://hosted-19.invalid/', accessClientIdFile, accessClientSecretFile,
+    nativeHome, ownerAlpha, hostedOwnerBindingSha256: bindingSha256, personas: { [ownerAlpha.persona_id]: base.personas.bot } };
+  const originalRequest = f.dependencies.control.request, originalRpc = f.transport.request;
+  let overrides;
+  f.transport.request = async (method, params) => {
+    if (method !== 'config/read') return originalRpc(method, params);
+    const name = overrides.default_permissions;
+    return { config: { ...restrictedReadback, agents: { enabled: false },
+      features: { ...restrictedReadback.features, multi_agent: false, multi_agent_v2: false },
+      default_permissions: name, permissions: { [name]: overrides[`permissions.${name}`] } } };
+  };
+  const dependencies = { ...f.dependencies,
+    checkVersion: async () => f.calls.push('version'),
+    tasks: { ...f.dependencies.tasks, release: async () => { f.calls.push('release'); assert.fail('must retain hosted Task'); } },
+    launch: input => { overrides = input.configOverrides; return f.dependencies.launch(input); },
+    control: { request: async (type, payload) => {
+      if (type === 'status') return { epoch: 0, phase: 'STOPPED', execution_enabled: false,
+        owner_alpha: ownerAlpha, owner_binding_sha256: bindingSha256 };
+      if (type === 'claim') return { submission_key: 'hosted-run:1', deadline_at: new Date(f.dependencies.now() + 179000).toISOString(),
+        run: { id: 'hosted-run', current_attempt: 1, persona_id: ownerAlpha.persona_id,
+          role: 'coordinator', context_json: '{"instruction":"hosted fixture 43"}' } };
+      return originalRequest(type, payload);
+    } } };
+  return { ...f, config, dependencies, bindingSha256, ownerAlpha, accessClientIdFile, accessClientSecretFile };
+}
+
+test('hosted owner composition persists its pin before authenticated status and holds before version/native submission', async t => {
+  const f = await hostedFixture(t), request = f.dependencies.control.request;
+  f.dependencies.control.request = async (type, payload) => {
+    if (type === 'status') {
+      const persisted = JSON.parse(await readFile(join(f.directory, 'journal', 'service.json'), 'utf8'));
+      assert.deepEqual(persisted.hostedOwner, { bindingSha256: f.bindingSha256, origin: 'https://hosted-19.invalid' });
+    }
+    return request(type, payload);
+  };
+  const service = createCodexService(f.config, f.dependencies);
+  t.after(() => service.stop());
+  await service.start();
+  assert.ok(f.calls.indexOf('hold') < f.calls.indexOf('version'));
+  assert.ok(f.calls.indexOf('version') < f.calls.indexOf('launch'));
+  assert.equal(f.calls.filter(call => call === 'hold').length, 1);
+  assert.equal(f.calls.filter(call => call.method === 'turn/start').length, 1);
+  assert.equal((await service.journal.get('service')).hostedOwner.bindingSha256, f.bindingSha256);
+  await assert.rejects(service.supervisor.drain({}), { code: 'SLEEP_DENIED' });
+  f.advance(120000);
+  await assert.rejects(service.maintain());
+  assert.equal(f.calls.filter(call => call === 'hold').length, 1);
+  assert.equal(f.calls.filter(call => call.method === 'turn/start').length, 1);
+  await service.stop();
+  assert.equal(f.calls.includes('release'), false);
+});
+
+for (const readback of ['missing', 'mismatch']) test(`hosted owner ${readback} status digest blocks boot, hold and native`, async t => {
+  const f = await hostedFixture(t), request = f.dependencies.control.request;
+  f.dependencies.control.request = async (type, payload) => type === 'status'
+    ? { ...(await request(type, payload)), owner_binding_sha256: readback === 'missing' ? undefined : '43'.repeat(32) }
+    : request(type, payload);
+  const service = createCodexService(f.config, f.dependencies);
+  await assert.rejects(service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  assert.equal(f.calls.includes('boot'), false); assert.equal(f.calls.includes('hold'), false);
+  assert.equal(f.calls.includes('version'), false); assert.equal(f.calls.includes('launch'), false);
+  assert.equal((await service.journal.get('service')).hostedOwner.bindingSha256, f.bindingSha256);
+});
+
+test('hosted owner validates pin, Access references and Task functions before side effects', async t => {
+  const f = await hostedFixture(t);
+  const malformed = [
+    { hostedOwnerBindingSha256: '19'.repeat(31) }, { hostedOwnerBindingSha256: 'AA'.repeat(32) },
+    { hostedOwnerBindingSha256: undefined }, { ownerAlpha: undefined },
+    { accessClientIdFile: undefined }, { accessClientSecretFile: undefined },
+  ];
+  for (const patch of malformed) await assert.rejects(createCodexService({ ...f.config, ...patch }, f.dependencies).start(),
+    { code: 'INVALID_SERVICE_CONFIGURATION' });
+  for (const tasks of [{ hold: async () => {} }, { release: async () => {} }, undefined])
+    await assert.rejects(createCodexService(f.config, { ...f.dependencies, tasks }).start(), { code: 'INVALID_SERVICE_CONFIGURATION' });
+  const { hostedOwnerBindingSha256, ...localAlpha } = f.config;
+  await assert.rejects(createCodexService(localAlpha, f.dependencies).start(), { code: 'INVALID_SERVICE_CONFIGURATION' });
+  assert.deepEqual(f.calls, []);
+  assert.equal((await readdir(f.directory)).includes('journal'), false);
+});
+
+test('hosted owner captures config across status await and retained journal refuses repeat startup', { timeout: 5000 }, async t => {
+  const f = await hostedFixture(t), original = f.dependencies.control.request;
+  let releaseStatus, statusArrived;
+  const arrived = new Promise(resolve => { statusArrived = resolve; });
+  const held = new Promise(resolve => { releaseStatus = resolve; });
+  f.dependencies.control.request = async (type, payload) => {
+    if (type === 'status') { statusArrived(); await held; return original(type, payload); }
+    return original(type, payload);
+  };
+  const service = createCodexService(f.config, f.dependencies), started = service.start();
+  t.after(() => service.stop());
+  await arrived;
+  f.config.hostedOwnerBindingSha256 = '43'.repeat(32); f.config.portalOrigin = 'https://swapped.invalid/';
+  releaseStatus(); await started;
+  assert.deepEqual((await service.journal.get('service')).hostedOwner,
+    { bindingSha256: f.bindingSha256, origin: 'https://hosted-19.invalid' });
+  await service.stop();
+  const count = f.calls.length;
+  await assert.rejects(createCodexService({ ...f.config, hostedOwnerBindingSha256: f.bindingSha256,
+    portalOrigin: 'https://hosted-19.invalid/' }, f.dependencies).start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  assert.equal(f.calls.length, count);
+});
+
+test('failed hosted hold prevents version/native and stop never releases its Task', async t => {
+  const f = await hostedFixture(t); f.failHold();
+  f.dependencies.checkVersion = async () => f.calls.push('version');
+  const service = createCodexService(f.config, f.dependencies);
+  await assert.rejects(service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  assert.equal(f.calls.filter(call => call === 'hold').length, 1);
+  assert.equal(f.calls.includes('version'), false); assert.equal(f.calls.includes('launch'), false);
+  assert.equal(f.calls.includes('release'), false);
+});
+
+for (const boundary of ['version', 'prepare']) test(`hosted hold expiry during ${boundary} blocks native launch without reacquiring`, async t => {
+  const f = await hostedFixture(t);
+  f.dependencies.checkVersion = async () => { if (boundary === 'version') f.advance(120000); };
+  f.dependencies.prepareNative = async () => { f.calls.push('prepare'); f.advance(120000); };
+  const service = createCodexService(f.config, f.dependencies);
+  await assert.rejects(service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  assert.equal(f.calls.includes('prepare'), boundary === 'prepare');
+  assert.equal(f.calls.filter(call => call === 'hold').length, 1);
+  assert.equal(f.calls.includes('launch'), false); assert.equal(f.calls.includes('release'), false);
+});
 
 for (const sleepTool of [false, { enabled: false, mode: 'always_on' }]) test(`restricted service binds exact minimal profile with sleep config ${JSON.stringify(sleepTool)}`, async t => {
   const f = await fixture(t), rpc = f.transport.request;

@@ -62,6 +62,31 @@ match reports `executor_ready:false`; this entrypoint cannot boot, claim, create
 activity holds or invoke a model. Actual hosted execution must separately persist
 and enforce its expected identity before admission; this check does not enable it.
 
+The runtime composition now accepts explicit `hostedOwnerBindingSha256` alongside
+`ownerAlpha`, both private Access credential file references, and a supplied
+Sprites Tasks client. It persists `{bindingSha256, origin}` in the fresh service
+journal before status, compares the authenticated owner digest before boot, and
+requires confirmed activity custody before version checks, native preparation,
+launch and subsequent admission. Hold expiry refuses reacquisition; stop retains
+the Task and unknown work. The expected digest must be computed independently as
+above. Configuration is captured before awaits; retained state cannot reboot.
+This is a tested composition prerequisite, **not a hosted launcher**: the Worker
+still rejects owner-alpha policies under Access auth, and the Sprite HTTP
+entrypoint remains transport-only. The local launcher supplies no Tasks client
+and cannot use this option. No deployment, live hold or account use follows from
+setting the field. Local alpha remains loopback-only and provider-free.
+
+Source check, 2026-09-17 Asia/Jakarta: the official
+[authentication documentation, CLI/headless section](https://developers.openai.com/codex/auth.md)
+explicitly supports ChatGPT device-code login on remote/headless machines and
+also recommends API keys for programmatic automation. This establishes a supported
+same-owner login mechanism, not blanket subscription eligibility for unattended
+hosted workloads or managed resale. Hehebot still forbids paid API fallback and
+copying OAuth caches, including the cache-copy fallback described upstream. Use
+supported login on the actual executing runtime; verify its account/model/limits
+separately. Current web documentation is not proof every new feature exists in
+the pinned 0.154.0 binary.
+
 The smallest future hosted bounded mode should reuse the existing command,
 quota, deadline and native-custody paths, while making these changes explicit:
 

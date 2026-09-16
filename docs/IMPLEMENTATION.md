@@ -4,6 +4,29 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Hosted runtime composition prerequisite (2026-09-17 Asia/Jakarta): optional
+`hostedOwnerBindingSha256` requires an exact lowercase digest, owner-alpha policy,
+both private Access credential files and Tasks hold/release functions. Existing
+fixed-origin HTTPS validation remains authoritative. Fresh service intent persists
+`hostedOwner:{bindingSha256,origin}` before status; owner mismatch refuses boot.
+The config is captured before awaits. This branch uses SpritesActivityGuard,
+including checks before version/native preparation/launch and normal supervisor
+admission. An expired startup hold cannot be silently reacquired. Stop retains
+the Task; sleep and reused journals remain denied. Default local alpha retains
+its loopback/provider-free behavior. Worker Access alpha admission and the Sprite
+execution entrypoint remain disabled; synthetic composition does not activate them.
+Delegated service tests were reviewed; host added expiry across both startup
+await boundaries, a deterministic status barrier, and explicit sleep/retained-Task
+checks.57 focused service/alpha/activity tests pass in
+`.local/hosted-owner-focused-final.log`. The initial host test edit introduced a
+missing brace and referenced a nonexistent activity test filename; corrected
+command passes. Full combined verification exits0 in `.local/hosted-owner-combined.log`:
+1,335 backend/419 runtime tests plus native/browser/service/build checks; the final
+startup-expiry cases were included in that run. Desktop16 pass in
+`.local/hosted-owner-desktop.log`.
+No account/model/provider/deployment action occurred. Live provider containment,
+account eligibility and the separately gated control/launcher contract remain open.
+
 Owner-pinned transport preflight (2026-09-17 Asia/Jakarta): bound Access internal
 status now exposes owner_binding_sha256, not raw binding values. Its canonical
 digest is checked against a fixed independent vector through actual authenticated
