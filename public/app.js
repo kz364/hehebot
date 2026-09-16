@@ -156,7 +156,8 @@ function render(){
  }
  $('routines').replaceChildren();for(const r of items('routine').filter(x=>x.body.persona_id===selected)){
   const card=node('div',undefined,'card');card.append(node('h4',r.body.name),node('span',r.body.enabled?'Scheduled':'Paused','status'),node('p',r.body.schedule?`${r.body.schedule.cron} · ${r.body.schedule.timezone}`:'Event-triggered'),node('p',r.body.instructions));const actions=node('div',undefined,'actions');actions.append(button('Edit',()=>editRoutine(r)),button(r.body.enabled?'Pause':'Enable',()=>act(()=>command('routine.put',{...r.body,expected_revision:r.revision,enabled:!r.body.enabled}))));
-  actions.append(button('Run now',()=>act(()=>command('routine.run',{id:r.id,expected_revision:r.revision}))),button('Delete',()=>{if(confirm(`Delete “${r.body.name}”? Future and queued work will stop. Already active tasks will continue.`))act(()=>command('routine.delete',{id:r.id,expected_revision:r.revision}));},'danger'));
+  const remove=button('Delete',()=>deleteRoutine(r),'danger');remove.disabled=$('connection').textContent!=='Connected';remove.dataset.action='delete-routine';
+  actions.append(button('Run now',()=>act(()=>command('routine.run',{id:r.id,expected_revision:r.revision}))),remove);
   card.append(actions);$('routines').append(card);
  }if(!$('routines').children.length)$('routines').append(node('p','No routines for this bot yet.','muted'));
  $('add-routine').disabled=object?.kind!=='persona';
@@ -360,7 +361,7 @@ $('composer').onsubmit=async event=>{
 };
 function field(label,name,value='',type='text'){const l=node('label',label,'field');let input;if(type==='textarea')input=node('textarea');else{input=node('input');input.type=type;}input.name=name;input.value=value;input.required=true;l.append(input);return l;}
 function selectField(label,name,options,value){const l=node('label',label,'field');const select=node('select');select.name=name;for(const [v,text]of options){const o=node('option',text);o.value=v;select.append(o);}select.value=value;l.append(select);return l;}
-function openEditor(title,fields,save){editing=save;$('editor-title').textContent=title;$('editor-fields').replaceChildren(...fields);$('editor-error').hidden=true;$('editor').showModal();}
+function openEditor(title,fields,save,submitLabel='Save'){editing=save;$('editor-title').textContent=title;$('editor-fields').replaceChildren(...fields);$('editor-error').hidden=true;$('editor-form').querySelector('button[type="submit"]').textContent=submitLabel;$('editor').showModal();}
 const dollars=cents=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
 function renderMonitoring(){
  const m=snapshot.monitoring;$('monitoring-panel').hidden=!m;if(!m)return;
@@ -414,6 +415,16 @@ function editBot(object,duplicate=false){
  fields.push(advanced,node('p','Saving this profile makes no model call or wake request. No introduction is generated.','hint'));
  if(existing)fields.push(button('Duplicate as new bot',()=>{closeEditor();editBot(object,true);},'quiet'));
  $('editor').classList.add('roster-editor');openEditor(duplicate?'Duplicate bot':existing?'Bot instructions':'New bot',fields,form=>command('persona.put',{id,expected_revision:existing?object.revision:0,name:form.get('name'),role:form.get('role'),instructions:form.get('instructions'),tool_policy_ids:existing?source.tool_policy_ids:[],archived:existing?source.archived:false},key));
+}
+function deleteRoutine(routine){
+ const key=crypto.randomUUID(),owner=selected,affirmation=node('label',undefined,'check'),check=node('input');check.type='checkbox';check.name='confirm';check.required=true;
+ affirmation.append(check,document.createTextNode('Delete this routine’s future automation and queued work. Already active tasks will continue.'));
+ openEditor(`Delete routine: ${routine.body.name}`,[node('p',`Routine ${routine.id} · revision ${routine.revision}`,'message-body'),node('p','This does not cancel active tasks or undo external actions. To stop active work, cancel its exact task separately.','review-notice'),affirmation],form=>{
+  const latest=items('routine').find(row=>row.id===routine.id);
+  if($('connection').textContent!=='Connected'||selected!==owner||latest?.revision!==routine.revision||latest?.body.persona_id!==owner)throw new Error('Routine status is stale or changed. Close this editor and review the current routine before deleting.');
+  if(form.get('confirm')!=='on')throw new Error('Confirm deletion of this exact routine.');
+  return command('routine.delete',{id:routine.id,expected_revision:routine.revision},key);
+ },'Delete routine');
 }
 function editRoutine(object){
  const routine=object?.body,persona=routine?.persona_id??selected,id=object?.id??crypto.randomUUID(),key=crypto.randomUUID();

@@ -25,8 +25,25 @@ tests, five Mac source/script checks, all HTTP/native/service modes and build dr
 run. Four Swift XCTest methods passed separately; desktop 16 tests passed.
 Logs: `.local/native-client-integration-combined.log`, `.local/macos-swift-policy-final.log`,
 `.local/native-client-desktop.log`. Native UI was not rendered: Apple frameworks
-are unavailable. Source review found routine Delete's browser `confirm` is denied
-by the native shell; moving it into the portal editor is the next local UI gap.
+are unavailable.
+
+Routine-delete compatibility follow-through (2026-09-16): the portal now uses its
+existing accessible editor instead of `window.confirm`, which the native shell
+denies. It shows the exact routine ID/revision and requires acknowledgement that
+active tasks continue. Submission rechecks current selection, owner, revision and
+observed connection; reconnect does not replay. An explicit retry in the same
+editor preserves the command key. Server authorization remains authoritative for
+races beyond the client's observed snapshot.
+`node scripts/test-portal-routine-delete.mjs` passes with native confirm disabled:
+required acknowledgement, Escape/Enter, stale/offline rejection, sibling isolation,
+same-key uncertain retry and normal Save-label restoration (two synthetic requests,
+one receipt). Schedule/recovery Chromium fixtures also pass; desktop, narrow/offline
+and uncertain-result screenshots were inspected. Logs:
+`.local/routine-delete-{browser,schedule,recovery}.log`. No native WKWebView,
+screen-reader, live deletion or external cancellation acceptance is inferred.
+Combined rerun passed: `.local/routine-delete-combined.log`, 1,154 control / 262
+runtime tests plus compatibility, auditor/Mac source checks, HTTP/native/service
+fixtures and typecheck/build dry run. Final production admission remains false.
 
 WhatsApp transport investigation: the locked MCP SDK 1.30.0's
 [`Protocol.request`](https://github.com/modelcontextprotocol/typescript-sdk/blob/2d889f2b329e46680ec9bdd565de4616c497825a/src/shared/protocol.ts#L681-L834)

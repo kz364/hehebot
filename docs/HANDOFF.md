@@ -21,9 +21,16 @@ unsigned packaging does not activate sandbox entitlements. No worker is pending.
 Combined integration rerun passed in `.local/native-client-integration-combined.log`:
 1,154 control / 262 runtime tests, eight auditor tests, five Mac checks and all
 HTTP/native/service/build modes. It includes `--plan-child`; desktop 16 tests pass.
-Next UI gap: routine Delete uses `confirm` in `public/app.js`; the native shell
-denies JS confirms. Move it into the existing portal editor with current revision/
-selection checks and rendered offline/stale/keyboard coverage before claiming parity.
+Routine Delete now uses the existing portal editor, not the native confirm API.
+The dedicated Chromium fixture passes with confirm disabled: exact ID/revision,
+required acknowledgement, Escape/Enter, stale revision/owner/selection/offline
+rejection, no reconnect replay and same-editor retry with the original command key.
+Two synthetic requests yield one receipt; schedule/recovery fixtures also pass.
+Desktop, narrow/offline and uncertain-result screenshots were inspected. This is
+not real WKWebView acceptance; native checks remain open. Focused logs are
+`.local/routine-delete-{browser,schedule,recovery}.log`.
+Combined rerun passed in `.local/routine-delete-combined.log` (1,154 control / 262
+runtime tests and all compatibility/native/service/build checks; admission false).
 Next transport work must preserve unresolved MCP I/O across SDK timeout/abort;
 see IMPLEMENTATION's pinned SDK investigation. No actual connector was launched.
 Main owns runtime read-boundary work: `authorize` may now return exact Worker

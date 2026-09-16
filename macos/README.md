@@ -21,11 +21,12 @@ Navigation actions (including frames) and navigation responses must have the exa
 
 The navigation allowlist is not a network firewall: portal scripts, fetch/SSE, service workers and subresources remain subject to WebKit and the portal/server's CSP, authentication and authorization. Server-side protections are required even for trusted login origins. Stricter UI denial intentionally may break popup SSO, passkeys, JavaScript-confirmed portal operations, or browser permission-dependent workflows. Cookie/SSO parity is **not claimed**.
 
-Integration found one concrete portal compatibility gap: routine Delete currently
-uses `window.confirm`, so this shell's deny-confirm delegate prevents that action.
-Move that confirmation into the portal's existing accessible editor/dialog flow
-and verify it before claiming routine-management parity. Do not enable arbitrary
-page-to-OS access to hide the gap.
+Routine Delete now uses the portal's accessible editor rather than `window.confirm`.
+The Chromium fixture (`node scripts/test-portal-routine-delete.mjs`) verifies explicit
+acknowledgement, keyboard cancellation/submission, stale/offline rejection and
+same-editor idempotent retry with native confirmation unavailable. This resolves
+the source compatibility gap, not real WKWebView routine-management acceptance.
+Do not enable arbitrary page-to-OS access to hide remaining gaps.
 
 Navigation-level 401/403 responses discard the view and display a rejected-session message. TLS/network failures and WebKit content-process termination also stop rather than automatically reload. Reconnect always creates a fresh view and GETs the configured root; it never calls reload/back, replays a POST, submits a task, retries an effect or infers task completion. A network failure may follow a successfully admitted command: inspect remote task history before resending anything. Login-origin redirects remain allowed so explicitly configured authentication can occur in the same store. The shell cannot see API fetch/SSE 401/403 responses through navigation delegates, or distinguish a server's 200 login page from normal content. API/session revocation and task reconciliation remain portal/control-plane duties; the native lock is available without trusting a page's login claim.
 
