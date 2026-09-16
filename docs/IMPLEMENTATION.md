@@ -45,6 +45,39 @@ Combined rerun passed: `.local/routine-delete-combined.log`, 1,154 control / 262
 runtime tests plus compatibility, auditor/Mac source checks, HTTP/native/service
 fixtures and typecheck/build dry run. Final production admission remains false.
 
+WhatsApp invocation-journal follow-through (2026-09-16):
+`readJournaledWappMcp` is a trusted, unregistered assembly around the scoped read
+boundary. It requires host attempt/operation IDs, a deadline and an authorization
+callback. Inside the existing cancellation envelope it serializes and fsyncs a
+payload-free `whatsappReads` intent in the exact running attempt before upstream
+dispatch. The stored cap includes the initial Worker's tighter deadline. Retained
+IDs are never replayed. Concurrent writes preserve sibling/native fields through
+the existing single-process journal queue; this is not multi-executor fencing.
+
+Only a trusted transport's observed protocol response can record `response`.
+SDK rejection, timeout and late responses leave intent uncertain. A response
+already observed before cancellation may finish its durable write afterward;
+that records invocation termination, not caller success, authorization or browser
+termination. Reads still validate content and recheck authority before release.
+`CodexOperations` projects retained intents as unknown and responses as settled,
+with stable IDs/clocks and the bounded deadline, while coverage remains unknown.
+Root completion cannot erase these records. Corrupt inventories fail closed.
+No chat IDs, queries, message bodies or transport error text enter these records.
+
+Eight new tests and the existing read/operation/journal suites pass (61 total):
+pre-dispatch disk visibility, exact 37ms expiry, late completion, reconstruction,
+replay refusal, concurrent duplicate IDs/siblings, blocked/failed writes, root
+completion and corrupt records. Log: `.local/wapp-operations-focused.log`.
+`bash scripts/verify-codex.sh` passed (1,154 control / 270 runtime tests, all
+compatibility/native/service/build checks, production admission false) in
+`.local/wapp-operations-combined.log`. After expanding only the blocked-write test
+to include response persistence, focused and full runtime suites passed again
+(`.local/wapp-operations-runtime-final.log`, 270 tests). Desktop 16 tests pass.
+Real MCP transport registration, descendant/process termination, successful
+reconciliation and live pairing remain open. The transport callback must not
+resolve on local abort/close; this unit does not assert that an SDK close settled
+anything. The existing plain read helper remains for isolated contract fixtures.
+
 WhatsApp transport investigation: the locked MCP SDK 1.30.0's
 [`Protocol.request`](https://github.com/modelcontextprotocol/typescript-sdk/blob/2d889f2b329e46680ec9bdd565de4616c497825a/src/shared/protocol.ts#L681-L834)
 deletes the response handler and rejects locally on timeout/abort; cancellation

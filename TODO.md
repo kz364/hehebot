@@ -6,11 +6,11 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest checkpoint:** routine deletion moved from native confirmation into the portal editor, 2026-09-16. Chromium checks and inspected desktop/narrow states pass; native WKWebView acceptance remains unverified. Not pushed or deployed.
+- **Latest checkpoint:** payload-free WhatsApp read intent/response journaling and operation projection, 2026-09-16. 61 focused read/operation/journal tests and combined verification pass. Transport registration, browser termination and live acceptance remain open. Not pushed or deployed.
 - **Focused evidence:** **45 runtime/service + 186 control/backup tests passed** after reviewing and applying worker deliveries. **15 WhatsApp reads passed**; disposable 350-package installation, exact approved patch and compatibility checks passed. Logs: `.local/parallel-question-focused.log`, `.local/parallel-control-focused.log`, `.local/wappmcp-locked-focused.log`.
-- **Combined:** `bash scripts/verify-codex.sh` passed **1,154 control / 262 runtime tests**, eight artifact-auditor and five Mac source/script checks, pinned compatibility, scoped HTTPS read fixture, two actual crash/reopen cases, HTTP/native/service fixtures including `--plan-child`, and typecheck/build dry run. Latest log: `.local/routine-delete-combined.log`. Final status passed; production admission false. Desktop **16 passed** and four actual Swift XCTest methods passed at the preceding native-client checkpoint; neither proves native Mac rendering.
+- **Combined:** `bash scripts/verify-codex.sh` passed **1,154 control / 270 runtime tests**, eight artifact-auditor and five Mac source/script checks, pinned compatibility, scoped HTTPS read fixture, two actual crash/reopen cases, HTTP/native/service fixtures including `--plan-child`, and typecheck/build dry run. Latest log: `.local/wapp-operations-combined.log`. Final status passed; production admission false. Desktop **16 passed** this checkpoint; four actual Swift XCTest methods passed at the preceding native-client checkpoint. Neither proves native Mac rendering.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
-- **Next priority:** trusted WhatsApp MCP transport/operation accounting and remaining E01/E02 coverage. All eight worker deliveries are reviewed/integrated; main retains integration/checklist ownership. Credential-free engineering remains; this is not an auth-only boundary.
+- **Next priority:** bind journaled WhatsApp reads into the trusted one-installation transport, independently account for browser/process termination, and continue E01/E02 coverage. All eight worker deliveries are reviewed/integrated; main retains integration/checklist ownership. Credential-free engineering remains; this is not an auth-only boundary.
 - **Latest follow-through:** main's sequential 100-case crash/reopen run passed in 470,837ms (50 precommit/50 committed-response-loss), with cleanup confirmed; the earlier concurrent timeout remains documented. Log: `.local/integrated-crash-sequential-100.jsonl`. License inventory now inspects all 350 SRI-verified artifacts, retaining ten identical aliases without extraction; eight focused tests pass. Legal review remains required.
 - **Latest integration:** child-stream negative contract passes; first-turn child Plan mode is not inherited. Mac source checks (5) and actual Linux Swift policy XCTest methods (4) pass. Optional pinned Swift setup passed twice. No workers remain outstanding. Native Mac compilation/rendering remains unverified. Portal routine-delete, schedule and recovery Chromium fixtures pass; routine deletion no longer requires the denied native confirmation API.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
@@ -30,6 +30,7 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 These are useful foundations that should not be rebuilt simply because their full acceptance gates remain open.
 
+- [x] Unregistered WhatsApp read assembly fsyncs payload-free intent before dispatch, refuses retained operation IDs and projects unresolved reads across reconstruction/root completion. Responses settle only protocol invocations; SDK rejection, timeout and late response do not establish termination. Eight new tests plus existing read/operation/journal suites pass (61 total). No connector launch, process/browser settlement or E09 completion is claimed.
 - [x] Routine deletion uses the accessible portal editor with exact ID/revision, explicit acknowledgement, current selection/owner/revision/offline fencing, and same-editor idempotency key reuse after uncertain response. `node scripts/test-portal-routine-delete.mjs` passed (two synthetic requests, one receipt); schedule/recovery fixtures also pass. Desktop/narrow screenshots inspected. This is Chromium evidence, not native Mac acceptance or proof of external cancellation.
 - [x] Portable Swift client origin/navigation policy compiles and passes four actual XCTest methods on Linux with verified Swift 6.3.3; five source/permission-script checks also pass. `macos/` native source remains unbuilt/unrendered against Apple frameworks; E12 is not closed.
 - [x] Actual spawned-child proposed-plan-tag stream/cancellation contract confirms Default mode, exact child message ownership, stable clocks, no host-journal streaming payload, and continued sleep denial. [Evidence](docs/CODEX_CHILD_PLAN_EVIDENCE.md). This is not child Plan emission or recursive settlement acceptance.
@@ -106,7 +107,10 @@ remains unimplemented. An unregistered scoped read boundary now has synthetic
 contract and cancellation/timeout tests. Host-only canonical UTC `deadlineAt`
 can cap the relative timeout. Worker task-grant/lease/revocation authority is now
 implemented and HTTPS-tested; trusted runtime transport assembly must still bind
-the admitted deadline and account for in-flight MCP operations.
+the admitted deadline and use the new journaled read assembly. This assembly now
+records pre-dispatch intent and observed responses and exposes retained unknown
+invocations through operation snapshots. Browser/process termination, actual MCP
+registration and transport recovery remain unimplemented.
 The owner approved only the pinned upstream 1.34.7 patch; AGENTS.md and SPEC.md
 now contain that exception. `scripts/verify-wappmcp.mjs` pins both tarball hashes
 and source patch hash, verifies clean application in disposable storage and executes

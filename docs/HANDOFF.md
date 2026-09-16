@@ -4,6 +4,20 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+WhatsApp invocation accounting now has an unregistered journaled read assembly in
+`runtime/wappmcp-operations.mjs`. It fsyncs payload-free intent before dispatch,
+requires host IDs/deadline/authorization, rejects retained IDs and preserves unknown
+outcomes across timeout/SDK rejection/reconstruction. Actual protocol responses
+settle invocation only; browser/process termination is independent. Codex operation
+snapshots now include these records and retain the unknown coverage blocker.
+61 focused tests pass, including eight new journal/dispatch cases. Combined rerun
+passed in `.local/wapp-operations-combined.log`: 1,154 control / 270 runtime tests,
+all compatibility/native/service/build checks; admission false. A test-only
+response-write cancellation expansion then passed the focused and full runtime
+suites again (`.local/wapp-operations-runtime-final.log`); desktop 16 tests pass.
+No connector is registered or launched. Next: trusted transport wiring and independently
+verified browser/process lifecycle; never treat SDK abort/close as termination.
+
 Third wave is delivered/reviewed/applied. Both workers used the uploaded
 `.local/next-coverage.bundle` at source local main 9479cb7, not origin/main.
 Child worker `T-01a0a864-4f76-7568-979b-816d30d8c194` delivered the fixture and

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readQuietPhases } from './codex-quiet-phases.mjs';
+import { readWappMcpOperations } from './wappmcp-operations.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const entries = value => {
@@ -54,6 +55,11 @@ export class CodexOperations {
     add(['root'], 'inference', row?.rootSettled === true ? 'settled'
       : row?.status === 'cancelling' ? 'cancelling' : row?.status === 'running' ? 'active' : 'unknown');
     if (!row) return operations;
+    for (const [id, record] of Object.entries(readWappMcpOperations(row.whatsappReads))) {
+      add(['whatsappRead', id], 'tool', record.status === 'response' ? 'settled' : 'unknown',
+        { startedAt: record.startedAt, lastProgressAt: record.startedAt });
+      operations.at(-1).deadline_at = new Date(Math.min(Date.parse(record.deadlineAt), Date.parse(deadlineAt))).toISOString();
+    }
     if (row.initialInference !== undefined) {
       if (!['inProgress', 'completed'].includes(row.initialInference)) fail('INVALID_OPERATION_TIMING');
       const start = new Date(startedAt).toISOString();

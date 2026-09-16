@@ -80,7 +80,7 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
       if (authorize) await checkAuthority();
       if (controller.signal.aborted || signal?.aborted || Date.now() >= deadline) { stop(); return; }
       let value;
-      try { value = await call(name, { ...admitted }, { signal: controller.signal }); }
+      try { value = await call(name, { ...admitted }, { signal: controller.signal, deadlineAt: new Date(deadline).toISOString() }); }
       catch { fail('WHATSAPP_READ_FAILED'); }
       if (controller.signal.aborted || signal?.aborted || Date.now() >= deadline) { stop(); return; }
       if (authorize) await checkAuthority();
