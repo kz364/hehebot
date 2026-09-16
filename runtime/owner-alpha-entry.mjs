@@ -37,6 +37,9 @@ export async function runOwnerAlpha(config, { createService = createCodexService
   wait = ms => new Promise(resolveWait => setTimeout(resolveWait, ms)) } = {}) {
   config = structuredClone(config);
   const policy = ownerAlphaPolicy(config.ownerAlpha);
+  // V1 native tools can target foreign live thread IDs in the same app-server.
+  // Scripted service fixtures do not establish independent-task authority.
+  if (policy.background_first_root) fail('OWNER_BACKGROUND_AUTHORITY_UNVERIFIED');
   if (config.disposableTest !== undefined || config.restrictedPermissions !== undefined ||
       Object.keys(config.personas ?? {}).length !== 1 || !config.personas?.[policy.persona_id] ||
       Date.parse(policy.expires_at) <= now() || Date.parse(policy.expires_at) > now() + 300000) fail('INVALID_OWNER_ALPHA_CONFIGURATION');

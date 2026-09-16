@@ -242,6 +242,9 @@ export function createCodexService(config, dependencies) {
           sleepReadiness: () => adapter.sleepReadiness(),
           cancel: id => adapter.cancel(id),
           submit: async input => {
+            input = { ...input };
+            const background = Object.hasOwn(input, 'ownerAlphaBackground');
+            if (background && (input.ownerAlphaBackground !== true || alpha?.background_first_root !== true)) fail('OWNER_ALPHA_ADMISSION_DENIED');
             supervisor.assertLease();
             if (permissions) {
               const contents = await readFile(join(home, 'config.toml')).catch(error => {
@@ -253,6 +256,8 @@ export function createCodexService(config, dependencies) {
             }
             const row = await journal.get(supervisor.bridge.cursor);
             if (row?.attemptId !== input.attemptId || !row.claim?.run) fail('CLAIM_IDENTITY_MISMATCH');
+            if (Object.hasOwn(row.claim, 'owner_alpha_background') !== background ||
+                Object.hasOwn(row.claim, 'owner_alpha_background') && row.claim.owner_alpha_background !== true) fail('OWNER_ALPHA_ADMISSION_DENIED');
             const run = row.claim.run, persona = config.personas[run.persona_id];
             if (!persona) fail('NATIVE_PERSONA_UNMAPPED');
             if (alpha) {

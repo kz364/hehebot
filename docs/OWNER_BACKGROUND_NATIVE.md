@@ -1,6 +1,13 @@
 # Bounded owner background native prerequisite
 
-`scripts/test-codex-owner-background.mjs` is a credential-free behavioral prerequisite for a future bounded owner-background path. It runs pristine Codex app-server **0.154.0** against a scripted loopback Responses endpoint in a disposable home and workspace. It performs no account login, actual model/provider call, Worker/service admission, connector action, or production activation.
+**Live background entry is blocked.** Pinned V1 tools can target another live root
+when given its raw thread ID. Spawn capacity/depth and host cancellation routing
+do not enforce independently admitted task authority. The scripted checks below
+remain useful lifecycle evidence, not permission to use V1 background mode live.
+`runOwnerAlpha` refuses it before filesystem/service/account work with
+`OWNER_BACKGROUND_AUTHORITY_UNVERIFIED`. Default root-only alpha is unchanged.
+
+`scripts/test-codex-owner-background.mjs` is a credential-free behavioral prerequisite for the bounded owner-background path. It runs pristine Codex app-server **0.154.0** against a scripted loopback Responses endpoint in a disposable home and workspace. This native-only fixture performs no account login, actual model/provider call, Worker/service admission, connector action, or production activation. A separate integrated service check is documented below.
 
 ## Contract under test
 
@@ -48,13 +55,72 @@ The strengthened host fixture exited 0 with seven scripted model requests and ze
 
 Per-thread readback was `multi_agent=true, multi_agent_v2=false` for A and its child, and both false for S. Child source named A's exact thread as parent at depth 1. The run used distinct A, child, and S thread/turn identities; those UUIDs are intentionally emitted per run rather than treated as stable documentation. Cleanup interrupted the exact held child turn, observed zero active turns and one of one held HTTP request closed, then observed the native process stopped. The pre/post config SHA-256 values were identical. Host evidence: `.local/owner-background-native-host.log`.
 
-The host must still choose and durably bind the single background-capable root;
-enabling this override for every independent root would permit one child per root,
-not one installation-wide background child. Current owner-alpha policy, service
-and Worker admission remain root-only. Integrating a separately opt-in bounded
-policy must preserve exact task grants, shared deadlines, all-family operation
-accounting, cancellation, quota and unknown outcomes before any live use.
+Enabling this override for every independent root would permit one child per root,
+not one installation-wide background child. The service integration below selects
+only one root durably. Default owner alpha remains root-only.
 
 ## Non-claims
 
 This is not evidence of an app-server-global child cap, tool/effect settlement, real authentication or model judgment, service/control-plane integration, safe sleep, recursive termination beyond observed cleanup, filesystem sandbox completeness, provider behavior, or production readiness. Production execution/native-verification flags remain false.
+
+## Opt-in service integration (2026-09-16)
+
+An immutable owner-alpha policy may explicitly add `background_first_root: true`.
+Only literal true is accepted when present; absence preserves old serialization
+and root-only behavior. `admitted_run_ids[0]` selects the first durably admitted
+coordinator within the existing atomic claim/quota transaction. Only that claim
+carries `owner_alpha_background: true`; the bridge maps it to the native input's
+`ownerAlphaBackground: true`. The service compares the input against persisted
+claim and policy. The adapter captures it before awaits, fingerprints it, and
+merges the exact agents/features override with the original task MCP config.
+No model text, family ordering or root completion can select another root.
+
+The ledger accepts same-persona direct observations under that selected root,
+with the exact parent attempt, boot/epoch, native receipt, ancestry and inherited
+deadline checked on authorization and reconstruction. Children do not consume
+root quota. This is a concurrent native cap, not a one-child-ever allowance;
+observed child bookkeeping must not discard later or cancelled work. Late
+observations remain cancelling; owner/context revocation takes precedence over
+deadline expiry. Root cancellation propagates before authenticated callbacks and
+watchdog processing, preserving grace anchors and unknown operations. Repeated
+already-propagated cancellation performs no writes.
+
+Read-MCP calls share the admitted root's immutable logical-task grant; their
+receipts are task-level, not authenticated per-child provenance. Mutations,
+effects, complete and sleep remain denied. No live session has used this option.
+
+Run `bash scripts/test-codex-service.sh --owner-alpha-background`. Host result
+`.local/owner-background-integration-final.log` passes seven loopback requests:
+actual browser message → private HTTPS Worker/SQLite → selected native root/child,
+successful inherited routine read, independent status reply with exact A summary,
+actual status-root spawn denial, reload without inference, separate B admission,
+exact B and old-A cancellation, three retained families and25 heartbeat operations.
+It verifies three root admissions plus one child, distinct immutable grants,
+unchanged global root-only config, no provider holds, three unknown coverage
+records, no run.result and denied sleep. Both native fixtures are now in the
+combined verifier. This is scripted service/control integration, not real-model
+judgment, complete settlement, live hosted readiness or production acceptance.
+
+## Cross-root authority blocker
+
+Pinned V1 `send_input` uses global [get_thread](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control.rs#L200-L228)
+without local registry membership; `close_agent` also globally
+[looks up and shuts down the supplied ID](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control/legacy.rs#L46-L98).
+V1 `wait_agent` can subscribe to foreign status. UUID secrecy is not authority.
+There is no public per-tool filter to retain spawn while removing these V1 tools;
+the [V1 tool set is fixed](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/tools/spec_plan.rs#L655-L689).
+This is pinned-source evidence; the initial native fixture did not attempt it.
+
+V2's message/follow-up [delivery](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control/delivery.rs#L72-L107)
+and [interrupt](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control/interrupt.rs#L25-L54)
+paths check `ensure_agent_known` before global access. This is a candidate, not an
+adopted replacement: V2 capacity/depth/residency and actual foreign-ID denials
+need behavioral verification before changing the service. No dependency patch,
+prompt-only restriction or guessed-ID assumption is an acceptable fix.
+
+The combined verifier passed 1,297 control/380 runtime tests and all scripted
+checks, including root cancellation reaching its held child, in
+`.local/owner-background-combined.log`. The subsequent live-entry gate passes
+24 focused tests in `.local/owner-background-live-gate.log`; the full combined
+suite was not repeated for that gate. Both results retain all production flags
+false and do not resolve this authority blocker.

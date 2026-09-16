@@ -64,19 +64,30 @@ export class CodexAdapter {
   }
   async submit(input) {
     const keys = ['attemptId', 'installationId', 'personaId', 'scope', 'scopeId', 'message', 'model'];
-    if (!input || Object.keys(input).some(key => !keys.includes(key)) ||
+    if (!input || Object.keys(input).some(key => !keys.includes(key) && key !== 'ownerAlphaBackground') ||
+        Object.hasOwn(input, 'ownerAlphaBackground') && input.ownerAlphaBackground !== true ||
         !['attemptId', 'installationId', 'personaId', 'scopeId'].every(key => /^[a-zA-Z0-9_-]{1,128}$/.test(input[key] ?? '')) ||
         !['routine', 'conversation'].includes(input.scope) || typeof input.message !== 'string' ||
         !input.message.trim() || input.message.length > 100000 ||
         typeof input.model !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(input.model)) fail('INVALID_SUBMISSION');
+    // Capture before journal/RPC awaits; the fingerprint and native grant must agree.
+    input = { ...input };
+    const background = Object.hasOwn(input, 'ownerAlphaBackground');
+    if (background && this.#ownerAlpha?.background_first_root !== true) fail('OWNER_ALPHA_ADMISSION_DENIED');
     if (!this.admissionReadiness().allowed) fail('COMPATIBILITY_GATE_BLOCKED');
     if (this.#ownerAlpha && (this.#now() >= Date.parse(this.#ownerAlpha.expires_at) ||
         input.scope !== 'conversation' || input.scopeId !== this.#ownerAlpha.persona_id)) fail('OWNER_ALPHA_ADMISSION_DENIED');
     const values = keys.map(key => input[key]);
     const legacyFingerprintInput = Object.keys(this.mcpServers).length ? [values, this.dynamicTools, this.mcpServers]
       : this.dynamicTools.length ? [values, this.dynamicTools] : values;
-    const fingerprint = hash(this.#permissionsProfile === undefined ? legacyFingerprintInput
-      : [legacyFingerprintInput, { permissionsProfile: this.#permissionsProfile, ...(this.#ownerAlpha ? { ownerAlpha: this.#ownerAlpha } : {}) }]);
+    const fingerprintInput = this.#permissionsProfile === undefined ? legacyFingerprintInput
+      : [legacyFingerprintInput, { permissionsProfile: this.#permissionsProfile, ...(this.#ownerAlpha ? { ownerAlpha: this.#ownerAlpha } : {}) }];
+    const fingerprint = hash(background ? [fingerprintInput, { ownerAlphaBackground: true }] : fingerprintInput);
+    const config = {
+      ...(Object.keys(this.mcpServers).length ? { mcp_servers: this.mcpServers } : {}),
+      ...(background ? { agents: { enabled: true, max_concurrent_threads_per_session: 1, max_depth: 1 },
+        features: { multi_agent: true, multi_agent_v2: false } } : {}),
+    };
     const prior = await this.journal.putIfAbsent(input.attemptId, {
       attemptId: input.attemptId, fingerprint, status: 'thread_unknown', threadId: null,
       nativeRunId: null, rootSettled: false, cancelAcknowledged: false,
@@ -91,7 +102,7 @@ export class CodexAdapter {
         cwd: this.cwd, model: input.model, approvalPolicy: 'untrusted', ephemeral: false,
         ...(this.#permissionsProfile === undefined ? { sandbox: 'read-only' } : { permissions: this.#permissionsProfile }),
         ...(this.dynamicTools.length ? { dynamicTools: this.dynamicTools } : {}),
-        ...(Object.keys(this.mcpServers).length ? { config: { mcp_servers: this.mcpServers } } : {}),
+        ...(Object.keys(config).length ? { config } : {}),
       });
       if (typeof started?.thread?.id !== 'string' || !started.thread.id) fail('CODEX_PROTOCOL_ERROR');
       // Persist the native thread before turn/start; even a successful thread start is not inference.

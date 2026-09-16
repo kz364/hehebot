@@ -74,7 +74,10 @@ export class ExecutionBridge {
       catch { return this.journal.update(this.cursor, { phase: 'claim_unknown' }); }
       if (claim === null) return this.journal.update(this.cursor, { phase: 'complete' });
       if (!claim?.run?.id || !Number.isSafeInteger(claim.run.current_attempt) ||
-          claim.submission_key !== `${claim.run.id}:${claim.run.current_attempt}`) fail('INVALID_CLAIM');
+          claim.submission_key !== `${claim.run.id}:${claim.run.current_attempt}` ||
+          Object.hasOwn(claim, 'owner_alpha_background') && claim.owner_alpha_background !== true) fail('INVALID_CLAIM');
+      claim = structuredClone(claim);
+      const background = Object.hasOwn(claim, 'owner_alpha_background');
       await this.journal.update(this.cursor, { phase: 'claimed', claim });
       const persona = this.personas[claim.run.persona_id];
       if (!persona?.agentId || !persona.model) fail('NATIVE_PERSONA_UNMAPPED');
@@ -82,6 +85,7 @@ export class ExecutionBridge {
       const input = {
         attemptId: hash([this.installationId, claim.submission_key]), installationId: this.installationId,
         personaId: persona.agentId, model: persona.model,
+        ...(background ? { ownerAlphaBackground: true } : {}),
         scope: claim.run.routine_id ? 'routine' : 'conversation',
         scopeId: claim.run.routine_id ?? context.room_id ?? claim.run.persona_id,
         message: JSON.stringify({ ...context, skills: (context.skills ?? []).map(skill => ({

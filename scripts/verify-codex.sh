@@ -39,6 +39,7 @@ node scripts/test-codex-tools.mjs --supervisor
 node scripts/test-codex-tools.mjs --supervisor-child
 bash scripts/test-codex-service.sh
 bash scripts/test-codex-service.sh --owner-alpha-multi
+bash scripts/test-codex-service.sh --owner-alpha-background
 bash scripts/test-codex-service.sh --submission-ack
 bash scripts/test-codex-service.sh --operation-pages
 bash scripts/test-codex-service.sh --reasoning

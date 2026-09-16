@@ -32,20 +32,23 @@ export class NativeTaskLedger {
   return this.store.run(run.id);
  }
  register(identity:Identity,input:NativeChildReceipt,started=false):Run {
-  requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Owner alpha does not admit native children.');
+  requireThat(!this.core.ownerAlpha.policy||this.core.ownerAlpha.policy.background_first_root,'CAPABILITY_UNAVAILABLE','Owner alpha does not admit native children.');
   return this.store.db.transaction(()=>{
    this.lifecycle.authorizeAttempt(identity,input.parent_run_id,input.parent_attempt);
    const parent=this.store.run(input.parent_run_id);
+   requireThat(!this.core.ownerAlpha.policy||this.core.ownerAlpha.backgroundRoot(parent.id)&&parent.role==='coordinator'&&input.persona_id===parent.persona_id,'FORBIDDEN','Owner-alpha child must belong directly to the selected root and persona.',403);
    requireThat(parent.current_attempt===input.parent_attempt,'STALE_EPOCH','Native parent attempt is no longer current.');
    requireThat(input.persona_id===parent.persona_id||parent.role==='coordinator'&&this.core.options.delegations?.[parent.persona_id]?.includes(input.persona_id),'FORBIDDEN','Native delegation target is not authorized.',403);
    requireThat(input.native_run_ref.length>0&&input.native_run_ref.length<=256&&input.native_session_key.length>0&&input.native_session_key.length<=512&&input.title.length>0&&input.title.length<=200,'INVALID_INPUT','Invalid native child receipt.',422);
    const existing=this.store.db.all<{run_id:string;parent_run_id:string;parent_attempt:number;native_session_key:string}>('SELECT * FROM native_task_links WHERE native_run_ref=?',input.native_run_ref)[0];
-   if(existing){requireThat(existing.parent_run_id===parent.id&&existing.parent_attempt===input.parent_attempt&&existing.native_session_key===input.native_session_key&&this.store.run(existing.run_id).persona_id===input.persona_id,'IDEMPOTENCY_CONFLICT','Native child identity was reused.');const run=this.store.run(existing.run_id);return started?this.acknowledgeStart(identity,input,run):run;}
+   if(existing){requireThat(existing.parent_run_id===parent.id&&existing.parent_attempt===input.parent_attempt&&existing.native_session_key===input.native_session_key&&this.store.run(existing.run_id).persona_id===input.persona_id,'IDEMPOTENCY_CONFLICT','Native child identity was reused.');this.core.ownerAlpha.authorize(existing.run_id,1);const run=this.store.run(existing.run_id);return started?this.acknowledgeStart(identity,input,run):run;}
    const oldContext=JSON.parse(parent.context_json) as ContextSnapshot;
    const context=input.persona_id===parent.persona_id?{...oldContext,instruction:input.title}:this.core.context(input.persona_id,input.title,null,oldContext.room_id);
    const id=this.core.options.uuid(),now=this.core.now();
    const deadline=this.store.db.all<{deadline_at:string}>('SELECT deadline_at FROM attempts WHERE run_id=? AND attempt=?',parent.id,input.parent_attempt)[0].deadline_at;
-   const cancelCode=deadline<=now?'DEADLINE_EXCEEDED':['cancelled','cancelling','recovery_required'].includes(parent.status)?parent.error_code??'OWNER_CANCELLED':null;
+   // Revoked alpha context stays revoked even when its deadline also expired.
+   const revoked=this.core.ownerAlpha.policy&&['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(parent.error_code??'');
+   const cancelCode=revoked?parent.error_code:deadline<=now?'DEADLINE_EXCEEDED':['cancelled','cancelling','recovery_required'].includes(parent.status)?parent.error_code??'OWNER_CANCELLED':null;
    const cancellation=cancelCode!==null;
    this.store.db.exec("INSERT INTO runs(id,command_id,persona_id,routine_id,context_json,status,current_attempt,error_code,created_at,updated_at,role,parent_run_id,title) VALUES(?,?,?,?,?,?,1,?,?,?,'background',?,?)",id,parent.command_id,input.persona_id,input.persona_id===parent.persona_id?parent.routine_id:null,JSON.stringify(context),cancellation?'cancelling':'claimed',cancelCode,now,now,parent.id,input.title);
    this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,native_run_ref,epoch,boot_id,status,deadline_at,started_at) VALUES(?,1,?,?,?,?,?,?,?)",id,`native:${input.native_run_ref}`,input.native_run_ref,identity.epoch,identity.boot_id,'claimed',deadline,now);

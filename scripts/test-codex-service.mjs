@@ -18,10 +18,11 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { inspectCodexRecovery } from '../runtime/codex-recovery-inspect.mjs';
 
 const root = resolve(import.meta.dirname, '..');
+const ownerAlphaBackgroundMode = process.argv.includes('--owner-alpha-background');
 const ownerAlphaMultiMode = process.argv.includes('--owner-alpha-multi');
-const ownerAlphaMode = process.argv.includes('--owner-alpha') || ownerAlphaMultiMode;
+const ownerAlphaMode = process.argv.includes('--owner-alpha') || ownerAlphaMultiMode || ownerAlphaBackgroundMode;
 const restrictedMode = process.argv.includes('--restricted-background') || ownerAlphaMode;
-const backgroundMode = process.argv.includes('--background-responsive') || process.argv.includes('--restricted-background');
+const backgroundMode = process.argv.includes('--background-responsive') || process.argv.includes('--restricted-background') || ownerAlphaBackgroundMode;
 const effectsMode = process.argv.includes('--child-effects');
 const historyChildMode = process.argv.includes('--history-child');
 const planChildMode = process.argv.includes('--plan-child');
@@ -39,7 +40,7 @@ const browserSession = `service-${randomUUID().slice(0, 8)}`;
 const browser = (...args) => promisify(execFile)('agent-browser', ['--session', browserSession, '--ignore-https-errors', ...args], { timeout: 30000 });
 const expectedToolCalls = operationPagesMode ? 101 : 1;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback', '--background-responsive', '--restricted-background', '--owner-alpha', '--owner-alpha-multi'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback', '--background-responsive', '--restricted-background', '--owner-alpha', '--owner-alpha-multi', '--owner-alpha-background'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -98,11 +99,13 @@ const statusOutput = 'SERVICE_STATUS_PROVISIONAL_71: A remains active; this is n
 const alphaFirstText = 'OWNER_ALPHA_MULTI_FIRST_19', alphaSecondText = 'OWNER_ALPHA_MULTI_SECOND_43';
 const alphaOutputs = new Map();
 const interrupts = [], notifications = [];
+const nativeStarts = [];
 const errors = [], taskRequests = [];
 try {
   const workerPort = await port(), token = randomBytes(32).toString('hex');
   const ownerAlpha = { session_id: randomUUID(), persona_id: '11111111-1111-4111-8111-111111111111',
-    expires_at: new Date(Date.now() + 300000).toISOString(), max_runs: ownerAlphaMultiMode ? 2 : 1, max_task_seconds: 15 };
+    expires_at: new Date(Date.now() + 300000).toISOString(), max_runs: ownerAlphaBackgroundMode ? 3 : ownerAlphaMultiMode ? 2 : 1,
+    max_task_seconds: ownerAlphaBackgroundMode ? 120 : 15, ...(ownerAlphaBackgroundMode ? { background_first_root: true } : {}) };
   const routinePolicy = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
   const cert = join(directory, 'cert.pem'), key = join(directory, 'key.pem');
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
@@ -120,7 +123,9 @@ try {
   const origin = `https://127.0.0.1:${workerPort}`;
   dispatcher = new Agent({ connect: { ca: await readFile(cert) } });
   const trustedFetch = (url, init) => fetch(url, { ...init, dispatcher });
-  const state = await (await trustedFetch(`${origin}/v1/state`)).json();
+  const initialState = await trustedFetch(`${origin}/v1/state`);
+  assert.equal(initialState.status, 200, 'Worker must accept the explicit fixture policy before any inference');
+  const state = await initialState.json();
   const persona = state.objects.find(object => object.kind === 'persona');
   const adopted = await (await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
     'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
@@ -167,7 +172,7 @@ try {
       const chunks = []; for await (const chunk of req) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString());
       report.modelRequests++;
-      assert.ok(report.modelRequests <= (ownerAlphaMultiMode ? 4 : backgroundMode ? 6 : childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2), 'Unexpected model continuation');
+      assert.ok(report.modelRequests <= (ownerAlphaBackgroundMode ? 7 : ownerAlphaMultiMode ? 4 : backgroundMode ? 6 : childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2), 'Unexpected model continuation');
       await wait(() => bound, 'service acknowledged root');
       const actualContexts = body.input.filter(item => item.role === 'user').flatMap(item => {
         const content = typeof item.content === 'string' ? [item.content] : (item.content ?? []).map(part => part.text);
@@ -216,6 +221,16 @@ try {
           assert.ok(summary, 'Actual S model input contains A task summary');
           assert.equal(summary.status, 'running');
           assert.equal(summary.title, backgroundChild.title);
+          if (ownerAlphaBackgroundMode) {
+            const denial = body.input.find(item => item.type === 'function_call_output' && item.call_id === 'forbidden_status_spawn');
+            if (!denial) {
+              await send(res, [{ id: 'fc_forbidden_status_spawn', type: 'function_call', status: 'completed',
+                call_id: 'forbidden_status_spawn', name: 'spawn_agent', arguments: JSON.stringify({ message: 'FORBIDDEN_STATUS_CHILD' }) }]);
+              return;
+            }
+            assert.equal(denial.output, 'unsupported call: spawn_agent');
+            report.statusRootSpawnDenied = true;
+          }
           report.statusModelSawChildSummary = true;
           await send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
             content: [{ type: 'output_text', text: statusOutput, annotations: [] }] }]);
@@ -266,8 +281,9 @@ try {
         if (toolRequests === 0) {
           await wait(async () => Object.values((await service.observe()).childObligations ?? {}).some(child => child.initialInference === 'inProgress'), 'child initial phase');
           const phases = (await service.supervisor.operations()).filter(operation => operation.kind === 'inference' && operation.status === 'active');
-          assert.equal(phases.length, 1);
-          assert.equal(Date.parse(phases[0].deadline_at) - Date.parse(phases[0].started_at), 300000);
+          assert.equal(phases.length, 1); // Child lifetime is kind=child, unlike root lifetime.
+          if (ownerAlphaBackgroundMode) assert.ok(phases.every(op => op.deadline_at === dispatched.claim.deadline_at));
+          else assert.equal(Date.parse(phases[0].deadline_at) - Date.parse(phases[0].started_at), 300000);
           report.childInitialSilenceBounded = true;
         }
       } else assert.match(JSON.stringify(body.input), /SERVICE_ASSEMBLY_19_43/);
@@ -299,7 +315,7 @@ try {
           }, 'post-tool quiet phase');
           const phases = (await service.supervisor.operations()).filter(operation => operation.kind === 'inference' &&
             operation.status === 'active' && Date.parse(operation.deadline_at) === Math.min(Date.parse(dispatched.claim.deadline_at), Date.parse(operation.started_at) + 300000));
-          assert.equal(phases.length, ownerAlphaMode ? 2 : 1); report.postToolSilenceBounded = true;
+          assert.equal(phases.length, ownerAlphaMode && !childMode ? 2 : 1); report.postToolSilenceBounded = true;
         }
         if (questionsMode) {
           const tool = body.tools.find(tool => tool.name === 'request_user_input' || tool.tools?.some(nested => nested.name === 'request_user_input'));
@@ -480,6 +496,7 @@ try {
       nativeTransport = transport; nativeLaunches++;
       transport.on('notification', notification => notifications.push(notification));
       transport.request = (method, params) => {
+        if (method === 'thread/start') nativeStarts.push(structuredClone(params));
         if (method === 'turn/interrupt') interrupts.push(structuredClone(params));
         if (planMode && method === 'initialize') params = { ...params, capabilities: { ...params.capabilities, experimentalApi: true } };
         if (planMode && method === 'turn/start') params = { ...params,
@@ -498,6 +515,7 @@ try {
     assert.ok(dispatched.claim.deadline_at <= ownerAlpha.expires_at);
     assert.equal((await control.request('status', {})).execution_enabled, false);
     report.ownerAlphaAdmission = true;
+    assert.equal(dispatched.claim.owner_alpha_background, ownerAlphaBackgroundMode ? true : undefined);
   }
   if (restrictedMode) {
     const { permissions } = await service.journal.get('service');
@@ -513,6 +531,11 @@ try {
     assert.equal(readback.config.web_search, 'disabled');
     for (const key of ['apps', 'plugins', 'tool_suggest', 'image_generation', 'standalone_web_search',
       'token_budget', 'request_permissions_tool', 'exec_permission_approvals']) assert.equal(readback.config.features[key], false);
+    if (ownerAlphaBackgroundMode) {
+      assert.equal(readback.config.agents.enabled, false);
+      assert.equal(readback.config.features.multi_agent, false);
+      assert.equal(readback.config.features.multi_agent_v2, false);
+    }
     report.providerSurfacesDisabled = true;
     report.restrictedProfileSelected = true;
   }
@@ -680,7 +703,9 @@ try {
     assert.deepEqual(await service.observe(p.attemptId), parent);
     assert.equal(childClosed, false);
     assert.notEqual((await service.journal.get(service.supervisor.bridge.cursor)).attemptId, p.attemptId);
-    await cancel(backgroundChild.id);
+    // Alpha proves owner cancellation of the released root reaches its live child.
+    // Existing background mode retains direct old-child cancellation coverage.
+    await cancel(ownerAlphaBackgroundMode ? queued.resource_id : backgroundChild.id);
     await wait(() => childClosed, 'old A interrupted HTTP closure');
     await wait(async () => (await service.observe(p.attemptId)).childTurns[childKey] === 'interrupted', 'old A exact native interruption');
     await service.maintain(); await service.maintain();
@@ -688,7 +713,7 @@ try {
     const operations = await assertCoverage();
     await assert.rejects(service.supervisor.drain({ state: 'background-responsive' }), { code: 'SLEEP_DENIED' });
     const final = await getState();
-    assert.equal(final.runs.find(run => run.id === queued.resource_id).status, 'running');
+    assert.equal(final.runs.find(run => run.id === queued.resource_id).status, ownerAlphaBackgroundMode ? 'cancelling' : 'running');
     assert.equal(final.runs.find(run => run.id === statusReceipt.resource_id).status, 'running');
     for (const id of [backgroundChild.id, independentReceipt.resource_id]) assert.equal(final.runs.find(run => run.id === id).status, 'cancelling');
     const history = await (await trustedFetch(`${origin}/v1/conversations/${persona.id}/events`)).json();
@@ -696,8 +721,28 @@ try {
     for (const text of ['SERVICE_ASSEMBLY_19_43', statusText, independentText]) {
       assert.equal(history.events.filter(event => event.type === 'message.user' && event.payload.text === text).length, 1);
     }
-    assert.equal(report.modelRequests, 6); assert.equal(nativeLaunches, 1); assert.deepEqual(errors, []);
-    assert.deepEqual(taskRequests, ['PUT', 'GET']);
+    assert.equal(report.modelRequests, ownerAlphaBackgroundMode ? 7 : 6); assert.equal(nativeLaunches, 1); assert.deepEqual(errors, []);
+    assert.deepEqual(taskRequests, ownerAlphaBackgroundMode ? [] : ['PUT', 'GET']);
+    if (ownerAlphaBackgroundMode) {
+      assert.equal(final.summary.owner_alpha_session.admitted_runs, 3, 'Child does not consume root quota');
+      assert.equal(final.runs.length, 4);
+      assert.deepEqual([p, s, b].map(row => row.claim.owner_alpha_background), [true, undefined, undefined]);
+      assert.equal(nativeStarts.length, 3);
+      assert.deepEqual(nativeStarts[0].config.agents, { enabled: true, max_concurrent_threads_per_session: 1, max_depth: 1 });
+      assert.deepEqual(nativeStarts[0].config.features, { multi_agent: true, multi_agent_v2: false });
+      for (const started of nativeStarts.slice(1)) {
+        assert.equal(started.config.agents, undefined);
+        assert.equal(started.config.features, undefined);
+      }
+      for (const [index, family] of [p, s, b].entries()) {
+        assert.equal(nativeStarts[index].config.mcp_servers.hehebot.env.HEHEBOT_AGENT_TOOLS_CONFIG,
+          service.journal.path(`grant-${family.attemptId}`));
+      }
+      assert.equal(report.statusRootSpawnDenied, true);
+      assert.equal(final.runs.find(run => run.id === backgroundChild.id).error_code, 'OWNER_CANCELLED');
+      report.rootCancellationReachedChild = true;
+      report.ownerAlphaBackground = true;
+    }
     Object.assign(report, { backgroundResponsive: true, exactIndependentCancellation: true, exactOldChildCancellation: true,
       familyCount: 3, heartbeatOperations: operations.length, unknownCoverage: 3, sleepDenied: true,
       completedResultObserved: false, productionCompletion: false, p02Complete: false });

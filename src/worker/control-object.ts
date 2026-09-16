@@ -125,7 +125,7 @@ export class PersonalControl extends DurableObject<Env> {
   const command=input as RuntimeCommand;
   const alpha=this.core.ownerAlpha.policy;
   if(command.type==='status'){const state=this.lifecycle.get();return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{})};}
-  requireThat(this.core.options.executionEnabled||alpha&&['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','steer-pending','agent-routines','agent-skill'].includes(command.type),'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified for this operation.');
+  requireThat(this.core.options.executionEnabled||alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','steer-pending','agent-routines','agent-skill'].includes(command.type)||alpha.background_first_root&&command.type==='native-child'),'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified for this operation.');
   if(command.type==='whatsapp-read-authorize')return new WhatsAppReadAccess(this.core,this.lifecycle).authorize(command.payload);
   let result:unknown={ok:true};
   switch(command.type){

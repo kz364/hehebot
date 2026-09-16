@@ -4,6 +4,24 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+IMPORTANT: V1 background is NOT safe for independent-task authority. After the
+integration passed, pinned source review found raw foreign thread IDs reach
+global ThreadManager through V1 send_input/close_agent/wait_agent without tree
+membership checks. No supported spawn-only filter exists. Host added a live-entry
+gate: runOwnerAlpha rejects background_first_root before filesystem/service/account
+work with OWNER_BACKGROUND_AUTHORITY_UNVERIFIED.24 focused tests pass after the
+full combined run. Do not remove this gate based on earlier scripted success.
+Details/citations: OWNER_BACKGROUND_NATIVE.md#cross-root-authority-blocker.
+
+Active [V2 native worker](https://ampcode.com/threads/T-01a0ab2c-d340-7198-8811-fbb800f5ed2c)
+owns only new scripts/test-codex-owner-background-v2.mjs and
+docs/OWNER_BACKGROUND_V2_NATIVE.md. It uses the existing79d93fd bundle plus host
+native fixture reference. It must prove actual foreign-UUID denials, positive
+same-tree calls, one active child/capacity/depth and cleanup. Source says V2
+ensure_agent_known guards message/followup/interrupt; V2 has no close_agent.
+Capacity includes root and residency differs; do not simply flip the feature.
+Worker will upload patch/report. No other worker is active; no live session runs.
+
 Current wave: fixed cross-scope background-summary leakage in ControlCore.context.
 Exact captured scope filters before LIMIT30; unknown legacy scope is omitted.
 Two new SQLite regressions and all1,281 control tests/typecheck pass; restricted
@@ -16,31 +34,42 @@ control/364 runtime plus all native/browser/service/build gates, exit0 in
 `.local/background-scope-combined-retry.log`. First attempt retained EADDRINUSE
 in a tool fixture before inference. Existing live sessions remain stopped.
 
-Active isolated workers, both based on host unpublished main79d93fd bundle:
+Both isolated workers are finished and integrated from host unpublished main79d93fd:
 - [Control](https://ampcode.com/threads/T-01a0ab14-10bd-75eb-9af9-cf0db2cf434f)
-  owns owner-alpha/lifecycle/native-task/runtime types/Worker and focused tests.
+  delivered SHA2563b0d682515e82415a8fd1c88781ab0bf1b9f68f7a93d7f14806dcda9073a932b;
+  host reviewed and reran115 focused SQLite/control tests, all pass. Host found
+  repeated cancellation propagation wrote unchanged child rows; two added replay
+  assertions failed before a one-line no-op guard, then all16 background tests
+  passed (`.local/owner-background-replay-{before,after}.log`).
 - [Runtime](https://ampcode.com/threads/T-01a0ab14-c3e5-70da-9831-09c963d2c317)
-  owns policy/bridge/adapter/service and runtime tests.
-Host owns scripts/test-codex-service.mjs new --owner-alpha-background mode, not
-yet run against integrated changes. Agreed optional policy is
+  delivered and is integrated, SHA256315c64dbaa03ea320e5cb847fc61dcf9f24cc08cc28fd24d90851bdec3044f4e.
+  Host reviewed patch and reran50 runtime/alpha/service tests, all pass in
+  `.local/owner-background-runtime-host.log`; worker additionally reports380
+  runtime and28 bridge tests. Default fingerprints are unchanged; selected flag
+  is captured before awaits and matches persisted claim before native launch.
+Host --owner-alpha-background integration passes seven native loopback requests,
+successful inherited MCP read, status alongside held A, B/old-A exact cancellation,
+three root families/four runs,25 heartbeat operations and denied sleep; no provider
+holds, no root-result settlement. Log `.local/owner-background-integration-final.log`.
+Initial old-backend run stopped before inference; first integrated run exposed
+host's incorrect two-inference expectation for child lifetime (kind=child), now
+corrected from runtime source without product changes. The fixture was subsequently
+strengthened to cancel the released ROOT, requiring propagation to the held child;
+the full combined run `.local/owner-background-combined.log` passed this final
+variant and all other gates:1,297 control/380 runtime, exit0. This predates the
+small live-entry authority gate above, covered by24 focused tests afterward.
+Desktop reinstall/tests pass16/16. Agreed optional policy is
 `background_first_root:true`; selected first claim alone carries
 `owner_alpha_background:true`, mapped to submit `ownerAlphaBackground:true`.
-Absence preserves exact old behavior/serialization. Both workers will upload
-owned-file patches and report; do not duplicate their assignments. Bundle
+Absence preserves exact old behavior/serialization. Both integration workers are done. Bundle
 `.local/owner-background-base.bundle` is the pre-scope-fix base intentionally;
 neither worker owns ControlCore.context or shared docs.
 
-Next P0 implementation: explicit opt-in immutable policy selecting only the first
-durably admitted coordinator for V1 direct-child capability. Default alpha must
-remain root-only. The native cap is per root, so enabling every root is incorrect.
-Carry selection in a control-owned claim field, not runtime family ordering; bind
-it into native submission fingerprint. Child ledger observations need exact
-selected-parent ownership, same persona/deadline and durable restart validation;
-current alpha denies children and counts every attempt as an admitted root, so
-both checks need deliberate extension. Preserve late cancellation observations,
-unknown operations, all-family accounting and root-level read-MCP provenance.
-Do not infer a one-child-ever limit from the native concurrent-child cap or treat
-root completion as slot release. No live child capability is enabled by this wave.
+Next: review V2 worker evidence and choose a supported authority boundary before
+changing the service or permitting live background entry. Current integration
+is local preparation only. Default alpha stays root-only; unknown outcomes,
+task-level MCP provenance and sleep denial remain. Preserve all old sessions.
+No live background session has run and no production gate changed.
 
 Continuation: the owner-access session expired with zero admitted tasks/runs/previews
 (`.local/owner-alpha-access-session/expiry-readback.json`), nativeStopped:true.

@@ -2,7 +2,7 @@ import { requireThat } from './errors';
 import type { Store } from './store';
 import type { Run } from './types';
 
-export type OwnerAlphaPolicy = { session_id:string; persona_id:string; expires_at:string; max_runs:number; max_task_seconds:number };
+export type OwnerAlphaPolicy = { session_id:string; persona_id:string; expires_at:string; max_runs:number; max_task_seconds:number; background_first_root?:true };
 const key='owner_alpha';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function parseOwnerAlpha(value:string|undefined,env:{AUTH_MODE?:string;EXECUTION_ENABLED?:string;NATIVE_VERIFIED?:string;PROVIDER_CONFIG?:string}):OwnerAlphaPolicy|undefined {
@@ -10,12 +10,12 @@ export function parseOwnerAlpha(value:string|undefined,env:{AUTH_MODE?:string;EX
  let p:Record<string,unknown>|undefined,provider:unknown;
  try{p=JSON.parse(value);provider=JSON.parse(env.PROVIDER_CONFIG??'{}');}catch{requireThat(false,'INVALID_CONFIGURATION','Invalid owner-alpha configuration.',503);}
  requireThat(env.AUTH_MODE==='local'&&env.EXECUTION_ENABLED==='false'&&env.NATIVE_VERIFIED==='false'&&provider&&typeof provider==='object'&&!Array.isArray(provider)&&Object.keys(provider).length===0,'INVALID_CONFIGURATION','Owner alpha requires local auth, false production gates and no provider.',503);
- requireThat(p&&typeof p==='object'&&!Array.isArray(p)&&Object.keys(p).sort().join(',')==='expires_at,max_runs,max_task_seconds,persona_id,session_id'&&
+ requireThat(p&&typeof p==='object'&&!Array.isArray(p)&&Object.keys(p).sort().join(',')===(Object.hasOwn(p,'background_first_root')?'background_first_root,expires_at,max_runs,max_task_seconds,persona_id,session_id':'expires_at,max_runs,max_task_seconds,persona_id,session_id')&&(!Object.hasOwn(p,'background_first_root')||p.background_first_root===true)&&
   typeof p.session_id==='string'&&uuid.test(p.session_id)&&typeof p.persona_id==='string'&&uuid.test(p.persona_id)&&
   typeof p.expires_at==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(p.expires_at)&&Number.isFinite(Date.parse(p.expires_at))&&new Date(p.expires_at).toISOString()===p.expires_at&&
   Number.isInteger(p.max_runs)&&Number(p.max_runs)>=1&&Number(p.max_runs)<=3&&Number.isInteger(p.max_task_seconds)&&Number(p.max_task_seconds)>=1&&Number(p.max_task_seconds)<=300,
   'INVALID_CONFIGURATION','Invalid owner-alpha policy.',503);
- return {session_id:p.session_id as string,persona_id:p.persona_id as string,expires_at:p.expires_at as string,max_runs:p.max_runs as number,max_task_seconds:p.max_task_seconds as number};
+ return {session_id:p.session_id as string,persona_id:p.persona_id as string,expires_at:p.expires_at as string,max_runs:p.max_runs as number,max_task_seconds:p.max_task_seconds as number,...(p.background_first_root===true?{background_first_root:true as const}:{})};
 }
 type Custody={policy:OwnerAlphaPolicy;admitted_run_ids:string[]};
 /** Immutable local-session policy; each durable admitted ID consumes one run forever. */
@@ -38,7 +38,8 @@ export class OwnerAlpha {
     requireThat(state&&state.provider_ref_json==='{}'&&state.provider_operation_id===null&&
      (state.epoch===0&&state.phase==='STOPPED'&&state.boot_id===null&&state.lease_until===null&&attempts.length===0||
       state.epoch===1&&['BOOTING','READY','RECOVERY_REQUIRED'].includes(state.phase)&&typeof state.boot_id==='string'&&uuid.test(state.boot_id))&&
-     attempts.length===custody.admitted_run_ids.length&&attempts.every(a=>a.attempt===1&&a.epoch===1&&a.boot_id===state.boot_id&&custody.admitted_run_ids.includes(a.run_id)),
+     custody.admitted_run_ids.every(id=>attempts.some(a=>a.run_id===id))&&attempts.every(a=>this.validAttempt(a.run_id,a.attempt,custody))&&
+     this.store.db.all<{run_id:string}>('SELECT run_id FROM native_task_links').every(link=>attempts.some(a=>a.run_id===link.run_id)&&!custody.admitted_run_ids.includes(link.run_id)),
      'INVALID_CONFIGURATION','Owner-alpha attempt custody is inconsistent.',503);
     return;
    }
@@ -66,9 +67,37 @@ export class OwnerAlpha {
   this.store.db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=?',JSON.stringify(saved),key);
   return new Date(Math.min(Date.parse(this.policy!.expires_at),Date.parse(this.now())+this.policy!.max_task_seconds*1000)).toISOString();
  }
+ backgroundRoot(runId:string):boolean {return this.policy?.background_first_root===true&&this.read().admitted_run_ids[0]===runId;}
+ propagateCancellation():void {
+  if(!this.policy?.background_first_root)return;
+  const custody=this.read(),rootId=custody.admitted_run_ids[0];if(!rootId)return;
+  const root=this.store.run(rootId);
+  if(!['cancelling','cancelled','recovery_required'].includes(root.status))return;
+  for(const child of this.store.db.all<Run>('SELECT * FROM runs WHERE parent_run_id=?',rootId)){
+   requireThat(this.validAttempt(child.id,1,custody),'STALE_EPOCH','Owner-alpha child custody is inconsistent.');
+   if(!['claimed','running','finishing','cancelling','recovery_required'].includes(child.status))continue;
+   const revoked=['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(root.error_code??'');
+   if(['cancelling','recovery_required'].includes(child.status)&&(!revoked||child.error_code===root.error_code))continue;
+   this.store.db.exec('UPDATE runs SET status=?,error_code=?,updated_at=? WHERE id=?',child.status==='recovery_required'?'recovery_required':'cancelling',root.error_code??'OWNER_CANCELLED',['cancelling','recovery_required'].includes(child.status)?child.updated_at:this.now(),child.id);
+  }
+ }
+ private validAttempt(runId:string,attempt:number,custody:Custody):boolean {
+  const run=this.store.db.all<Run>('SELECT * FROM runs WHERE id=?',runId)[0];
+  const row=this.store.db.all<{epoch:number;boot_id:string;deadline_at:string;started_at:string;native_run_ref:string|null;submission_key:string}>('SELECT * FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
+  const state=this.store.db.all<{epoch:number;boot_id:string}>('SELECT epoch,boot_id FROM lifecycle')[0];
+  if(!run||!row||attempt!==1||run.current_attempt!==1||run.persona_id!==this.policy!.persona_id||state.epoch!==1||row.epoch!==1||row.boot_id!==state.boot_id)return false;
+  const link=this.store.db.all<{parent_run_id:string;parent_attempt:number;native_run_ref:string;native_session_key:string}>('SELECT * FROM native_task_links WHERE run_id=?',runId)[0];
+  if(custody.admitted_run_ids.includes(runId))return run.role==='coordinator'&&run.parent_run_id===null&&!link&&row.submission_key===`${runId}:1`&&
+   this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null)&&
+   Number.isFinite(Date.parse(row.started_at))&&Number.isFinite(Date.parse(row.deadline_at))&&row.deadline_at<=this.policy!.expires_at&&Date.parse(row.deadline_at)<=Date.parse(row.started_at)+this.policy!.max_task_seconds*1000;
+  if(!this.policy!.background_first_root||!link||run.role!=='background'||link.parent_run_id!==custody.admitted_run_ids[0]||run.parent_run_id!==link.parent_run_id||link.parent_attempt!==1||!link.native_session_key||!link.native_run_ref||row.native_run_ref!==link.native_run_ref||row.submission_key!==`native:${link.native_run_ref}`)return false;
+  if(!this.validAttempt(link.parent_run_id,1,custody))return false;
+  const parent=this.store.run(link.parent_run_id);
+  const parentAttempt=this.store.db.all<{deadline_at:string}>('SELECT deadline_at FROM attempts WHERE run_id=? AND attempt=1',parent.id)[0];
+  return row.deadline_at===parentAttempt.deadline_at&&run.command_id===parent.command_id&&run.routine_id===parent.routine_id&&run.occurrence_id===null;
+ }
  authorize(runId:string,attempt:number):void {
   if(!this.policy)return;
-  const run=this.store.run(runId);
-  requireThat(attempt===1&&run.current_attempt===attempt&&run.role==='coordinator'&&run.persona_id===this.policy.persona_id&&this.read().admitted_run_ids.includes(runId),'STALE_EPOCH','Attempt is not owned by this owner-alpha session.');
+  requireThat(this.validAttempt(runId,attempt,this.read()),'STALE_EPOCH','Attempt is not owned by this owner-alpha session.');
  }
 }

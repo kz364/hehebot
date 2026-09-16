@@ -43,7 +43,8 @@ export class LifecycleCore {
   const state=this.get();
   requireThat(Number.isSafeInteger(identity.epoch)&&identity.epoch===state.epoch&&identity.boot_id===state.boot_id,'STALE_EPOCH','The executor no longer owns this runtime.');
   requireThat(state.lease_until!==null&&state.lease_until>this.core.now(),'STALE_EPOCH','The executor lease expired.');
-  requireThat((allowBoot?['BOOTING','READY','DRAINING']:['READY','DRAINING']).includes(state.phase),'STALE_EPOCH','Runtime admission is closed.');return state;
+  requireThat((allowBoot?['BOOTING','READY','DRAINING']:['READY','DRAINING']).includes(state.phase),'STALE_EPOCH','Runtime admission is closed.');
+  this.core.ownerAlpha.propagateCancellation();return state;
  }
  authorizeAttempt(identity:Identity,runId:string,attempt:number):void {
   this.identity(identity);
@@ -95,7 +96,7 @@ export class LifecycleCore {
    return {lease_until:lease,cancellations:this.store.db.all<{id:string}>("SELECT id FROM runs WHERE status IN ('cancelling','recovery_required')").map(x=>x.id)};
   });
  }
- claim(identity:Identity):{run:Run;submission_key:string;deadline_at:string}|null {
+ claim(identity:Identity):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true}|null {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled||this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
@@ -125,7 +126,7 @@ export class LifecycleCore {
    this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,started_at) VALUES(?,?,?,?,?,'claimed',?,?)",run.id,attempt,submissionKey,identity.epoch,identity.boot_id,deadline,this.core.now());
    if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='claimed' WHERE id=?",run.occurrence_id);
    for(const event of context.context_events)this.store.db.exec('UPDATE consumer_cursors SET consumed_sequence=MAX(consumed_sequence,?) WHERE consumer_id=? AND conversation_id=?',event.sequence,run.persona_id,context.room_id);
-   this.touch();return {run:this.store.run(run.id),submission_key:submissionKey,deadline_at:deadline};
+   this.touch();return {run:this.store.run(run.id),submission_key:submissionKey,deadline_at:deadline,...(this.core.ownerAlpha.backgroundRoot(run.id)?{owner_alpha_background:true as const}:{})};
   });
  }
  submitted(identity:Identity,runId:string,attempt:number,nativeRef:string):void {
@@ -253,6 +254,7 @@ export class LifecycleCore {
  watchdog():void {
   this.store.db.transaction(()=>{
    const now=this.core.now(),state=this.get();
+   this.core.ownerAlpha.propagateCancellation();
    const overdue=this.store.db.all<{run_id:string}>("SELECT run_id FROM attempts WHERE status IN ('claimed','running') AND deadline_at<=?",now);
    const ops=this.store.db.all<{run_id:string}>("SELECT DISTINCT run_id FROM operations WHERE status='active' AND deadline_at<=?",now);
    for(const id of new Set([...overdue,...ops].map(x=>x.run_id)))this.store.db.exec("UPDATE runs SET status='cancelling',error_code='DEADLINE_EXCEEDED',updated_at=? WHERE id=? AND status IN ('claimed','running','finishing')",now,id);

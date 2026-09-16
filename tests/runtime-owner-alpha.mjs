@@ -28,6 +28,13 @@ test('alpha policy is exact, bounded and independently captured', () => {
   }
 });
 
+test('live entry refuses background authority before filesystem, service or account work', async () => {
+  await assert.rejects(runOwnerAlpha({ ownerAlpha: { ...policy, background_first_root: true } }, {
+    createService: () => assert.fail('must not create service'),
+    launch: () => assert.fail('must not launch native/account work'),
+  }), { code: 'OWNER_BACKGROUND_AUTHORITY_UNVERIFIED' });
+});
+
 test('account check requires ChatGPT, exact visible model and bounded supported discovery', async () => {
   const calls = [];
   await checkAlphaAccount({ request: async (method, params) => {

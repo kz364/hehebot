@@ -4,6 +4,29 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Opt-in integration / authority blocker (2026-09-16): the runtime accepts a true-only
+`background_first_root` policy and consumes only an exact persisted claim marker,
+not model text or family order. Submission captures the marker before awaits and
+includes it in the selected-root fingerprint; old default bytes remain unchanged.
+The nested agents/features override merges with the original task MCP grant.
+Both workers are integrated. Scripted service/native/browser check passes seven
+requests, inherited read, independent status/B, root cancellation reaching its
+held child, three retained families/25 operations, no result settlement and sleep
+denial. Host fixed redundant cancellation propagation with two red/green replay
+cases. Combined passes1,297 control/380 runtime and all remaining checks, exit0,
+in `.local/owner-background-combined.log`; desktop16/16.
+
+This does NOT establish independent-task authority. Subsequent pinned-source
+inspection found V1 send_input/close_agent/wait_agent can target a foreign live
+root by UUID; no public spawn-only filter exists. `runOwnerAlpha` now refuses
+background mode before filesystem/service/account work, with24 focused tests
+passing in `.local/owner-background-live-gate.log` after the full verifier.
+See [exact sources and boundary](OWNER_BACKGROUND_NATIVE.md#cross-root-authority-blocker).
+V2 target paths check the tree registry, but native positive/foreign-target and
+capacity behavior is under investigation, not adopted. No live session used
+background mode, no provider/account/production action occurred, and default
+root-only alpha is unchanged.
+
 Background scope and native prerequisite (2026-09-16): task summaries previously
 selected every same-persona background title, including private titles for a room
 or unrelated routine. They now filter by exact captured `scope_key` before LIMIT30,
