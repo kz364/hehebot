@@ -51,9 +51,11 @@ export class FileJournal {
     await rename(temporary, target);
     const directory = await open(this.directory, 'r');
     try { await directory.sync(); } finally { await directory.close(); }
-    return row;
+    return parseRecord(contents);
   }
-  putIfAbsent(id, row) {
+  async putIfAbsent(id, row) {
+    // Capture before serial() yields, not when the queue finally admits the write.
+    row = parseRecord(encodeRecord(row));
     return this.serial(async () => {
       const existing = await this.get(id);
       if (existing) return existing;
@@ -61,9 +63,15 @@ export class FileJournal {
       return null;
     });
   }
-  update(id, patch) {
+  async update(id, patch) {
+    const captured = parseRecord(encodeRecord(patch));
+    // Omitted JSON properties still replace an existing field with undefined,
+    // deleting it at final serialization. Do not turn deletions into no-ops.
+    for (const key of Object.keys(patch)) if (!Object.hasOwn(captured, key)) {
+      Object.defineProperty(captured, key, { value: undefined, enumerable: true });
+    }
+    patch = captured;
     return this.serial(async () => {
-      encodeRecord(patch);
       const current = await this.get(id);
       if (!current) throw new Error('UNKNOWN_ATTEMPT');
       return this.write(id, { ...current, ...patch });

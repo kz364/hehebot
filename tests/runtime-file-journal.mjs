@@ -5,6 +5,37 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { FileJournal } from '../runtime/file-journal.mjs';
 
+for (const operation of ['putIfAbsent', 'update']) test(`${operation} takes custody before waiting in the directory queue`, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'hehe-journal-custody-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const journal = new FileJournal(directory);
+  if (operation === 'update') await journal.putIfAbsent('intent', { unchanged: 71, remove: 'old', ['__proto__']: 'old data key', nested: { revision: 1 } });
+  let release;
+  const held = journal.serial(() => new Promise(resolve => { release = resolve; }));
+  await new Promise(setImmediate);
+  const input = { nested: { revision: 19, values: ['original'] }, remove: undefined, ['__proto__']: undefined };
+  const pending = journal[operation]('intent', input);
+  input.nested.revision = 43; input.nested.values.push('late'); input.remove = 'restored';
+  release(); await held;
+  const returned = await pending;
+  const expected = { ...(operation === 'update' ? { unchanged: 71 } : {}), nested: { revision: 19, values: ['original'] } };
+  assert.deepEqual(await journal.get('intent'), expected);
+  assert.deepEqual(returned, operation === 'update' ? expected : null);
+});
+
+test('direct write returns the persisted wire value, not the caller reference changed during disk I/O', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'hehe-journal-custody-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const journal = new FileJournal(directory), input = { nested: { revision: 19 }, absent: undefined };
+  const pending = journal.write('intent', input);
+  input.nested.revision = 43;
+  const returned = await pending;
+  assert.deepEqual(returned, { nested: { revision: 19 } });
+  assert.deepEqual(await journal.get('intent'), returned);
+  returned.nested.revision = 83;
+  assert.deepEqual(await journal.get('intent'), { nested: { revision: 19 } });
+});
+
 test('reopened journal instances serialize intent and updates in the same directory', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'hehe-journal-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
