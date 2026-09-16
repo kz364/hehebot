@@ -4,6 +4,23 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+Latest: bounded live V2 responsiveness/cancellation passed with same-owner
+ChatGPT gpt-5.6-luna and **Chief of Staff** (not Travel). Three roots/one child;
+status and independent packing reply arrived while child active. Exact A cancel
+interrupted its child, not S/B. Native MCP read completed; no itinerary delivery
+or settlement claim. Private `.local/owner-v2-live-session` retains live-report,
+verified-evidence, readback and reconstructed-readback JSON plus journal/Worker
+persistence. Never restart/reset that session. Both managed services owner-v2-live
+and owner-v2-readback are stopped; native process count is zero. Only Worker was
+restarted for readback, never inference. Browser reload retained S/B exact previews,
+disabled composer/recovery warnings; inspected2x screenshot in artifacts.
+The UI banner now says background delegation requires explicit opt-in. No public
+portal was published and no cloud deployment/paid API fallback occurred. The
+earlier live-gate-blocked/no-live-session paragraphs below describe prior stages.
+Next is hosted owner-trial preparation with existing provider containment and
+recovery limits, not production activation or automatic replay. Continuation
+remains enabled; no subagent active. Carry the existing spending ceiling forward.
+
 V2 capable followup is delivered/integrated; old native worker is done. Host
 verified patch95c4616343737f52b91ccf8da2bd383396480bb90f9644d8a28103816e9af6da
 and reran31 requests, advertised grandchild capacity denials and sequential idle

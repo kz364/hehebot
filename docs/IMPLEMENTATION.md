@@ -4,6 +4,28 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Live bounded V2 demonstration (2026-09-16,19:20Z): same-owner ChatGPT-backed
+gpt-5.6-luna, Chief of Staff, three independent admitted roots and one native child.
+A returned after delegation; S's accurate status and B's packing list persisted
+while the child remained active. Exact A cancellation propagated OWNER_CANCELLED
+to its child; native journal records interrupted child, completed A/S/B roots and
+distinct native thread IDs. S/B were not cancelled by A's command. Child MCP read
+completed; its itinerary was interrupted, not delivered. No general settlement.
+Independent evidence assertions report passed in private
+`.local/owner-v2-live-session/verified-evidence.json`; full snapshots/live receipts
+are in live-report.json. Native shutdown followed by private Worker reconstruction
+and browser reload preserved exact S/B previews (reconstructed-readback.json).
+Cancelled A's preview is hidden by the existing owner-cancellation output fence;
+the report and native journal retain its earlier acknowledgement.
+Both services stopped, zero native processes, state retained and never replayed.
+Browser DOM confirms Connected, disabled Send, both provisional replies; the
+inspected2x screenshot is `.amp/in/artifacts/owner-v2-live-readback.png`.
+Portal wording now describes explicit background opt-in rather than falsely
+declaring it unavailable. node --check and rendered DOM verify that text-only
+change; the combined verifier predates it. No cloud deployment, paid API fallback
+or production flag changes. Full P0.3 orchestration and P0.4 hosted/recovery gates
+remain open despite this narrow live responsiveness/cancellation milestone.
+
 V2 service/custody integration (2026-09-16): selected alpha roots use nested V2
 cap2 with V1/wait disabled; selected fingerprints include `v2-cap2`, rejecting old
 V1 custody before RPC. Default submission fingerprints/config are unchanged.

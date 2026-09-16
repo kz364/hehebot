@@ -1,6 +1,6 @@
 # Codex V2 target-authority prerequisite
 
-**Restricted V2 integration passed on 2026-09-16; explicit bounded owner-background entry is implemented, not yet live-demonstrated.** The fixture alone is not authenticated model behavior, a universal depth guarantee, logical-child settlement, or live-alpha authorization. The integrated service now also enforces inherited feature restrictions and durable per-turn custody. Only this combined boundary replaces the earlier blanket `OWNER_BACKGROUND_AUTHORITY_UNVERIFIED` refusal; production/native-verification flags remain false and V1 remains prohibited.
+**Restricted V2 integration and a bounded live owner-background trial passed on 2026-09-16.** The fixture alone is not authenticated model behavior, a universal depth guarantee, logical-child settlement, or live-alpha authorization. The integrated service also enforces inherited feature restrictions and durable per-turn custody. Only this combined boundary replaces the earlier blanket `OWNER_BACKGROUND_AUTHORITY_UNVERIFIED` refusal; production/native-verification flags remain false and V1 remains prohibited. The separately authorized live trial demonstrated independent status/reply while a child ran, exact family cancellation and persisted readback—not child result delivery, settlement or automatic recovery. See [implementation evidence](IMPLEMENTATION.md).
 
 ## Reproduce without credentials
 
