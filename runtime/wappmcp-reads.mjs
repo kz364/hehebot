@@ -10,6 +10,8 @@ const tools = ['whatsapp_get_chat_messages', 'whatsapp_search_messages'];
 /** grant must come from the authenticated host's admitted task snapshot, never
  * model arguments or imported text. Caller supplies current lease/revocation checks
  * and supplies deadlineAt from the admitted attempt, not model arguments.
+ * authorize returns true or the Worker's exact {allowed:true,deadline_at} response;
+ * an authority deadline can tighten the cap but cannot extend it.
  * Caller owns the one-installation MCP connection. This module grants no runtime access.
  */
 export async function readWappMcp(grant, name, args, call, options = {}) {
@@ -39,7 +41,8 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
   if (!integer(limit, 100) || !integer(page, 100)) fail('WHATSAPP_READ_DENIED');
   // Copy all admitted values before awaiting untrusted upstream code.
   const admitted = { chatId: args.chatId, limit, ...(search ? { query: args.query, page } : {}) };
-  const controller = new AbortController(), deadline = Math.min(Date.now() + timeoutMs, taskDeadline);
+  const controller = new AbortController();
+  let deadline = Math.min(Date.now() + timeoutMs, taskDeadline);
   if (Date.now() >= deadline) fail('WHATSAPP_READ_STOPPED');
   const result = await new Promise((resolve, reject) => {
     let done = false;
@@ -49,7 +52,7 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
     };
     const stopped = () => Object.assign(new Error('WHATSAPP_READ_STOPPED'), { code: 'WHATSAPP_READ_STOPPED' });
     const stop = () => { finish(reject, stopped()); controller.abort(); };
-    const timer = setTimeout(stop, Math.max(0, deadline - Date.now()));
+    let timer = setTimeout(stop, Math.max(0, deadline - Date.now()));
     if (signal?.aborted) { stop(); return; }
     signal?.addEventListener('abort', stop, { once: true });
     const checkAuthority = async () => {
@@ -58,7 +61,17 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
       try {
         allowed = await authorize(Object.freeze({ name, chatId: admitted.chatId }), { signal: controller.signal });
       } catch { /* Never expose host custody errors or credentials. */ }
-      if (allowed !== true) fail('WHATSAPP_READ_DENIED');
+      if (done) return; // Late authority results cannot arm another timer.
+      if (allowed === true) return;
+      if (!exact(allowed, ['allowed', 'deadline_at']) || allowed.allowed !== true || typeof allowed.deadline_at !== 'string') fail('WHATSAPP_READ_DENIED');
+      const cap = Date.parse(allowed.deadline_at);
+      if (!Number.isFinite(cap) || new Date(cap).toISOString() !== allowed.deadline_at) fail('WHATSAPP_READ_DENIED');
+      // Worker may supply an earlier ancestor deadline; neither check may extend
+      // the original operation/task cap or a previously returned authority cap.
+      deadline = Math.min(deadline, cap);
+      clearTimeout(timer);
+      if (Date.now() >= deadline) { stop(); return; }
+      timer = setTimeout(stop, deadline - Date.now());
     };
     Promise.resolve().then(async () => {
       // Keep both host checks inside the same timeout/cancellation envelope.

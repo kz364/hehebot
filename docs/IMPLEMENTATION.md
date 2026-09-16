@@ -4,6 +4,18 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+WhatsApp authority-deadline follow-up (2026-09-16; verified locally):
+`readWappMcp` now accepts the exact Worker `{allowed:true,deadline_at}` authorization
+response as well as the existing boolean host callback contract. The initial
+response can tighten the timer to an earlier ancestor deadline; the second check
+cannot extend any previous cap. Malformed/extra fields deny, exact expiry stops,
+and late callbacks after cancellation cannot arm new timers. This avoids reducing
+the Worker's effective deadline to a boolean in trusted HTTPS composition.
+18 scoped-read tests and the HTTPS Worker fixture pass; combined rerun passed
+1,154 control / 262 runtime tests, eight auditor tests and all HTTP/native/service/
+build checks in `.local/authority-deadline-combined.log`. No MCP registration or live read
+has been added, and AbortSignal delivery does not prove upstream termination.
+
 WhatsApp scoped-authority follow-up (2026-09-16):
 `HEHEBOT_WHATSAPP_READ_POLICIES` is an operator-provisioned JSON registry keyed by
 policy UUID, with values `{chatIds:string[],tools:string[]}`. It defaults to `{}`

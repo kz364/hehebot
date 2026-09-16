@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+Third wave: `.local/next-coverage.bundle` containing source local main 9479cb7
+(not origin/main) was uploaded to both new workers. Child-Plan worker
+`T-01a0a864-4f76-7568-979b-816d30d8c194` owns `scripts/test-codex-service.mjs`
+and a dedicated evidence doc/helper for actual native child Plan streams.
+SwiftUI worker `T-01a0a864-5c5a-721e-b726-9efe599ca7ad` owns new `macos/` source,
+tests and README. Both reply with transferable commits/evidence; do not poll or
+duplicate their work. They do not edit shared checklist/progress/spec/verifier.
+Main owns runtime read-boundary work: `authorize` may now return exact Worker
+`{allowed:true,deadline_at}`, tightening but never extending the original cap.
+18 focused tests and HTTPS composition pass; combined rerun passed 1,154 control /
+262 runtime tests, eight auditor tests and all HTTP/native/service/build checks in
+`.local/authority-deadline-combined.log`. Production admission remains false.
+
 Main has implemented scoped WhatsApp authority: operator registry
 `HEHEBOT_WHATSAPP_READ_POLICIES` defaults empty; admission captures exact tool/chat
 tuples; `whatsapp-read-authorize` intersects pinned/current grants and checks lease,
@@ -18,7 +31,7 @@ Two independent workers imported `.local/parallel-next.bundle` (source local mai
 310bac4, not origin/main). Restart worker `T-01a0a841-c306-71c9-b6e4-34d94d4e7c2c`
 delivered the crash harness with 100 passing injections. License worker
 `T-01a0a841-dfd3-720d-a7c5-76304d75bf78` delivered the artifact inventory. Both are
-reviewed/applied; no workers remain outstanding. The inventory deliberately exits
+reviewed/applied; no workers from that second wave remain outstanding. The inventory deliberately exits
 2 (review required), with all 350 locations SRI-verified and inspected. Main added
 safe alias handling: ten byte/metadata-identical aliases are retained explicitly;
 conflicting contents/metadata reject. Eight focused auditor tests pass after this

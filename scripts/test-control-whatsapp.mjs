@@ -55,7 +55,7 @@ try {
  const foreign = new ControlClient({ origin, token: 'wrong-runtime-token', fetchImpl: trustedFetch });
  await assert.rejects(foreign.request('whatsapp-read-authorize', input), { status: 401 });
  assert.deepEqual((await state()).runs, before.runs); assert.equal((await state()).next_cursor, before.next_cursor);
- const authorize = async ({ name, chatId }) => (await control.request('whatsapp-read-authorize', { ...custody, name, chatId })).allowed === true;
+ const authorize = ({ name, chatId }) => control.request('whatsapp-read-authorize', { ...custody, name, chatId });
  const message = { id: 'synthetic-17', body: 'Untrusted text', timestamp: '2026-09-16T00:00:00.000Z', chat: { id: grant.chatIds[0] } };
  let calls = 0;
  const output = await readWappMcp(grant, tool, { chatId: grant.chatIds[0] }, async () => { calls++; return { structuredContent: [message] }; }, { authorize, deadlineAt: claim.deadline_at });

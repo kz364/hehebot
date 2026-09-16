@@ -228,3 +228,43 @@ test('one revoked task does not cancel an independently authorized read', async 
   release(envelope([message()])); await denied;
   assert.equal(second.chatId, 'work@g.us'); assert.equal(second.messages[0].id, 'work-11');
 });
+
+test('Worker authority deadline caps held I/O earlier than the admitted child deadline', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+  let release, signal, stopped = false;
+  const result = readWappMcp(grant(), recent, { chatId: 'family@g.us' }, (_, __, options) => {
+    signal = options.signal; return new Promise(resolve => { release = resolve; });
+  }, { deadlineAt: new Date(100).toISOString(), authorize: () => ({ allowed: true, deadline_at: new Date(37).toISOString() }) });
+  const checked = assert.rejects(result, { code: 'WHATSAPP_READ_STOPPED' }).then(() => { stopped = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  t.mock.timers.tick(36); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(stopped, false); assert.equal(signal.aborted, false);
+  t.mock.timers.tick(1); await checked; assert.equal(signal.aborted, true);
+  release(envelope([message()])); await new Promise(resolve => setImmediate(resolve));
+});
+
+test('authority deadline cannot widen a previous cap or release data exactly at expiry', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+  let checks = 0;
+  await assert.rejects(readWappMcp(grant(), recent, { chatId: 'family@g.us' }, async () => envelope([message()]), {
+    deadlineAt: new Date(100).toISOString(), authorize: () => {
+      checks++;
+      if (checks === 2) t.mock.timers.setTime(37);
+      return { allowed: true, deadline_at: new Date(checks === 1 ? 37 : 999).toISOString() };
+    },
+  }), { code: 'WHATSAPP_READ_STOPPED' });
+  assert.equal(checks, 2);
+});
+
+test('expired and malformed authority deadline responses never dispatch', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100 });
+  const call = () => assert.fail('authority response admitted invalid I/O');
+  for (const decision of [{ allowed: true }, { allowed: false, deadline_at: new Date(200).toISOString() },
+    { allowed: true, deadline_at: '1970-01-01T00:00:01Z' }, { allowed: true, deadline_at: null },
+    { allowed: true, deadline_at: new Date(200).toISOString(), grant: grant() }]) {
+    await assert.rejects(readWappMcp(grant(), recent, { chatId: 'family@g.us' }, call, { authorize: () => decision }), { code: 'WHATSAPP_READ_DENIED' });
+  }
+  await assert.rejects(readWappMcp(grant(), recent, { chatId: 'family@g.us' }, call, {
+    authorize: () => ({ allowed: true, deadline_at: new Date(100).toISOString() }),
+  }), { code: 'WHATSAPP_READ_STOPPED' });
+});
