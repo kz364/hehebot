@@ -4,6 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest independent P1 fix: skill draft/update editor retains one proposal UUID,
+command key and first submitted payload; unchanged explicit retries reuse them.
+Changed body/target and offline/stale/deleted/missing targets dispatch nothing.
+Browser regression reproduced old behavior and passes after fix;14 backend skill/
+restore tests pass. Combined verifier exits0 with1,359 backend/434 runtime plus
+browser/native/service/build checks in `.local/skill-draft-combined.log`; desktop16 pass.
+No layout/authority change, no account/provider action, no active worker. Same-editor
+only: no pending-draft persistence across close/reload. Next local E05 work is
+bounded owner-only skill-history read API and restore discovery through existing staged review; no new immediate
+approval or credential request. Cloudflare decision remains pending below.
+
 Latest target review: no remaining local P0 prerequisite was identified before
 the named deployment decision. AUTH_SETUP records a protected-control-only proposal
 against the verified composition revision: `hehebot-portal`, no inference/provider

@@ -4,6 +4,20 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Skill draft retry custody (2026-09-17 Asia/Jakarta): a real Chromium HTTP fixture
+reproduced a new proposal UUID and idempotency key on each retry. The editor now
+captures both once and freezes its first submitted payload. An unchanged explicit
+retry reuses exact custody; changed contents or target reject locally. Latest
+connection and selected update target revision/existence are checked before POST.
+`node scripts/test-portal-skill-draft.mjs` passes create/update, required affirmation,
+lost-response retry and offline/stale/deleted/missing fences with four requests;
+14 skill/restore SQLite tests pass. This changes interaction only, with no layout
+or backend permission change. It does not persist pending drafts across page close;
+closing an uncertain editor requires refreshing and inspecting proposals before
+creating another. Combined check exits0 with1,359 backend/434 runtime plus
+browser/native/service/build checks in `.local/skill-draft-combined.log`;
+desktop16 pass in `.local/skill-draft-desktop.log`. No live accounts or providers.
+
 Private hosted composition (2026-09-17 Asia/Jakarta):
 `scripts/test-codex-hosted-owner.mjs` composes signed synthetic Access JWTs,
 the actual Worker and persistent SQLite Durable Object, hosted Sprite service,
