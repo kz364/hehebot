@@ -13,7 +13,7 @@ It describes this checkout; local checkpoints are not necessarily published to G
 - **Next priority:** trusted WhatsApp MCP transport/operation accounting and remaining E01/E02 coverage. All six worker deliveries are reviewed/integrated; main retains integration/checklist ownership. Credential-free engineering remains; this is not an auth-only boundary.
 - **Latest follow-through:** main's sequential 100-case crash/reopen run passed in 470,837ms (50 precommit/50 committed-response-loss), with cleanup confirmed; the earlier concurrent timeout remains documented. Log: `.local/integrated-crash-sequential-100.jsonl`. License inventory now inspects all 350 SRI-verified artifacts, retaining ten identical aliases without extraction; eight focused tests pass. Legal review remains required. No workers remain outstanding.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
-- **Mac direction:** SwiftUI + WKWebView native shell around the remote portal, as communicated by the owner-decision thread. Not implemented. Existing Electron code is a tested foundation, not a verified Mac release. The separate Mac-decision documentation edits have not been integrated into this checkout.
+- **Mac direction:** SwiftUI + WKWebView native shell around the remote portal. The exact owner-decision section is now merged into SPEC §21.4 and reflected in PRODUCT_UX_SPEC without overwriting progress links. Not implemented. Existing Electron code is a tested foundation, not a verified Mac release.
 
 ## How to read and maintain this checklist
 
