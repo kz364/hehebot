@@ -52,14 +52,19 @@ browser or provider calls. Real runtime MCP assembly remains open.
 
 Second parallel delivery integration (2026-09-16): the artifact-license auditor
 and disk-backed receipt-crash harness are reviewed and applied. The auditor's
-seven unit tests pass; all 350 locked artifacts pass SRI, 340 are inspected and
-ten retain canonical-path collision errors. Exit 2 deliberately means review
+eight unit tests pass; all 350 locked artifacts pass SRI and are inspected.
+Ten byte/metadata-identical aliases are explicitly retained; conflicting contents
+or metadata still reject without extraction. Exit 2 deliberately means review
 required, never legal approval. See [license evidence](WAPPMCP_LICENSE_EVIDENCE.md).
 The worker's 100 crash/reopen trials passed; main's first rerun failed on case 4
 with an HTTP timeout during concurrent combined verification, and its cleanup
 deadline was not confirmed. A subsequent process scan found no workerd survivors.
-Do not count the failed rerun as acceptance. Integrated combined and sequential
-crash reruns are pending; [methodology](CONTROL_CRASH_RESTART.md) distinguishes
+Do not count the failed rerun as acceptance. The integrated combined verifier
+passed 1,154 control / 259 runtime tests plus HTTP/native/service/build checks.
+The subsequent sequential run passed 100 injections/reopens in 470,837ms, with
+50 cases of each mode, 1,350 helper requests and all children stopped. The later
+alias-only auditor follow-up passed eight focused tests and full artifact inventory.
+[Methodology](CONTROL_CRASH_RESTART.md) distinguishes
 incomplete-input loss from committed-response loss and excludes power-loss claims.
 
 Parallel integration checkpoint (2026-09-16; verified locally, unpushed):

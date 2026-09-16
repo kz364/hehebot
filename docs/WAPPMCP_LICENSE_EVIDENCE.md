@@ -23,12 +23,14 @@ artifacts without redirects, verifies SHA512 SRI **before** decompression, check
 package name/version (including explicit npm aliases), and hashes individual
 files. Tar contents stay in bounded process memory: nothing is extracted to the
 filesystem. Python runs isolated (`-I`); no package code is imported or executed.
-Traversal/absolute paths, canonical duplicate names, links and special files
+Traversal/absolute paths, conflicting canonical duplicate names, links and special files
 are rejected after PAX/GNU filename resolution. Per-package inspection errors
 remain visible, never silently omitted. Download/SRI failures abort collection.
 Compressed/expanded sizes, member size/count and subprocess time are bounded.
 Interior dot aliases are normalized for collision detection while retaining their
-original archive names; no files are extracted or overwritten.
+original archive names. Repeated regular files with identical hashes, lengths,
+mode, ownership and modification time are recorded in `identicalArchiveAliases`;
+conflicting bytes or metadata reject the artifact. No extraction or overwrite occurs.
 
 Output is sorted, timestamp-free JSON with the lock hash, artifact URL/SRI/SHA256,
 declarations, legacy `licenses`, repository metadata, scripts as **data**, file
@@ -42,26 +44,25 @@ release-evidence archive, not a new vendored dependency tree.
 
 Observed verification:
 
-- `node --test tests/audit-wappmcp-licenses.mjs`: **7 passed, 0 failed**. Negative
+- `node --test tests/audit-wappmcp-licenses.mjs`: **8 passed, 0 failed**. Negative
   controls cover changed/appended/empty bytes, missing/weak SRI, misleading or
   missing metadata, identity mismatch, traversal/PAX paths, links and duplicates.
   Synthetic upstream source and postinstall traps are inventoried, never executed.
 - Auditor: **exit 2, review-required**, all **350 locations SRI-verified**;
-  **340 inspected locations / 15,613 file records / 40 binary-magic candidates**.
-  Ten artifacts have explicit inspection errors (below). This is not a claim of
-  complete file or legal coverage for 350 packages.
+  **350 inspected locations / 15,785 canonical file records / 40 binary-magic candidates**.
+  Ten identical aliases are retained explicitly; no artifact inspection errors
+  remain. This is not complete legal or source-header coverage.
 - Lock SHA256: `15bf32b13594d9a38fd9d36e59a93d1433a0f077320d253e3b2209eb39df4ddf`.
-- Integrated inventory SHA256: `223988df5d6596f60b9b8a1f1157fdc97cccec4134a5a77cf164af40721550a5`.
+- Integrated inventory SHA256: `f0e8e1a0a3ae1b413c45f63b9ce9b26f701660736c6b4d56d1a59f7b5a6146fd`.
 
-The integrated parser detects canonical duplicate paths in `agent-base`,
+The integrated parser records identical canonical aliases in `agent-base`,
 `data-uri-to-buffer`, `degenerator`, `get-uri`, `http-proxy-agent`,
 `https-proxy-agent`, `pac-proxy-agent`, `pac-resolver`, `proxy-agent` and
-`socks-proxy-agent`. Allowing interior `.` aliases did not resolve these errors:
-the canonical paths collide. These errors come from SRI-verified tar streams.
-This is an **inventory limitation**, not evidence that those packages are malicious
-or unlicensed. Before claiming full coverage, independently inspect their original
-member names and canonical-path collisions; do not silently normalize/overwrite
-aliases during extraction. Their exact artifact identities remain in the report.
+`socks-proxy-agent`. Earlier conservative inspection rejected these aliases;
+the final pass compares exact hash/length and metadata and records both names
+without extracting anything. All ten declare MIT, but `degenerator` has no named
+license/notice file in its tarball; its redistribution notice evidence still needs
+review. The other nine have a LICENSE file. Metadata alone grants no approval.
 
 ## Exact locked artifacts resolve some metadata gaps, not all obligations
 
@@ -183,7 +184,7 @@ decide whether to retain the LGPL component with reviewed compliance materials o
 authorize a separately reviewed replacement. No replacement/graph change is made
 or authorized by this evidence. Qualified review must close the WebAssembly source
 and notice gaps, jsonify rights trail, vendored QR/asset notices, native prebuilds,
-ten parser exceptions and remaining source/header/asset coverage. Produce and
+degenerator notice evidence and remaining source/header/asset coverage. Produce and
 verify a third-party notice/source bundle against the **actual released files**.
 
 Browser binaries fetched by later Puppeteer installation, system libraries, FFmpeg,

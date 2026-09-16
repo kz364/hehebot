@@ -21,7 +21,7 @@ const reader = String.raw`
 import sys, io, tarfile, json, hashlib, re
 archive = tarfile.open(fileobj=io.BytesIO(sys.stdin.buffer.read()), mode='r:')
 files = []
-seen = set()
+seen = {}
 package = None
 root = None
 for index, member in enumerate(archive):
@@ -35,12 +35,21 @@ for index, member in enumerate(archive):
     name = '/'.join(parts)
     if root is None: root = parts[0]
     if parts[0] != root: raise ValueError('Multiple archive roots')
-    if name in seen: raise ValueError('Duplicate archive path')
-    seen.add(name)
-    if member.isdir(): continue
+    if member.isdir():
+        if name in seen: raise ValueError('Duplicate archive path')
+        seen[name] = None
+        continue
     if not member.isfile(): raise ValueError('Unsupported archive entry (including links)')
     if member.size > 64 * 1024 * 1024: raise ValueError('Oversize archive file')
     data = archive.extractfile(member).read()
+    digest = hashlib.sha256(data).hexdigest()
+    metadata = (member.mode, member.uid, member.gid, member.uname, member.gname, member.mtime)
+    if name in seen:
+        prior = seen[name]
+        if prior is None or prior[0]['sha256'] != digest or prior[0]['bytes'] != len(data) or prior[1] != metadata:
+            raise ValueError('Duplicate archive path with conflicting contents or metadata')
+        prior[0].setdefault('identicalArchiveAliases', []).append(original_name)
+        continue
     path = '/'.join(parts[1:])
     if not path: raise ValueError('Invalid package file')
     if path == 'package.json': package = json.loads(data)
@@ -48,7 +57,8 @@ for index, member in enumerate(archive):
     notice = bool(re.search(r'(^|/)(licen[sc]e|copying|copyright|notice|authors)([./_-]|$)', path, re.I))
     asset = bool(re.search(r'\.(png|jpe?g|gif|webp|svg|ico|woff2?|ttf|mp[34]|pdf|wasm|node|exe|dll|so|a)$', path, re.I))
     source = data.startswith(b'#!') or bool(re.search(r'\.(js|mjs|cjs|ts|c|cc|h|cpp|py)$', path, re.I))
-    record = dict(path=path, bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), kind='binary' if binary else 'notice' if notice else 'asset' if asset else 'source' if source else 'other')
+    record = dict(path=path, bytes=len(data), sha256=digest, kind='binary' if binary else 'notice' if notice else 'asset' if asset else 'source' if source else 'other')
+    seen[name] = (record, metadata)
     if original_name != name: record['archivePath'] = original_name
     if notice:
         record['text'] = data[:65536].decode('utf-8', errors='replace')
@@ -83,6 +93,7 @@ export function inspectArtifact(bytes, entry, location) {
   if (!inspected.files.some(file => file.kind === 'notice')) reasons.push('No named license/notice file found');
   if (inspected.files.some(file => file.kind === 'binary')) reasons.push('Bundled binary: establish corresponding source, build provenance and notices');
   if (inspected.files.some(file => file.truncated)) reasons.push('Truncated notice evidence: inspect complete hashed file');
+  if (inspected.files.some(file => file.identicalArchiveAliases)) reasons.push('Identical archive aliases recorded; no extraction or overwrite performed');
   return {
     location, name, version: entry.version, resolved: entry.resolved, integrity: entry.integrity,
     artifactSha256: sha256(bytes), lockLicense: entry.license ?? null,

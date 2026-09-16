@@ -137,3 +137,19 @@ The transferable evidence archive contains the patch, the full run's 100 case
 records plus summary, the final two-case pilot, and the graceful-run summary.
 Local logs and disposable databases are not included. These results complete
 this local crash-test slice, not all E15 or a production promotion gate.
+
+## Coordinator integration rerun
+
+The first integrated run, concurrent with dependency installation and the full
+verifier, timed out on an HTTP request in case 4 after three completed cases.
+Its cleanup deadline was not confirmed; a later process scan found no workerd
+survivors. That run is a failure, not acceptance, and contention is only a possible
+cause—not an established application diagnosis.
+
+After the full verifier finished, the unchanged harness passed all **100 injections
+and 100 same-disk reopens in 470,837ms**, with 50 precommit and 50 committed-response
+loss cases, 1,350 helper requests and confirmed child cleanup. A final process scan
+found no survivors. No timeout or assertion was relaxed. Evidence is retained in
+`.local/integrated-crash-sequential-100.jsonl`; the failed run is
+`.local/integrated-crash-100.jsonl`. The combined verifier independently passed its
+two-case smoke, and the graceful harness passed 18 requests/two restarts.

@@ -19,12 +19,15 @@ Two independent workers imported `.local/parallel-next.bundle` (source local mai
 delivered the crash harness with 100 passing injections. License worker
 `T-01a0a841-dfd3-720d-a7c5-76304d75bf78` delivered the artifact inventory. Both are
 reviewed/applied; no workers remain outstanding. The inventory deliberately exits
-2 (review required), with 350 SRI-verified/340 inspected locations and ten canonical
-path collisions. Main added safe interior-dot alias handling with collision tests.
+2 (review required), with all 350 locations SRI-verified and inspected. Main added
+safe alias handling: ten byte/metadata-identical aliases are retained explicitly;
+conflicting contents/metadata reject. Eight focused auditor tests pass after this
+follow-up, with no installation/extraction or legal approval inferred.
 Main's concurrent 100-case rerun timed out on case 4; cleanup deadline was not
 confirmed, but subsequent process scan found no workerd survivors. Sequential
-rerun is active in `.local/integrated-crash-sequential-100.jsonl`; inspect its final
-result before marking that slice complete. Do not weaken timeouts/assertions.
+rerun passed all 100 injections/reopens in 470,837ms, 50 of each loss mode, with
+all child cleanup confirmed (`.local/integrated-crash-sequential-100.jsonl`).
+No timeouts or assertions were weakened. A final process scan found no survivors.
 No auth-only boundary reached: trusted MCP transport/operation accounting, guided
 connector setup, and remaining E01/E02 coverage are still credential-free work.
 

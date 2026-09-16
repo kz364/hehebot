@@ -17,6 +17,7 @@ out = io.BytesIO()
 with tarfile.open(fileobj=out, mode='w', format=tarfile.PAX_FORMAT) as tar:
  for member in json.load(sys.stdin):
   info = tarfile.TarInfo(member['path'])
+  info.mode = member.get('mode', 0o644)
   data = bytes(member['bytes']) if 'bytes' in member else member.get('text', '').encode()
   info.size = len(data)
   if 'link' in member:
@@ -100,6 +101,21 @@ test('checks version and name, but supports explicit lockfile npm aliases', () =
   const f = fixture();
   f.entry.name = 'example';
   assert.equal(inspectArtifact(f.bytes, f.entry, 'node_modules/example-cjs').name, 'example');
+});
+
+test('identical aliases remain explicit evidence, while changed bytes or metadata reject', () => {
+  const first = { path: 'package/./dist/index.js', text: '// Same bytes' };
+  const alias = { path: 'package/dist/index.js', text: first.text };
+  const result = inspect(fixture([first, alias]));
+  const files = result.files.filter(file => file.path === 'dist/index.js');
+  assert.equal(files.length, 1);
+  assert.equal(files[0].archivePath, first.path);
+  assert.deepEqual(files[0].identicalArchiveAliases, [alias.path]);
+  assert.equal(result.status, 'review-required');
+  assert.ok(result.reasons.some(reason => reason.includes('Identical archive aliases')));
+  for (const changed of [{ ...alias, text: '// Other bytes' }, { ...alias, mode: 0o755 }]) {
+    assert.throws(() => inspect(fixture([first, changed])), /conflicting contents or metadata/);
+  }
 });
 
 test('audit is deterministic and unsafe archives are explicit unresolved evidence, not omitted', async () => {
