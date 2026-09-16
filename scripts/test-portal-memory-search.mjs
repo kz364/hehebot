@@ -1,0 +1,97 @@
+#!/usr/bin/env node
+// Synthetic local Chromium. Timer disabled to distinguish user actions from polling.
+import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {readFile,mkdir} from 'node:fs/promises';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {randomUUID} from 'node:crypto';
+const bot='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
+const hostile='<img src="/injected" onerror="window.searchExecuted=true">';
+const memory=(id,text,owner,revision)=>({id,kind:'memory',revision,body:{text,scope:{kind:owner?'persona':'global',id:owner},sensitivity:'ordinary',expires_at:null,source_event_id:`source-${id}`}});
+const own=memory('own','Quiet room near station.',bot,7),shared=memory('shared','Prefer TRAIN travel.',null,19),foreign=memory('foreign','Finance-only quiet ledger.',other,23),injected=memory('hostile',hostile,null,31);
+const state={objects:[{id:bot,kind:'persona',revision:3,body:{name:'Travel'}},{id:other,kind:'persona',revision:5,body:{name:'Finance'}},own,shared,foreign,injected],runs:[],summary:{phase:'STOPPED',execution_enabled:false,queued_runs:0,blocked_runs:0}};
+const requests=[],session=`search-${randomUUID().slice(0,8)}`;
+const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
+const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
+const wait=code=>browser('wait','--fn',code);
+const server=createServer(async(req,res)=>{
+ const path=new URL(req.url,'http://fixture').pathname;requests.push(`${req.method} ${path}`);
+ const json=value=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(value));};
+ if(path==='/v1/state')return json(state);
+ if(path.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
+ if(path.endsWith('/events'))return json({events:[],has_more:false});
+ const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+ if(!file){res.writeHead(404);res.end();return;}
+ let content=await readFile(new URL(`../public/${file}`,import.meta.url),'utf8');
+ if(file==='index.html')content=content.replace('<head>','<head><script>window.setInterval=()=>0;</script>');
+ res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(content);
+});
+await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
+const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
+let refreshNumber=0;
+const refresh=async(id=bot,navigate=false)=>{
+ state.provider={id:`Search refresh ${++refreshNumber}`};const start=requests.length;
+ await browser('click',navigate?`[data-persona-id="${id}"]`:'#refresh');
+ await wait(`document.querySelector('#runtime-provider').textContent===${JSON.stringify(state.provider.id)}`);
+ assert.deepEqual(requests.slice(start),['GET /v1/state',`GET /v1/conversations/${id}/events`,`GET /v1/conversations/${id}/tasks`]);
+};
+const texts=()=>evaluate('Array.from(document.querySelectorAll("#memories .card > p"),p=>p.textContent)');
+const search=async(value,expected)=>{const before=requests.length;await browser('fill','#memory-search',value);assert.deepEqual(await texts(),expected);assert.equal(requests.length,before,'search does not fetch');};
+const capture=async name=>{
+ assert.equal(await evaluate('devicePixelRatio'),2);
+ await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+ assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth && document.querySelector("#details").scrollWidth<=document.querySelector("#details").clientWidth'),true);
+ await browser('screenshot',new URL(name,artifacts).pathname);
+};
+try{
+ await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');
+ await wait('document.querySelector("#connection").textContent==="Connected"');await refresh();
+ assert.deepEqual(await texts(),[own.body.text,shared.body.text,hostile]);
+ assert.equal(await evaluate('document.querySelector("#memory-search").labels[0].textContent'),'Search memory text');
+ assert.equal(await evaluate('document.querySelector("#memory-search-status").getAttribute("role")'),'status');
+ assert.equal(await evaluate('document.querySelector("#memory-search").maxLength'),200);
+ const before=requests.length;
+ await search('  QUIET  ',[own.body.text]);
+ assert.equal(await evaluate('document.querySelector("#memory-search-status").textContent'),'1 of 3 loaded memories shown.');
+ await browser('focus','#memory-search');await browser('press','Tab');
+ assert.equal(await evaluate('document.activeElement.id'),'clear-memory-search');
+ await browser('press','Enter');assert.deepEqual(await texts(),[own.body.text,shared.body.text,hostile]);
+ assert.equal(await evaluate('document.activeElement.id'),'memory-search');
+ await search('train',[shared.body.text]);
+ await browser('focus','#memories summary');await browser('press','Enter');
+ assert.equal(await evaluate('document.querySelector("#memories details").open'),true);
+ await capture('portal-memory-search-desktop.png');
+ assert.equal(requests.length,before,'keyboard, clear, inspection and capture do not fetch');
+ await refresh();assert.equal(await evaluate('document.querySelector("#memory-search").value'),'train');
+ assert.equal(await evaluate('document.querySelector("#memories details").open'),true);
+ shared.revision++;await refresh();assert.equal(await evaluate('document.querySelector("#memories details").open'),false);
+ assert.match(await evaluate('document.querySelector("#memories details").textContent'),/Revision: 20/);
+ shared.body.text='Prefer ferry travel.';await refresh();assert.deepEqual(await texts(),[]);
+ assert.match(await evaluate('document.querySelector("#memories").textContent'),/No loaded memories match/);
+ await capture('portal-memory-search-empty.png');
+ await search('Finance-only',[]);await search('source-own',[]);await search('.*',[]);
+ await search(hostile,[hostile]);assert.equal(await evaluate('document.querySelectorAll("#memories img").length'),0);
+ assert.equal(await evaluate('window.searchExecuted===true'),false);
+ await search('   ',[own.body.text,shared.body.text,hostile]);
+ await search('quiet',[own.body.text]);await refresh(other,true);
+ assert.equal(await evaluate('document.querySelector("#memory-search").value'),'');
+ assert.deepEqual(await texts(),[shared.body.text,foreign.body.text,hostile]);
+ await search('quiet',[foreign.body.text]);await refresh(bot,true);
+ assert.equal(await evaluate('document.querySelector("#memory-search").value'),'');
+ assert.deepEqual(await texts(),[own.body.text,shared.body.text,hostile]);
+ await search('quiet',[own.body.text]);state.objects=state.objects.filter(row=>row!==own);await refresh();assert.deepEqual(await texts(),[]);
+ console.log('PASS asymmetric scope-before-search, literal/case/whitespace text matching, hostile text, accessible label/status and keyboard clear; zero search requests.');
+ console.log('PASS unchanged refresh retains query/disclosure; revision closes metadata; changed/deleted text updates results; navigation resets query and scope.');
+ await browser('set','viewport','390','844','2');await browser('click','#show-details');await search('ferry',[shared.body.text]);
+ await browser('click','#memories summary');await browser('eval','document.querySelector("#memory-search").scrollIntoView({block:"start"})');
+ await capture('portal-memory-search-narrow.png');
+ await browser('set','viewport','1280','900','2');
+ state.objects=state.objects.filter(row=>row.kind!=='memory'||row===foreign);await refresh();
+ assert.equal(await evaluate('document.querySelector("#memory-search-status").textContent'),'0 of 0 loaded memories shown.');
+ assert.match(await evaluate('document.querySelector("#memories").textContent'),/No loaded memories in this scope/);
+ assert.equal(requests.filter(row=>row.startsWith('POST ')).length,0);
+ assert.ok(requests.filter(row=>row.includes('/v1/')).every(row=>/^GET \/v1\/(state|conversations\/[\w-]+\/(events|tasks))$/.test(row)));
+ assert.equal(requests.some(row=>row.includes('/injected')),false);
+ console.log('PASS truthful no-match/no-eligible states, DPR2 desktop/narrow without overflow; zero commands or source retrieval; existing refresh is exactly three reads.');
+}finally{await browser('close').catch(()=>{});server.closeAllConnections();await new Promise(ok=>server.close(ok));}

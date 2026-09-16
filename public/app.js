@@ -6,6 +6,7 @@ let recoveryView=null;
 let taskFeed=null;
 let snapshot=null,selected=localStorage.getItem('personal.selected'),events=[],loading=false,lastSignature='',editing=null;
 let selectionVersion=0;
+let memorySearchSelection='';
 const names={IDLE_PERMITTED:'Idle — hibernation permitted',STOPPED:'Sleeping',START_REQUESTED:'Waking',BOOTING:'Starting',READY:'Awake',DRAINING:'Finishing up',STOP_COMMITTED:'Stopping',STOPPING:'Stopping',RECOVERY_REQUIRED:'Recovery needed'};
 const statuses={queued:'Queued',claimed:'Starting',running:'Working',finishing:'Saving result',completed:'Completed',waiting:'Waiting',failed:'Failed',cancelling:'Cancelling',cancelled:'Cancelled',recovery_required:'Needs recovery'};
 const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
@@ -162,15 +163,27 @@ function render(){
   card.append(actions);$('routines').append(card);
  }if(!$('routines').children.length)$('routines').append(node('p','No routines for this bot yet.','muted'));
  $('add-routine').disabled=object?.kind!=='persona';
+ renderMemories();
+}
+function renderMemories(){
+ const selection=JSON.stringify([selected,selectionVersion]);
+ if(memorySearchSelection!==selection){$('memory-search').value='';memorySearchSelection=selection;}
+ const query=$('memory-search').value.slice(0,200).trim().toLowerCase();
+ const eligible=items('memory').filter(x=>x.body.scope.kind==='global'||x.body.scope.kind==='persona'&&x.body.scope.id===selected);
+ const matches=eligible.filter(x=>!query||x.body.text.toLowerCase().includes(query));
+ $('memory-search-status').textContent=`${matches.length} of ${eligible.length} loaded memories shown.`;
+ $('clear-memory-search').disabled=!$('memory-search').value;
  const inspected=new Set([...$('memories').querySelectorAll('details[open]')].map(details=>details.dataset.inspection));
- $('memories').replaceChildren();for(const m of items('memory').filter(x=>x.body.scope.kind==='global'||x.body.scope.kind==='persona'&&x.body.scope.id===selected)){
+ $('memories').replaceChildren();for(const m of matches){
   const card=node('div',undefined,'card');card.append(node('span',m.body.scope.kind==='global'?'Shared preference':'Bot memory','status'),node('p',m.body.text));const actions=node('div',undefined,'actions');const forget=button('Forget',()=>deleteMemory(m),'danger');forget.dataset.action='delete-memory';forget.disabled=$('connection').textContent!=='Connected'||!navigator.onLine;actions.append(button('Edit',()=>editMemory(m)),forget);card.append(actions);$('memories').append(card);
   const metadata=node('details',undefined,'hint');metadata.append(node('summary','Memory metadata'));
   for(const [label,value] of [['ID',m.id],['Revision',m.revision],['Scope kind',m.body.scope.kind],['Scope ID',m.body.scope.id===null?'None (null)':m.body.scope.id],['Sensitivity',m.body.sensitivity],['Expiry',m.body.expires_at===null?'None':m.body.expires_at],['Source event ID',m.body.source_event_id]])metadata.append(node('p',`${label}: ${value??'Unknown (not provided)'}`,'message-body'));
   metadata.append(node('p','Source identity only; source text is not retrieved.','hint'));card.append(metadata);
   metadata.dataset.inspection=JSON.stringify([selected,selectionVersion,m.body.text,metadata.textContent]);metadata.open=inspected.has(metadata.dataset.inspection);
- }if(!$('memories').children.length)$('memories').append(node('p','Save preferences you want your bots to remember.','muted'));
+ }if(!matches.length)$('memories').append(node('p',eligible.length?'No loaded memories match this search. Clear search to see this scope.':'No loaded memories in this scope. Save preferences you want your bots to remember.','muted'));
 }
+ $('memory-search').oninput=()=>renderMemories();
+ $('clear-memory-search').onclick=()=>{$('memory-search').value='';renderMemories();$('memory-search').focus();};
 function renderTaskStrip(){
  const strip=$('task-strip'),target=$('task-strip-content');strip.hidden=skillsSelected();if(strip.hidden)return;
  const feed=taskFeed?.conversationId===selected?taskFeed:null,page=feed?.page;
