@@ -4,6 +4,56 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Private follow-up continuity (2026-09-16): the delegated two-message root-only
+alpha fixture reproduced absence of first-task information in second-root input.
+ControlCore now captures bounded same-persona history before the current command
+sequence, including visible explicitly provisional replies tied to original
+receipts. Claim rebuild excludes later messages and preserves admitted snapshots;
+room/routine/cross-persona scopes receive no private history. Retention filtering,
+clipping disclosure and non-authoritative labels are verified; this is not complete
+token budgeting, completed-result history or actual-model conversational judgment.
+See [scope and evidence](OWNER_ALPHA_MULTI_MESSAGE.md).
+
+Combined verification passed 1,279 control / 364 runtime plus scripted native,
+browser, HTTP/service and build checks. Final focused mode validates four model
+fixture requests, exact first preview in second input, two successful routine
+receipts, distinct task/thread/grant custody, third-admission refusal, reload with
+no inference and cancellation isolation. Unknown coverage still denies settlement
+and sleep. Logs: `.local/alpha-continuity-combined.log`,
+`.local/alpha-multi-host-final.log`, `.local/private-context-focused.log`.
+The separate early-runtime-exit forwarding fence passes13 gateway/launcher tests;
+it preserves readback/cancellation while rejecting held/new messages after exit.
+The public session expired unused, nativeStopped:true, zero runs/previews; all
+session processes stopped and custody was preserved. No new real inference,
+production permission, provider action, push or deployment occurred.
+
+Authenticated orb access (2026-09-16): a fresh-state launcher composes private
+HTTPS Worker, existing root-only native entrypoint and short-lived token/cookie
+gateway. Worker local-auth bypass is never exposed. Actual orb ingress login
+and state read succeed; runtime/internal and export paths return404. Chromium
+observes Connected, selected Chief of Staff, one remaining admission and120s task
+limit. Host submitted no message. Owner access uses the Terminal-held private
+token; it is never in a URL, localStorage or transcript. The instance is owner-wide
+read scope, not persona confidentiality, and has no private imports/connectors.
+
+The credential-free browser integration verifies durable queued message/reload,
+zero native attempts, forbidden writes and logout. It caught a real form POST
+failure: no-referrer suppresses Origin to null; same-origin fixes login without
+weakening CSRF. Absolute10s gateway deadlines resist continuous trickle responses;
+token rotation during awaited bodies/ownership reads prevents dispatch. Unknown
+mutation outcomes are not replayed. Session UI fences expiry/quota/offline/wrong
+persona and retains provisional/history/cancel access. Inspected DPR2 screenshots
+include actual public ingress and available/expired/wrong-persona states.
+
+Host combined verifier passes1275 control/363 runtime tests and all scripted
+HTTP/native/service/build checks; desktop16/16. Private logs:
+`.local/alpha-access-{combined,desktop,supervisor-child}.log`. The separate final
+supervisor-child check verifies a request-order fixture correction: unrelated
+grant proof no longer consumes the root catalog assertion. This is not relaxed
+authorization or new model evidence. No production gate changed, push/deployment,
+paid API fallback, connector write or Sprite operation. Managed session deadlines
+and continuation custody are recorded in HANDOFF; do not reset consumed state.
+
 Corrected live trial (2026-09-16): the owner authorized the follow-up and a $5
 ceiling without repeated permission asks for this bounded work. The same ChatGPT
 login and `gpt-5.6-luna` produced run `6c057062-54d2-4a28-8532-3565f1708f88`,

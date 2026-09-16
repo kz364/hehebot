@@ -8,6 +8,37 @@ let snapshot=null,selected=localStorage.getItem('personal.selected'),events=[],l
 let selectionVersion=0;
 let memorySearchSelection='';
 let conversationSearchSelection='';
+let alphaSession=null,alphaSeen=false,alphaInvalid=false,alphaExpired=false,alphaDeadline=0,sending=false;
+function alphaBlock(){
+ if(!alphaSeen&&!snapshot?.summary.owner_alpha)return '';
+ const s=snapshot?.summary.owner_alpha_session;
+ alphaSeen=true;
+ if(!snapshot?.summary.owner_alpha||!s||typeof s.persona_id!=='string'||!Number.isFinite(Date.parse(s.expires_at))||!Number.isInteger(s.max_runs)||s.max_runs<1||!Number.isInteger(s.admitted_runs)||s.admitted_runs<0||s.admitted_runs>s.max_runs||!Number.isInteger(s.max_task_seconds)||s.max_task_seconds<1)alphaInvalid=true;
+ if(!alphaInvalid){
+  if(!alphaSession){alphaSession={...s};alphaDeadline=performance.now()+Math.max(0,Date.parse(s.expires_at)-Date.now());}
+  if(['persona_id','expires_at','max_runs','max_task_seconds'].some(key=>s[key]!==alphaSession[key]))alphaInvalid=true;
+  alphaSession.admitted_runs=Math.max(alphaSession.admitted_runs,s.admitted_runs);
+  if(Date.now()>=Date.parse(alphaSession.expires_at)||performance.now()>=alphaDeadline)alphaExpired=true;
+ }
+ if(alphaInvalid)return 'Session details changed or are unavailable. Reload to review the session; sending is closed.';
+ if(alphaExpired)return 'Session expired. New messages are closed.';
+ if(alphaSession.admitted_runs>=alphaSession.max_runs)return 'All admissions used. New messages are closed.';
+ if(current()?.kind!=='persona'||selected!==alphaSession.persona_id)return 'This session accepts private messages only for its selected persona. Other bots and rooms are read-only.';
+ if($('connection').textContent!=='Connected'||!navigator.onLine)return 'Session status is offline. Reconnect before sending.';
+ return '';
+}
+function renderAlphaSession(){
+ const reason=alphaBlock();
+ $('send').disabled=sending||Boolean(reason);
+ $('message').readOnly=Boolean(reason);
+ if(!alphaSeen)return;
+ $('message').setAttribute('aria-describedby','runtime-banner');
+ $('send').setAttribute('aria-describedby','runtime-banner');
+ $('runtime-banner').hidden=false;
+ const s=alphaSession,name=snapshot?.objects?.find(x=>x.id===s?.persona_id)?.body.name??s?.persona_id;
+ const text=`Supervised owner alpha${s?` · ${name} only · ${Math.max(0,s.max_runs-s.admitted_runs)} of ${s.max_runs} admissions remaining · Deadline ${new Date(s.expires_at).toLocaleString(undefined,{timeZoneName:'short'})} · Up to ${s.max_task_seconds}s per task`:''}. ${reason||'Private message admission available; queued messages have not yet consumed admissions.'} History, previews and cancellation remain available. Provisional output or a successful root turn is not a completed result or proof of safe recovery. Background tasks, external actions and automatic recovery are unavailable.`;
+ if($('runtime-banner').textContent!==text)$('runtime-banner').textContent=text;
+}
 const names={IDLE_PERMITTED:'Idle — hibernation permitted',STOPPED:'Sleeping',START_REQUESTED:'Waking',BOOTING:'Starting',READY:'Awake',DRAINING:'Finishing up',STOP_COMMITTED:'Stopping',STOPPING:'Stopping',RECOVERY_REQUIRED:'Recovery needed'};
 const statuses={queued:'Queued',claimed:'Starting',running:'Working',finishing:'Saving result',completed:'Completed',waiting:'Waiting',failed:'Failed',cancelling:'Cancelling',cancelled:'Cancelled',recovery_required:'Needs recovery'};
 const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
@@ -31,16 +62,17 @@ function acceptHistory(conversationId,history){
  }
  return true;
 }
+function alphaConversationAvailable(id){return !(alphaSeen||snapshot?.summary.owner_alpha)||id===snapshot?.summary.owner_alpha_session?.persona_id;}
 async function refresh(force=false){
  if(loading||document.hidden&&!force)return;loading=true;
  try{const value=await api('/v1/state');snapshot=value;
   if(!selected||selected!=='skills'&&!value.objects.some(x=>x.id===selected))selected=items('persona').find(x=>!x.body.archived)?.id;
-  const conversationId=selected;if(conversationId!=='skills'){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId&&acceptHistory(conversationId,history)){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
-  if(conversationId!=='skills'){
+  const conversationId=selected,readable=conversationId!=='skills'&&alphaConversationAvailable(conversationId);if(readable){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId&&acceptHistory(conversationId,history)){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
+  if(readable){
    try{const page=await api('/v1/conversations/'+conversationId+'/tasks');if(!page.counts||!Array.isArray(page.runs))throw new Error('Invalid task page');if(selected===conversationId)taskFeed={conversationId,page,error:false};}
    catch{if(selected===conversationId)taskFeed={conversationId,page:taskFeed?.conversationId===conversationId?taskFeed.page:null,error:true};}
   }
-  const view=recoveryView;if(view){const request=++view.request,page=await api(recoveryUrl(view));if(recoveryView===view&&selected===view.conversationId&&view.request===request)view.page=page;}
+  const view=recoveryView;if(view&&alphaConversationAvailable(view.conversationId)){const request=++view.request,page=await api(recoveryUrl(view));if(recoveryView===view&&selected===view.conversationId&&view.request===request)view.page=page;}
   $('connection').textContent='Connected';$('connection-dot').classList.add('online');render();
  }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);if(taskFeed)taskFeed.error=true;if(recoveryView?.kind==='tasks')recoveryView.page=null;render();}
  finally{loading=false;}
@@ -48,6 +80,7 @@ async function refresh(force=false){
 function choose(id){selectionVersion++;recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
 function recoveryUrl(view){return '/v1/conversations/'+view.conversationId+'/'+(view.kind==='tasks'?'tasks':'recovery')+(view.cursor?'?after='+encodeURIComponent(view.cursor):'');}
 async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=null){
+ if(!alphaConversationAvailable(selected)){report('History and task pages are unavailable for this conversation in the owner-alpha session.');return;}
  selectionVersion++;
  const view={conversationId:selected,cursor,previous,kind,focusRun,page:null,request:1};recoveryView=view;report('');render();
  try{const page=await api(recoveryUrl(view));if(recoveryView===view&&selected===view.conversationId&&view.request===1){view.page=page;render();}}
@@ -71,7 +104,8 @@ function render(){
  const object=current();$('conversation-name').textContent=object?.body.name??'Choose a bot';$('conversation-type').textContent=object?.kind==='room'?'SHARED ROOM':'ASSISTANT';$('edit-bot').hidden=object?.kind!=='persona';
  $('runtime-state').textContent=names[snapshot.summary.phase]??snapshot.summary.phase;$('runtime-provider').textContent=snapshot.provider?.id??'Unconfigured';$('runtime-queued').textContent=snapshot.summary.queued_runs;$('runtime-waiting').textContent=snapshot.summary.blocked_runs;
  $('runtime-banner').hidden=snapshot.summary.execution_enabled;
- $('runtime-banner').textContent=snapshot.summary.owner_alpha?'Supervised owner alpha: bounded private chat and provisional replies only. Background tasks, external actions and automatic recovery are unavailable.':'Your messages and routines are saved. The assistant is waiting for its runtime connection and sign-in before it can work.';
+ if(!alphaSeen&&!snapshot.summary.owner_alpha)$('runtime-banner').textContent='Your messages and routines are saved. The assistant is waiting for its runtime connection and sign-in before it can work.';
+ renderAlphaSession();
  const view=recoveryView?.conversationId===selected?recoveryView:null;
  const conversation=view?[]:events.filter(x=>x.conversation_id===selected);const runs=view?(view.page?.runs??[]):snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
  const query=$('conversation-search').value.slice(0,200).trim().toLowerCase();
@@ -93,9 +127,10 @@ function render(){
    if(view.previous.length)controls.append(button(`Previous ${label} page`,()=>loadRecovery(view.previous.at(-1),view.previous.slice(0,-1),view.kind),'quiet'));
    if(view.page?.next_cursor)controls.append(button(`Next ${label} page`,()=>loadRecovery(view.page.next_cursor,[...view.previous,view.cursor],view.kind),'quiet'));
    timeline.append(controls);if(!runs.length){const notice=node('p',view.page?`No ${taskMode?'unfinished':'recovery'} tasks on this page.`:`Loading ${taskMode?'current':'recovery'} tasks…`,'hint');notice.setAttribute('role','status');timeline.append(notice);}
-  }else timeline.append(button('Review recovery tasks',()=>loadRecovery(),'quiet'));
+  }else if(alphaConversationAvailable(selected))timeline.append(button('Review recovery tasks',()=>loadRecovery(),'quiet'));
+  else timeline.append(node('p','History and task pages are unavailable for this conversation in the owner-alpha session. Select the authorized persona to review its history and tasks.','hint'));
   if(!view&&historyFloors.get(selected)){const notice=node('p','Earlier history has expired under the retention policy. Only retained messages and updates are shown.','hint');notice.setAttribute('role','status');timeline.append(notice);}
-  if(conversation.length>=100){const conversationId=selected;timeline.append(button('Load earlier messages',async()=>{try{
+  if(conversation.length>=100&&alphaConversationAvailable(selected)){const conversationId=selected;timeline.append(button('Load earlier messages',async()=>{try{
    const history=await api('/v1/conversations/'+conversationId+'/events?before='+conversation[0].sequence);
    if(!acceptHistory(conversationId,history))return;
    const combined=[...history.events,...(olderEvents.get(conversationId)??conversation)];
@@ -103,7 +138,7 @@ function render(){
    if(selected!==conversationId)return;
    events=olderEvents.get(conversationId);lastSignature='';render();
   }catch(e){if(selected===conversationId)report(e.message);}},'quiet'));}
-  if(!view&&!conversation.length&&!questions.length){const empty=node('div',undefined,'empty');empty.append(node('h2',`A place to work with ${object?.body.name??'your assistant'}`),node('p','Ask for help, share an update, or describe something you’d like done on a schedule.'));timeline.append(empty);}
+  if(!view&&!conversation.length&&!questions.length&&alphaConversationAvailable(selected)){const empty=node('div',undefined,'empty');empty.append(node('h2',`A place to work with ${object?.body.name??'your assistant'}`),node('p','Ask for help, share an update, or describe something you’d like done on a schedule.'));timeline.append(empty);}
   for(const question of questions)renderQuestion(timeline,question);
   for(const event of conversation){
    if(event.type==='message.user'||event.type==='run.result'){
@@ -199,7 +234,7 @@ $('clear-conversation-search').onclick=()=>{$('conversation-search').value='';re
  $('memory-search').oninput=()=>renderMemories();
  $('clear-memory-search').onclick=()=>{$('memory-search').value='';renderMemories();$('memory-search').focus();};
 function renderTaskStrip(){
- const strip=$('task-strip'),target=$('task-strip-content');strip.hidden=skillsSelected();if(strip.hidden)return;
+ const strip=$('task-strip'),target=$('task-strip-content');strip.hidden=skillsSelected()||!alphaConversationAvailable(selected);if(strip.hidden)return;
  const feed=taskFeed?.conversationId===selected?taskFeed:null,page=feed?.page;
  const signature=JSON.stringify([selected,feed?.error,page?.counts,page?.runs,items('persona').map(bot=>[bot.id,bot.body.name])]);
  if(strip.dataset.signature===signature)return;strip.dataset.signature=signature;target.replaceChildren();
@@ -416,10 +451,11 @@ async function act(fn){try{report('');await fn();await refresh(true);}catch(e){r
 $('message').oninput=()=>{if(selected)localStorage.setItem('personal.draft.'+selected,$('message').value);$('draft-status').textContent='Unsent draft saved on this device';};
 $('composer').onsubmit=async event=>{
  event.preventDefault();if(!selected||!$('message').value.trim())return;const text=$('message').value,conversation=selected;
+ const blocked=alphaBlock();if(blocked||sending){renderAlphaSession();if(blocked)report(blocked);return;}
  const pendingKey='personal.pending.'+conversation;let pending;try{pending=JSON.parse(localStorage.getItem(pendingKey));}catch{}
- if(!pending||pending.text!==text)pending={text,key:crypto.randomUUID()};localStorage.setItem(pendingKey,JSON.stringify(pending));$('send').disabled=true;
+ if(!pending||pending.text!==text)pending={text,key:crypto.randomUUID()};localStorage.setItem(pendingKey,JSON.stringify(pending));sending=true;$('send').disabled=true;
  try{report('');await command('message.send',{conversation_id:conversation,text},pending.key);localStorage.removeItem(pendingKey);localStorage.removeItem('personal.draft.'+conversation);if(selected===conversation)$('message').value='';$('draft-status').textContent='Saved to your conversation';await refresh(true);}
- catch(e){report(e.message);$('draft-status').textContent='Not confirmed — Send retries the same message';}finally{$('send').disabled=false;}
+ catch(e){report(e.message);$('draft-status').textContent='Not confirmed — Send retries the same message';}finally{sending=false;renderAlphaSession();}
 };
 function field(label,name,value='',type='text'){const l=node('label',label,'field');let input;if(type==='textarea')input=node('textarea');else{input=node('input');input.type=type;}input.name=name;input.value=value;input.required=true;l.append(input);return l;}
 function selectField(label,name,options,value){const l=node('label',label,'field');const select=node('select');select.name=name;for(const [v,text]of options){const o=node('option',text);o.value=v;select.append(o);}select.value=value;l.append(select);return l;}
@@ -622,4 +658,6 @@ $('export-control').onclick=async()=>{
  finally{trigger.disabled=false;}
 };
 installImportSetup({trigger:$('import-setup'),api,command,onAdopted:()=>refresh(true)});
+setInterval(()=>{if(alphaSeen)renderAlphaSession();},250);
+document.addEventListener('visibilitychange',()=>{if(alphaSeen)renderAlphaSession();});
 await refresh(true);if(selected)$('message').value=localStorage.getItem('personal.draft.'+selected)??'';setInterval(()=>refresh(),5000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(true);});

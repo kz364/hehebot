@@ -130,6 +130,62 @@ wrapper. Separate entrypoint unit tests cover account/provider refusal and bound
 shutdown. [Native evidence and limits](OWNER_ALPHA_NATIVE.md) distinguish supported
 root-only dispatch from complete operation isolation or settlement.
 
+## Authenticated gateway session
+
+`runtime/owner-alpha-session.mjs --serve /absolute/private-operator.json` composes
+fresh local Worker state, the existing bounded native entrypoint, and the
+[owner gateway](OWNER_ALPHA_GATEWAY.md). Publish only the gateway port. The Worker
+remains private loopback HTTPS; it is not the portal target. The gateway is a
+short-lived owner-authentication surface, not Cloudflare Access deployment or a
+new production mode. Its owner token authenticates reads of the session's whole
+public control-state view, not a persona-confidential subset; never attach it to
+an imported/private multi-owner database.
+
+The operator file is owner-only (0600), outside a new empty 0700 session directory:
+
+```json
+{
+  "stateDirectory": "/absolute/private/new-session",
+  "nativeHome": "/absolute/existing/authorized-codex-home",
+  "model": "gpt-5.6-luna",
+  "personaId": "11111111-1111-4111-8111-111111111111",
+  "sessionSeconds": 300,
+  "maxRuns": 1,
+  "maxTaskSeconds": 120
+}
+```
+
+The model must be visible to the authorized ChatGPT account; there is no API-key
+fallback. The launcher supplies the fixed routine-read policy before any admission,
+creates distinct 256-bit owner/runtime tokens, preserves native home configuration,
+and holds its kernel directory lock during native execution. It refuses nonempty
+session state rather than resetting quotas. Setup failure leaves the no-replay
+marker and all available diagnostics. No initial message is submitted by launch.
+
+For an authorized orb session, the managed-service environment supplies `PORT` and
+`PUBLIC_URL`; explicit `port`/`publicOrigin` fields must agree if also supplied:
+
+```sh
+amp orb service start owner-alpha --portal --command \
+  'node runtime/owner-alpha-session.mjs --serve /absolute/private-operator.json; exec sleep infinity'
+```
+
+The trailing idle process prevents a service manager from automatically rerunning
+the operator command after refusal/expiry; it grants no execution or recovery.
+Open the returned portal and obtain the login token from `owner-token` inside the
+private session directory using the owner's Terminal. Do not paste that file into
+chat/logs, put the token in a URL, or expose the runtime token. Browser cookies are
+short-lived, Secure, HttpOnly and SameSite=Strict. Native admission ends at the
+session deadline; authenticated readback lasts at most 15 minutes longer, then the
+gateway and private Worker stop. Earlier native termination leaves readback only.
+Stop the managed service explicitly when finished. Existing uncertain records are
+never replayed or deleted; a new operator-approved session uses a new directory.
+
+Preparation tests are `node --test tests/runtime-owner-alpha-session.mjs`.
+Gateway HTTP/CSRF/token-separation tests are independent of live model behavior;
+real orb ingress and the combined launcher must be verified before advertising
+owner access as working. See the current checkpoint for actual integration evidence.
+
 ## Run locally
 
 After the normal `bash scripts/verify-codex.sh` prerequisites:

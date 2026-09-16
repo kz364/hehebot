@@ -4,6 +4,56 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+Continuation: the owner-access session expired with zero admitted tasks/runs/previews
+(`.local/owner-alpha-access-session/expiry-readback.json`), nativeStopped:true.
+Gateway/Worker stopped on their deadline at15:54:33Z with stopConfirmed:true;
+host then stopped managed service `owner-alpha-access`. No service/session restart
+or new live inference occurred. Preserve all session directories and original login.
+Future launcher gateways now check original runtime process liveness immediately
+before message dispatch. Early exit preserves readback/cancel but refuses new
+messages, including input held across process exit.13 targeted tests, typecheck
+and all364 runtime tests pass; `.local/alpha-access-runtime-final.log`.
+
+The delegated fixture work in `scripts/test-codex-service.mjs --owner-alpha-multi`
+found a real missing private-history defect. Host added bounded same-persona
+`conversation_history` snapshots in ControlCore with current command sequence
+cutoff, original-receipt preview attribution, explicit provisional/data labels,
+retention filtering and disclosed truncation. Rooms/routines/cross-persona contexts
+get no private history; later messages do not mutate admitted work. Four new SQLite
+tests and 50 focused tests pass. Final combined verifier passed 1,279 control / 364
+runtime and all scripted/browser/service/build checks, exit0, in
+`.local/alpha-continuity-combined.log`. Final stronger two-MCP-receipt and exact
+prior-preview checks pass `.local/alpha-multi-host-final.log`: four scripted requests,
+two retained families, no third admission or inference on reload. No test process
+remains pending. See OWNER_ALPHA_MULTI_MESSAGE.md for bounded scope.
+No worker is still assigned; host owns final integration/verification. Changes
+remain local and unpublished. No production/background-child permissions changed.
+
+Authenticated-access wave is integrated. Gateway and session-view workers are
+done, including gateway follow-up b8178005. Do not reapply their patches.
+Host browser integration exposed no-referrer → null form Origin; same-origin
+referrer policy fixes login while exact Origin remains required. Combined verifier
+passed1275 control/363 runtime and all remaining scripted/build checks; desktop16.
+The independent supervisor-child fixture now identifies unrelated input without
+assuming arrival order; host retained a mandatory first-root catalog assertion.
+Final focused supervisor-child passes after that change.
+
+Managed service `owner-alpha-access` exposes only the authenticated gateway, not
+the private Worker. It started with the existing same-owner home, fresh dedicated
+`.local/owner-alpha-access-session`, max1 run and120s per task. Admission expires
+2026-09-16T15:39:32.159Z; access/Worker stop at15:54:32.159Z. The native entrypoint
+has its own fixed session timer. Do not restart this directory or renew its quota.
+Host verified actual orb HTTPS form/cookie login, Connected UI and state200,
+internal/export404; no host task submitted. Token was never logged and the owner
+was given a Terminal command to read it privately. Browser is closed. Screenshot
+`.amp/in/artifacts/owner-alpha-public-portal.png` inspected. Check retained custody
+for owner activity before making claims; preserve all earlier live trials.
+Service command ends in `sleep infinity` to prevent automatic restarts; after
+readback closes, stop the managed service. Continuation schedule remains enabled.
+Logs `.local/alpha-access-{combined,desktop,supervisor-child}.log` are host evidence.
+Actual owner use, P0.3 background and full settlement remain separate. No paid
+fallback, connector write, Sprite operation, production deployment or gate change.
+
 The owner authorized the corrected trial and directed no repeated permission asks
 unless spending exceeds $5. Treat that as a ceiling for this bounded work, not per
 attempt or blanket deployment/connector-write permission. The corrected session

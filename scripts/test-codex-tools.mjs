@@ -238,17 +238,20 @@ try {
     { idempotency_key: randomUUID(), payload: { id: routineId, expected_revision: 1 } },
     { skill_id: reviewedId }];
   let manualRunId, nativeBound = false, toolRequests = 0, childThreadId, intermediateThreadId, childFinalHeld = false, childFinalClosed = false;
+  let rootCatalogChecked = false;
   fixture = createServer(async (req, res) => { try {
     if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
     if (report.modelCalls >= expectedModelCalls) { res.writeHead(400); res.end(); return; }
     report.modelCalls++; const body = await jsonBody(req);
-    if (supervisorMode && report.modelCalls === 1) check('native model receives paused routine instructions and progressive skill catalog only', () => {
-      const input = JSON.stringify(body.input);
+    const input = JSON.stringify(body.input);
+    const unrelatedGrantProof = childMode && input.includes('UNRELATED_GRANT_PROOF');
+    if (supervisorMode && !unrelatedGrantProof && !rootCatalogChecked) check('native model receives paused routine instructions and progressive skill catalog only', () => {
       assert.match(input, /SUPERVISED_PAUSED_ROUTINE/); assert.ok(input.includes(reviewedId));
       assert.match(input, /hehebot_read_skill/); assert.equal(input.includes(reviewedBody.steps[0]), false);
+      rootCatalogChecked = true;
     });
     if (childMode) {
-      if (body.input.some(item => item?.role === 'user' && JSON.stringify(item.content).includes('UNRELATED_GRANT_PROOF'))) {
+      if (unrelatedGrantProof) {
         const output = findType(body.input, 'function_call_output');
         if (output) {
           check('unadmitted second root cannot borrow first task Worker authority', () => {

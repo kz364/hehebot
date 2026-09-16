@@ -18,7 +18,8 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { inspectCodexRecovery } from '../runtime/codex-recovery-inspect.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const ownerAlphaMode = process.argv.includes('--owner-alpha');
+const ownerAlphaMultiMode = process.argv.includes('--owner-alpha-multi');
+const ownerAlphaMode = process.argv.includes('--owner-alpha') || ownerAlphaMultiMode;
 const restrictedMode = process.argv.includes('--restricted-background') || ownerAlphaMode;
 const backgroundMode = process.argv.includes('--background-responsive') || process.argv.includes('--restricted-background');
 const effectsMode = process.argv.includes('--child-effects');
@@ -38,7 +39,7 @@ const browserSession = `service-${randomUUID().slice(0, 8)}`;
 const browser = (...args) => promisify(execFile)('agent-browser', ['--session', browserSession, '--ignore-https-errors', ...args], { timeout: 30000 });
 const expectedToolCalls = operationPagesMode ? 101 : 1;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback', '--background-responsive', '--restricted-background', '--owner-alpha'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback', '--background-responsive', '--restricted-background', '--owner-alpha', '--owner-alpha-multi'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -94,12 +95,14 @@ let nativeTransport, nativeLaunches = 0, crashHeld = false, crashClosed = false;
 let backgroundChild, independentHeld = false, independentClosed = false;
 const statusText = 'SERVICE_STATUS_S_71', independentText = 'SERVICE_INDEPENDENT_B_103';
 const statusOutput = 'SERVICE_STATUS_PROVISIONAL_71: A remains active; this is not a completed result.';
+const alphaFirstText = 'OWNER_ALPHA_MULTI_FIRST_19', alphaSecondText = 'OWNER_ALPHA_MULTI_SECOND_43';
+const alphaOutputs = new Map();
 const interrupts = [], notifications = [];
 const errors = [], taskRequests = [];
 try {
   const workerPort = await port(), token = randomBytes(32).toString('hex');
   const ownerAlpha = { session_id: randomUUID(), persona_id: '11111111-1111-4111-8111-111111111111',
-    expires_at: new Date(Date.now() + 300000).toISOString(), max_runs: 1, max_task_seconds: 15 };
+    expires_at: new Date(Date.now() + 300000).toISOString(), max_runs: ownerAlphaMultiMode ? 2 : 1, max_task_seconds: 15 };
   const routinePolicy = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
   const cert = join(directory, 'cert.pem'), key = join(directory, 'key.pem');
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
@@ -139,10 +142,11 @@ try {
     await browser('click', `[data-persona-id="${persona.id}"]`);
     // Observe the real UI's receipt, without replacing its transport or server response.
     await browser('eval', `window.fixtureReceipts=[];window.fixtureFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.fixtureFetch(...args);if(args[0]==='/v1/commands'&&args[1]?.method==='POST')window.fixtureReceipts.push({request:JSON.parse(args[1].body),key:args[1].headers['Idempotency-Key'],receipt:await response.clone().json()});return response;}`);
-    await browser('fill', '#message', 'SERVICE_ASSEMBLY_19_43'); await browser('click', '#send');
+    const initialPortalText = ownerAlphaMultiMode ? alphaFirstText : 'SERVICE_ASSEMBLY_19_43';
+    await browser('fill', '#message', initialPortalText); await browser('click', '#send');
     await browser('wait', '--fn', 'window.fixtureReceipts.length === 1');
     const [observed] = JSON.parse((await browser('eval', 'window.fixtureReceipts')).stdout);
-    assert.deepEqual(observed.request, { schema_version: 1, type: 'message.send', payload: { conversation_id: persona.id, text: 'SERVICE_ASSEMBLY_19_43' } });
+    assert.deepEqual(observed.request, { schema_version: 1, type: 'message.send', payload: { conversation_id: persona.id, text: initialPortalText } });
     assert.match(observed.key, /^[0-9a-f-]{36}$/); queued = observed.receipt;
     await browser('close');
     report.portalMessageSubmitted = true;
@@ -163,8 +167,42 @@ try {
       const chunks = []; for await (const chunk of req) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString());
       report.modelRequests++;
-      assert.ok(report.modelRequests <= (backgroundMode ? 6 : childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2), 'Unexpected model continuation');
+      assert.ok(report.modelRequests <= (ownerAlphaMultiMode ? 4 : backgroundMode ? 6 : childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2), 'Unexpected model continuation');
       await wait(() => bound, 'service acknowledged root');
+      const actualContexts = body.input.filter(item => item.role === 'user').flatMap(item => {
+        const content = typeof item.content === 'string' ? [item.content] : (item.content ?? []).map(part => part.text);
+        return content.flatMap(text => { try { return [JSON.parse(text)]; } catch { return []; } });
+      });
+      const alphaContext = actualContexts.find(candidate => [alphaFirstText, alphaSecondText].includes(candidate.instruction));
+      if (ownerAlphaMultiMode && alphaContext) {
+        const key = alphaContext.instruction;
+        const count = (alphaOutputs.get(key) ?? 0) + 1; alphaOutputs.set(key, count);
+        if (key === alphaSecondText && count === 1) {
+          report.secondActualContext = { instruction: alphaContext.instruction,
+            task_summaries: alphaContext.task_summaries ?? [], context_events: alphaContext.context_events ?? [],
+            conversation_history: alphaContext.conversation_history };
+          report.secondInputContainsFirstTask = JSON.stringify(body.input).includes(alphaFirstText);
+          assert.equal(alphaContext.conversation_history.messages[0].provisional_reply.text, `${alphaFirstText}_PROVISIONAL`);
+        }
+        if (count === 1) {
+          const tool = body.tools.find(tool => tool.name?.includes('hehebot_list_routines')) ?? body.tools.find(tool => tool.name === 'mcp__hehebot');
+          assert.ok(tool, `read-only MCP advertised for ${key}`);
+          await send(res, [{ id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
+            ...(tool.name === 'mcp__hehebot' ? { namespace: 'mcp__hehebot', name: 'hehebot_list_routines' } : { name: tool.name }), arguments: '{}' }]);
+        } else {
+          const outputs = body.input.filter(item => item.type === 'function_call_output');
+          assert.equal(outputs.length, 1);
+          const decoded = typeof outputs[0].output === 'string' ? JSON.parse(outputs[0].output) : outputs[0].output;
+          const content = Array.isArray(decoded) ? JSON.parse(decoded.at(-1).text) : decoded;
+          const receipt = content.content ? JSON.parse(content.content.find(item => item.type === 'text').text) : content;
+          assert.equal(receipt.next_cursor, null); assert.equal(receipt.routines.length, 1);
+          assert.equal(receipt.routines[0].id, routine.id); assert.deepEqual(receipt.routines[0].body, routine);
+          report.nativeReceipt = true;
+          await send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
+            content: [{ type: 'output_text', text: `${key}_PROVISIONAL`, annotations: [] }] }]);
+        }
+        return;
+      }
       if (backgroundMode) {
         // Inspect the actual provider input, not a fabricated context or the claim alone.
         const contexts = body.input.filter(item => item.role === 'user').flatMap(item => {
@@ -401,7 +439,7 @@ try {
       assert.equal(response.status, 200);
       heartbeatPages.push(JSON.parse(init.body).operations);
     }
-    if (backgroundMode && new URL(url).pathname === '/internal/coordinator-release') {
+    if ((backgroundMode || ownerAlphaMultiMode) && new URL(url).pathname === '/internal/coordinator-release') {
       assert.equal(response.status, 200);
       const input = JSON.parse(init.body);
       const terminal = notifications.find(n => n.method === 'turn/completed' && n.params.turn.id === input.native_ref);
@@ -672,6 +710,71 @@ try {
     assert.deepEqual(await service.supervisor.operations(), operations, 'Per-family coverage survives service stop');
     assert.deepEqual(await service.journal.get(`grant-${p.attemptId}`), pGrant);
     assert.deepEqual(await service.journal.get(`grant-${s.attemptId}`), sGrant);
+  } else if (ownerAlphaMultiMode) {
+    const getState = async () => (await (await trustedFetch(`${origin}/v1/state`)).json());
+    const submit = async text => {
+      await browser('open', origin); await browser('set', 'viewport', '1280', '900', '2');
+      await browser('wait', '--fn', 'document.querySelector("#connection").textContent === "Connected"');
+      await browser('click', `[data-persona-id="${persona.id}"]`);
+      await browser('eval', `window.fixtureReceipts=[];window.fixtureFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.fixtureFetch(...args);if(args[0]==='/v1/commands'&&args[1]?.method==='POST')window.fixtureReceipts.push({request:JSON.parse(args[1].body),receipt:await response.clone().json()});return response;}`);
+      await browser('fill', '#message', text); await browser('click', '#send');
+      await browser('wait', '--fn', 'window.fixtureReceipts.length === 1');
+      const [observed] = JSON.parse((await browser('eval', 'window.fixtureReceipts')).stdout);
+      assert.deepEqual(observed.request, { schema_version: 1, type: 'message.send', payload: { conversation_id: persona.id, text } });
+      assert.equal(observed.receipt.status, 'applied');
+      return observed.receipt;
+    };
+    const firstNative = await wait(async () => { const row = await service.observe(dispatched.attemptId); return row?.rootSettled && row; }, 'first alpha root terminal');
+    await service.maintain();
+    const firstFamily = (await service.supervisor.bridge.families()).find(row => row.attemptId === dispatched.attemptId);
+    assert.equal(firstFamily.coordinatorRelease.acknowledged, true);
+    assert.equal(firstFamily.phase, 'running');
+    const secondReceipt = await submit(alphaSecondText);
+    await wait(async () => { await service.maintain(); return alphaOutputs.get(alphaSecondText) === 2; }, 'second alpha root through MCP');
+    const families = await service.supervisor.bridge.families();
+    assert.equal(families.length, 2);
+    const secondFamily = families.find(row => row.claim.run.id === secondReceipt.resource_id);
+    assert.ok(secondFamily); assert.notEqual(secondFamily.attemptId, firstFamily.attemptId);
+    const secondNative = await wait(async () => { const row = await service.observe(secondFamily.attemptId); return row?.rootSettled && row; }, 'second alpha root terminal');
+    assert.equal(new Set([queued.resource_id, secondReceipt.resource_id]).size, 2);
+    assert.equal(new Set([dispatched.attemptId, secondFamily.attemptId]).size, 2);
+    assert.equal(new Set([firstNative.threadId, secondNative.threadId]).size, 2);
+    const firstGrant = await service.journal.get(`grant-${dispatched.attemptId}`);
+    const secondGrant = await service.journal.get(`grant-${secondFamily.attemptId}`);
+    assert.equal(firstGrant.runId, queued.resource_id); assert.equal(secondGrant.runId, secondReceipt.resource_id);
+    assert.notDeepEqual(firstGrant, secondGrant);
+    assert.equal((await getState()).summary.owner_alpha_session.admitted_runs, 2);
+    const third = await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
+      'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
+    }, body: JSON.stringify({ schema_version: 1, type: 'message.send', payload: { conversation_id: persona.id, text: 'OWNER_ALPHA_MULTI_QUOTA_67' } }) });
+    assert.equal(third.status, 202); const thirdReceipt = await third.json(); assert.equal(thirdReceipt.status, 'applied');
+    assert.equal((await getState()).runs.find(run => run.id === thirdReceipt.resource_id).status, 'waiting');
+    await service.maintain(); assert.equal(report.modelRequests, 4);
+    assert.equal((await service.supervisor.bridge.families()).length, 2);
+    const beforeReload = await getState();
+    await browser('reload'); await browser('wait', '--fn', 'document.querySelector("#connection").textContent === "Connected"');
+    assert.equal(report.modelRequests, 4); assert.deepEqual((await getState()).output_previews, beforeReload.output_previews);
+    const cancel = await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
+      'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
+    }, body: JSON.stringify({ schema_version: 1, type: 'run.cancel', payload: { run_id: queued.resource_id,
+      reason: 'Exact old owner-alpha fixture cancellation' } }) });
+    assert.equal(cancel.status, 202); assert.equal((await cancel.json()).status, 'applied'); await service.maintain();
+    assert.equal(interrupts.some(item => item.threadId === secondNative.threadId || item.turnId === secondNative.nativeRunId), false);
+    const history = await (await trustedFetch(`${origin}/v1/conversations/${persona.id}/events`)).json();
+    assert.equal(history.events.filter(event => event.type === 'run.result').length, 0);
+    assert.equal(history.events.filter(event => event.type === 'message.user' && [alphaFirstText, alphaSecondText].includes(event.payload.text)).length, 2);
+    const operations = await service.supervisor.operations();
+    for (const family of families) assert.equal(operations.filter(op => op.run_id === family.claim.run.id && op.status === 'unknown').length, 1);
+    await assert.rejects(service.supervisor.drain({ state: 'owner-alpha-multi' }), { code: 'SLEEP_DENIED' });
+    assert.deepEqual(taskRequests, []); assert.equal(nativeLaunches, 1); assert.deepEqual(errors, []);
+    Object.assign(report, { ownerAlphaMulti: true, familyCount: 2, distinctCustody: true,
+      retainedAfterCoordinatorRelease: true, quotaDeniedThirdAdmission: true, reloadWithoutInference: true,
+      exactOldCancellationDidNotTargetNewer: true, unknownCoverage: 2, completedResultObserved: false,
+      sleepDenied: true, providerHolds: 0, nativeChildren: 0, productionCompletion: false });
+    await service.stop();
+    assert.equal((await service.supervisor.bridge.families()).length, 2);
+    assert.equal(report.secondInputContainsFirstTask, true,
+      'Second owner-alpha root input must contain an appropriate first-task summary or history');
   } else {
   if (crashMode) await wait(() => crashHeld, 'active root inference after verified MCP receipt');
   else await wait(async () => (await service.observe())?.rootSettled, 'root completion');
@@ -946,7 +1049,9 @@ try {
     await browser('screenshot', join(root, '.amp/in/artifacts/portal-native-readback.png'));
     if (ownerAlphaMode) {
       assert.equal(reread.summary.owner_alpha, true);
-      assert.match((await browser('get', 'text', '#runtime-banner')).stdout, /Supervised owner alpha.*provisional replies only/);
+      const alphaBanner = (await browser('get', 'text', '#runtime-banner')).stdout;
+      assert.match(alphaBanner, /Supervised owner alpha/);
+      assert.match(alphaBanner, /Provisional output.*not a completed result/);
       await wait(async () => {
         const state = await (await trustedFetch(`${origin}/v1/state`)).json();
         if (state.runs.find(run => run.id === queued.resource_id)?.status !== 'cancelling') { await sleep(250); return false; }

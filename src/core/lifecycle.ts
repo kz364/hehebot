@@ -119,7 +119,7 @@ export class LifecycleCore {
    if(unresolved>=32)return null;
    const run=this.nextClaimableRun();if(!run)return null;
    const prior=JSON.parse(run.context_json) as Pick<ContextSnapshot,'instruction'|'room_id'>;
-   const context=this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id);
+   const context=this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id,run.command_id);
    const attempt=run.current_attempt+1,submissionKey=`${run.id}:${attempt}`,deadline=this.core.ownerAlpha.policy?this.core.ownerAlpha.admit(run):new Date(this.core.options.now().getTime()+20*60000).toISOString();
    this.store.db.exec("UPDATE runs SET status='claimed',current_attempt=?,context_json=?,updated_at=? WHERE id=?",attempt,JSON.stringify(context),this.core.now(),run.id);
    this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,started_at) VALUES(?,?,?,?,?,'claimed',?,?)",run.id,attempt,submissionKey,identity.epoch,identity.boot_id,deadline,this.core.now());

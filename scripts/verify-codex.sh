@@ -18,6 +18,8 @@ node --test tests/audit-wappmcp-licenses.mjs
 node --test macos/tests/*.test.mjs
 node scripts/verify-wappmcp.mjs
 npm run test:e2e
+node scripts/test-owner-alpha-gateway.mjs
+node scripts/test-portal-alpha-session.mjs
 node scripts/test-control-questions.mjs
 node scripts/test-control-whatsapp.mjs
 node scripts/test-control-crash.mjs 2
@@ -35,6 +37,7 @@ node scripts/test-codex-tools.mjs --dynamic
 node scripts/test-codex-tools.mjs --supervisor
 node scripts/test-codex-tools.mjs --supervisor-child
 bash scripts/test-codex-service.sh
+bash scripts/test-codex-service.sh --owner-alpha-multi
 bash scripts/test-codex-service.sh --submission-ack
 bash scripts/test-codex-service.sh --operation-pages
 bash scripts/test-codex-service.sh --reasoning
