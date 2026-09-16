@@ -4,6 +4,39 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+WhatsApp result custody (2026-09-16): two synthetic red cases changed an already
+returned message during final authority checking or journal response persistence.
+The shared capture boundary now detaches bounded structured data and error status
+before those waits; unchecked text/resource blocks are not captured. Original error
+responses cannot become successful by later mutation. Journal records still contain
+no message payload, and response observation settles only protocol invocation.
+All 36 read/operation cases plus typecheck pass, including an additional red/green
+case that prevents new authority I/O if result capture crosses the deadline. Logs:
+`.local/wapp-result-custody-red.log`, `.local/wapp-result-deadline-red.log` and
+`.local/wapp-result-custody-focused-final.log`. The preliminary combined run passed;
+final integrated run passed in `.local/search-expiry-final-combined.log`:
+1,227 control/291 runtime, scripted contracts and build dry run, exit 0.
+Recent-array compatibility and actual connector
+admission/browser settlement remain unproved; no patch or gate changed.
+
+Expiry/runtime integration (2026-09-16): both acknowledged and lost cancellation
+reply cases pass through real SQLite lifecycle and supervisor composition, preserving
+the exact attempt, unknown effects/tools/locks, unrelated active task and original
+expiry cancellation grace. Host reran 72 related tests and typecheck successfully
+in `.local/expiry-runtime-integrated.log`. No production defect was found; synthetic
+native/activity callbacks do not prove Codex interruption, transcript deletion or
+physical sleep. See [evidence and limits](MEMORY_EXPIRY_RUNTIME.md).
+
+Scoped local memory search integration (2026-09-16): host reran search, inspector,
+12-command edit and eight-command Forget fixtures successfully. Search is literal,
+case-insensitive text over loaded eligible records only; no added request or source
+retrieval. Navigation clears the query; unchanged refresh retains it and current
+metadata disclosure. Matched, empty and narrow DPR2 captures were inspected, with
+readable wrapping and actions. See [limits](PORTAL_MEMORY_SEARCH.md). The integrated
+build and desktop 16/16 passed in `.local/search-expiry-final-{build,desktop}.log`;
+desktop reinstall also passed earlier. No native Mac/Safari/live acceptance implied.
+Both workers are integrated locally; no production gate or publication changed.
+
 Completion custody snapshot (2026-09-16): `ExecutionBridge.complete` retained the
 caller's observation/result object across journal and control awaits. Three red
 cases showed changed identity or divergence between durable result and Worker

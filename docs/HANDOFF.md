@@ -4,7 +4,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
-Current wave is integrated from `.local/public-api-memory-inspect.bundle`,
+Current wave uses `.local/search-expiry.bundle`, unpublished local main f5799f9.
+Both workers delivered and are reviewed/integrated. Portal search, inspector,
+edit and Forget fixtures pass; three main-generated DPR2 search captures inspected.
+Expiry/runtime composition passes 72 related tests plus typecheck. Main reproduced
+and fixed result-reference mutation during final WhatsApp authority/journal waits.
+36 read/operation tests and typecheck pass, including a post-capture deadline guard.
+Final verifier passed 1,227 control/291 runtime, scripted contracts and build dry run
+in `.local/search-expiry-final-combined.log`. Integrated UI build and desktop 16/16
+pass in `.local/search-expiry-final-{build,desktop}.log`; reinstall also passed.
+No worker remains pending; all commits remain unpublished. Continue the owned
+service/descendant lifecycle boundary before connector admission. Recent-array SDK
+compatibility, browser settlement, licensing and live/device gates remain open.
+No connector admission or production changes; schedule remains active.
+
+Previous wave is integrated from `.local/public-api-memory-inspect.bundle`,
 unpublished host local main 5223347, not origin/main. Both public-server and memory
 inspector workers delivered; neither remains pending. The host wired public ESM
 factory checks into the artifact verifier (22 tools/eight schema rejections/26 host
