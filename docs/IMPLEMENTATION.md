@@ -4,6 +4,19 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Late-start checkpoint (2026-09-16): `submitted` now retains a late native receipt
+and marks the run cancelling/DEADLINE_EXCEEDED when its admitted deadline has passed,
+including equality. Previously a registered child could acknowledge start after
+expiry and become running before watchdog reconciliation. Attempt status remains
+running because the observed native work is not settled. Receipt replays remain
+no-ops and cannot renew cancellation grace. The exact child boundary failed before
+the fix; 82 focused lifecycle/orchestration/task-control tests pass, covering −1ms,
+exact and +1ms root/child cases (`.local/late-start-focused.log`, red evidence
+`.local/late-start-red.log`). Combined verification passed 922 control / 251 runtime
+tests, native/service fixtures and typecheck/build dry run
+(`.local/late-start-combined.log`). This is metadata cancellation intent, not verified
+native termination, new execution authority or production admission.
+
 Disabled-admission retry checkpoint (2026-09-16): `retryDue` previously deleted a
 due retry even when execution was disabled, leaving waiting work without its timer.
 It now retains that timer until admission reopens, while still removing stale timers

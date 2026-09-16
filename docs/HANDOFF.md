@@ -2,6 +2,18 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Late-start checkpoint (2026-09-16)
+
+First native start acknowledgement at/after hard deadline now retains the native
+receipt while setting run cancellation intent. Attempt stays running/unsettled;
+acknowledgement replay does not reset grace. Focused lifecycle/orchestration/task
+control: 82 passed, with before/exact/after boundaries and heartbeat/replay checks
+(`.local/late-start-focused.log`). Exact child boundary failed before the fix.
+Combined verification passed 922 control / 251 runtime tests, native/service fixtures
+and typecheck/build dry run (`.local/late-start-combined.log`). E01 native
+termination and other credential-free work remain open. No provider or production
+gate changes; schedule unchanged.
+
 ## Disabled-admission retry checkpoint (2026-09-16)
 
 Due automatic retries now survive disabled execution instead of losing their timer.

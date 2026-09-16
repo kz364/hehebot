@@ -103,14 +103,16 @@ export class LifecycleCore {
   this.store.db.transaction(()=>{
    this.authorizeAttempt(identity,runId,attempt);const run=this.store.run(runId);
    requireThat(run.current_attempt===attempt,'REVISION_CONFLICT','Attempt has changed.');
-   const row=this.store.db.all<{native_run_ref:string|null;status:string}>('SELECT native_run_ref,status FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
+   const row=this.store.db.all<{native_run_ref:string|null;status:string;deadline_at:string}>('SELECT native_run_ref,status,deadline_at FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
    requireThat(row.native_run_ref===null||row.native_run_ref===nativeRef,'REVISION_CONFLICT','Native submission identity already belongs to a different receipt.');
    // A registered receipt survives a lost reply and later cancellation/settlement.
    // A child may have a native ref while still claimed; that is not a start ACK.
    if(row.native_run_ref===nativeRef&&row.status!=='claimed')return;
    requireThat(run.status==='claimed','REVISION_CONFLICT','Run is not awaiting submission.');
+   const now=this.core.now(),expired=row.deadline_at<=now;
+   // Retain late native receipts, but expose cancellation without waiting for an alarm.
    this.store.db.exec("UPDATE attempts SET native_run_ref=?,status='running' WHERE run_id=? AND attempt=?",nativeRef,runId,attempt);
-   this.store.db.exec("UPDATE runs SET status='running',updated_at=? WHERE id=?",this.core.now(),runId);this.touch();
+   this.store.db.exec('UPDATE runs SET status=?,error_code=?,updated_at=? WHERE id=?',expired?'cancelling':'running',expired?'DEADLINE_EXCEEDED':run.error_code,now,runId);this.touch();
   });
  }
  complete(identity:Identity,runId:string,attempt:number,result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>}):void {

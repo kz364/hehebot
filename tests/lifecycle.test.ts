@@ -51,6 +51,19 @@ describe('executor leases and attempts', () => {
     f.setNow('2026-09-10T00:02:01.000Z');
     expect(() => life.registerBoot(identity.boot_id)).toThrowError(expect.objectContaining({ code: 'STALE_EPOCH' }));
   });
+  it('retains a first root submission receipt after deadline without reopening execution', () => {
+    const claim = claimed();
+    f.db.exec("UPDATE attempts SET deadline_at='2026-09-10T00:00:10.000Z' WHERE run_id=?", claim.run.id);
+    f.setNow('2026-09-10T00:00:10.001Z');
+    life.submitted(identity, claim.run.id, 1, 'late-root-receipt');
+    const run = f.store.run(claim.run.id), attempts = f.db.all('SELECT * FROM attempts');
+    expect(run).toMatchObject({ status: 'cancelling', error_code: 'DEADLINE_EXCEEDED' });
+    expect(attempts).toEqual([expect.objectContaining({ native_run_ref: 'late-root-receipt', status: 'running' })]);
+    expect(life.heartbeat(identity, []).cancellations).toContain(claim.run.id);
+    f.setNow('2026-09-10T00:00:20.000Z');
+    life.submitted(identity, claim.run.id, 1, 'late-root-receipt');
+    expect(f.store.run(claim.run.id)).toEqual(run); expect(f.db.all('SELECT * FROM attempts')).toEqual(attempts);
+  });
   it('submission cannot replace an already registered native child identity', () => {
     const parent = claimed();
     life.submitted(identity, parent.run.id, 1, 'native-root-19');

@@ -191,6 +191,25 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(f.db.all('SELECT * FROM native_task_links')).toHaveLength(3);
   });
 
+  it.each(['2026-09-10T00:00:29.999Z', '2026-09-10T00:00:30.000Z'])('late child start preserves its receipt and enforces the inherited deadline: %s', now => {
+    const p = parent(), deadline = '2026-09-10T00:00:30.000Z';
+    f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?', deadline, p);
+    const input = receipt(p), child = tasks.register(identity, input);
+    f.setNow(now);
+    const started = tasks.register(identity, input, true), expired = now === deadline;
+    expect(started).toMatchObject({ id: child.id, status: expired ? 'cancelling' : 'running', error_code: expired ? 'DEADLINE_EXCEEDED' : null });
+    expect(f.db.all('SELECT native_run_ref,status,deadline_at FROM attempts WHERE run_id=?', child.id)).toEqual([
+      { native_run_ref: input.native_run_ref, status: 'running', deadline_at: deadline },
+    ]);
+    expect(life.heartbeat(identity, []).cancellations.includes(child.id)).toBe(expired);
+    f.setNow('2026-09-10T00:00:40.000Z');
+    expect(tasks.register(identity, input, true)).toEqual(started);
+    if (expired) {
+      f.setNow('2026-09-10T00:01:00.000Z'); life.watchdog();
+      expect(f.store.run(child.id).status).toBe('recovery_required');
+    }
+  });
+
   it('descendants inherit the original hard deadline instead of extending it at each spawn', () => {
     const p = parent(), deadline = '2026-09-10T00:00:30.000Z';
     f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?', deadline, p);
