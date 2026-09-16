@@ -22,7 +22,10 @@ const mcp = { hehebot: { command: '/node', args: ['/agent-tools.mjs'],
   env: { HEHEBOT_AGENT_TOOLS_CONFIG: '/private/original-task-grant' },
   enabled_tools: ['hehebot_list_routines'], tools: { hehebot_list_routines: { approval_mode: 'approve' } } } };
 const grantConfig = { agents: { enabled: true },
-  features: { multi_agent: false, multi_agent_v2: { enabled: true, max_concurrent_threads_per_session: 2, wait_agent_enabled: false } } };
+  features: { apps: false, plugins: false, tool_suggest: false, image_generation: false,
+    standalone_web_search: false, token_budget: false, sleep_tool: false,
+    request_permissions_tool: false, exec_permission_approvals: false,
+    multi_agent: false, multi_agent_v2: { enabled: true, max_concurrent_threads_per_session: 2, wait_agent_enabled: false } } };
 const malformed = [false, null, undefined, 1, 'true', {}, [], { enabled: true }];
 async function journalFor(t) {
   const directory = await mkdtemp(join(tmpdir(), 'hehe-background-'));
@@ -67,12 +70,12 @@ test('only selected roots override nested native config; MCP and default fingerp
   assert.equal((await journal.get('legacy')).fingerprint, createHash('sha256').update(oldBytes).digest('hex'));
 });
 
-test('selected V2 submission refuses a persisted V1 fingerprint before native RPC', async t => {
+for (const priorMode of [undefined, 'v2-cap2']) test(`selected restricted V2 submission refuses prior fingerprint ${priorMode ?? 'V1'} before native RPC`, async t => {
   const journal = await journalFor(t), calls = [], adapter = adapterFor(journal, opted, calls);
   const selected = { ...input, ownerAlphaBackground: true };
   const values = ['attemptId', 'installationId', 'personaId', 'scope', 'scopeId', 'message', 'model'].map(key => selected[key]);
   const oldBytes = JSON.stringify([[[values, [], mcp], { permissionsProfile: 'alpha-profile', ownerAlpha: opted }],
-    { ownerAlphaBackground: true }]);
+    { ownerAlphaBackground: true, ...(priorMode ? { nativeOrchestration: priorMode } : {}) }]);
   const prior = { attemptId: input.attemptId, fingerprint: createHash('sha256').update(oldBytes).digest('hex'),
     status: 'running', threadId: 'old-v1-root', nativeRunId: 'old-v1-turn', rootSettled: false };
   await journal.putIfAbsent(input.attemptId, prior);

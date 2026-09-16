@@ -34,19 +34,31 @@ Native terminal-root probe passes33 requests: message queues, followup_task reje
 root, natural child completion appends metadata but starts no root turn/inference
 in a one-second observation window.31 unknown-inclusive operations survive;
 no router recovery/pending events. All three final native modes pass.
-No worker remains active. Next concrete fix before live-entry gate review:
-explicitly disable features.sleep_tool in restricted service, require readback,
-and test against always_on sleep configuration. Source confirmed sleep_tool is
-default-on and independent of token_budget=false; model metadata/reminder can
-expose it. Durable sleep can wake queue-only mail. No live sessions/external actions.
+No worker remains active. Sleep follow-through found two issues before live V2:
+sleep_tool defaults on independently of token_budget, and a selected per-thread
+features table drops startup overrides. Native root feature readback proved
+apps/sleep re-enabled despite global config/read false. The adapter now repeats
+the complete restricted set shared with startup; its fingerprint changed to
+v2-cap2-restricted, rejecting both earlier V1 and V2 journals. The service accepts
+native disabled sleep readback as false or {enabled:false,mode:always_on}.
+48 focused tests and actual native service pass with deliberately enabled
+always_on input config; root/child apps/plugins/sleep disabled, exact cancellation
+and independent work preserved. Full combined exits0 in
+`.local/restricted-v2-combined.log`:1,318 backend/399 runtime plus native/browser/
+service/build checks. Entry now permits the explicit bounded V2 policy; launcher
+accepts true-only `backgroundFirstRoot` and leaves default serialization root-only.
+33 subsequent focused tests pass in `.local/v2-launcher-focused.log`.
+Next: the already-authorized bounded same-owner V2 demonstration using fresh
+private state. No live V2 session/external action occurred at this checkpoint.
+Never infer full settlement/restart or default production enablement.
 
 IMPORTANT: V1 background is NOT safe for independent-task authority. After the
 integration passed, pinned source review found raw foreign thread IDs reach
 global ThreadManager through V1 send_input/close_agent/wait_agent without tree
 membership checks. No supported spawn-only filter exists. Host added a live-entry
-gate: runOwnerAlpha rejects background_first_root before filesystem/service/account
-work with OWNER_BACKGROUND_AUTHORITY_UNVERIFIED.24 focused tests pass after the
-full combined run. Do not remove this gate based on earlier scripted success.
+gate originally rejected background_first_root before filesystem/service/account
+work with OWNER_BACKGROUND_AUTHORITY_UNVERIFIED. It is superseded only by the
+integrated restricted V2 boundary above, not by earlier V1 scripted success.
 Details/citations: OWNER_BACKGROUND_NATIVE.md#cross-root-authority-blocker.
 
 V1 gap now behaviorally confirmed with optional native --foreign-close mode.

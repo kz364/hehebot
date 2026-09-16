@@ -1,6 +1,6 @@
 # Codex V2 target-authority prerequisite
 
-**Credential-free native fixture passed on 2026-09-16; live owner-background entry remains blocked.** This is executable evidence for the pinned binary and synthetic `fixture-model`, not authenticated model behavior, a universal depth guarantee, logical-child settlement, or live-alpha authorization. Do not clear `OWNER_BACKGROUND_AUTHORITY_UNVERIFIED` or production/native-verification flags based on this fixture alone.
+**Restricted V2 integration passed on 2026-09-16; explicit bounded owner-background entry is implemented, not yet live-demonstrated.** The fixture alone is not authenticated model behavior, a universal depth guarantee, logical-child settlement, or live-alpha authorization. The integrated service now also enforces inherited feature restrictions and durable per-turn custody. Only this combined boundary replaces the earlier blanket `OWNER_BACKGROUND_AUTHORITY_UNVERIFIED` refusal; production/native-verification flags remain false and V1 remains prohibited.
 
 ## Reproduce without credentials
 
@@ -115,9 +115,9 @@ V2 collaboration: its own live residency exhausts the sole child slot. The host
 independently passed the V2-capable fixture, including three advertised child spawn
 capacity denials and successful sequential root spawn after idle eviction.
 Lifetime logical-child count remains unbounded by residency; all evicted children
-still require custody/lifecycle accounting. Keep `OWNER_BACKGROUND_AUTHORITY_UNVERIFIED`
-until this native evidence and service integration are reviewed. Do not substitute
-role prompts or fixture-only metadata for enforcement.
+still require custody/lifecycle accounting. The integrated v11 control/service
+boundary below retains that history. Do not substitute role prompts or fixture-only
+metadata for enforcement.
 
 ## Runtime observation and remaining control-plane gap
 
@@ -144,8 +144,8 @@ parent/attempt/persona. Migration rollback and exact legacy backup/import histor
 are tested. Selected service roots use the V2 config above with a versioned
 fingerprint that rejects old V1 journal reuse. Scripted service/browser integration
 passes inherited read, independent status/B, exact old-family cancellation,
-26 retained operations and sleep denial. Live entry remains gated; default alpha
-is unchanged.
+26 retained operations and sleep denial. Explicit bounded V2 entry is enabled
+after the restricted-feature correction below; default root-only alpha is unchanged.
 
 ## Terminal-root mailbox is not new inference
 
@@ -169,5 +169,25 @@ This agrees with pinned source: [send_message uses QueueOnly](https://github.com
 [followup_task rejects root targets](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control/delivery.rs#L85-L107),
 and [completion notifications use trigger_turn=false](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control.rs#L629-L710).
 [Mailbox delivery only attempts a new turn for trigger_turn or durable sleep](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/session/handlers.rs#L76-L92).
-The fixture disables token_budget/wait_agent and asserts no sleep tool in each
-actual catalog. Durable-sleep wake behavior is not covered or authorized here.
+The fixture disables token_budget, sleep_tool and wait_agent and asserts no sleep
+tool in each actual catalog. Durable-sleep wake behavior is not covered or authorized here.
+`sleep_tool` is independently [default-on](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/features/src/lib.rs#L948-L953):
+token_budget=false alone does not remove it. Restricted service now overrides
+features.sleep_tool=false and requires false or structured enabled=false readback.
+The native merge retains an existing mode=always_on while changing enabled to
+false; that mode does not bypass the outer feature gate. The service fixture starts
+with enabled=true/mode=always_on, checks the effective root feature is disabled,
+and checks every actual root/child catalog lacks sleep. No native installation or
+owner config is patched to enforce this supported CLI override.
+
+The adversarial service run exposed a second, distinct layering issue: sending
+the per-thread V2 `features` table replaces startup feature overrides. With only
+multi_agent/multi_agent_v2 in that table, thread-scoped experimentalFeature/list
+reported apps and sleep_tool enabled despite globally disabled config/read.
+The selected adapter now repeats the complete frozen restricted feature set used
+at startup. Actual root and child feature readback confirms apps/plugins/sleep
+disabled, while inherited MCP read and independent S/B still work. The selected
+fingerprint is `v2-cap2-restricted`; both V1 and earlier V2 fingerprints reject
+before RPC. Default root-only serialization is unchanged. Initial unit and native
+failures are retained in `.local/sleep-tool-*`; the corrected native pass is
+`.local/feature-layer-native.log`. This was found before any live V2 session.

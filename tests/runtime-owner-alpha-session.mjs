@@ -24,6 +24,7 @@ test('fresh session captures distinct private tokens and bounded readback withou
   assert.equal(session.ownerAlpha.expires_at, '2026-09-16T15:01:13.000Z');
   assert.equal(session.accessExpiresAt, '2026-09-16T15:16:13.000Z');
   assert.equal(session.ownerAlpha.max_runs, 2); assert.equal(session.ownerAlpha.max_task_seconds, 41);
+  assert.equal(Object.hasOwn(session.ownerAlpha, 'background_first_root'), false);
   const owner = await readFile(session.ownerTokenFile, 'utf8'), runtime = await readFile(session.runtimeTokenFile, 'utf8');
   assert.match(owner, /^[A-Za-z0-9_-]{43}$/); assert.match(runtime, /^[a-f0-9]{64}$/); assert.notEqual(owner, runtime);
   for (const path of [session.ownerTokenFile, session.runtimeTokenFile, join(session.stateDirectory, 'session-policy.json')])
@@ -36,13 +37,25 @@ test('fresh session captures distinct private tokens and bounded readback withou
   assert.equal(await readFile(session.ownerTokenFile, 'utf8'), owner);
 });
 
+test('explicit background opt-in persists exact bounded policy without changing native home', async t => {
+  const input = await fixture(t);
+  const session = await prepareOwnerAlphaSession({ ...input, backgroundFirstRoot: true }, { now: () => at });
+  const saved = JSON.parse(await readFile(join(input.stateDirectory, 'session-policy.json'), 'utf8'));
+  assert.deepEqual(saved.ownerAlpha, session.ownerAlpha);
+  assert.equal(session.ownerAlpha.background_first_root, true);
+  assert.equal(session.ownerAlpha.max_runs, 2);
+  assert.equal(session.ownerAlpha.expires_at, '2026-09-16T15:01:13.000Z');
+  assert.deepEqual(await readdir(input.nativeHome), []);
+});
+
 test('invalid origin, bounds and extra fields refuse before creating session custody', async t => {
   const config = await fixture(t);
   for (const change of [{ publicOrigin: 'http://owner.example' }, { publicOrigin: 'https://owner.example/' },
     { publicOrigin: 'https://user:secret@owner.example' }, { publicOrigin: 'https://owner.example/path' },
     { publicOrigin: 'https://owner.example?x=1' }, { port: 0 }, { port: '19876' }, { port: 65536 },
     { sessionSeconds: 29 }, { sessionSeconds: 301 }, { maxRuns: 4 }, { maxTaskSeconds: 301 },
-    { model: 'model with spaces' }, { personaId: 'wrong' }, { disposableTest: true }]) {
+    { model: 'model with spaces' }, { personaId: 'wrong' }, { disposableTest: true },
+    ...[false, null, 1, 'true', undefined].map(backgroundFirstRoot => ({ backgroundFirstRoot }))]) {
     await assert.rejects(prepareOwnerAlphaSession({ ...config, ...change }, { now: () => at }));
     assert.deepEqual(await readdir(config.stateDirectory), []);
   }

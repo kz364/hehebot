@@ -26,8 +26,9 @@ async function privatePath(path, directory) {
 export async function prepareOwnerAlphaSession(input, { now = Date.now } = {}) {
   const config = structuredClone(input);
   const keys = ['stateDirectory', 'nativeHome', 'model', 'personaId', 'publicOrigin', 'port',
-    'sessionSeconds', 'maxRuns', 'maxTaskSeconds'];
+    'sessionSeconds', 'maxRuns', 'maxTaskSeconds', 'backgroundFirstRoot'];
   if (!config || Object.keys(config).some(key => !keys.includes(key))) fail('INVALID_SESSION_CONFIGURATION');
+  if (Object.hasOwn(config, 'backgroundFirstRoot') && config.backgroundFirstRoot !== true) fail('INVALID_SESSION_CONFIGURATION');
   const { stateDirectory, nativeHome, model, personaId, publicOrigin, port,
     sessionSeconds = 300, maxRuns = 1, maxTaskSeconds = 120 } = config;
   let origin;
@@ -37,7 +38,8 @@ export async function prepareOwnerAlphaSession(input, { now = Date.now } = {}) {
       !Number.isInteger(sessionSeconds) || sessionSeconds < 30 || sessionSeconds > 300 ||
       typeof model !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(model)) fail('INVALID_SESSION_CONFIGURATION');
   const ownerAlpha = ownerAlphaPolicy({ session_id: randomUUID(), persona_id: personaId,
-    expires_at: new Date(now() + sessionSeconds * 1000).toISOString(), max_runs: maxRuns, max_task_seconds: maxTaskSeconds });
+    expires_at: new Date(now() + sessionSeconds * 1000).toISOString(), max_runs: maxRuns, max_task_seconds: maxTaskSeconds,
+    ...(config.backgroundFirstRoot === true ? { background_first_root: true } : {}) });
   await privatePath(stateDirectory, true); await privatePath(nativeHome, true);
   const state = resolve(stateDirectory), home = resolve(nativeHome);
   if (state === home || state.startsWith(home + '/') || home.startsWith(state + '/')) fail('SEPARATE_NATIVE_HOME_REQUIRED');

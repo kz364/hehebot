@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { AGENT_TOOL_NAMES, readAccessCredentials } from './agent-tools.mjs';
 import { ControlClient } from './control-client.mjs';
 import { FileJournal } from './file-journal.mjs';
-import { CodexAdapter, PINNED_CODEX } from './codex-adapter.mjs';
+import { CodexAdapter, PINNED_CODEX, RESTRICTED_CODEX_FEATURES } from './codex-adapter.mjs';
 import { CodexEventRouter } from './codex-events.mjs';
 import { CodexTaskControl } from './codex-tasks.mjs';
 import { CodexOperations } from './codex-operations.mjs';
@@ -154,10 +154,8 @@ export function createCodexService(config, dependencies) {
         await starting(() => mkdir(workspace, { mode: 0o700 }));
         await starting(() => prepareNative(home));
         const configOverrides = config.restrictedPermissions ? {
-          web_search: 'disabled', 'features.apps': false, 'features.plugins': false,
-          'features.tool_suggest': false, 'features.image_generation': false,
-          'features.standalone_web_search': false, 'features.token_budget': false,
-          'features.request_permissions_tool': false, 'features.exec_permission_approvals': false,
+          web_search: 'disabled',
+          ...Object.fromEntries(Object.entries(RESTRICTED_CODEX_FEATURES).map(([key, value]) => [`features.${key}`, value])),
           ...(alpha ? { 'agents.enabled': false, 'features.multi_agent': false, 'features.multi_agent_v2': false } : {}),
         } : {};
         let permissions;
@@ -225,8 +223,12 @@ export function createCodexService(config, dependencies) {
         if (permissions) {
           const readback = await starting(() => transport.request('config/read', { includeLayers: false, cwd: workspace }));
           const profile = readback?.config?.permissions?.[permissions.name];
-          if (Object.entries(configOverrides).some(([key, value]) =>
-            !key.startsWith('permissions.') && key.split('.').reduce((node, part) => node?.[part], readback?.config) !== value)) fail('RESTRICTED_PROFILE_MISMATCH');
+          if (Object.entries(configOverrides).some(([key, value]) => {
+            if (key.startsWith('permissions.')) return false;
+            const actual = key.split('.').reduce((node, part) => node?.[part], readback?.config);
+            // Native merging preserves a configured sleep mode when disabling it.
+            return key === 'features.sleep_tool' ? actual !== false && actual?.enabled !== false : actual !== value;
+          })) fail('RESTRICTED_PROFILE_MISMATCH');
           if (Object.keys(readback?.config?.mcp_servers ?? {}).length) fail('RESTRICTED_PROFILE_MISMATCH');
           if (readback?.config?.default_permissions !== permissions.name || profile?.network?.enabled !== false ||
               !profile.filesystem || Object.keys(profile.filesystem).some(key =>

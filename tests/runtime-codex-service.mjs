@@ -389,11 +389,11 @@ test('maintenance retains old-family coverage and late output after fresh coordi
 
 const restrictedReadback = {
   web_search: 'disabled', features: { apps: false, plugins: false, tool_suggest: false,
-    image_generation: false, standalone_web_search: false, token_budget: false,
+    image_generation: false, standalone_web_search: false, token_budget: false, sleep_tool: false,
     request_permissions_tool: false, exec_permission_approvals: false },
 };
 
-test('restricted service binds exact minimal profile before admission, without copying provider config into custody', async t => {
+for (const sleepTool of [false, { enabled: false, mode: 'always_on' }]) test(`restricted service binds exact minimal profile with sleep config ${JSON.stringify(sleepTool)}`, async t => {
   const f = await fixture(t), rpc = f.transport.request;
   const service = createCodexService({ ...f.config, restrictedPermissions: true }, { ...f.dependencies,
     launch: options => {
@@ -413,7 +413,7 @@ test('restricted service binds exact minimal profile before admission, without c
       assert.match(name, /^hehebot-restricted-[a-f0-9]{64}$/);
       assert.ok(contents.includes('[permissions.' + name + '.filesystem]'));
       assert.ok(contents.includes('":minimal" = "read"'));
-      return { config: { ...restrictedReadback, default_permissions: name, permissions: { [name]: {
+      return { config: { ...restrictedReadback, features: { ...restrictedReadback.features, sleep_tool: sleepTool }, default_permissions: name, permissions: { [name]: {
         filesystem: { glob_scan_max_depth: null, ':minimal': 'read', [join(f.directory, 'workspace')]: 'read',
           [join(f.directory, 'journal')]: 'deny', [join(f.directory, 'codex-home')]: 'deny', [f.config.runtimeTokenFile]: 'deny' },
         network: { enabled: false },
@@ -435,7 +435,7 @@ test('restricted service binds exact minimal profile before admission, without c
   } finally { await service.stop(); }
 });
 
-for (const mismatch of ['network', 'extra-root', 'changed-file', 'hosted-apps', 'extra-mcp']) test(`restricted ${mismatch} refuses native admission`, async t => {
+for (const mismatch of ['network', 'extra-root', 'changed-file', 'hosted-apps', 'sleep-tool', 'sleep-tool-structured', 'extra-mcp']) test(`restricted ${mismatch} refuses native admission`, async t => {
   const f = await fixture(t), rpc = f.transport.request, request = f.dependencies.control.request;
   const service = createCodexService({ ...f.config, restrictedPermissions: true }, f.dependencies);
   f.transport.request = async (method, params) => {
@@ -444,6 +444,8 @@ for (const mismatch of ['network', 'extra-root', 'changed-file', 'hosted-apps', 
     const name = JSON.parse(contents.split('\n')[0].split(' = ')[1]);
     return { config: { ...restrictedReadback,
       ...(mismatch === 'hosted-apps' ? { features: { ...restrictedReadback.features, apps: true } } : {}),
+      ...(mismatch === 'sleep-tool' ? { features: { ...restrictedReadback.features, sleep_tool: true } } : {}),
+      ...(mismatch === 'sleep-tool-structured' ? { features: { ...restrictedReadback.features, sleep_tool: { enabled: true, mode: 'always_on' } } } : {}),
       ...(mismatch === 'extra-mcp' ? { mcp_servers: { generic: { command: '/unapproved' } } } : {}),
       default_permissions: name, permissions: { [name]: {
       filesystem: { ':minimal': 'read', [join(f.directory, 'workspace')]: 'read',

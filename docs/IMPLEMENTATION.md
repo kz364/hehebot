@@ -24,10 +24,23 @@ pin and editing a running shell script; both logs remain. Desktop16/16 pass.
 Terminal-root native mode passes33 requests, no new root inference/turn in its
 one-second window, exact followup denial and31 retained operations/no sleep.
 The appended completion activity is metadata, not a second turn or settlement.
-Source follow-through found sleep_tool default-on independently of token_budget;
-explicit disabling/readback remains the next live-alpha prerequisite.
-Live background gate and production flags remain closed; these are local proofs,
-not account-backed inference, restart admission or general settlement.
+Source follow-through found sleep_tool default-on independently of token_budget.
+Its explicit disable exposed native override layering: the selected per-thread
+features table dropped startup overrides, restoring apps/sleep. Native thread
+readback contradicted globally disabled config/read. The selected adapter now
+carries the complete shared restricted feature map with v2-cap2-restricted
+fingerprint; older selected V1/V2 custody cannot replay. Actual root/child feature
+readbacks and catalog absence pass with enabled/always_on sleep input config.
+48 focused tests pass; final combined rerun `.local/restricted-v2-combined.log`
+exits0 with1,318 backend/399 runtime tests and native/browser/service/build checks.
+Initial failing checks are retained in `.local/sleep-tool-*`.
+The explicit bounded V2 entry now replaces the earlier blanket background refusal:
+the composed launcher accepts true-only `backgroundFirstRoot`, persists the exact
+policy and leaves absence root-only.33 entry/launcher/background tests pass in
+`.local/v2-launcher-focused.log`. No live V2 account-backed trial has run.
+Production flags remain false; this admits neither automatic replay/restart,
+sleep nor general settlement. V1 remains prohibited. The next deliverable is the
+already-authorized bounded same-owner V2 demonstration, not another synthetic gate.
 
 V2 native event integration (2026-09-16): host independently passed the31-request
 V2-capable catalog fixture. Advertised grandchild spawn hits capacity; completed

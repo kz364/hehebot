@@ -189,7 +189,7 @@ try {
   const filesystem = { ':minimal': 'read', [workspace]: 'read', [privateHome]: 'deny', [journal]: 'deny', [token]: 'deny' };
   const fileEntries = Object.entries(filesystem).map(([path, mode]) => `${JSON.stringify(path)} = ${JSON.stringify(mode)}`).join('\n');
   const disabled = ['multi_agent', 'multi_agent_v2', 'apps', 'plugins', 'tool_suggest', 'image_generation',
-    'standalone_web_search', 'remote_models', 'token_budget', 'request_permissions_tool', 'exec_permission_approvals', 'code_mode', 'code_mode_only'];
+    'standalone_web_search', 'remote_models', 'token_budget', 'sleep_tool', 'request_permissions_tool', 'exec_permission_approvals', 'code_mode', 'code_mode_only'];
   const catalogPath = join(home, 'fixture-models.json');
   if (v2ModelCatalog) {
     // Supported startup config, not a Codex-owned cache/database edit. Required fields follow

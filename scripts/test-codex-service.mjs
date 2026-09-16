@@ -173,6 +173,10 @@ try {
       const body = JSON.parse(Buffer.concat(chunks).toString());
       report.modelRequests++;
       assert.ok(report.modelRequests <= (ownerAlphaBackgroundMode ? 7 : ownerAlphaMultiMode ? 4 : backgroundMode ? 6 : childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2), 'Unexpected model continuation');
+      if (restrictedMode) {
+        const tools = body.tools.flatMap(tool => tool.type === 'namespace' ? tool.tools.map(nested => `${tool.name}.${nested.name}`) : [tool.name]);
+        assert.ok(!tools.some(name => /(^|\.)sleep$/.test(name)), 'Restricted root/child cannot request durable sleep');
+      }
       await wait(() => bound, 'service acknowledged root');
       const actualContexts = body.input.filter(item => item.role === 'user').flatMap(item => {
         const content = typeof item.content === 'string' ? [item.content] : (item.content ?? []).map(part => part.text);
@@ -516,7 +520,7 @@ try {
       };
       return transport;
     },
-    prepareNative: home => writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\n${questionsMode ? 'default_mode_request_user_input = true\n' : ''}[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) };
+    prepareNative: home => writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\n${restrictedMode ? 'sleep_tool = { enabled = true, mode = "always_on" }\n' : ''}${questionsMode ? 'default_mode_request_user_input = true\n' : ''}[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) };
   service = ownerAlphaMode ? createCodexService(config, dependencies) : createSpriteCodexService(config, dependencies);
   const dispatched = await service.start(); bound = true;
   assert.equal(dispatched.phase, 'running'); assert.equal(dispatched.claim.run.id, queued.resource_id);
@@ -542,6 +546,9 @@ try {
     assert.equal(readback.config.web_search, 'disabled');
     for (const key of ['apps', 'plugins', 'tool_suggest', 'image_generation', 'standalone_web_search',
       'token_budget', 'request_permissions_tool', 'exec_permission_approvals']) assert.equal(readback.config.features[key], false);
+    assert.deepEqual(readback.config.features.sleep_tool, { enabled: false, mode: 'always_on' });
+    const features = await nativeTransport.request('experimentalFeature/list', { threadId: (await service.observe()).threadId, limit: 100 });
+    for (const name of ['sleep_tool', 'apps', 'plugins']) assert.equal(features.data.find(feature => feature.name === name)?.enabled, false, name);
     if (ownerAlphaBackgroundMode) {
       assert.equal(readback.config.agents.enabled, false);
       assert.equal(readback.config.features.multi_agent, false);
@@ -749,9 +756,13 @@ try {
       assert.deepEqual([p, s, b].map(row => row.claim.owner_alpha_background), [true, undefined, undefined]);
       assert.equal(nativeStarts.length, 3);
       assert.deepEqual(nativeStarts[0].config.agents, { enabled: true });
-      assert.deepEqual(nativeStarts[0].config.features, { multi_agent: false, multi_agent_v2: {
+      assert.deepEqual(nativeStarts[0].config.features, { apps: false, plugins: false, tool_suggest: false,
+        image_generation: false, standalone_web_search: false, token_budget: false, sleep_tool: false,
+        request_permissions_tool: false, exec_permission_approvals: false, multi_agent: false, multi_agent_v2: {
         enabled: true, max_concurrent_threads_per_session: 2, wait_agent_enabled: false,
       } });
+      const childFeatures = await nativeTransport.request('experimentalFeature/list', { threadId: aThread, limit: 100 });
+      for (const name of ['sleep_tool', 'apps', 'plugins']) assert.equal(childFeatures.data.find(feature => feature.name === name)?.enabled, false, name);
       for (const started of nativeStarts.slice(1)) {
         assert.equal(started.config.agents, undefined);
         assert.equal(started.config.features, undefined);

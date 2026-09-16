@@ -28,11 +28,11 @@ test('alpha policy is exact, bounded and independently captured', () => {
   }
 });
 
-test('live entry refuses background authority before filesystem, service or account work', async () => {
-  await assert.rejects(runOwnerAlpha({ ownerAlpha: { ...policy, background_first_root: true } }, {
+test('live entry refuses malformed background opt-in before filesystem, service or account work', async () => {
+  await assert.rejects(runOwnerAlpha({ ownerAlpha: { ...policy, background_first_root: false } }, {
     createService: () => assert.fail('must not create service'),
     launch: () => assert.fail('must not launch native/account work'),
-  }), { code: 'OWNER_BACKGROUND_AUTHORITY_UNVERIFIED' });
+  }), { code: 'INVALID_OWNER_ALPHA_POLICY' });
 });
 
 test('account check requires ChatGPT, exact visible model and bounded supported discovery', async () => {
@@ -80,10 +80,10 @@ test('alpha adapter is separate from test mode and rejects expiry across journal
   }
 });
 
-test('entrypoint keeps account/provider selection host-owned and stops without settlement after bounded grace', async t => {
+for (const background of [false, true]) test(`entrypoint preserves explicit background=${background}, host account selection and bounded grace`, async t => {
   const stateDirectory = await directory(t), reports = [], calls = [];
   let now = at, stopped = 0;
-  const config = { stateDirectory, ownerAlpha: policy, personas: { [policy.persona_id]: { model: 'chosen' } } };
+  const config = { stateDirectory, ownerAlpha: { ...policy, ...(background ? { background_first_root: true } : {}) }, personas: { [policy.persona_id]: { model: 'chosen' } } };
   await runOwnerAlpha(config, { now: () => now, report: value => reports.push(value), wait: async () => { now += 45000; },
     launch: options => {
       assert.deepEqual(options.configOverrides, { 'features.apps': false, model_provider: 'openai' });
@@ -96,6 +96,7 @@ test('entrypoint keeps account/provider selection host-owned and stops without s
     createService: (captured, dependencies) => {
       config.personas[policy.persona_id].model = 'changed-after-capture';
       assert.equal(captured.personas[policy.persona_id].model, 'chosen');
+      assert.deepEqual(captured.ownerAlpha, { ...policy, ...(background ? { background_first_root: true } : {}) });
       return { phase: 'running', start: async () => dependencies.launch({ configOverrides: { 'features.apps': false } }).initialize(),
         maintain: async () => calls.push('maintain'), stop: async () => { stopped++; } };
     },

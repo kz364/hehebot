@@ -61,13 +61,18 @@ The provider-restricted six-request rerun passed in
 `runtime/owner-alpha-entry.mjs --run /absolute/private-session.json` is the separate
 operator entrypoint. Do not launch it until the owner authorizes the specific
 account/model task. It accepts no disposable flag and never changes production
-gates. The initial slice is one selected persona's private messages, root-only,
-read-only routine/skill MCP and persisted **provisional** output. It does not offer
-background descendants, connector actions, shell execution, final settlement,
+gates. The default slice is one selected persona's private messages, root-only,
+read-only routine/skill MCP and persisted **provisional** output. Explicit
+`ownerAlpha.background_first_root:true` enables bounded V2 descendants on only the
+first admitted root; the composed session launcher accepts `backgroundFirstRoot:true`
+and persists that exact policy. Absence remains root-only; false is invalid.
+See [the V2 boundary and evidence](OWNER_BACKGROUND_V2_NATIVE.md). It does not offer
+connector actions, shell execution, final settlement,
 automatic replay, sleep or unattended service recovery.
 
 The private session config uses the normal service fields below, plus `ownerAlpha`
-with the exact five-field [Worker policy](OWNER_ALPHA_CONTROL.md). Session expiry
+with the five-field [Worker policy](OWNER_ALPHA_CONTROL.md) and optional true-only
+`background_first_root` marker. Session expiry
 must be at most five minutes from startup; one to three runs and one to 300 seconds
 per task are allowed. Use one run for the first authorized trial. The Worker must
 have the identical `HEHEBOT_OWNER_ALPHA`, local auth, both production flags false,
@@ -96,8 +101,9 @@ config. Supported login, if needed, is a separately authorized owner action.
 
 Native configuration/history/cache writes still belong to the selected home.
 Coordinate a single credential-refresh owner and do not run another consumer
-concurrently. Existing MCP servers are rejected; root spawning and provider
-search/apps/plugins/image generation are disabled. Approval callbacks remain
+concurrently. Existing MCP servers are rejected; spawning is disabled except on
+the selected V2 tree. Provider search/apps/plugins/image generation and sleep
+remain disabled on that tree too. Approval callbacks remain
 denied. The entrypoint selects the built-in OpenAI provider, rejects custom
 OpenAI provider definitions, checks `account/read` for ChatGPT, and requires the
 exact visible model from bounded `model/list` pagination before task submission.

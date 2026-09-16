@@ -3,6 +3,9 @@ import { advanceQuietPhases, readQuietPhases, QUIET_PHASE_FIELDS } from './codex
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 
 export const PINNED_CODEX = '0.154.0';
+export const RESTRICTED_CODEX_FEATURES = Object.freeze({ apps: false, plugins: false,
+  tool_suggest: false, image_generation: false, standalone_web_search: false,
+  token_budget: false, sleep_tool: false, request_permissions_tool: false, exec_permission_approvals: false });
 export const OBSERVED_COLLAB_TOOLS = Object.freeze(['sendInput', 'resumeAgent', 'wait', 'closeAgent', 'sendMessage', 'followupTask', 'interruptAgent', 'listAgents']);
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = code => { throw Object.assign(new Error(code), { code }); };
@@ -85,11 +88,13 @@ export class CodexAdapter {
     const fingerprintInput = this.#permissionsProfile === undefined ? legacyFingerprintInput
       : [legacyFingerprintInput, { permissionsProfile: this.#permissionsProfile, ...(this.#ownerAlpha ? { ownerAlpha: this.#ownerAlpha } : {}) }];
     // Selected orchestration changes cannot silently replay an old V1 grant.
-    const fingerprint = hash(background ? [fingerprintInput, { ownerAlphaBackground: true, nativeOrchestration: 'v2-cap2' }] : fingerprintInput);
+    const fingerprint = hash(background ? [fingerprintInput, { ownerAlphaBackground: true, nativeOrchestration: 'v2-cap2-restricted' }] : fingerprintInput);
     const config = {
       ...(Object.keys(this.mcpServers).length ? { mcp_servers: this.mcpServers } : {}),
       ...(background ? { agents: { enabled: true },
-        features: { multi_agent: false, multi_agent_v2: {
+        // A per-thread features table replaces the startup override table. Carry
+        // all restricted gates forward instead of restoring owner-file defaults.
+        features: { ...RESTRICTED_CODEX_FEATURES, multi_agent: false, multi_agent_v2: {
           enabled: true, max_concurrent_threads_per_session: 2, wait_agent_enabled: false,
         } } } : {}),
     };
