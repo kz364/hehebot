@@ -23,7 +23,9 @@ Owner messages must not implicitly steer active background work. Preserve exact 
 
 The owner permits native descendants to share their admitted logical task's grant. Preserve separate authority for independently admitted tasks/personas. Task-scoped MCP effects have task-level provenance, not authenticated per-child provenance. Inheritance does not settle tools/effects or permit sleep; see `docs/NATIVE_ORCHESTRATION.md`.
 
-Use supported upstream interfaces only: never import hashed runtime internals, edit Codex-owned databases, patch installed dependencies, bypass approvals, or copy OAuth caches. Pin tested versions and rerun behavioral adapter contracts before upgrades. `hehebot_*` is the tool prefix, `HEHEBOT_` the environment prefix, and `x-hehe-wake-token` the wake header for new identifiers.
+Use supported upstream interfaces only: never import hashed runtime internals, edit Codex-owned databases, patch installed dependencies except for the owner-approved wappmcp exception below, bypass approvals, or copy OAuth caches. Pin tested versions and rerun behavioral adapter contracts before upgrades. `hehebot_*` is the tool prefix, `HEHEBOT_` the environment prefix, and `x-hehe-wake-token` the wake header for new identifiers.
+
+The sole dependency-patch exception is wappmcp revision `9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8`'s upstream `patches/whatsapp-web.js+1.34.7.patch` on exactly `whatsapp-web.js` 1.34.7. Pin and verify the revision, dependency, artifact and patch contents/application; rerun compatibility and authorization tests before upgrades. Changed patches require renewed review and explicit approval. See SPEC.md's “Out-of-the-box WhatsApp plugin” requirements. No ad hoc dependency edits or Codex/runtime-internal patches are allowed; live pairing and production gates remain separate.
 
 ## Commercial reuse and account boundaries
 

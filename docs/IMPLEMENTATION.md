@@ -4,6 +4,41 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Approved WhatsApp compatibility checkpoint (2026-09-16): the owner-authorized
+exception from the coordination thread is merged into AGENTS.md/SPEC.md without
+removing local progress links or native-descendant authority guidance. It supersedes
+earlier patch-policy blocker statements below, not live adoption gates.
+`node scripts/verify-wappmcp.mjs` verifies pinned public artifacts before extraction,
+the distributed patch against the exact approved source revision, clean `git apply`
+and rejection of changed/missing bytes and double application. It executes the
+actual patched Reaction and Injected/Utils functions with synthetic WhatsApp models:
+both `_serialized`/`$1`, precedence, non-mutating normalization, message model and
+last-message cache/fallback lookups, and absent-key suppression. All 20 published
+tools outside the two scoped reads are denied; the 9 existing read-boundary tests
+also pass. Combined verification passed 931 control / 251 runtime tests, the new
+WhatsApp check, native/service fixtures and typecheck/build dry run
+(`.local/wappmcp-approved-combined.log`); production admission remains false.
+
+Artifact provenance (public downloads; no vendored upstream code):
+- wappmcp 0.4.0, MIT, source revision `9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8`
+  (npm `gitHead` matches); npm tarball SHA256
+  `f1b28838615cabb55d17734b67ad1d6cb0d8a86cbbf8339564a3bc57dc57f1e8`.
+- whatsapp-web.js 1.34.7, Apache-2.0; npm tarball SHA256
+  `714e51cc23d1855ac200b99ad063fe8025208d4feca86dad4c27ffdaff096c0c`.
+- Approved upstream `patches/whatsapp-web.js+1.34.7.patch`, SHA256
+  `b2b582a7650545d6e7534e7a66731a8b546b309efd6bce9e0e9a4722e0a616cf`;
+  touches only dependency `src/structures/Reaction.js` and `src/util/Injected/Utils.js`.
+  No modifications to that patch. Upstream license files stay in the disposable
+  extracted artifacts. Future redistribution must retain MIT/Apache notices and
+  complete the transitive dependency/asset license audit; this is not that audit.
+
+This is a disposable compatibility check, not an installer: it runs no npm lifecycle
+scripts, browser, MCP server or pairing. No installed graph or signature/provenance
+attestation is claimed verified; hashes pin the inspected artifacts. Guided setup,
+transitive lockfile, trusted task/lease/revocation transport, persistent pairing,
+reconnect coverage and sleep/cost evidence remain open. Rerun compatibility and
+authorization checks before upgrades; patch changes require renewed approval.
+
 Resource-deadline checkpoint (2026-09-16): acquiring a new lock now checks the
 attempt hard deadline even before watchdog reconciliation. Exact already-held
 lock replay remains a no-op; deadline expiry does not release locks or bypass

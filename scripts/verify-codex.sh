@@ -14,6 +14,7 @@ node --test tests/setup-codex.test.mjs
 node scripts/probe-codex.mjs
 npm test
 npm run test:runtime
+node scripts/verify-wappmcp.mjs
 npm run test:e2e
 node scripts/test-control-questions.mjs
 node scripts/test-codex-native.mjs

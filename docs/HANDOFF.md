@@ -2,6 +2,23 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Approved WhatsApp patch checkpoint (2026-09-16)
+
+Owner-approved exception merged from the coordination thread into AGENTS/SPEC,
+preserving local progress and authority guidance. Earlier no-exception blockers
+below are superseded. Only revision 9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8's
+exact patch on whatsapp-web.js 1.34.7 is approved; no pairing/activation permission.
+`scripts/verify-wappmcp.mjs` pins artifact/patch SHA256, checks distributed/source
+equality and clean application, executes actual patched key/message/last-message
+functions with synthetic models, denies the 20 other upstream tools and runs 9
+scoped-read tests. Focused check passed; combined verification passed 931 control /
+251 runtime tests, WhatsApp/native/service fixtures and typecheck/build dry run
+(`.local/wappmcp-approved-combined.log`). Provenance/hashes/limits are recorded in
+IMPLEMENTATION.md. No connector was installed or started; temporary trees clean up.
+Next E09 work: transitive locked installation/license audit and trusted scoped
+transport/setup. Live pairing, reconnect/coverage and cost require separate authority.
+Production gates false; schedule unchanged.
+
 ## Resource-deadline checkpoint (2026-09-16)
 
 Expired attempts cannot acquire new locks, including before watchdog reconciliation.

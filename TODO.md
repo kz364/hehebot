@@ -6,11 +6,11 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest checkpoint:** resource hard-deadline admission, 2026-09-16. Local, not pushed or deployed. Expired tasks cannot acquire new shared-resource locks; exact held-lock replay and authorized release remain available.
-- **Verified:** **91 focused tests passed**; three new cases failed before the fix. Claimed/running/finishing states cover before/exact/after expiry, mixed held/new lock rejection, preserved acquisition records, release and forbidden reacquisition. Logs: `.local/resource-deadline-red.log`, `.local/resource-deadline-focused.log`.
-- **Combined:** `bash scripts/verify-codex.sh` passed **931 control / 251 runtime tests**, native/service fixtures, typecheck and build dry run. Log: `.local/resource-deadline-combined.log`; final status `passed`, production admission false.
+- **Latest checkpoint:** approved wappmcp patch compatibility, 2026-09-16. Local, not pushed or deployed. Merged only the approved AGENTS/SPEC exception, preserving progress and authority guidance; added pinned-artifact verification to the combined check.
+- **Verified:** `node scripts/verify-wappmcp.mjs` passed SHA256 checks, distributed/source patch equality, clean application to exactly 1.34.7, corruption/double-apply negative controls, both key formats and last-message lookups, 20 denied upstream tools, and 9 scoped-read tests. Log: `.local/wappmcp-approved-check.log`.
+- **Combined:** `bash scripts/verify-codex.sh` passed **931 control / 251 runtime tests**, the new pinned WhatsApp check, native/service fixtures, typecheck and build dry run. Log: `.local/wappmcp-approved-combined.log`; final status `passed`, production admission false.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
-- **Next implementation priority:** E01, complete deadline/activity accounting; then E02 recovery and E03 responsive orchestration. These are queued, not claims that an agent is currently running them.
+- **Next implementation priority:** E09 trusted scoped WhatsApp transport/setup with a locked installation graph; E01 deadline/activity accounting and E02 recovery remain open. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
 - **Mac direction:** SwiftUI + WKWebView native shell around the remote portal, as communicated by the owner-decision thread. Not implemented. Existing Electron code is a tested foundation, not a verified Mac release. The separate Mac-decision documentation edits have not been integrated into this checkout.
 
@@ -91,9 +91,12 @@ Do not perform these implicitly. [AUTH_SETUP.md](docs/AUTH_SETUP.md) contains de
 remains unimplemented. An unregistered scoped read boundary now has synthetic
 contract and cancellation/timeout tests; trusted task-grant/lease/revocation,
 task-deadline capping and transport wiring remain.
-Installation is blocked by its
-`postinstall: patch-package` dependency mutation; no exception is authorized.
-Credential-free authorization/compatibility fixtures can proceed independently.
+The owner approved only the pinned upstream 1.34.7 patch; AGENTS.md and SPEC.md
+now contain that exception. `scripts/verify-wappmcp.mjs` pins both tarball hashes
+and source patch hash, verifies clean application in disposable storage and executes
+actual patched normalization/last-message functions with synthetic models.
+No connector installation or postinstall was run. A transitive lockfile/license
+audit, guided installer/catalog and trusted transport wiring remain credential-free work.
 Pairing, reconnect/history coverage and sleep/cost measurements require separate
 live authorization. Notification allowlists are not tool permissions; mutations
 must remain unavailable by default. Source findings are in docs/IMPLEMENTATION.md.
