@@ -172,3 +172,31 @@ for a cloud deployment. Run owner/runtime negative-auth tests before promotion.
 Neither these commands nor a checklist pass authorizes publishing, changing Access,
 provisioning, waking/mutating the Sprite, installing a model account or enabling
 production. Track each live acceptance result separately in TODO/IMPLEMENTATION.
+
+## Next proposed stage: protected control plane only
+
+Prepared 2026-09-17 Asia/Jakarta, not authorized or executed. Candidate code is
+local commit `f358b0c23a742cc50d76c2f71232bb95d10f4154`, which passed the combined
+credential-free verifier and desktop checks. Proposed Worker name is the existing
+`hehebot-portal`; the existing selected Sprite name is `hehebot`. Its saved cold
+inspection is historical, not current availability evidence.
+
+The blocking inputs are the owner-selected Cloudflare account and protected HTTPS
+hostname, Access issuer/audience/owner subject, and private deployment access.
+`wrangler.jsonc` currently has no account or route and blank Access identity;
+the orb has no Cloudflare credential environment variables. Do not infer an account
+from Git ownership or publish to an unprotected workers.dev endpoint.
+
+Request authorization for only Worker/SQLite publication and owner-only Access
+configuration on those named targets, followed by owner/runtime negative-auth and
+durable message/readback checks. Keep execution/native flags false, provider config
+empty, and omit hosted-alpha admission until the separately bounded runtime trial.
+No paid-plan upgrade, Sprite mutation, model login/inference, connector effect,
+Git push or retained-state upload belongs to this stage. Existing spending grants
+are not renewed. Stop if setup requires an unapproved paid change.
+
+After target selection, prepare the exact private configuration and inspect its
+dry-run bindings before publication. Rollback closes ingress/admission and retains
+the new database; it must not delete data or reset native custody. This stage can
+establish protected durable intake, not hosted assistant execution. Model-account,
+Sprite runtime and containment acceptance remain separately scoped follow-ups.

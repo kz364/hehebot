@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Latest target review: no remaining local P0 prerequisite was identified before
+the named deployment decision. AUTH_SETUP records a protected-control-only proposal
+against the verified composition revision: `hehebot-portal`, no inference/provider
+activation. Cloudflare account, HTTPS hostname, Access identity and deployment
+authorization are still missing; no Cloudflare credential env vars are present.
+Existing Sprite `hehebot` is historical evidence only, not freshly queried.
+Ask once for these targets/authorization. While pending, continuation should work
+on independent P1 routine/skill workflows, not repeat synthetic P0 checks or the
+approval request. No active workers; no live actions or new tests this checkpoint.
+
 Newest: private hosted composition is implemented and independently rerun in
 scripts/test-codex-hosted-owner.mjs: signed Access, actual Worker/SQLite, native
 Codex, exact routine MCP receipt and persisted provisional readback; two loopback
