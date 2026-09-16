@@ -89,11 +89,31 @@ deliberately disables automatic wake; Sprite holds are owned by the runtime.
 Tasks client and the same account/model checks, no-paid-fallback restrictions and
 deadline watchdog as local alpha. Build the provider module with
 `bash scripts/build-codex-service.sh` before composing it. Its caller must hold the
-kernel executor lock for the complete process tree. No hosted CLI or HTTP wake
-activation route is provided yet; the Sprite HTTP entrypoint stays transport-only.
+kernel executor lock for the complete process tree. The manual launcher is:
+
+```sh
+node runtime/hosted-owner-launcher.mjs --run /absolute/private/operator-config.json
+```
+
+Run this only on the explicitly authorized runtime, after the hosted integration
+and account/provider checks. It requires distinct existing private `nativeHome`
+and `stateDirectory` directories, locks the native home first and session second,
+then hands the child an exact config digest. A changed config refuses before
+account work. Exit73 means lock contention; it is not a retry instruction. Signals
+forward to the one launched child; retained state is never reset. The internal
+`--run-hosted-locked` mode is a launcher handoff, not an alternative entrypoint.
+Do not replace locked directories or invoke the composition API without its locks.
+No HTTP wake activation was added; the Sprite HTTP entrypoint stays transport-only.
 The local entrypoint rejects the hosted field. No deployed binding or default
 configuration selects this mode. Local alpha stays loopback-only/provider-free.
 This is local fixture evidence, not permission to launch a hosted trial.
+
+**Lock limitation:** Node's default child spawn drops extra descriptors. A bounded
+pristine0.154.0 experiment observed explicitly inherited lock custody in the npm
+wrapper, but not in its native ELF child. The launcher therefore proves exclusion
+only while its cooperating lock owner survives; it does not prove native descendant
+termination after wrapper loss. Never start replacement work merely because a lock
+is free. Preserve unknown custody and resolve provider/process containment separately.
 
 Source check, 2026-09-17 Asia/Jakarta: the official
 [authentication documentation, CLI/headless section](https://developers.openai.com/codex/auth.md)

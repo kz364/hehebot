@@ -4,6 +4,30 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest: runtime/hosted-owner-launcher.mjs supplies explicit manual --run of private
+config, native-home-first/session-second flock, digest-bound child re-read and
+signal forwarding without retry. Internal --run-hosted-locked is only its handoff.
+21 focused launcher/entry/lock tests pass; full combined exits0 with1,359 backend/
+430 runtime plus native/browser/service/build checks in
+`.local/hosted-launcher-combined.log`; desktop16 pass. No worker active.
+Important: delegated pristine Codex experiment shows inherited fd survives only
+in npm wrapper, NOT native ELF. No claim of descendant containment or safe takeover
+from free locks. No transport change/dependency patch, no real account/model/provider
+action. Next: complete private scripted Access/Worker/native/Tasks composition;
+no HTTP wake activation or deployment authorized. Preserve both old live sessions
+and unknown work. Existing local launcher behavior remains unchanged.
+
+Next fixture mechanism: Miniflare's supported v4 options include modules:true,
+scriptPath to bundled Worker, nodejs_compat, durableObjects:{CONTROL:{className:
+'PersonalControl',useSQLite:true}} and outboundService(request). Intercept ONLY
+the exact synthetic Access issuer GET /cdn-cgi/access/certs with public JWKS;
+throw on all other outbound fetch. dispatchFetch drives unmodified Worker auth
+with Cf-Access-Jwt-Assertion (not the generic bearer example from upstream).
+Use actual env ACCESS_ISSUER/ACCESS_AUD/OWNER_SUB and synthetic signed JWTs.
+Source recipe: https://github.com/cloudflare/workers-sdk/blob/main/packages/miniflare/README.md
+This has been researched, not executed in this repo; match installed version,
+bundle SQL text/external cloudflare:workers correctly, and dispose the instance.
+
 Newest: default-absent HEHEBOT_HOSTED_OWNER_ALPHA now supports the strict pin/policy
 envelope under Access with false production flags and empty provider config. Wrong
 pin rolls back owner binding before seed; runtime requires owner_alpha_hosted:true

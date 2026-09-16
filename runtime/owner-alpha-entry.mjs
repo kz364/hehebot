@@ -1,4 +1,5 @@
 import { lstat, readFile, mkdir } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createCodexService } from './codex-service.mjs';
@@ -14,6 +15,15 @@ async function privatePath(path, directory = false) {
   const stat = await lstat(path);
   if (!(directory ? stat.isDirectory() : stat.isFile()) || stat.isSymbolicLink() ||
       stat.uid !== process.getuid() || stat.mode & 0o077 || !directory && stat.size > 32768) fail('PRIVATE_PATH_REQUIRED');
+}
+
+export async function readOwnerAlphaConfig(path, expectedSha256) {
+  await privatePath(path);
+  const bytes = await readFile(path);
+  if (bytes.length > 32768) fail('INVALID_OWNER_ALPHA_CONFIGURATION');
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  if (expectedSha256 !== undefined && expectedSha256 !== sha256) fail('OWNER_ALPHA_CONFIG_CHANGED');
+  return { config: JSON.parse(bytes.toString('utf8')), sha256 };
 }
 
 /** Supported account/model discovery, never inference or an account login. */
@@ -38,7 +48,8 @@ export async function runOwnerAlpha(config, options = {}) {
 }
 
 /** Supervised hosted composition only. Caller must hold the kernel executor lock
- * for the complete native process tree. No HTTP wake or CLI activation route. */
+ * for the complete native process tree. CLI uses the dual-lock launcher, never
+ * the HTTP wake service. Locks are not proof of descendant termination. */
 export async function runHostedOwnerAlpha(config, options = {}) {
   config = structuredClone(config);
   if (typeof config.hostedOwnerBindingSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(config.hostedOwnerBindingSha256)) fail('INVALID_OWNER_ALPHA_CONFIGURATION');
@@ -111,10 +122,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const stop = () => controller.abort();
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
   try {
-    if (process.argv.length !== 4 || process.argv[2] !== '--run') fail('OWNER_ALPHA_EXPLICIT_RUN_REQUIRED');
-    const path = process.argv[3]; await privatePath(path);
-    const config = JSON.parse(await readFile(path, 'utf8'));
-    await runOwnerAlpha(config, { signal: controller.signal });
+    const hosted = process.argv[2] === '--run-hosted-locked';
+    if (hosted ? process.argv.length !== 5 || !/^[a-f0-9]{64}$/.test(process.argv[4])
+      : process.argv.length !== 4 || process.argv[2] !== '--run') fail('OWNER_ALPHA_EXPLICIT_RUN_REQUIRED');
+    const { config } = await readOwnerAlphaConfig(process.argv[3], hosted ? process.argv[4] : undefined);
+    await (hosted ? runHostedOwnerAlpha : runOwnerAlpha)(config, { signal: controller.signal });
   } catch {
     console.error('Owner alpha refused or stopped; inspect retained private state. No automatic retry.');
     process.exitCode = 1;

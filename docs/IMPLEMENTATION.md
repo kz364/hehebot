@@ -4,6 +4,28 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Hosted manual launcher (2026-09-17 Asia/Jakarta): runtime/hosted-owner-launcher.mjs
+uses the existing flock wrapper twice, native home then session state. Both must
+be existing distinct owner-only directories. Parent config bytes are SHA-256-bound
+to the child's re-read before account work. Contention returns73; abort forwards
+to the exact exec-preserved child; no retry or state deletion occurs. Four new
+real-subprocess cases plus entry/lock coverage pass21 tests in
+`.local/hosted-launcher-focused.log`. Tests substitute a synthetic Node workload
+after asserting the actual lock argv, except the changed-config case exercises
+the real entrypoint refusal. This is not complete hosted native integration.
+Combined verification exits0 with1,359 backend/430 runtime plus native/browser/
+service/build checks in `.local/hosted-launcher-combined.log`; desktop16 pass.
+Delegated pristine0.154.0 experiment kept protocol FIFO open after SIGKILL of its
+synthetic parent: npm wrapper retained fd3 and exclusion, native ELF had no matching
+directory descriptor. Both stayed alive; stopping wrapper stopped native, then a
+contender entered. This is bounded delegated evidence, not independently repeated
+host proof or arbitrary wrapper-loss containment. Existing process-lock tests also
+reproduce Node's default descriptor drop. No transport/dependency patch was made;
+free locks still cannot authorize takeover. Both workers finished and cleaned their
+synthetic processes. No account/login/model/provider action or deployment occurred.
+Next: complete private scripted Access/Worker/native/Tasks composition. HTTP wake
+remains preflight-only; supervised CLI existence adds no live deployment grant.
+
 Hosted bounded control composition (2026-09-17 Asia/Jakarta): distinct default-off
 HEHEBOT_HOSTED_OWNER_ALPHA accepts the exact owner pin/policy envelope under Access
 only, both production flags false and no provider/local-alpha config. Shared policy
