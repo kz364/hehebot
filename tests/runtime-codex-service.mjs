@@ -386,3 +386,88 @@ test('maintenance retains old-family coverage and late output after fresh coordi
   assert.equal(threads, 2); assert.equal(claims, 2);
   await service.stop();
 });
+
+const restrictedReadback = {
+  web_search: 'disabled', features: { apps: false, plugins: false, tool_suggest: false,
+    image_generation: false, standalone_web_search: false, token_budget: false,
+    request_permissions_tool: false, exec_permission_approvals: false },
+};
+
+test('restricted service binds exact minimal profile before admission, without copying provider config into custody', async t => {
+  const f = await fixture(t), rpc = f.transport.request;
+  const service = createCodexService({ ...f.config, restrictedPermissions: true }, { ...f.dependencies,
+    launch: options => {
+      assert.deepEqual(options.configOverrides, { web_search: 'disabled',
+        ...Object.fromEntries(Object.keys(restrictedReadback.features).map(key => [`features.${key}`, false])) });
+      return f.dependencies.launch(options);
+    },
+    prepareNative: home => writeFile(join(home, 'config.toml'), 'model = "private-provider-canary"\n', { mode: 0o600 }),
+  });
+  let name;
+  f.transport.initialize = async options => assert.deepEqual(options, { experimentalApi: true });
+  f.transport.request = async (method, params) => {
+    if (method === 'config/read') {
+      assert.equal(f.calls.includes('ready'), false);
+      const contents = await readFile(join(f.directory, 'codex-home', 'config.toml'), 'utf8');
+      name = JSON.parse(contents.split('\n')[0].split(' = ')[1]);
+      assert.match(name, /^hehebot-restricted-[a-f0-9]{64}$/);
+      assert.ok(contents.includes('[permissions.' + name + '.filesystem]'));
+      assert.ok(contents.includes('":minimal" = "read"'));
+      return { config: { ...restrictedReadback, default_permissions: name, permissions: { [name]: {
+        filesystem: { glob_scan_max_depth: null, ':minimal': 'read', [join(f.directory, 'workspace')]: 'read',
+          [join(f.directory, 'journal')]: 'deny', [join(f.directory, 'codex-home')]: 'deny', [f.config.runtimeTokenFile]: 'deny' },
+        network: { enabled: false },
+      } } } };
+    }
+    if (method === 'thread/start') {
+      assert.equal(params.permissions, name); assert.equal(Object.hasOwn(params, 'sandbox'), false);
+      assert.equal(params.approvalPolicy, 'untrusted');
+      assert.deepEqual(Object.keys(params.config.mcp_servers.hehebot.tools), ['hehebot_list_routines']);
+      assert.deepEqual(params.config.mcp_servers.hehebot.enabled_tools, ['hehebot_list_routines']);
+    }
+    return rpc(method, params);
+  };
+  try {
+    await service.start();
+    const custody = await service.journal.get('service');
+    assert.equal(custody.permissions.name, name); assert.match(custody.permissions.configSha256, /^[a-f0-9]{64}$/);
+    assert.doesNotMatch(JSON.stringify(custody), /private-provider-canary/);
+  } finally { await service.stop(); }
+});
+
+for (const mismatch of ['network', 'extra-root', 'changed-file', 'hosted-apps', 'extra-mcp']) test(`restricted ${mismatch} refuses native admission`, async t => {
+  const f = await fixture(t), rpc = f.transport.request, request = f.dependencies.control.request;
+  const service = createCodexService({ ...f.config, restrictedPermissions: true }, f.dependencies);
+  f.transport.request = async (method, params) => {
+    if (method !== 'config/read') return rpc(method, params);
+    const contents = await readFile(join(f.directory, 'codex-home', 'config.toml'), 'utf8');
+    const name = JSON.parse(contents.split('\n')[0].split(' = ')[1]);
+    return { config: { ...restrictedReadback,
+      ...(mismatch === 'hosted-apps' ? { features: { ...restrictedReadback.features, apps: true } } : {}),
+      ...(mismatch === 'extra-mcp' ? { mcp_servers: { generic: { command: '/unapproved' } } } : {}),
+      default_permissions: name, permissions: { [name]: {
+      filesystem: { ':minimal': 'read', [join(f.directory, 'workspace')]: 'read',
+        [join(f.directory, 'journal')]: 'deny', [join(f.directory, 'codex-home')]: 'deny', [f.config.runtimeTokenFile]: 'deny',
+        ...(mismatch === 'extra-root' ? { ':root': 'read' } : {}) },
+      network: { enabled: mismatch === 'network' },
+    } } } };
+  };
+  f.dependencies.control.request = async (type, payload) => {
+    if (type === 'claim' && mismatch === 'changed-file') await writeFile(join(f.directory, 'codex-home', 'config.toml'), 'changed');
+    return request(type, payload);
+  };
+  try {
+    await assert.rejects(service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+    assert.equal(f.calls.some(call => call.method === 'thread/start'), false);
+    assert.equal(f.calls.includes('submitted'), false);
+  } finally { await service.stop(); }
+});
+
+test('restricted mode rejects mutation tools and malformed options before any startup side effect', async t => {
+  const f = await fixture(t);
+  for (const config of [
+    { ...f.config, restrictedPermissions: 'true' },
+    { ...f.config, restrictedPermissions: true, personas: { bot: { ...f.config.personas.bot, allowedTools: ['hehebot_save_routine'] } } },
+  ]) await assert.rejects(createCodexService(config, f.dependencies).start(), { code: 'INVALID_SERVICE_CONFIGURATION' });
+  assert.deepEqual(f.calls, []);
+});

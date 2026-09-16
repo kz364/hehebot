@@ -4,6 +4,47 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Restricted service preparation (2026-09-16): opt-in disposable composition selects
+a digest-bound minimal/workspace-read named profile, disabled network and only
+first-party read MCP grants. Startup checks native configuration readback before
+readiness; submission rejects config-file drift. Initial host service tests pass23/23,
+and `--restricted-background` passes six scripted loopback requests through the
+actual browser/Worker/native path, retaining the three unknown families and
+denying sleep/final settlement. Initial zero-inference readback refusal and the
+corrected null-metadata handling are recorded in
+`.local/restricted-background-{first,second}.log`. See [service limits](CODEX_SERVICE.md).
+
+The bounded native permissions worker's patch was reviewed and integrated. Host
+reran `node scripts/test-codex-permissions.mjs --minimal-native`: exit0, 24 requests,
+26 assertions, exact root/direct-child workspace reads and journal/token/symlink
+denials, pristine binaries and confirmed disposable cleanup
+(`.local/restricted-profile-host-native.log`). This variant adds only the exact
+native ELF read path plus explicit private-path denies. Unaugmented `--minimal`
+cannot launch shell and is not enforcement proof; service keeps shell unavailable.
+These are separate policies and evidence, not a claim that app-server/MCP or all
+model-reachable built-ins are isolated. The completed
+[pinned built-in review](ALPHA_NATIVE_CAPABILITY_BOUNDARY.md) found no concrete
+arbitrary host-file bypass in the inspected tools; image/patch reads use sandboxed
+helpers, and nested code-mode calls retain tool dispatch. No additional container
+or shell allowance is required by that source evidence. Built-in denial remains
+source-supported rather than behaviorally proved.
+
+Main applied the concrete remaining restriction: native command-line overrides
+disable provider search/apps/plugins/suggestions/image generation, token-budget
+mode and escalation features. Startup requires their exact config readback and
+no inherited MCP servers; admitted MCP `enabled_tools` matches the immutable
+read-only grant. The six-request provider-restricted path passes in
+`.local/restricted-background-final.log`. Desktop16/16 passes in
+`.local/restricted-desktop.log`; final combined verifier passed1244 control
+and342 runtime tests plus native/service/build checks in
+`.local/restricted-final-combined.log`. The final explicit journal/home/token/Access
+path denies additionally pass48 service/transport cases and actual restricted
+background with six requests in `.local/restricted-final-focused.log` and
+`.local/restricted-background-verified.log`. No live model, provider, account,
+deployment or production gate changes. Next deliverable is an explicit bounded
+owner-alpha session entrypoint and specifically authorized real-model task, not
+further general containment work or enabling the disposable gate for live use.
+
 Owner-alpha direction (2026-09-16): useful supervised tasks with disclosed bugs and
 manual recovery need not await complete product/connector/Mac acceptance. Credential,
 authority, unknown-effect, replay and spend safeguards remain mandatory. The newly

@@ -4,6 +4,43 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+Current restricted-alpha wave starts from unpublished local main 487be774, not
+origin/main. Main added disposable-only `restrictedPermissions`, exact native
+profile readback and pre-submit file-digest checks; native background fixture
+passes six scripted requests with chat/read-MCP and shell unavailable. Initial23
+service cases and desktop16/16 pass. Initial combined verification passed1244
+control/340 runtime in `.local/restricted-combined.log`; first restricted positive is
+`.local/restricted-background-second.log`, after null readback metadata caused
+the first zero-inference refusal. No live task or production gate is authorized.
+
+Native worker T-01a0a99d-ff26-70a8-9aef-f0cd16078094 finished; its two-file
+`.local/restricted-profile-native.patch` is applied. Do not reapply. Host reran
+`--minimal-native`, passing 24 requests/26 assertions with exact ELF-only extra
+read, positive workspace and denied journal/token/symlink root/direct-child
+reads; cleanup/pristine binary confirmed. Logs/archive are under `.local/`.
+This is a different policy from the service: native fixture adds ELF access;
+service permits only minimal + workspace reads and now explicitly denies journal,
+Codex home, runtime token and optional Access credential paths. Neither proves
+all native built-ins or trusted MCP/app-server isolation.
+Worker T-01a0a99e-5b45-70e2-900d-21e13b430e17 finished; its
+`docs/ALPHA_NATIVE_CAPABILITY_BOUNDARY.md` patch is applied. Both workers are done.
+No concrete arbitrary host-file bypass was found in inspected built-ins; image
+and patch reads use sandboxed helpers, including exact runtime read additions.
+Do not broaden the service to match the shell diagnostic. Main implemented the
+remaining provider-surface restriction with supported CLI overrides and native
+readback: search/apps/plugins/suggestions/image generation/token-budget and
+escalation features off, no inherited MCP, exact admitted enabled_tools. Native
+six-request rerun passes in `.local/restricted-background-final.log`.
+Final combined regression passes1244 control/342 runtime plus native/service/build
+checks in `.local/restricted-final-combined.log`. The last explicit private-path
+deny addition passes48 focused service/transport cases in
+`.local/restricted-final-focused.log` and the six-request actual restricted
+background path in `.local/restricted-background-verified.log`, including exact
+readback, reload and both cancellations. Source evidence is not behavioral
+built-in denial proof. Next: explicit bounded owner-alpha session entrypoint,
+then one specifically authorized real-model task; no deployment/account grant or
+permission to use disposable flags for live work. Keep production gates false.
+
 Latest integrated wave used `.local/alpha-family.bundle`, unpublished host main
 d96a498, not origin/main. Backend worker T-01a0a983-1f17-755f-98ab-6b7047a68ea3
 and fixture worker T-01a0a983-8f49-759d-9f1b-0d44d9067af3 both finished. All three

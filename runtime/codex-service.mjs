@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { lstat, mkdir, readFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -96,13 +96,15 @@ export function createCodexService(config, dependencies) {
       // No environment variable or persisted compatibility flag enables this.
       if (config.disposableTest !== true) fail('NATIVE_COMPATIBILITY_GATE_BLOCKED');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions'].includes(key)) ||
-        config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean') fail('INVALID_SERVICE_CONFIGURATION');
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions'].includes(key)) ||
+        config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
+        config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean') fail('INVALID_SERVICE_CONFIGURATION');
       if (!tasks?.hold || !tasks?.release || typeof operations !== 'function' ||
           !isAbsolute(config.binary) || !config.personas || !isAbsolute(config.stateDirectory)) fail('INVALID_SERVICE_CONFIGURATION');
       for (const persona of Object.values(config.personas)) {
         if (!Array.isArray(persona.allowedTools) || new Set(persona.allowedTools).size !== persona.allowedTools.length ||
             persona.allowedTools.some(tool => !AGENT_TOOL_NAMES.includes(tool))) fail('INVALID_SERVICE_CONFIGURATION');
+        if (config.restrictedPermissions && persona.allowedTools.some(tool => !['hehebot_list_routines', 'hehebot_read_skill'].includes(tool))) fail('INVALID_SERVICE_CONFIGURATION');
       }
       phase = 'starting';
       try {
@@ -129,6 +131,34 @@ export function createCodexService(config, dependencies) {
         const home = join(config.stateDirectory, 'codex-home'), workspace = join(config.stateDirectory, 'workspace');
         await starting(() => mkdir(home, { mode: 0o700 })); await starting(() => mkdir(workspace, { mode: 0o700 }));
         await starting(() => prepareNative(home));
+        const configOverrides = config.restrictedPermissions ? {
+          web_search: 'disabled', 'features.apps': false, 'features.plugins': false,
+          'features.tool_suggest': false, 'features.image_generation': false,
+          'features.standalone_web_search': false, 'features.token_budget': false,
+          'features.request_permissions_tool': false, 'features.exec_permission_approvals': false,
+        } : {};
+        let permissions;
+        if (config.restrictedPermissions) {
+          const path = join(home, 'config.toml');
+          let base = '';
+          try {
+            await starting(() => privatePath(path));
+            base = await starting(() => readFile(path, 'utf8'));
+          } catch (error) { if (error.code !== 'ENOENT') throw error; }
+          const filesystem = { ':minimal': 'read', [workspace]: 'read',
+            [join(config.stateDirectory, 'journal')]: 'deny', [home]: 'deny',
+            ...Object.fromEntries([config.runtimeTokenFile, config.accessClientIdFile, config.accessClientSecretFile]
+              .filter(Boolean).map(path => [path, 'deny'])) };
+          const digest = createHash('sha256').update(JSON.stringify({ base, filesystem, network: { enabled: false }, configOverrides })).digest('hex');
+          const name = `hehebot-restricted-${digest}`;
+          const contents = `default_permissions = ${JSON.stringify(name)}\n${base}\n[permissions.${name}.filesystem]\n` +
+            Object.entries(filesystem).map(([path, mode]) => `${JSON.stringify(path)} = ${JSON.stringify(mode)}\n`).join('') +
+            `[permissions.${name}.network]\nenabled = false\n`;
+          permissions = { name, filesystem, configSha256: createHash('sha256').update(contents).digest('hex') };
+          await starting(() => writeFile(path, contents, { mode: 0o600 }));
+          // Journal only the digest/identity, never provider configuration text.
+          await starting(() => journal.update('service', { permissions: { name, configSha256: permissions.configSha256 } }));
+        }
         assertStarting();
         if (config.ownerQuestions === true) questions = new CodexQuestionBinding({ journal, control, timeoutMs: 300000,
           resolveBinding: async ({ threadId, turnId }) => {
@@ -155,7 +185,7 @@ export function createCodexService(config, dependencies) {
             }
             return null;
           } });
-        transport = launch({ binary: config.binary, home, cwd: workspace, timeoutMs: 10000,
+        transport = launch({ binary: config.binary, home, cwd: workspace, timeoutMs: 10000, configOverrides,
           ...(questions ? { onUserInput: questions.onUserInput, userInputTimeoutMs: 300000 } : {}) });
         if (questions) {
           questionNotification = message => { void questions.onNotification(message).catch(recover); };
@@ -164,7 +194,19 @@ export function createCodexService(config, dependencies) {
         }
         // Native diagnostics may contain task data; callers must not log them.
         transport.child.stderr?.resume();
-        await starting(() => transport.initialize());
+        await starting(() => transport.initialize({ experimentalApi: Boolean(permissions) }));
+        if (permissions) {
+          const readback = await starting(() => transport.request('config/read', { includeLayers: false, cwd: workspace }));
+          const profile = readback?.config?.permissions?.[permissions.name];
+          if (Object.entries(configOverrides).some(([key, value]) =>
+            key.split('.').reduce((node, part) => node?.[part], readback?.config) !== value)) fail('RESTRICTED_PROFILE_MISMATCH');
+          if (Object.keys(readback?.config?.mcp_servers ?? {}).length) fail('RESTRICTED_PROFILE_MISMATCH');
+          if (readback?.config?.default_permissions !== permissions.name || profile?.network?.enabled !== false ||
+              !profile.filesystem || Object.keys(profile.filesystem).some(key =>
+                !Object.hasOwn(permissions.filesystem, key) && !(key === 'glob_scan_max_depth' && profile.filesystem[key] === null)) ||
+              Object.entries(permissions.filesystem).some(([path, mode]) => profile.filesystem[path] !== mode) ||
+              profile.extends != null || profile.workspace_roots != null) fail('RESTRICTED_PROFILE_MISMATCH');
+        }
         assertStarting();
         adapter = new CodexAdapter({ journal, cwd: workspace, rpc: (method, params) => transport.request(method, params), testMode: true });
         const native = {
@@ -173,6 +215,11 @@ export function createCodexService(config, dependencies) {
           cancel: id => adapter.cancel(id),
           submit: async input => {
             supervisor.assertLease();
+            if (permissions) {
+              const contents = await readFile(join(home, 'config.toml'));
+              if (createHash('sha256').update(contents).digest('hex') !== permissions.configSha256) fail('RESTRICTED_PROFILE_CHANGED');
+              supervisor.assertLease();
+            }
             const row = await journal.get(supervisor.bridge.cursor);
             if (row?.attemptId !== input.attemptId || !row.claim?.run) fail('CLAIM_IDENTITY_MISMATCH');
             const run = row.claim.run, persona = config.personas[run.persona_id];
@@ -190,9 +237,11 @@ export function createCodexService(config, dependencies) {
               env: { HEHEBOT_AGENT_TOOLS_CONFIG: journal.path(key),
                 ...(config.tlsCAFile ? { NODE_EXTRA_CA_CERTS: config.tlsCAFile } : {}) },
               tools: Object.fromEntries(persona.allowedTools.map(name => [name, { approval_mode: 'approve' }])),
+              ...(permissions ? { enabled_tools: persona.allowedTools } : {}),
             } };
             // Fresh service-owned native home has no inherited global MCP config.
-            return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, testMode: true, mcpServers }).submit(input);
+            return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, testMode: true, mcpServers,
+              permissionsProfile: permissions?.name }).submit(input);
           },
         };
         router = new CodexEventRouter({ transport, adapter, onRecovery: recover, now });

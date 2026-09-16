@@ -4,6 +4,101 @@ Run `node scripts/test-codex-permissions.mjs` from the pinned extraction.
 Exit0 means the bounded read/deny comparison passed; exit2 means a capability
 gap; exit1 means a fixture/protocol/assertion failure. No production gate changes.
 
+## Minimal reads: shell launch gap and exact executable addition
+
+The credential-free restricted-alpha prerequisite has two explicit variants;
+neither replaces the original no-argument comparison:
+
+```sh
+bash scripts/setup-codex.sh
+node --check scripts/test-codex-permissions.mjs
+node scripts/test-codex-permissions.mjs                  # exit0, original comparison
+node scripts/test-codex-permissions.mjs --minimal        # exit2, launch gap on this orb
+node scripts/test-codex-permissions.mjs --minimal-native # exit0, exact ELF read added
+```
+
+On pristine Linux x64 Codex 0.154.0, **`:minimal` plus explicit workspace read is
+not sufficient to launch the npm-installed native sandbox helper**. Strict
+configuration and experimental initialize succeed, but every custom root/child
+shell attempt returns exit1 with:
+
+```text
+bwrap: execvp /home/user/workspace/repo/.local/codex-runtime/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex: No such file or directory
+```
+
+`--minimal` preserves this result: `filesystemIsolationProved:false`,
+`childInheritanceProved:false`, `status:"capability-gap"`. The baseline root and
+child read all four paths successfully, but neither custom task has a successful
+workspace control. **Launch failure is not filesystem-denial evidence.**
+
+`--minimal-native` adds read access to that **single actual native ELF**, not the
+Node launcher, installation directory, repository, home, `/tmp`, or `:root`.
+No other explicit system-root additions were needed on this orb. This addition
+is a fixture alternative for host review, not a change to service policy.
+The selected profile is the following template (the fixture substitutes exact
+absolute disposable paths and prints the exact bytes in `selectedProfileToml`):
+
+```toml
+[permissions.isolated.filesystem]
+":minimal" = "read"
+"/home/user/workspace/repo/.local/codex-runtime/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex" = "read"
+"/absolute/disposable/state/workspace" = "read"
+"/absolute/disposable/state/journal" = "deny"
+"/absolute/disposable/state/runtime-token" = "deny"
+"/absolute/disposable/state/codex-home" = "deny"
+[permissions.isolated.network]
+enabled = false
+```
+
+`--minimal` omits only the ELF entry. Workspace **read**, rather than write,
+matches the host's updated read-only restricted-alpha candidate; no workspace
+writes are attempted or claimed. The baseline/default remains `:root = "read"`
+for the comparison only. Both variants use `permissions:"isolated"` exclusively
+for the custom root, `approvalPolicy:"untrusted"`, `--strict-config`, and
+`experimentalApi:true`. `config/read` checks every filesystem entry exactly
+(including native's null `glob_scan_max_depth` metadata) and network disabled.
+
+The service-shaped layout places `workspace`, `journal`, `runtime-token`, and
+`codex-home` under one private synthetic `state` directory. The grant filename
+matches the service journal's `grant-<attempt>.json` convention; its contents and
+the token are random synthetic canaries, not real grants or credentials. One
+workspace symlink points to that same outside grant. This tests topology, not
+access to any deployed service's actual credential files.
+
+| Variant / tasks | Workspace file | Sibling grant | Sibling token | Workspace symlink → grant |
+|---|---|---|---|---|
+| Baseline root and direct child | Exact contents, exit0 | Exact contents, exit0 | Exact contents, exit0 | Exact contents, exit0 |
+| Minimal root and direct child | Launch failure | Launch failure | Launch failure | Launch failure |
+| Minimal + exact ELF root and direct child | Exact contents, exit0 | Permission denied, exit1 | Permission denied, exit1 | Permission denied, exit1 |
+
+The passing ELF variant makes **24 scripted loopback requests**, records **26
+assertions**, accepts **16 exact single-read commands**, and declines both real
+suffix commands. Actual shell outputs are retained in `shellOutputs`, with
+canary values replaced only after comparison. The denied synthetic home produces
+`/bin/bash: <home>/.bashrc: Permission denied` even with `login:false`; the positive
+control requires exit0 and the entire exact canary payload, optionally preceded
+by only this exact warning. It does not mistake that warning for a negative
+grant/token result. Each negative requires `cat: <exact probe path>: Permission
+denied` and exit1. Child parent identity is verified by `thread/read`; all four
+turns complete, the process stops, and disposable files are removed.
+
+The original no-argument mode still passes with 20 requests, 25 assertions,
+12 exact approvals and two suffix declines. Both minimal variants retain bounded
+requests/waits, exact approvals, no escalation, no installed allow-prefix rules,
+and unchanged native executable hashes. Their JSON also records full
+`configToml`, so `jq -j .configToml LOG > config.toml` reproduces the tested bytes
+(including the now-expired disposable paths and loopback port).
+
+This proves the bounded shell read/deny behavior **only with the exact ELF
+addition**. It does not prove the host's unaugmented profile has usable shell
+access, sandboxing of the app-server or first-party MCP subprocesses, real
+credential protection, arbitrary symlink/hardlink attacks, write policy, network
+denial by a live probe, Sprite behavior, or restricted-alpha readiness. Native
+home denial is configured but no home canary is tested. No accounts, auth,
+real-model calls, providers, shared verifier, adapter, service or gates changed.
+A chat/read-MCP service may intentionally leave shell unavailable; that service
+decision and its independent read-MCP/background verification belong to the host.
+
 ## Observed on pristine Codex 0.154.0
 
 The adapter-backed orb run passed with **20 scripted loopback model requests, 25 named
@@ -159,8 +254,9 @@ incorrect assumptions about child source notification and rendered approval
 command, and rejecting local environment/proposed-but-unapplied amendment fields.
 They failed closed and are not counted as passing enforcement evidence.
 
-This proves only the tested real shell reads and direct-child inheritance on this
-host/build. It does not prove arbitrary native API/MCP-process isolation, alternate
-path/symlink/hardlink attacks, every system read, adversarial-model safety, real
+The original comparison proves only the tested real shell reads and direct-child
+inheritance on this host/build. The minimal ELF variant additionally tests one
+workspace-to-grant symlink, not arbitrary native API/MCP-process isolation,
+alternate path/symlink/hardlink attacks, every system read, adversarial-model safety, real
 credential isolation, live Sprite enforcement, whole-task settlement or safe sleep.
 Launch failure or missing workspace success remains a capability gap, not isolation.

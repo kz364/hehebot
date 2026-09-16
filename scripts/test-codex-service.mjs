@@ -17,7 +17,8 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { inspectCodexRecovery } from '../runtime/codex-recovery-inspect.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const backgroundMode = process.argv.includes('--background-responsive');
+const restrictedMode = process.argv.includes('--restricted-background');
+const backgroundMode = process.argv.includes('--background-responsive') || restrictedMode;
 const effectsMode = process.argv.includes('--child-effects');
 const historyChildMode = process.argv.includes('--history-child');
 const planChildMode = process.argv.includes('--plan-child');
@@ -35,7 +36,7 @@ const browserSession = `service-${randomUUID().slice(0, 8)}`;
 const browser = (...args) => promisify(execFile)('agent-browser', ['--session', browserSession, '--ignore-https-errors', ...args], { timeout: 30000 });
 const expectedToolCalls = operationPagesMode ? 101 : 1;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback', '--background-responsive'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback', '--background-responsive', '--restricted-background'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -381,6 +382,7 @@ try {
   };
   const config = { disposableTest: true, stateDirectory, binary: join(root, '.local/codex-runtime/node_modules/.bin/codex'),
     ...(questionsMode ? { ownerQuestions: true } : {}),
+    ...(restrictedMode ? { restrictedPermissions: true } : {}),
     portalOrigin: origin + '/', runtimeTokenFile, tlsCAFile: cert, installationId: 'service-fixture',
     personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model', allowedTools: ['hehebot_list_routines'] } } };
   const submissionRequests = [], heartbeatPages = [], coordinatorReleases = [];
@@ -443,6 +445,23 @@ try {
   service = createSpriteCodexService(config, dependencies);
   const dispatched = await service.start(); bound = true;
   assert.equal(dispatched.phase, 'running'); assert.equal(dispatched.claim.run.id, queued.resource_id);
+  if (restrictedMode) {
+    const { permissions } = await service.journal.get('service');
+    assert.match(permissions.name, /^hehebot-restricted-[a-f0-9]{64}$/);
+    const contents = await readFile(join(stateDirectory, 'codex-home', 'config.toml'));
+    assert.equal(createHash('sha256').update(contents).digest('hex'), permissions.configSha256);
+    const readback = await nativeTransport.request('config/read', { includeLayers: false, cwd: join(stateDirectory, 'workspace') });
+    assert.equal(readback.config.default_permissions, permissions.name);
+    assert.deepEqual(readback.config.permissions[permissions.name].filesystem, { glob_scan_max_depth: null,
+      ':minimal': 'read', [join(stateDirectory, 'workspace')]: 'read', [join(stateDirectory, 'journal')]: 'deny',
+      [join(stateDirectory, 'codex-home')]: 'deny', [runtimeTokenFile]: 'deny' });
+    assert.equal(readback.config.permissions[permissions.name].network.enabled, false);
+    assert.equal(readback.config.web_search, 'disabled');
+    for (const key of ['apps', 'plugins', 'tool_suggest', 'image_generation', 'standalone_web_search',
+      'token_budget', 'request_permissions_tool', 'exec_permission_approvals']) assert.equal(readback.config.features[key], false);
+    report.providerSurfacesDisabled = true;
+    report.restrictedProfileSelected = true;
+  }
   if (submissionAckMode) {
     assert.equal(submissionRequests.length, 2);
     assert.deepEqual(submissionRequests[0], submissionRequests[1]);

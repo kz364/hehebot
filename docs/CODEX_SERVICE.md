@@ -6,6 +6,55 @@ explicit **disposable-test-only** boundary. It is not production admission.
 it cannot claim work or invoke a model. Execution/native verification flags stay
 false. No account connection, deployment or live Sprite task is part of these tests.
 
+## Restricted owner-alpha preparation
+
+Optional `restrictedPermissions: true` still requires `disposableTest: true`;
+it does not authorize a live session. It selects a generated named profile with
+`:minimal = read`, the exact fresh workspace readable, and network disabled.
+Journal, Codex home, runtime token and configured Access credential paths are
+explicitly denied to model filesystem tools, including credentials outside the
+state directory. Trusted host/MCP processes still read their required files.
+Only `hehebot_list_routines` and `hehebot_read_skill` may appear in persona grants.
+The same subset is enforced with native MCP `enabled_tools`; startup rejects any
+preconfigured MCP server before admission. Supported command-line config overrides
+disable web search, hosted apps, plugins, suggestions, image generation, standalone
+search, token-budget/history-notes selection and permission-escalation features.
+These overrides take precedence over preparation-hook configuration, participate
+in the profile identity, and must match native readback. Network sandbox settings
+alone do not disable provider-side tools. No dynamic tools are supplied.
+The trusted preparation hook may supply provider configuration; its contents
+remain private. The profile identity includes that configuration's digest input,
+and the journal stores only the name and final config SHA256. Startup checks
+supported `config/read` before readiness; each submission rechecks file identity.
+Unexpected filesystem entries, inheritance, network enablement or file drift
+fence admission. Pinned readback includes null `glob_scan_max_depth` metadata;
+that is accepted, not interpreted as an additional readable path.
+
+`bash scripts/test-codex-service.sh --restricted-background` passes the actual
+portal/Worker/native six-request scripted sequence with this profile selected:
+status while A is held, a fresh status thread/grant, provisional reload without
+inference, and exact independent-B then old-A cancellation. Three unresolved
+families retain unknown coverage; no final result or sleep is granted. The first
+host run refused before inference because the validator rejected Codex's null
+metadata; `.local/restricted-background-first.log` preserves that failure and
+`.local/restricted-background-second.log` records the corrected positive run.
+
+This service profile deliberately does not grant access to the non-system native
+executable. Shell execution under `:minimal` alone is unavailable in this orb;
+that failure is not filesystem-denial evidence. Separate native permissions
+fixtures evaluate an exact executable-path read allowance. The scripted service
+uses chat and trusted read-only MCP, not shell commands. App-server and local MCP
+are trusted host processes, not sandboxed by this profile. The completed
+[pinned-source review](ALPHA_NATIVE_CAPABILITY_BOUNDARY.md) found no concrete
+arbitrary host-file bypass in the inspected built-ins: image/patch reads use
+sandboxed helpers, which supply their own exact runtime-executable access.
+This is source support, not an executed built-in denial test or general security
+proof. Code-mode false flags are not an absolute off switch when model metadata
+selects code mode; nested tool dispatch still retains authority. No extra shell
+allowance, root-only requirement, safe-tree-termination or text-only claim follows.
+The provider-restricted six-request rerun passed in
+`.local/restricted-background-final.log`; the service remains disposable-only.
+
 ## Run locally
 
 After the normal `bash scripts/verify-codex.sh` prerequisites:

@@ -5,18 +5,25 @@ import { randomUUID, createHash } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer } from 'node:http';
-import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, realpath, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { CodexTransport } from '../runtime/codex-transport.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 
+assert.ok(process.argv.length === 2 || (process.argv.length === 3 && ['--minimal', '--minimal-native'].includes(process.argv[2])),
+  'usage: test-codex-permissions.mjs [--minimal|--minimal-native]');
+const minimal = process.argv.length === 3;
+const nativeRead = process.argv[2] === '--minimal-native';
+const readCount = minimal ? 4 : 3;
 const binary = resolve(import.meta.dirname, '../.local/codex-runtime/node_modules/.bin/codex');
 const directory = await mkdtemp(join(tmpdir(), 'hehe-permissions-'));
-const home = join(directory, 'home'), cwd = join(directory, 'workspace'), secrets = join(directory, 'host-only');
+const state = minimal ? join(directory, 'state') : directory;
+const home = join(state, minimal ? 'codex-home' : 'home'), cwd = join(state, 'workspace');
+const secrets = join(state, minimal ? 'journal' : 'host-only');
 const env = { PATH: process.env.PATH, LANG: 'C.UTF-8', HOME: home, CODEX_HOME: home };
-const report = { status: 'failed', requests: 0, approvalsDenied: 0, approvalsAccepted: 0, assertions: [], observations: {}, productionEnabled: false,
+const report = { status: 'failed', mode: process.argv[2]?.slice(2) ?? 'baseline', requests: 0, approvalsDenied: 0, approvalsAccepted: 0, assertions: [], observations: {}, productionEnabled: false,
   externalModelRequests: 0, filesystemIsolationProved: false, childInheritanceProved: false };
 let transport, server;
 const events = [], errors = [], calls = new Map(), counts = new Map();
@@ -38,7 +45,7 @@ class SyntheticReadTransport extends CodexTransport {
   async approveSyntheticRead(message) {
     const p = message.params, call = calls.get(p.itemId);
     let expected;
-    if (call && call.index < 3 && !approved.has(p.itemId) && active.get(p.threadId) === p.turnId) {
+    if (call && call.index < readCount && !approved.has(p.itemId) && active.get(p.threadId) === p.turnId) {
       const root = roots.get(call.label.split('_')[0]);
       let correctThread = p.threadId === root;
       if (call.label.endsWith('CHILD') && p.threadId !== root) {
@@ -89,10 +96,17 @@ function tool(body, name, args, observation) {
     ...(outer.type === 'namespace' ? { namespace: outer.name } : {}), arguments: JSON.stringify(args) }];
 }
 try {
+  if (minimal) await mkdir(state, { mode: 0o700 });
   for (const path of [home, cwd, secrets]) await mkdir(path, { mode: 0o700 });
-  const paths = [join(cwd, 'shared.txt'), join(secrets, 'grant.txt'), join(secrets, 'credential.txt')];
+  const paths = [join(cwd, 'shared.txt'), join(secrets, minimal ? 'grant-fixture.json' : 'grant.txt'),
+    minimal ? join(state, 'runtime-token') : join(secrets, 'credential.txt')];
   const canaries = paths.map(() => `SYNTHETIC_${randomUUID()}`);
   for (let i = 0; i < paths.length; i++) await writeFile(paths[i], canaries[i], { mode: 0o600 });
+  if (minimal) {
+    paths.push(join(cwd, 'outside-grant-link'));
+    canaries.push(canaries[1]);
+    await symlink(paths[1], paths[3]);
+  }
   const executable = await realpath(binary);
   const hash = async () => createHash('sha256').update(await readFile(executable)).digest('hex');
   report.binarySha256Before = await hash();
@@ -141,8 +155,18 @@ try {
       for (const item of body.input) if (item.type === 'function_call_output' && calls.has(item.call_id)) {
         const { label: owner, index } = calls.get(item.call_id);
         const output = String(item.output);
-        const read = index < 3 && output.includes(`Output:\n${canaries[index]}`) && output.includes('Process exited with code 0');
-        const denied = index < 3 && output.includes(`cat: ${paths[index]}: Permission denied`) && output.includes('Process exited with code 1');
+        // The denied synthetic home can produce this startup warning even with login:false.
+        // Match the whole payload, with only that exact warning allowed before the canary.
+        const payload = output.split('Output:\n')[1];
+        const homeWarning = `/bin/bash: ${home}/.bashrc: Permission denied\n`;
+        const read = index < readCount && output.includes('Process exited with code 0') &&
+          (payload === canaries[index] || (minimal && payload === homeWarning + canaries[index]));
+        const denied = index < readCount && output.includes(`cat: ${paths[index]}: Permission denied`) &&
+          output.includes('Process exited with code 1') && !canaries.some(canary => output.includes(canary));
+        if (minimal) {
+          report.shellOutputs ??= {};
+          report.shellOutputs[`${owner}:${index}`] = canaries.reduce((text, canary) => text.replaceAll(canary, '<synthetic-canary>'), output);
+        }
         report.observations[`${owner}:${index}`] = read ? 'read' :
           /reject|declin|approval/i.test(output) ? 'approval-denied' :
           /bwrap|namespace|sandbox.*(?:fail|error)|operation not permitted/i.test(output) ? 'sandbox-launch-failed' :
@@ -153,21 +177,30 @@ try {
         }
       }
       const step = counts.get(label) ?? 0; counts.set(label, step + 1);
-      if (step < 3) {
+      if (step < readCount) {
         const command = `cat ${paths[step]}`;
         send(res, tool(body, 'exec_command', { cmd: command, shell: '/bin/bash', login: false, sandbox_permissions: 'use_default', yield_time_ms: 1000, max_output_chars: 2000 },
           { label, index: step, command: `/bin/bash -c '${command}'` }));
-      } else if (step === 3 && label.endsWith('ROOT')) {
+      } else if (step === readCount && label.endsWith('ROOT')) {
         const command = `cat ${paths[0]} ${paths[1]}`;
         send(res, tool(body, 'exec_command', { cmd: command, shell: '/bin/bash', login: false, sandbox_permissions: 'use_default', yield_time_ms: 1000, max_output_chars: 2000 },
-          { label, index: 3, command: `/bin/bash -c '${command}'` }));
-      } else if (step === 4 && label.endsWith('ROOT')) {
+          { label, index: readCount, command: `/bin/bash -c '${command}'` }));
+      } else if (step === readCount + 1 && label.endsWith('ROOT')) {
         send(res, tool(body, 'spawn_agent', { message: `PERMISSIONS_${label.replace('ROOT', 'CHILD')}`, agent_type: 'default' }));
       } else send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant', content: [{ type: 'output_text', text: 'SCRIPTED_DONE', annotations: [] }] }]);
     } catch (e) { errors.push(e.message); if (!res.headersSent) res.writeHead(400); res.end(); }
   });
   await new Promise(ok => server.listen(0, '127.0.0.1', ok));
-  await writeFile(join(home, 'config.toml'), `default_permissions = "baseline"\nmodel = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\nmulti_agent = true\n[permissions.baseline.filesystem]\n":root" = "read"\n[permissions.baseline.network]\nenabled = false\n[permissions.isolated.filesystem]\n":root" = "read"\n":workspace_roots" = "read"\n${JSON.stringify(secrets)} = "deny"\n[permissions.isolated.network]\nenabled = false\n[model_providers.fixture]\nname = "Loopback only"\nbase_url = "http://127.0.0.1:${server.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 });
+  // :minimal does not expose the npm-installed native ELF outside system roots.
+  // Bubblewrap re-execs this exact binary; do not broaden to the installation tree.
+  const filesystem = minimal
+    ? { ':minimal': 'read', ...(nativeRead ? { [nativeBinary]: 'read' } : {}),
+      [cwd]: 'read', [secrets]: 'deny', [paths[2]]: 'deny', [home]: 'deny' }
+    : { ':root': 'read', ':workspace_roots': 'read', [secrets]: 'deny' };
+  const profile = `[permissions.isolated.filesystem]\n${Object.entries(filesystem).map(([path, access]) => `${JSON.stringify(path)} = ${JSON.stringify(access)}`).join('\n')}\n[permissions.isolated.network]\nenabled = false\n`;
+  const configToml = `default_permissions = "baseline"\nmodel = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\nmulti_agent = true\n[permissions.baseline.filesystem]\n":root" = "read"\n[permissions.baseline.network]\nenabled = false\n${profile}[model_providers.fixture]\nname = "Loopback only"\nbase_url = "http://127.0.0.1:${server.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`;
+  if (minimal) { report.selectedProfileToml = profile; report.configToml = configToml; }
+  await writeFile(join(home, 'config.toml'), configToml, { mode: 0o600 });
   const child = spawn(binary, ['app-server', '--strict-config', '--listen', 'stdio://'], { env, cwd, stdio: ['pipe', 'pipe', 'pipe'] });
   transport = new SyntheticReadTransport(child, { timeoutMs: 15000 });
   transport.on('notification', n => {
@@ -180,8 +213,8 @@ try {
   const config = await transport.request('config/read', { includeLayers: false, cwd });
   check('strict config reads exact named deny profile', () => {
     assert.equal(config.config.default_permissions, 'baseline');
-    assert.equal(config.config.permissions.isolated.filesystem[secrets], 'deny');
-    assert.equal(config.config.permissions.isolated.filesystem[':root'], 'read');
+    assert.deepEqual(config.config.permissions.isolated.filesystem, { ...filesystem, glob_scan_max_depth: null });
+    assert.equal(config.config.permissions.isolated.network.enabled, false);
   });
   for (const mode of ['BASE', 'CUSTOM']) {
     const journalPath = join(directory, `journal-${mode}`), journal = new FileJournal(journalPath);
@@ -229,7 +262,7 @@ try {
       assert.equal(adapter.admissionReadiness().productionVerified, false);
     });
     await wait(() => events.some(n => n.method === 'turn/completed' && n.params.threadId === threadId && n.params.turn.id === turnId), `${mode} root terminal`);
-    await wait(() => [0, 1, 2].every(i => report.observations[`${mode}_CHILD:${i}`]), `${mode} child read results`);
+    await wait(() => paths.every((_, i) => report.observations[`${mode}_CHILD:${i}`]), `${mode} child read results`);
     let childId;
     for (const id of new Set(events.filter(n => n.method === 'turn/started').map(n => n.params.threadId))) {
       if (id === threadId) continue;
@@ -245,9 +278,9 @@ try {
   report.nativeSha256After = await nativeHash();
   check('native executable remains pristine', () => assert.equal(report.binarySha256Before, report.binarySha256After));
   check('actual native ELF remains pristine', () => assert.equal(report.nativeSha256Before, report.nativeSha256After));
-  check('twelve reads and two suffix-negative calls returned observations', () => {
-    assert.equal(Object.keys(report.observations).length, 14);
-    assert.equal(calls.size, 14);
+  check(`${4 * readCount} reads and two suffix-negative calls returned observations`, () => {
+    assert.equal(Object.keys(report.observations).length, 4 * readCount + 2);
+    assert.equal(calls.size, 4 * readCount + 2);
   });
   check('all four native turns completed before shutdown', () => {
     assert.equal(active.size, 0);
@@ -256,30 +289,31 @@ try {
     assert.ok(terminal.every(n => n.params.turn.status === 'completed'));
   });
   const observed = (label, index) => report.observations[`${label}:${index}`];
-  report.baselineOutsideRead = ['BASE_ROOT', 'BASE_CHILD'].every(l => [0, 1, 2].every(i => observed(l, i) === 'read'));
+  report.baselineOutsideRead = ['BASE_ROOT', 'BASE_CHILD'].every(l => paths.every((_, i) => observed(l, i) === 'read'));
   report.filesystemIsolationProved = report.baselineOutsideRead && ['CUSTOM_ROOT', 'CUSTOM_CHILD'].every(l =>
-    observed(l, 0) === 'read' && [1, 2].every(i => observed(l, i) === 'filesystem-permission-denied'));
+    observed(l, 0) === 'read' && paths.slice(1).every((_, i) => observed(l, i + 1) === 'filesystem-permission-denied'));
   report.childInheritanceProved = report.filesystemIsolationProved;
   check('both actual suffix requests are declined rather than session-authorized', () => {
-    assert.equal(observed('BASE_ROOT', 3), 'approval-denied');
-    assert.equal(observed('CUSTOM_ROOT', 3), 'approval-denied');
+    assert.equal(observed('BASE_ROOT', readCount), 'approval-denied');
+    assert.equal(observed('CUSTOM_ROOT', readCount), 'approval-denied');
   });
   if (report.filesystemIsolationProved) {
-    check('baseline root and child read all three exact canaries', () => assert.equal(report.baselineOutsideRead, true));
-    check('custom root and child retain workspace read and deny both outside reads', () => {
+    check('baseline root and child read all exact canaries', () => assert.equal(report.baselineOutsideRead, true));
+    check('custom root and child retain workspace read and deny outside reads', () => {
       for (const label of ['CUSTOM_ROOT', 'CUSTOM_CHILD']) {
         assert.equal(observed(label, 0), 'read');
-        for (const index of [1, 2]) assert.equal(observed(label, index), 'filesystem-permission-denied');
+        for (let index = 1; index < readCount; index++) assert.equal(observed(label, index), 'filesystem-permission-denied');
       }
     });
-    check('only twelve initial exact commands accepted; two suffixes declined', () => {
-      assert.equal(report.approvalsAccepted, 12); assert.equal(report.approvalsDenied, 2);
+    check('only initial exact commands accepted; two suffixes declined', () => {
+      assert.equal(report.approvalsAccepted, 4 * readCount); assert.equal(report.approvalsDenied, 2);
     });
   }
   if (Object.values(report.observations).every(value => value === 'approval-denied')) {
-    check('untrusted rejects every unmatched command before filesystem access', () => assert.equal(report.approvalsDenied, 14));
+    check('untrusted rejects every unmatched command before filesystem access', () => assert.equal(report.approvalsDenied, 4 * readCount + 2));
     report.gap = 'UNTRUSTED_COMMAND_APPROVAL_REQUIRED: no baseline read or filesystem enforcement observed';
   }
+  if (!report.filesystemIsolationProved) report.gap ??= 'WORKSPACE_READ_OR_OUTSIDE_DENIAL_NOT_PROVED: inspect actual shellOutputs; launch failure is not denial';
   report.status = report.filesystemIsolationProved ? 'passed' : 'capability-gap';
   if (!report.filesystemIsolationProved) process.exitCode = 2;
 } catch (e) { report.error = e.message; report.fixtureErrors = errors; process.exitCode = 1; }

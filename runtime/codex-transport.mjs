@@ -188,14 +188,18 @@ export class CodexTransport extends EventEmitter {
 }
 
 /** Dedicated customer-owned home; never inherit provider keys or Amp auth. */
-export function spawnCodex({ binary, home, cwd, timeoutMs, userInputTimeoutMs, onToolCall = null, onUserInput = null }) {
+export function spawnCodex({ binary, home, cwd, timeoutMs, userInputTimeoutMs, onToolCall = null, onUserInput = null, configOverrides = {} }) {
   if (!binary?.startsWith('/') || !home?.startsWith('/') || !cwd?.startsWith('/')) throw new Error('ABSOLUTE_PATHS_REQUIRED');
   if (!validUserInputTimeout(userInputTimeoutMs)) throw new Error('INVALID_USER_INPUT_TIMEOUT');
+  if (!configOverrides || typeof configOverrides !== 'object' || Array.isArray(configOverrides) ||
+      Object.entries(configOverrides).some(([key, value]) => !/^[a-z_]+(?:\.[a-z_]+)*$/.test(key) ||
+        !['string', 'boolean'].includes(typeof value))) throw new Error('INVALID_CONFIG_OVERRIDES');
   const env = Object.fromEntries(['PATH', 'LANG']
     .filter(key => process.env[key]).map(key => [key, process.env[key]]));
   env.HOME = home;
   env.CODEX_HOME = home;
-  return new CodexTransport(spawn(binary, ['app-server', '--listen', 'stdio://'], {
+  const overrides = Object.entries(configOverrides).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`]);
+  return new CodexTransport(spawn(binary, ['app-server', ...overrides, '--listen', 'stdio://'], {
     cwd, env, stdio: ['pipe', 'pipe', 'pipe'],
   }), { timeoutMs, userInputTimeoutMs, onToolCall, onUserInput });
 }
