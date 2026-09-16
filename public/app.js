@@ -48,6 +48,7 @@ async function refresh(force=false){
 function choose(id){selectionVersion++;recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
 function recoveryUrl(view){return '/v1/conversations/'+view.conversationId+'/'+(view.kind==='tasks'?'tasks':'recovery')+(view.cursor?'?after='+encodeURIComponent(view.cursor):'');}
 async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=null){
+ selectionVersion++;
  const view={conversationId:selected,cursor,previous,kind,focusRun,page:null,request:1};recoveryView=view;report('');render();
  try{const page=await api(recoveryUrl(view));if(recoveryView===view&&selected===view.conversationId&&view.request===1){view.page=page;render();}}
  catch(e){if(recoveryView===view&&view.request===1){recoveryView=null;report(e.message);render();}}
@@ -120,7 +121,7 @@ function render(){
    }else if(['run.accepted','run.cancellation_requested'].includes(event.type)){
     const run=runs.find(x=>x.id===event.payload.run_id);if(!run)continue;const e=node('div',undefined,'event');e.append(node('span',statuses[run.status]??run.status,'status'));
     if(run.status==='waiting')e.append(node('span',run.error_code==='CAPABILITY_UNAVAILABLE'?'Runtime connection required':run.error_code??'Input required'));
-    if(['queued','claimed','running','waiting'].includes(run.status))e.append(button('Cancel',()=>act(()=>command('run.cancel',{run_id:run.id,reason:'Owner requested cancellation.'}))));
+    if(['queued','claimed','running','waiting'].includes(run.status))e.append(button('Cancel',()=>cancelTask(run,'Owner requested cancellation.')));
     if(['failed','cancelled','recovery_required','waiting'].includes(run.status)&&snapshot.summary.execution_enabled)e.append(button('Retry',()=>act(()=>command('run.retry',{run_id:run.id,expected_attempt:run.current_attempt}))));timeline.append(e);
    }else if(event.type==='effect.owner_reconciled'||event.type==='run.owner_recovered'){
     const e=node('div',undefined,'event');e.setAttribute('role','status');
@@ -161,7 +162,7 @@ function render(){
     steer.dataset.action='steer';steer.disabled=receipts.some(receipt=>['pending','outcome_unknown'].includes(receipt.status));actions.append(steer);
    }
    if(run.role==='background')actions.append(button('Follow up after settlement',()=>{const key=crypto.randomUUID();openEditor(`Follow up: ${title}`,[node('p','This message targets only the selected task. While it is active, the follow-up waits for native settlement.','hint'),field('Follow-up','text','','textarea')],form=>command('run.followup',{run_id:run.id,text:form.get('text')},key));},'quiet'));
-   if(['queued','claimed','running','finishing','waiting'].includes(run.status))actions.append(button('Cancel this task',()=>act(()=>command('run.cancel',{run_id:run.id,reason:'Owner selected this task for cancellation.'})),'quiet danger'));
+   if(['queued','claimed','running','finishing','waiting'].includes(run.status))actions.append(button('Cancel this task',()=>cancelTask(run,'Owner selected this task for cancellation.'),'quiet danger'));
    card.append(actions);timeline.append(card);
   }
   if(view?.focusRun&&view.page){const card=[...timeline.querySelectorAll('.task-card')].find(card=>card.dataset.runId===view.focusRun);card?.scrollIntoView({block:'nearest'});view.focusRun=null;}
@@ -423,6 +424,41 @@ $('composer').onsubmit=async event=>{
 function field(label,name,value='',type='text'){const l=node('label',label,'field');let input;if(type==='textarea')input=node('textarea');else{input=node('input');input.type=type;}input.name=name;input.value=value;input.required=true;l.append(input);return l;}
 function selectField(label,name,options,value){const l=node('label',label,'field');const select=node('select');select.name=name;for(const [v,text]of options){const o=node('option',text);o.value=v;select.append(o);}select.value=value;l.append(select);return l;}
 function openEditor(title,fields,save,submitLabel='Save'){editing=save;$('editor-title').textContent=title;$('editor-fields').replaceChildren(...fields);$('editor-error').hidden=true;$('editor-form').querySelector('button[type="submit"]').textContent=submitLabel;$('editor').showModal();}
+function cancelTask(run,reason){
+ const original=structuredClone(run),owner=selected,version=selectionVersion,view=recoveryView,identity=structuredClone(current()),key=crypto.randomUUID();
+ const body=JSON.stringify({schema_version:1,type:'run.cancel',payload:{run_id:original.id,reason}});
+ const affirmation=node('label',undefined,'check'),check=node('input');check.type='checkbox';check.name='confirm';check.required=true;
+ affirmation.append(check,document.createTextNode('Request cancellation of only this exact task.'));
+ let rejected=false;
+ $('editor').classList.add('roster-editor');
+ openEditor('Cancel this exact task?',[
+  node('p',original.title??(original.role==='background'?'Background task':'Conversation task'),'message-body'),
+  node('p',`Task ${original.id} · attempt ${original.current_attempt} · ${statuses[original.status]??original.status}`,'hint message-body'),
+  node('p','This requests cancellation, not confirmed executor termination. Children, tools and external effects may remain unresolved. It does not undo or roll back effects, release locks, or cancel other tasks.','review-notice'),
+  node('p','This review checks the latest task observed by this client. The server has no attempt precondition for cancellation: an attempt can change after this check and before the server receives it.','hint'),
+  node('p','A lost reply may still mean the request was accepted. Only an explicit retry sends this exact request with the same key. Reconnecting never retries it. If the task changes or disappears, close and refresh instead.','hint'),affirmation
+ ],async form=>{
+  const latest=(view?view.page:snapshot)?.runs?.find(row=>row.id===original.id),currentIdentity=current();
+  if($('connection').textContent!=='Connected'||!navigator.onLine||selected!==owner||selectionVersion!==version||recoveryView!==view||!identity||!currentIdentity||currentIdentity.deleted_at||currentIdentity.revision!==identity.revision||currentIdentity.body.archived!==identity.body.archived||!latest||latest.current_attempt!==original.current_attempt||latest.status!==original.status||latest.persona_id!==original.persona_id||latest.title!==original.title||latest.role!==original.role||!['queued','claimed','running','finishing','waiting'].includes(latest.status))throw new Error('Task or selection changed, is stale, or is offline. Close and refresh before reviewing again.');
+  if(form.get('confirm')!=='on')throw new Error('Confirm cancellation of this exact task.');
+  if(rejected)throw new Error('The request was rejected. Close and refresh before reviewing again.');
+  // Keep transport classification local: other editors retain their existing retry behavior.
+  let response,result;
+  try{
+   response=await fetch('/v1/commands',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key},body});
+   result=await response.json();
+   if(response.ok&&!['accepted','applied','rejected'].includes(result?.status))throw new Error('Unexpected receipt');
+   if(response.status>=500)throw new Error('Uncertain server outcome');
+  }catch{
+   $('editor-form').querySelector('button[type="submit"]').textContent='Retry same cancellation';
+   throw new Error('Cancellation outcome unknown. Refresh to review current status; retry only this same request explicitly, or close.');
+  }
+  if(!response.ok||result.status==='rejected'){
+   rejected=true;$('editor-form').querySelector('button[type="submit"]').textContent='Request cancellation';
+   throw new Error(`${result?.error?.message??'Cancellation was rejected.'} Close and refresh before reviewing again.`);
+  }
+ },'Request cancellation');
+}
 const dollars=cents=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
 function renderMonitoring(){
  const m=snapshot.monitoring;$('monitoring-panel').hidden=!m;if(!m)return;

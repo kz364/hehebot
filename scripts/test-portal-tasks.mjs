@@ -48,6 +48,9 @@ try{
  assert.match((await browser('get','text',`[data-run-id="${id(1)}"]`)).stdout,/Request application is not task completion/);
  assert.equal(commands.length,0);
  await browser('click',`[data-run-id="${id(1)}"] .danger`);
+ assert.equal(commands.length,0);
+ await browser('check','#editor [name=confirm]');
+ await browser('click','#editor-form button[type=submit]');
  await browser('wait','--fn','document.querySelector(".timeline").textContent.includes("Cancellation requested, not confirmed")');
  assert.equal(commands.length,1);assert.equal(tasks[1].status,'waiting');
  assert.match((await browser('get','text','#task-strip-summary')).stdout,/Waiting 12/);
