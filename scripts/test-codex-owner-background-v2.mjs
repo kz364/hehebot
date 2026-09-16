@@ -9,7 +9,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
+import { CodexAdapter } from '../runtime/codex-adapter.mjs';
+import { CodexEventRouter } from '../runtime/codex-events.mjs';
+import { CodexOperations } from '../runtime/codex-operations.mjs';
+import { FileJournal } from '../runtime/file-journal.mjs';
 
+assert.ok(process.argv.slice(2).every(arg => arg === '--v2-model-catalog'), 'UNKNOWN_FIXTURE_ARGUMENT');
+const v2ModelCatalog = process.argv.includes('--v2-model-catalog');
 const binary = resolve(import.meta.dirname, '../.local/codex-runtime/node_modules/.bin/codex');
 const directory = await mkdtemp(join(tmpdir(), 'hehe-owner-background-v2-'));
 const home = join(directory, 'home');
@@ -25,13 +31,34 @@ const report = { status: 'failed', codex: null, pinnedSourceCommit: '6b9826e3aa8
   externalModelCalls: 0, realAuth: false, providerIntegration: false, productionReady: false,
   appServerGlobalChildCapProved: false, toolEffectSettlementProved: false,
   modelIndependentDepthBoundProved: false, logicalChildCountBoundProved: false,
-  scope: 'Scripted fixture-model only; V2 residency cap is not a logical-child or model-independent depth bound.' };
-let server, transport, configPath, originalConfig, modelRequests = 0;
+  mode: v2ModelCatalog ? 'v2-model-catalog' : 'default',
+  scope: v2ModelCatalog ? 'Synthetic V2-capable model: advertised child spawn capacity and sequential idle eviction; no live authorization.' :
+    'Default synthetic model: child collaboration tools absent; no model-independent depth claim.' };
+let server, transport, router, configPath, originalConfig, modelRequests = 0;
 const held = new Map(), active = new Map(), completed = new Map();
 const calls = new Map(), pending = new Map(), counts = new Map();
-let rootS, childThread;
+let rootS, childThread, secondChildThread;
 report.results = {};
 report.modelCalls = [];
+const source = 'https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/';
+report.pinnedSourceReferences = {
+  startupCatalogConfig: `${source}core/config.schema.json#L6636-L6643`,
+  catalogLoader: `${source}core/src/config/mod.rs#L2057-L2085`,
+  modelMetadata: `${source}protocol/src/openai_models.rs#L400-L505`,
+  requiredInstructions: `${source}protocol/src/openai_models.rs#L810-L866`,
+  sharedResidency: `${source}core/src/agent/control.rs#L114-L135`,
+  spawnResidencyReservation: `${source}core/src/agent/control/spawn.rs#L620-L641`,
+  residencyUnloadability: `${source}core/src/agent/control/residency.rs#L233-L239`,
+  liveAgentList: `${source}core/src/agent/control.rs#L579-L615`,
+  notificationMethods: `${source}app-server-protocol/src/protocol/common.rs#L1882-L1917`,
+  activityItem: `${source}app-server-protocol/src/protocol/v2/item.rs#L385-L393`,
+  activityKinds: `${source}app-server-protocol/src/protocol/v2/item.rs#L1244-L1259`,
+  itemStarted: `${source}app-server-protocol/src/protocol/v2/item.rs#L1321-L1330`,
+  itemCompleted: `${source}app-server-protocol/src/protocol/v2/item.rs#L1399-L1408`,
+  turnStarted: `${source}app-server-protocol/src/protocol/v2/turn.rs#L492-L504`,
+  threadStarted: `${source}app-server-protocol/src/protocol/v2/thread.rs#L1939-L1942`,
+  childSource: `${source}protocol/src/protocol.rs#L2822-L2842`,
+};
 
 async function wait(predicate, label, timeout = 15000) {
   const end = Date.now() + timeout;
@@ -100,16 +127,33 @@ try {
       const catalog = names(body);
       assert.ok(!catalog.some(name => /web_search|image_generation|mcp|tool_suggest/.test(name)), 'DISABLED_PROVIDER_SURFACE');
       const text = JSON.stringify(body.input.filter(item => item.role === 'user' || item.type === 'agent_message'));
-      const label = ['CHILD_A', 'ROOT_A', 'ROOT_S'].find(value => text.includes(marker(value)));
+      const label = ['CHILD_B', 'CHILD_A', 'ROOT_A', 'ROOT_S'].find(value => text.includes(marker(value)));
       assert.ok(label, 'UNKNOWN_SCRIPTED_REQUEST');
       counts.set(label, (counts.get(label) ?? 0) + 1);
       report[`${label}ToolCatalog`] = catalog;
       assert.ok(!catalog.some(name => /wait_agent|close_agent|send_input|resume_agent/.test(name)), 'LEGACY_OR_WAIT_TOOL_ADVERTISED');
-      if (label !== 'ROOT_A') assert.ok(!catalog.some(name => /agent|collaboration/.test(name)), 'NON_ROOT_CONTROL_TOOLS');
+      if (label === 'ROOT_S' || !v2ModelCatalog && label !== 'ROOT_A') {
+        assert.ok(!catalog.some(name => /agent|collaboration/.test(name)), 'NON_ROOT_CONTROL_TOOLS');
+      } else if (v2ModelCatalog) {
+        for (const name of ['spawn_agent', 'send_message', 'followup_task', 'interrupt_agent', 'list_agents']) {
+          assert.ok(catalog.includes(`collaboration.${name}`), `${label}_V2_TOOL_MISSING_${name}`);
+        }
+      }
       if (label === 'ROOT_S') { hold(`ROOT_S_${counts.get(label)}`, res); return; }
+      if (label === 'CHILD_B') {
+        assert.equal(v2ModelCatalog, true);
+        if (counts.get(label) === 1) {
+          send(res, call(body, 'secondGrandchild', 'spawn_agent', { task_name: 'grandchild_b', message: 'FORBIDDEN_GRANDCHILD_B', fork_turns: 'none' }));
+        } else {
+          assert.equal(counts.get(label), 2);
+          report.results.secondGrandchild = body.input.filter(item => item.type === 'function_call_output').at(-1)?.output;
+          hold('CHILD_B', res);
+        }
+        return;
+      }
       if (label === 'CHILD_A') {
         if (counts.get(label) === 1) {
-          send(res, call(body, 'grandchild', 'spawn_agent', { task_name: 'grandchild', message: 'FORBIDDEN_GRANDCHILD', fork_turns: 'none' }, true));
+          send(res, call(body, 'grandchild', 'spawn_agent', { task_name: 'grandchild', message: 'FORBIDDEN_GRANDCHILD', fork_turns: 'none' }, !v2ModelCatalog));
         } else if (counts.get(label) === 2) {
           report.results.grandchild = body.input.filter(item => item.type === 'function_call_output').at(-1)?.output;
           send(res, call(body, 'grandchildNamespaced', 'spawn_agent', { task_name: 'grandchild', message: 'FORBIDDEN_GRANDCHILD', fork_turns: 'none' }, 'collaboration'));
@@ -135,7 +179,23 @@ try {
   const fileEntries = Object.entries(filesystem).map(([path, mode]) => `${JSON.stringify(path)} = ${JSON.stringify(mode)}`).join('\n');
   const disabled = ['multi_agent', 'multi_agent_v2', 'apps', 'plugins', 'tool_suggest', 'image_generation',
     'standalone_web_search', 'remote_models', 'token_budget', 'request_permissions_tool', 'exec_permission_approvals', 'code_mode', 'code_mode_only'];
+  const catalogPath = join(home, 'fixture-models.json');
+  if (v2ModelCatalog) {
+    // Supported startup config, not a Codex-owned cache/database edit. Required fields follow
+    // pinned protocol/src/openai_models.rs ModelInfo; multi_agent_version is public model metadata.
+    const catalog = { models: [{ slug: 'fixture-model', display_name: 'Synthetic V2 fixture', description: null,
+      supported_reasoning_levels: [], shell_type: 'unified_exec', visibility: 'list', supported_in_api: true,
+      priority: 1, upgrade: null, model_messages: { instructions_template: 'Synthetic credential-free native fixture.', instructions_variables: null },
+      default_reasoning_summary: 'auto', support_verbosity: false,
+      default_verbosity: null, apply_patch_tool_type: null, truncation_policy: { mode: 'bytes', limit: 10000 },
+      supports_image_detail_original: false, context_window: 272000, auto_compact_token_limit: null,
+      effective_context_window_percent: 95, experimental_supported_tools: [], multi_agent_version: 'v2' }] };
+    await writeFile(catalogPath, JSON.stringify(catalog), { mode: 0o600 });
+    report.modelCatalog = catalog;
+    report.modelCatalogSha256 = sha256(await readFile(catalogPath));
+  }
   const config = `model = "fixture-model"\nmodel_provider = "fixture"\nweb_search = "disabled"\ndefault_permissions = "owner-background"\n` +
+    (v2ModelCatalog ? `model_catalog_json = ${JSON.stringify(catalogPath)}\n` : '') +
     `[agents]\nenabled = false\n[features]\n${disabled.map(key => `${key} = false`).join('\n')}\n` +
     `[analytics]\nenabled = false\n[feedback]\nenabled = false\n[otel]\nexporter = "none"\ntrace_exporter = "none"\nmetrics_exporter = "none"\n` +
     `[permissions.owner-background.filesystem]\n${fileEntries}\n[permissions.owner-background.network]\nenabled = false\n` +
@@ -144,6 +204,17 @@ try {
   configPath = join(home, 'config.toml'); await writeFile(configPath, config, { mode: 0o600 }); originalConfig = await readFile(configPath);
   report.originalConfigSha256 = sha256(originalConfig);
   transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 10000 });
+  // Observe public JSON-RPC errors without changing transport behavior. This disposable fixture
+  // has no private prompts or credentials; path redaction still applies to the final report.
+  let protocolBuffer = '';
+  transport.child.stdout.on('data', chunk => {
+    protocolBuffer += chunk.toString();
+    let end;
+    while ((end = protocolBuffer.indexOf('\n')) !== -1) {
+      const line = protocolBuffer.slice(0, end); protocolBuffer = protocolBuffer.slice(end + 1);
+      try { const frame = JSON.parse(line); if (frame.error) (report.nativeRpcErrors ??= []).push(frame.error); } catch { /* transport validates frames */ }
+    }
+  });
   transport.on('notification', notification => {
     raw.notifications.push(notification);
     if (notification.method === 'turn/started') active.set(notification.params.threadId, notification.params.turn.id);
@@ -154,7 +225,16 @@ try {
     }
   });
   await transport.initialize({ experimentalApi: true });
+  const runtimeJournal = new FileJournal(journal);
+  const adapter = new CodexAdapter({ journal: runtimeJournal, cwd: workspace,
+    rpc: () => assert.fail('Observation integration must not submit or replay inference') });
+  const recoveryEvents = [];
+  router = new CodexEventRouter({ transport, adapter, onRecovery: value => recoveryEvents.push(value) });
   const effective = (await transport.request('config/read', { includeLayers: false, cwd: workspace })).config;
+  if (v2ModelCatalog) {
+    assert.equal(effective.model_catalog_json, catalogPath);
+    report.modelCatalogConfigReadback = '<disposable>/home/fixture-models.json';
+  }
   assert.equal(effective.agents.enabled, false); assert.equal(effective.features.multi_agent, false); assert.equal(effective.features.multi_agent_v2, false);
   for (const key of disabled) assert.equal(effective.features[key], false, key);
   assert.equal(effective.web_search, 'disabled'); assert.equal(effective.default_permissions, 'owner-background');
@@ -177,6 +257,9 @@ try {
       activePermissionProfile: started.activePermissionProfile, model: started.model, modelProvider: started.modelProvider };
     const turn = (await transport.request('turn/start', { threadId: started.thread.id,
       input: [{ type: 'text', text: marker(label) }] })).turn;
+    await runtimeJournal.putIfAbsent(label, { attemptId: label, threadId: started.thread.id, nativeRunId: turn.id,
+      status: 'running', rootSettled: false });
+    await router.bind(label);
     return { threadId: started.thread.id, turnId: turn.id };
   };
   const read = async threadId => (await transport.request('thread/read', { threadId, includeTurns: true })).thread;
@@ -204,8 +287,8 @@ try {
   assert.equal(childRead.source.subAgent.thread_spawn.parent_thread_id, rootA.threadId);
   assert.equal(childRead.source.subAgent.thread_spawn.depth, 1);
   report.identities.childA = { threadId: childThread, turnId: childTurn, source: childRead.source };
-  assert.equal(report.results.grandchild, 'unsupported call: spawn_agent');
-  assert.equal(report.results.grandchildNamespaced, 'unsupported call: collaborationspawn_agent');
+  assert.equal(report.results.grandchild, v2ModelCatalog ? 'collab spawn failed: agent thread limit reached' : 'unsupported call: spawn_agent');
+  assert.equal(report.results.grandchildNamespaced, v2ModelCatalog ? 'collab spawn failed: agent thread limit reached' : 'unsupported call: collaborationspawn_agent');
   assert.equal(await step('secondChild', 'spawn_agent', { task_name: 'second', message: 'FORBIDDEN_SECOND', fork_turns: 'none' }),
     'collab spawn failed: agent thread limit reached');
   const listBefore = JSON.parse(await step('listBefore', 'list_agents', {}));
@@ -254,35 +337,155 @@ try {
   assert.ok(active.has(childThread));
   assert.deepEqual((await read(rootS.threadId)).turns[0].items.filter(item => item.type === 'agentMessage').map(item => item.text), ['ROOT_S_INDEPENDENT']);
   report.independentResponse = 'ROOT_S_INDEPENDENT';
-  const row = await wait(() => pending.get('ROOT_A'), 'A_FINISH');
-  pending.delete('ROOT_A'); send(row.res, message('ROOT_A_AUTHORITY_CHECKED'));
-  await wait(() => completed.get(rootA.threadId)?.get(rootA.turnId) === 'completed', 'A_COMPLETE');
   report.scopedFeatures = {};
   for (const [label, id, enabled] of [['rootA', rootA.threadId, true], ['childA', childThread, true], ['rootS', rootS.threadId, false]]) {
     const result = await transport.request('experimentalFeature/list', { threadId: id, limit: 100 });
     const flags = Object.fromEntries(['multi_agent', 'multi_agent_v2'].map(name => [name, result.data.find(item => item.name === name)?.enabled]));
     assert.deepEqual(flags, { multi_agent: false, multi_agent_v2: enabled }); report.scopedFeatures[label] = flags;
   }
+  if (v2ModelCatalog) {
+    const loaded = async () => {
+      const result = await transport.request('thread/loaded/list', { limit: 100 });
+      assert.equal(result.nextCursor, null); return result.data.sort();
+    };
+    const firstFollowupTurn = active.get(childThread);
+    send(held.get('CHILD_FOLLOWUP').res, message('CHILD_A_DONE'));
+    await wait(() => completed.get(childThread)?.get(firstFollowupTurn) === 'completed', 'FIRST_CHILD_COMPLETED');
+    await wait(() => held.get('CHILD_FOLLOWUP').closed, 'COMPLETED_CHILD_HTTP_CLOSED');
+    assert.equal(active.has(childThread), false);
+    const loadedBefore = await loaded();
+    assert.deepEqual(loadedBefore, [rootA.threadId, rootS.threadId, childThread].sort());
+    const sBeforeEviction = (await read(rootS.threadId)).turns;
+    const sEventsBeforeEviction = structuredClone(sEvents());
+    const second = JSON.parse(await step('sequentialSpawn', 'spawn_agent', {
+      task_name: 'child_b', message: marker('CHILD_B'), fork_turns: 'none' }));
+    assert.equal(second.task_name, '/root/child_b');
+    await wait(() => held.has('CHILD_B'), 'SECOND_CHILD_ACTIVE');
+    const descendants = [...active.keys()].filter(id => id !== rootA.threadId && id !== rootS.threadId);
+    assert.equal(descendants.length, 1); secondChildThread = descendants[0];
+    assert.notEqual(secondChildThread, childThread);
+    assert.equal(report.results.secondGrandchild, 'collab spawn failed: agent thread limit reached');
+    const secondRead = await read(secondChildThread);
+    assert.equal(secondRead.source.subAgent.thread_spawn.parent_thread_id, rootA.threadId);
+    assert.equal(secondRead.source.subAgent.thread_spawn.depth, 1);
+    assert.equal(secondRead.source.subAgent.thread_spawn.agent_path, '/root/child_b');
+    report.identities.childB = { threadId: secondChildThread, turnId: active.get(secondChildThread), source: secondRead.source };
+    const loadedAfter = await loaded();
+    assert.deepEqual(loadedAfter, [rootA.threadId, rootS.threadId, secondChildThread].sort());
+    const retained = await read(childThread);
+    assert.deepEqual(retained.source, childRead.source);
+    assert.deepEqual(retained.turns.map(turn => turn.status), ['interrupted', 'completed']);
+    assert.deepEqual(retained.turns.at(-1).items.filter(item => item.type === 'agentMessage').map(item => item.text), ['CHILD_A_DONE']);
+    assert.deepEqual(await loaded(), loadedAfter, 'READ_MUST_NOT_RELOAD_EVICTED_CHILD');
+    const registry = JSON.parse(await step('sequentialRegistry', 'list_agents', {}));
+    // list_agents skips unloaded threads; it is not a complete logical-child inventory.
+    assert.deepEqual(registry.agents, [
+      { agent_name: '/root', agent_status: 'running' },
+      { agent_name: '/root/child_b', agent_status: 'running' },
+    ]);
+    // A retained same-tree UUID must pass identity resolution, then fail residency admission
+    // while B is active. A foreign UUID must still fail identity resolution instead.
+    assert.equal(await step('retainedChildAuthority', 'send_message', { target: childThread, message: 'MUST_NOT_DELIVER_WHILE_B_ACTIVE' }),
+      'collab tool failed: agent thread limit reached');
+    for (const name of ['send_message', 'followup_task', 'interrupt_agent']) {
+      assert.equal(await step(`afterEviction_${name}`, name, { target: rootS.threadId,
+        ...(name === 'interrupt_agent' ? {} : { message: `FORBIDDEN_AFTER_EVICTION_${name}` }) }), `agent with id ${rootS.threadId} not found`);
+    }
+    assert.deepEqual((await read(rootS.threadId)).turns, sBeforeEviction);
+    assert.deepEqual(sEvents(), sEventsBeforeEviction);
+    assert.deepEqual(await loaded(), loadedAfter);
+    assert.deepEqual((await read(childThread)).turns, retained.turns, 'CAPACITY_DENIED_MESSAGE_MUST_NOT_MUTATE_EVICTED_CHILD');
+    report.v2CapacityEvidence = { advertisedChildSpawnDenied: true, sequentialRootSpawnSucceeded: true,
+      completedFirstChildEvictedButReadable: true, loadedBefore, loadedAfter, retainedChild: retained,
+      registry, depthDenialDoesNotDependOnMissingTool: true,
+      retainedChildIdentityAcceptedButCapacityDenied: true, foreignControlsDeniedAfterEviction: true };
+  }
+  const row = await wait(() => pending.get('ROOT_A'), 'A_FINISH');
+  pending.delete('ROOT_A'); send(row.res, message('ROOT_A_AUTHORITY_CHECKED'));
+  await wait(() => completed.get(rootA.threadId)?.get(rootA.turnId) === 'completed', 'A_COMPLETE');
   report.persistedReadback = { rootA: (await read(rootA.threadId)).turns, rootS: (await read(rootS.threadId)).turns };
   assert.deepEqual(report.persistedReadback.rootA[0].items.filter(item => item.type === 'agentMessage').map(item => item.text), ['ROOT_A_AUTHORITY_CHECKED']);
-  assert.deepEqual(report.persistedReadback.rootA[0].items.filter(item => item.type === 'subAgentActivity').map(item => item.agentThreadId),
-    [childThread, childThread, childThread, childThread]);
-  await interrupt(childThread, active.get(childThread));
-  await wait(() => held.get('CHILD_FOLLOWUP').closed, 'FOLLOWUP_HTTP_CLOSED');
+  assert.deepEqual(report.persistedReadback.rootA[0].items.filter(item => item.type === 'subAgentActivity').map(item => [item.kind, item.agentThreadId]),
+    [['started', childThread], ['interacted', childThread], ['interrupted', childThread], ['interacted', childThread],
+      ...(v2ModelCatalog ? [['completed', childThread], ['started', secondChildThread]] : [])]);
+  const cleanupChild = v2ModelCatalog ? secondChildThread : childThread;
+  await interrupt(cleanupChild, active.get(cleanupChild));
+  await wait(() => held.get(v2ModelCatalog ? 'CHILD_B' : 'CHILD_FOLLOWUP').closed, 'FOLLOWUP_HTTP_CLOSED');
   assert.equal(active.size, 0); assert.deepEqual(raw.failures, []);
   assert.equal(counts.get('ROOT_S'), 1); assert.equal(counts.get('CHILD_A'), 4);
-  assert.equal(modelRequests, 23);
+  assert.equal(modelRequests, v2ModelCatalog ? 31 : 23);
   report.persistedReadback.childA = (await read(childThread)).turns;
-  assert.deepEqual(report.persistedReadback.childA.map(turn => turn.status), ['interrupted', 'interrupted']);
+  assert.deepEqual(report.persistedReadback.childA.map(turn => turn.status), ['interrupted', v2ModelCatalog ? 'completed' : 'interrupted']);
+  if (v2ModelCatalog) {
+    assert.equal(counts.get('CHILD_B'), 2);
+    report.persistedReadback.childB = (await read(secondChildThread)).turns;
+    assert.deepEqual(report.persistedReadback.childB.map(turn => turn.status), ['interrupted']);
+    assert.equal(sha256(await readFile(catalogPath)), report.modelCatalogSha256);
+    report.modelCatalogUnchanged = true;
+  }
   const defaultsAfter = (await transport.request('config/read', { includeLayers: false, cwd: workspace })).config;
   assert.deepEqual(defaultsAfter, effective);
   report.defaultConfigReadbackUnchanged = true;
+  await router.flush();
+  assert.deepEqual(recoveryEvents, []);
+  assert.equal(router.pending.length, 0);
+  const observedA = await adapter.requireRun('ROOT_A'), observedS = await adapter.requireRun('ROOT_S');
+  assert.equal(observedA.rootSettled, true); assert.equal(observedS.rootSettled, true);
+  assert.equal(Object.keys(observedS.spawns ?? {}).length, 0);
+  assert.deepEqual(Object.values(observedA.spawns).map(spawn => spawn.receiverThreadIds[0]).sort(),
+    [childThread, ...(v2ModelCatalog ? [secondChildThread] : [])].sort());
+  assert.ok(Object.values(observedA.spawns).every(spawn => spawn.status === 'observed' && spawn.source === 'v2Activity'));
+  assert.equal(Object.keys(observedA.childTurns).length, v2ModelCatalog ? 3 : 2);
+  for (const [threadId, turns] of [[childThread, report.persistedReadback.childA],
+    ...(v2ModelCatalog ? [[secondChildThread, report.persistedReadback.childB]] : [])]) {
+    for (const turn of turns) assert.equal(observedA.childTurns[JSON.stringify([threadId, turn.id])], turn.status);
+  }
+  const operations = await new CodexOperations({ journal: runtimeJournal, attemptId: 'ROOT_A', runId: randomUUID(), attempt: 1,
+    startedAt: new Date(Date.now() - 60000).toISOString(), deadlineAt: new Date(Date.now() + 60000).toISOString() }).snapshot();
+  assert.ok(operations.some(operation => operation.status === 'unknown'));
+  assert.equal(adapter.sleepReadiness().allowed, false);
+  report.runtimeObservation = { roots: 2, childTurns: Object.keys(observedA.childTurns).length,
+    retainedChildThreads: Object.keys(observedA.spawns).length, recoveryEvents, pendingEvents: router.pending.length,
+    activityInvocationsSettled: false, sleepAllowed: false, operationCount: operations.length };
+  report.liveCollaborationEvents = raw.notifications.filter(event =>
+    ['subAgentActivity', 'collabAgentToolCall'].includes(event.params?.item?.type));
+  assert.equal(report.liveCollaborationEvents.length, v2ModelCatalog ? 12 : 8);
+  assert.ok(report.liveCollaborationEvents.every(event => event.params.item.type === 'subAgentActivity'));
+  for (const [label, kind, id, path] of [
+    ['spawn', 'started', childThread, '/root/child_a'],
+    ['sameTreeMessage', 'interacted', childThread, '/root/child_a'],
+    ['sameTreeInterrupt', 'interrupted', childThread, '/root/child_a'],
+    ['sameTreeFollowup', 'interacted', childThread, '/root/child_a'],
+    ...(v2ModelCatalog ? [['sequentialSpawn', 'started', secondChildThread, '/root/child_b']] : []),
+  ]) {
+    const callId = [...calls].find(([, value]) => value === label)[0];
+    const events = report.liveCollaborationEvents.filter(event => event.params.item.id === callId);
+    assert.deepEqual(events.map(event => event.method), ['item/started', 'item/completed']);
+    for (const event of events) {
+      assert.deepEqual(event.params.item, { type: 'subAgentActivity', id: callId, kind, agentThreadId: id, agentPath: path });
+      assert.equal(event.params.threadId, rootA.threadId); assert.equal(event.params.turnId, rootA.turnId);
+    }
+  }
+  report.liveChildIdentityEvents = raw.notifications.filter(event => {
+    const id = event.params?.threadId ?? event.params?.thread?.id;
+    return [childThread, secondChildThread].includes(id) && ['thread/started', 'turn/started', 'turn/completed'].includes(event.method);
+  });
+  report.liveSourceIdentityEvents = raw.notifications.filter(event => JSON.stringify(event).includes('"thread_spawn"'));
+  report.liveChildThreadStartedCount = report.liveChildIdentityEvents.filter(event => event.method === 'thread/started').length;
+  report.liveEventLimits = [
+    'subAgentActivity is activity metadata, not collabAgentToolCall or a settlement receipt.',
+    'item/completed with kind started means the spawn activity completed, not that the child completed.',
+    'send_message and followup_task both emit interacted; the item alone does not distinguish them.',
+    'Child source ancestry is captured from thread/read; do not infer a thread/started event from persisted source.',
+  ];
+  report.liveCallEventLabels = Object.fromEntries(calls);
   report.cleanup = { activeTurns: active.size, heldRequests: held.size, closedHeldRequests: [...held.values()].filter(row => row.closed).length };
   report.status = 'passed';
 } catch (error) {
   raw.failures.push(error.stack); report.gap = error.message; process.exitCode = 1;
 } finally {
   clearTimeout(watchdog);
+  router?.close();
   if (transport) {
     for (const [threadId, turnId] of [...active]) await interrupt(threadId, turnId).catch(() => {});
     transport.close();

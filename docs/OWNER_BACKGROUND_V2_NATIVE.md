@@ -8,9 +8,10 @@
 bash scripts/setup-codex.sh  # only if the pinned runtime is absent
 node --check scripts/test-codex-owner-background-v2.mjs
 node scripts/test-codex-owner-background-v2.mjs
+node scripts/test-codex-owner-background-v2.mjs --v2-model-catalog
 ```
 
-The script exits nonzero on any failed native assertion and prints a redacted JSON report. Broader unproved gates remain explicitly false even on a scoped pass. It has a 90-second watchdog, bounded request/response waits, a 40-request ceiling, and an exact successful request count of 23. No installed dependency, runtime implementation, control-plane code, or production config is changed.
+The script exits nonzero on any failed native assertion and prints a redacted JSON report. Broader unproved gates remain explicitly false even on a scoped pass. It has a 90-second watchdog, bounded request/response waits, a 40-request ceiling, and exact successful request counts of 23 (default) or 31 (V2-capable catalog). It now routes actual native events through the runtime adapter and journal. No installed dependency, control-plane state, or production config is changed by running it.
 
 Base: host unpublished [main at 79d93fd](https://github.com/kz364/hehebot/commit/79d93fdb10008902d84d814b84a8bc0c65a85360), imported from the host bundle rather than `origin/main`. The unpublished commit link may not resolve until the host publishes it. Bundle SHA256: `80779407cdecd60dcc2b56da90a547b33eef1d02c5a74b5c5cefa4ea6240b817`. Scaffolding came from the host's reference `scripts/test-codex-owner-background.mjs`, retained only in ignored local storage. The two new files are the entire patch.
 
@@ -36,7 +37,7 @@ Global defaults are `agents.enabled = false`, `features.multi_agent = false`, an
 
 The correct V2 field is `features.multi_agent_v2.max_concurrent_threads_per_session`. It includes the root; `2` leaves one resident child slot. `agents.max_concurrent_threads_per_session` is a compatibility input with different counting semantics; this fixture does not use it. Native denial of a second direct child is tested while the first child is actively waiting on its model HTTP response. V2 can evict idle residents, so this is **not a limit on the total number of logical children** and not an app-server-global limit.
 
-There is no V2 `max_depth` field in the pinned feature schema. `agents.max_depth` is checked by V1; V2 child collaboration tools depend on model metadata. Here the synthetic model advertises no V2 model metadata: A has the V2 collaboration catalog, but its child has none. Both plain and `collaboration`-namespaced child spawn attempts fail natively. **A model-independent no-grandchild policy remains a prerequisite gap.** Do not extrapolate this result to a real model advertising V2 support.
+There is no V2 `max_depth` field in the pinned feature schema. `agents.max_depth` is checked by V1; V2 child collaboration tools depend on model metadata. The default synthetic model advertises no V2 metadata, so child spawn is unsupported. The new `--v2-model-catalog` mode uses supported `model_catalog_json` with synthetic `multi_agent_version: v2`: both children advertise spawn and their attempts fail with `collab spawn failed: agent thread limit reached`. This tests the shared residency mechanism described below, rather than relying on missing tools. It remains a finite pinned-native fixture, not all-model/role/race/restart acceptance.
 
 V2 `wait_agent` has only `timeout_ms` and waits for caller mailbox activity, not a foreign UUID target. It remains explicitly disabled; catalogs assert its absence. V2 has no `close_agent`; plain legacy control calls and the explicit `multi_agent_v1` namespace are exercised as unsupported calls. Legacy close/send probes use the supported `target` field; resume uses its supported `id` field. The report records each model call's arguments and namespace, not just the response.
 
@@ -109,11 +110,35 @@ Atomic pending-slot accounting prevents competing reservations from taking the
 same slot. Child model/role overrides cannot increase the inherited cap.
 
 This supports an effective depth-one invariant even when the child advertises
-V2 collaboration: its own live residency exhausts the sole child slot. It remains
-source-supported pending a native fixture with V2-capable child metadata. The
-initial fixture's unsupported-tool result alone does not test this mechanism.
-The worker is testing that case and positive sequential child replacement next.
+V2 collaboration: its own live residency exhausts the sole child slot. The host
+independently passed the V2-capable fixture, including three advertised child spawn
+capacity denials and successful sequential root spawn after idle eviction.
 Lifetime logical-child count remains unbounded by residency; all evicted children
 still require custody/lifecycle accounting. Keep `OWNER_BACKGROUND_AUTHORITY_UNVERIFIED`
 until this native evidence and service integration are reviewed. Do not substitute
 role prompts or fixture-only metadata for enforcement.
+
+## Runtime observation and remaining control-plane gap
+
+Host integrated run `.local/v2-events-native-host.json` passes31 requests, two
+retained child threads and three child turns, no unbound events or recovery errors,
+26 operation records, zero active turns, all4 held responses closed and native exit.
+Default23-request mode also passes. Runtime records flat public `subAgentActivity`
+fields, drops model path text, and marks spawn custody `observed`/`v2Activity`.
+Paired activity completion is a no-op, never invocation/child settlement. Child
+startup has a two-minute acknowledgment bound capped by the admitted deadline;
+all activity operations remain unknown. Follow-up turns stay under the thread's
+original logical root; no triggering-call correlation is invented.
+
+Both send_message and followup_task emit `interacted`; item metadata cannot
+distinguish them. list_agents lists loaded agents only. Child ancestry was read
+through thread/read; zero source-bearing child thread/started events occurred.
+The host corrected an initial synthetic test's mistaken nested wire shape against
+actual native flat events; four tests failed before that correction. Final126
+focused/394 runtime tests and typecheck pass, including offline inspection.
+
+Control-plane regression exposes UNIQUE(native_session_key) rejecting a second
+turn of the same child thread. A separately owned v11 application migration is
+in progress; it must preserve thread parent/attempt/persona authority while
+allowing distinct turn receipts and retain strict backup/restore compatibility.
+No live gate or default alpha behavior has changed.

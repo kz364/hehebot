@@ -104,12 +104,19 @@ export class CodexOperations {
         // A terminal spawn's observed progress time is immutable. Acknowledged
         // receivers need their own bound before any child turn arrives; observing
         // that turn ends startup only, never its work or descendants.
-        if (timing && ['completed', 'failed', 'interrupted'].includes(spawn?.status)) {
+        if (timing && (['completed', 'failed', 'interrupted'].includes(spawn?.status) ||
+            spawn?.status === 'observed' && spawn?.source === 'v2Activity')) {
           if (!Array.isArray(spawn.receiverThreadIds) || !spawn.receiverThreadIds.every(id => typeof id === 'string' && id.length > 0 && id.length <= 256) ||
               new Set(spawn.receiverThreadIds).size !== spawn.receiverThreadIds.length) fail('INVALID_CHILD_IDENTITY');
           for (const receiver of spawn.receiverThreadIds) add([identity, 'childStartup', id, receiver], 'child',
             observedChildren.has(receiver) ? 'settled' : 'active', { startedAt: timing.lastProgressAt, lastProgressAt: timing.lastProgressAt });
         }
+      }
+      for (const [id, activity] of entries(owner.v2Activities)) {
+        if (!id || id.length > 256 || !activity || typeof activity !== 'object' || Array.isArray(activity) ||
+            !['started', 'interacted', 'interrupted', 'completed'].includes(activity.kind) ||
+            typeof activity.targetThreadId !== 'string' || !activity.targetThreadId || activity.targetThreadId.length > 256) fail('INVALID_OPERATION_INVENTORY');
+        add([identity, 'v2Activity', id], 'tool', 'unknown');
       }
       // No sibling, category alias or omitted item can consume this owner's
       // remaining clocks. Reject the whole snapshot instead of hiding deadlines.

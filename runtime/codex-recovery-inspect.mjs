@@ -188,6 +188,12 @@ export async function inspectCodexRecovery(directory, attemptId = undefined) {
       for (const [itemId, digest] of entries(owner.outputItems)) {
         require(itemId.length > 0 && itemId.length <= 256 && typeof digest === 'string' && /^[0-9a-f]{64}$/.test(digest));
       }
+      for (const [itemId, activity] of entries(owner.v2Activities)) {
+        require(id(itemId) && object(activity) && id(activity.targetThreadId) &&
+          ['started', 'interacted', 'interrupted', 'completed'].includes(activity.kind) && obligations.length < 4096);
+        obligations.push({ threadId, turnId, kind: 'v2Activity', itemId, status: 'unknown',
+          activityKind: activity.kind, targetThreadId: activity.targetThreadId });
+      }
       for (const field of ['commands', 'mcpCalls', 'spawns', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'imageGenerations', 'collabCalls', 'reasoningItems', 'planItems', 'messageStarts']) for (const [key, item] of entries(owner[field])) {
         let itemId = key, tool;
         if (field === 'collabCalls') {
@@ -199,6 +205,7 @@ export async function inspectCodexRecovery(directory, attemptId = undefined) {
         const status = field === 'messageStarts' ? Object.hasOwn(owner.outputItems ?? {}, key) ? 'completed' : 'inProgress' : field === 'spawns' ? item?.status : item;
         const states = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems', 'planItems'].includes(field) ? ['inProgress', 'completed']
           : ['inProgress', 'completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : ['collabCalls', 'spawns'].includes(field) ? ['interrupted'] : [])];
+        if (field === 'spawns') states.push('observed');
         require(typeof itemId === 'string' && itemId.length > 0 && itemId.length <= 256 && states.includes(status) && obligations.length < 4096);
         obligations.push({ threadId, turnId, kind: field, itemId, status, ...(tool ? { tool } : {}) });
         const timingKey = JSON.stringify([field, key]);
@@ -216,6 +223,10 @@ export async function inspectCodexRecovery(directory, attemptId = undefined) {
             origins.set(receiver, threadId);
           }
           obligations.at(-1).receiverThreadIds = [...item.receiverThreadIds];
+          if (item.source !== undefined || item.status === 'observed') {
+            require(item.status === 'observed' && item.source === 'v2Activity');
+            obligations.at(-1).source = item.source;
+          }
         }
       }
       // A clock must identify an observed operation in this exact owner, not a

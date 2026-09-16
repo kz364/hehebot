@@ -8,6 +8,8 @@ const hash = value => createHash('sha256').update(JSON.stringify(value)).digest(
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const observationOwners = row => [row, ...Object.values(row.childObligations ?? {})];
 const hasReceiver = (row, threadId) => observationOwners(row).some(owner => Object.values(owner.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(threadId)));
+const spawnOrigin = (row, threadId) => observationOwners(row).filter(owner =>
+  Object.values(owner.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(threadId)));
 
 /** Latest native context/session observation, never a delta or billing receipt. */
 export function projectTokenUsage(value) {
@@ -136,6 +138,14 @@ export class CodexAdapter {
             !Number.isFinite(Date.parse(child.initialInferenceAt)) || new Date(child.initialInferenceAt).toISOString() !== child.initialInferenceAt) fail('INVALID_OPERATION_TIMING');
       }
     }
+    for (const owner of observationOwners(row)) {
+      if (owner.v2Activities !== undefined && (!owner.v2Activities || typeof owner.v2Activities !== 'object' || Array.isArray(owner.v2Activities) ||
+          Object.keys(owner.v2Activities).length > 4096)) fail('INVALID_V2_ACTIVITY');
+      for (const [itemId, activity] of Object.entries(owner.v2Activities ?? {})) if (!itemId || itemId.length > 256 || !activity ||
+          typeof activity !== 'object' || Array.isArray(activity) ||
+          typeof activity.targetThreadId !== 'string' || !activity.targetThreadId || activity.targetThreadId.length > 256 ||
+          !['started', 'interacted', 'interrupted', 'completed'].includes(activity.kind)) fail('INVALID_V2_ACTIVITY');
+    }
     return row;
   }
   async steer(attemptId, instruction) {
@@ -263,7 +273,7 @@ export class CodexAdapter {
       let operationTimes;
       // Only a live host-observed start establishes a phase clock. History reads
       // and duplicate starts cannot invent or advance native progress.
-      if (observedAt !== undefined && prior !== status && (timing || !prior && status === 'inProgress')) {
+      if (observedAt !== undefined && prior !== status && (timing || !prior && ['inProgress', 'observed'].includes(status))) {
         if (timing && observedAt < timing.lastProgressAt) fail('INVALID_OBSERVATION_TIME');
         operationTimes = { ...owner.operationTimes, [timingKey]: {
           startedAt: timing?.startedAt ?? observedAt, lastProgressAt: observedAt,
@@ -325,6 +335,7 @@ export class CodexAdapter {
       if ((!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) ||
           params.item.senderThreadId !== params.threadId) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const { id, status, receiverThreadIds } = params.item;
+      if (Object.hasOwn(owner.v2Activities ?? {}, id)) fail('SETTLEMENT_CONFLICT');
       if (typeof id !== 'string' || !id || id.length > 256 ||
           !(notification.method === 'item/started' ? ['inProgress'] : ['completed', 'failed', 'interrupted']).includes(status) ||
           !Array.isArray(receiverThreadIds) || receiverThreadIds.length > 100 ||
@@ -346,6 +357,34 @@ export class CodexAdapter {
       Object.defineProperty(spawns, id, { value: { status, receiverThreadIds: receivers }, enumerable: true, writable: true, configurable: true });
       return saveOperation('spawns', id, prior?.status, status, { spawns });
     }
+    if (['item/started', 'item/completed'].includes(notification?.method) && params?.item?.type === 'subAgentActivity') {
+      if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      const { id, kind, agentThreadId: targetThreadId } = params.item;
+      if (typeof id !== 'string' || !id || id.length > 256 ||
+          !['started', 'interacted', 'interrupted', 'completed'].includes(kind) ||
+          typeof targetThreadId !== 'string' || !targetThreadId || targetThreadId.length > 256) fail('CODEX_PROTOCOL_ERROR');
+      const activity = { kind, targetThreadId };
+      const activities = { ...owner.v2Activities }, prior = Object.hasOwn(activities, id) ? activities[id] : undefined;
+      if (prior) {
+        if (JSON.stringify(prior) !== JSON.stringify(activity)) fail('SETTLEMENT_CONFLICT');
+        return row;
+      }
+      if (Object.keys(activities).length >= 4096) fail('V2_ACTIVITY_TRACKING_LIMIT');
+      if (Object.hasOwn(owner.spawns ?? {}, id) || Object.keys(owner.collabCalls ?? {}).some(key => JSON.parse(key)[1] === id)) fail('SETTLEMENT_CONFLICT');
+      const origins = spawnOrigin(row, activity.targetThreadId);
+      if (activity.kind === 'started') {
+        if (origins.length || targetThreadId === row.threadId || targetThreadId === params.threadId) fail('SETTLEMENT_IDENTITY_MISMATCH');
+        if (Object.keys(owner.spawns ?? {}).length >= 4096) fail('SPAWN_TRACKING_LIMIT');
+      } else if (targetThreadId !== row.threadId && origins.length !== 1) {
+        fail('SETTLEMENT_IDENTITY_MISMATCH');
+      }
+      Object.defineProperty(activities, id, { value: activity, enumerable: true, writable: true, configurable: true });
+      if (activity.kind !== 'started') return save({ v2Activities: activities });
+      const spawns = { ...owner.spawns };
+      Object.defineProperty(spawns, id, { value: { status: 'observed', source: 'v2Activity', receiverThreadIds: [activity.targetThreadId] },
+        enumerable: true, writable: true, configurable: true });
+      return saveOperation('spawns', id, undefined, 'observed', { spawns, v2Activities: activities });
+    }
     const field = params?.item?.type === 'commandExecution' ? 'commands' : params?.item?.type === 'mcpToolCall' ? 'mcpCalls'
       : params?.item?.type === 'fileChange' ? 'fileChanges' : params?.item?.type === 'dynamicToolCall' ? 'dynamicCalls'
       : params?.item?.type === 'webSearch' ? 'webSearches' : params?.item?.type === 'sleep' ? 'sleeps'
@@ -358,6 +397,7 @@ export class CodexAdapter {
       if (!childItem && (params.threadId !== row.threadId || params.turnId !== row.nativeRunId)) fail('SETTLEMENT_IDENTITY_MISMATCH');
       if (field === 'collabCalls' && params.item.senderThreadId !== params.threadId) fail('SETTLEMENT_IDENTITY_MISMATCH');
       const { id } = params.item;
+      if (field === 'collabCalls' && Object.hasOwn(owner.v2Activities ?? {}, id)) fail('SETTLEMENT_CONFLICT');
       // These variants lack a closed native success/failure enum. Track lifecycle
       // termination only; never persist their payload-supplied status strings.
       const status = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems', 'planItems'].includes(field)

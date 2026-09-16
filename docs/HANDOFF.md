@@ -4,6 +4,27 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+V2 capable followup is delivered/integrated; old native worker is done. Host
+verified patch95c4616343737f52b91ccf8da2bd383396480bb90f9644d8a28103816e9af6da
+and reran31 requests, advertised grandchild capacity denials and sequential idle
+replacement. Host added actual runtime router/journal integration:2 retained child
+threads/3 child turns,26 unknown-inclusive operations, zero pending/recovery events,
+4/4 held responses closed and no sleep. Default23-request mode passes.126 focused/
+394 runtime/typecheck pass. Worker runtime patch initially assumed a nested wire
+shape; host's flat native regression failed then was fixed. See
+OWNER_BACKGROUND_V2_NATIVE.md and `.local/v2-events-*` logs.
+
+Active [schema/custody worker](https://ampcode.com/threads/T-01a0ab67-cf7f-744d-806f-9b46c412122e)
+owns v11 native_task_links migration, NativeTaskLedger and required strict
+backup/export/restore compatibility/tests. It imported exact host b6d4be7 bundle
+SHA25649b6c00cf93006f3bd83b3a7591b508ad6010d223b8a20f8288539ff847a816c.
+New `tests/owner-alpha-v2-custody.test.ts` is intentionally red locally: same
+thread/new turn hits UNIQUE(native_session_key). Do not delete/weaken this test;
+worker has identical copy and will return a patch including it. Host owns runtime,
+native fixtures and shared docs. Next host step: selected-root V2 config with a
+versioned fingerprint plus service fixture, keeping live-entry gate closed until
+full integration and custody migration pass. No live sessions or external actions.
+
 IMPORTANT: V1 background is NOT safe for independent-task authority. After the
 integration passed, pinned source review found raw foreign thread IDs reach
 global ThreadManager through V1 send_input/close_agent/wait_agent without tree

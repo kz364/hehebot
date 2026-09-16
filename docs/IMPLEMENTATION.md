@@ -4,6 +4,22 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+V2 native event integration (2026-09-16): host independently passed the31-request
+V2-capable catalog fixture. Advertised grandchild spawn hits capacity; completed
+child A is evicted for B while A's history remains readable. Foreign S controls
+remain denied. Runtime now records distinct unknown V2 activities and observed
+spawn custody, including two child threads/three turns after eviction/followup.
+Actual native notifications pass through the router with zero pending/recovery
+events;26 operations retain uncertainty, no sleep,4/4 held responses close.
+Logs `.local/v2-events-{native-host.json,native-default-host.json,focused-host.log,runtime-host.log}`.
+Host review caught the worker's synthetic nested wire shape; the actual flat
+fixture failed four tests before correction. Final126 focused/394 runtime tests
+and typecheck pass. [Detailed contract](OWNER_BACKGROUND_V2_NATIVE.md).
+Control regression fails because native_session_key is UNIQUE across turns;
+the isolated v11 migration worker owns immutable thread affinity and compatible
+backup/export/restore changes. No selected-config/fingerprint or live gate change
+is included in this checkpoint. Full combined waits for the known control gap.
+
 Missed-output recovery (2026-09-16): exact acknowledged completed-turn history now
 restores bounded provisional message digests/previews in one journal update.
 In-progress/failed/interrupted turns cannot freeze partial text; missing known
