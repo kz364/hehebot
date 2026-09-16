@@ -45,6 +45,10 @@ const server=createServer(async(req,res)=>{
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
 const capture=async name=>{await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',new URL(`skill-review-${name}.png`,artifacts).pathname);};
+const checkReviewScroll=async()=>{
+ const result=await evaluate(`(()=>{const fields=document.querySelector('#editor-fields');fields.scrollTop=fields.scrollHeight;const area=fields.getBoundingClientRect(),last=fields.querySelector('[data-skill-field="approval_boundaries"]').getBoundingClientRect(),footer=document.querySelector('#editor .dialog-footer').getBoundingClientRect();return {scrolls:fields.scrollTop>0,lastVisible:last.top>=area.top&&last.bottom<=area.bottom+1,footerSeparate:footer.top>=area.bottom};})()`);
+ assert.deepEqual(result,{scrolls:true,lastVisible:true,footerSeparate:true});
+};
 const open=async(decision='approve',id=proposal.id)=>{
  if(!await evaluate(`document.querySelector('${card(id)}').open`))await click(`${card(id)} > summary`);
  await click(`${card(id)} [data-action="skill-${decision}"]`);await wait('document.querySelector("#editor").open');
@@ -103,6 +107,7 @@ try{
  Object.assign(state,structuredClone(initial));await refresh();await open('approve',fresh.id);
  assert.match((await browser('get','text','#editor')).stdout,/New skill — no prior approved version/);
  assert.equal(await evaluate('Array.from(document.querySelectorAll("#editor .skill-detail h4")).some(h=>h.textContent==="Current approved")'),false);
+ await checkReviewScroll();
  await browser('eval','document.querySelector("#editor-fields").scrollTop=0');await capture('new-narrow');await close();
  await browser('set','viewport','1280','900','2');await open();
  await browser('focus','#editor [name="affirm"]');await browser('press','Space');
@@ -111,6 +116,7 @@ try{
  await browser('press','Tab');assert.equal(await evaluate('document.activeElement.type'),'submit');await browser('press','Enter');
  await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,1);
  assert.match((await browser('get','text','#editor-error')).stdout,/Synthetic revision conflict/);
+ await checkReviewScroll();
  await browser('eval','document.querySelector("#editor-fields").scrollTop=0');await capture('error-desktop');await close();
  mode='lost';await open();await affirm();await submit();await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,2);
  await submit();await wait('!document.querySelector("#editor").open');assert.equal(commands.length,3);assert.equal(commands[2].key,receiptKey);assert.equal(commands[1].key,commands[2].key);

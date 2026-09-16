@@ -4,6 +4,46 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native Tasks elapsed deadline (2026-09-16): `createSpritesTaskTransport` previously
+used Node request socket inactivity timeout, which incoming bytes can postpone.
+An owned elapsed timer now bounds the full async wait, destroys the request at
+expiry and retains the redacted unknown-outcome error. No automatic retry is added.
+Late response data/end cannot replace that outcome. Successful responses, request
+errors, aborted responses and parse errors clear the timer. A deterministic
+regression first remained pending at its exact deadline; after the fix, GET/PUT/
+DELETE no-response and trickle cases reject exactly at 50ms (not at 49ms).
+A real loopback HTTP response streaming every 10ms also fails at its configured
+100ms wait rather than completing after 1s. This is local transport evidence,
+not a Sprite call, provider rollback, native termination or safe-sleep proof.
+22 activity/service tests pass in `.local/tasks-deadline-focused.log`; red evidence
+is `.local/tasks-deadline-red.log`. A real HTTP before/after comparison also
+reproduces the old 1-second success beyond a 100ms configured timeout and the new
+unknown-outcome rejection: `.local/tasks-deadline-http-comparison.log`.
+Full verifier passed (exit 0), 1,197 control / 281 runtime tests and all fixtures/
+build checks in `.local/tasks-deadline-combined.log`; production gates stay false.
+Desktop reinstall/tests passed 16 tests in `.local/tasks-deadline-desktop.log`.
+
+The independent backend restore delivery has been reviewed and applied; main
+reran 30 skill/restore/routine/context tests successfully in
+`.local/skill-restore-integration-focused.log`. Nine new restore cases preserve
+pending-only staging, explicit review, historical content, admitted context and
+receipt replay. No production defect was found; [scope](SKILL_RESTORE_CUSTODY.md)
+excludes HTTP, crash and native acceptance. The portal comparison delivery is also
+reviewed/applied: ten field pairs, explicit new-skill state, stale/offline fencing,
+unchanged review envelope and same-editor uncertain retry key. Main reran
+`scripts/test-portal-skill-review.mjs` successfully, including added narrow/desktop
+scroll geometry assertions proving the final comparison field remains accessible
+above the footer. All four regenerated captures were inspected; partial cards at
+the scroll boundary are intentional, with no horizontal clipping or obscured controls.
+Keyboard Space/Tab/Enter/Escape and error-alert semantics pass; four synthetic
+commands, no live mutations. Routine-delete and recovery browser regressions pass.
+Logs: `.local/skill-review-integration-browser-final.log` and
+`.local/skill-review-integration-regressions.log`; [limits](PORTAL_SKILL_REVIEW.md)
+exclude Safari, real touch, screen-reader and native Mac acceptance. Combined batch
+verification passed (exit 0) in `.local/skill-review-integration-combined.log`:
+1,206 control / 281 runtime tests plus all artifact/native/service checks and
+typecheck/build dry run. Production admission remains false; E05 remains partial.
+
 Activity-renewal continuity fix (2026-09-16): `SpritesActivityGuard.ensure` now
 captures the previous receipt's expiry and checks it again after the renewal await.
 Previously a renewal begun at 90000ms could return at/after the old 120000ms expiry

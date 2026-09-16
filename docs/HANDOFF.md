@@ -4,11 +4,42 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+New independent E05 workers received `.local/skill-review-restore.bundle` containing
+host unpublished local main 94aedd2, not origin/main: portal comparison in
+`T-01a0a8d1-cb45-714e-a8c6-aa23a4b20c46` owns public UI/browser fixtures; restore
+custody in `T-01a0a8d1-d67e-7521-8fa5-c53482233967` owns backend restore contracts.
+Restore delivered `.local/e05-skill-restore.patch`; main reviewed/applied it and
+reran 30 focused tests successfully. Only new restore tests/evidence were added;
+no production defect found. Portal comparison also delivered and is reviewed/applied.
+Main reran the skill-review Chromium fixture, including added scroll/footer geometry
+checks, and inspected desktop/narrow/default/new/offline/error captures. Routine-delete
+and recovery browser regressions pass. No worker remains pending. Full batch verifier
+passed (exit 0) in `.local/skill-review-integration-combined.log`: 1,206 control /
+281 runtime tests, all artifact/native/service checks and typecheck/build dry run.
+Production admission remains false; E05 is still partial.
+Main fixed resettable socket timeout in Native Tasks transport with an elapsed
+deadline. Deterministic red/green and real HTTP trickle/timer-cleanup cases pass
+with 22 activity/service tests; `.local/tasks-deadline-{red,focused}.log`.
+Full verifier passed 1,197 control / 281 runtime tests and all fixtures/build checks
+in `.local/tasks-deadline-combined.log`; desktop rerun passed 16 tests.
+Timeout retains unknown mutation outcome, not rollback or permission to sleep.
+
+Next connector lifecycle investigation has a supported non-logout starting point:
+pinned wappmcp `src/cli/mcp.ts` registers SIGINT/SIGTERM through
+`src/lib/signal-handler.ts`, awaiting `WhatsAppSession.destroy()` in
+`src/lib/whatsapp/session.ts` (revision 9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8).
+Static source inspection finds a hard-coded 5-second destroy race followed on
+failure by browser disconnect/direct PID kill, then process exit. This does not
+prove descendant termination, and no graceful shutdown MCP tool/timeout option
+is exposed. Preserve LocalAuth and do not substitute logout. Verify pinned source
+and actual signal behavior in a credential-free fixture before choosing production
+ownership; SDK close and upstream process exit alone remain insufficient.
+
 Two independent workers imported `.local/parallel-readiness-security.bundle`,
 source unpublished local main 8915a47 (not origin/main): readiness classification
 in thread `T-01a0a8bd-a526-7157-b07e-6e4b075e72ea`, and endpoint custody/privacy
 tests in `T-01a0a8be-2ecc-7050-a072-3a6a18874ca6`. Both delivered; main reviewed and
-integrated their disjoint files. No worker remains pending. Main reran 25 readiness/read
+integrated their disjoint files. Neither earlier worker remains pending. Main reran 25 readiness/read
 and 123 custody/auth/question/control tests successfully; see
 `.local/readiness-integration-focused.log` and `.local/custody-integration-focused.log`.
 Readiness remains diagnostic, not authority or installation; the 43-test custody
