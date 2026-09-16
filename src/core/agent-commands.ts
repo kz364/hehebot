@@ -22,6 +22,8 @@ export class AgentCommandBoundary {
   this.lifecycle.authorizeAttempt(request.identity,request.run_id,request.attempt);
   const run=this.core.store.run(request.run_id);
   requireThat(run.current_attempt===request.attempt&&['claimed','running','finishing'].includes(run.status),'REVISION_CONFLICT','The admitted attempt is no longer active.');
+  const attempt=this.core.store.db.all<{deadline_at:string}>('SELECT deadline_at FROM attempts WHERE run_id=? AND attempt=?',request.run_id,request.attempt)[0];
+  requireThat(Date.parse(attempt.deadline_at)>Date.parse(this.core.now()),'REVISION_CONFLICT','The admitted attempt deadline has expired.');
   const snapshot=JSON.parse(run.context_json) as ContextSnapshot;
   requireThat(snapshot.persona.id===run.persona_id,'FORBIDDEN','The admitted persona does not match this run.',403);
   return {run,snapshot};

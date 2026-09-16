@@ -72,6 +72,16 @@ export class CodexQuestionBinding {
     const b = live ? validateBinding(await bounded(Promise.resolve().then(() => this.resolveBinding({ threadId: e.params.threadId, turnId: e.params.turnId })), this.controlTimeoutMs)) : e.binding;
     if (e.binding) check(['run_id', 'attempt', 'attemptId', 'deadline_at'].every(k => b[k] === e.binding[k]) &&
       b.identity.epoch === e.binding.identity.epoch && b.identity.boot_id === e.binding.identity.boot_id, 'QUESTION_STALE_BINDING');
+    if (live) {
+      this.#alive(e);
+      if (!e.binding) {
+        // The admitted deadline bounds the journal read too, not only later writes.
+        e.deadline = Math.min(e.deadline, Date.parse(b.deadline_at));
+        this.#alive(e);
+        clearTimeout(e.timer);
+        e.timer = setTimeout(() => e.controller.abort(), e.deadline - Date.now());
+      }
+    }
     const row = await bounded(this.journal.get(b.attemptId), this.controlTimeoutMs);
     check(row && row.threadId === e.params.threadId && row.nativeRunId === e.params.turnId &&
       (!live || row.rootSettled === false && row.status === 'running' && Date.parse(b.deadline_at) > Date.now()), 'QUESTION_UNBOUND');
@@ -112,13 +122,9 @@ export class CodexQuestionBinding {
       this.#entries.set(requestId, e);
       const abort = () => e.controller.abort();
       if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true });
-      let timer = setTimeout(abort, this.timeoutMs);
+      e.timer = setTimeout(abort, this.timeoutMs);
       e.initialized = this.#serial(e, async () => {
         this.#alive(e); e.binding = await this.#binding(e, true); this.#alive(e);
-        e.deadline = Math.min(e.deadline, Date.parse(e.binding.deadline_at));
-        clearTimeout(timer);
-        timer = setTimeout(abort, Math.max(0, e.deadline - Date.now()));
-        this.#alive(e);
         e.key = `question_${hash([e.binding.attemptId, e.params.threadId, e.params.turnId, e.params.itemId])}`;
         const existing = await bounded(this.journal.putIfAbsent(e.key, { version: 1, questionId: e.id, connectionId: this.connectionId,
           requestId, binding: e.binding, threadId: e.params.threadId, turnId: e.params.turnId, itemId: e.params.itemId,
@@ -150,7 +156,7 @@ export class CodexQuestionBinding {
           await pause(Math.max(1, Math.min(this.pollMs, e.deadline - Date.now())), e.controller.signal);
         }
       };
-      return run().catch(() => { throw error('QUESTION_CALLBACK_STOPPED'); }).finally(() => { clearTimeout(timer); signal.removeEventListener('abort', abort); });
+      return run().catch(() => { throw error('QUESTION_CALLBACK_STOPPED'); }).finally(() => { clearTimeout(e.timer); signal.removeEventListener('abort', abort); });
     } catch { return Promise.reject(error('QUESTION_CALLBACK_REJECTED')); }
   };
   #payload(e) { return { identity: e.binding.identity, question_id: e.id, connection_id: this.connectionId }; }

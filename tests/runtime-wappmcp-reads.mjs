@@ -161,3 +161,70 @@ test('upstream cannot retarget the admitted request; valid maximum bound is acce
   });
   assert.equal(result.chatId, 'family@g.us'); assert.equal(result.messages.length, 100);
 });
+
+test('host authority is checked before I/O and again before returning chat data', async () => {
+  const events = [], options = { authorize: async (request, { signal }) => {
+    assert.deepEqual(request, { name: recent, chatId: 'family@g.us' });
+    assert.equal(Object.isFrozen(request), true); assert.equal(signal.aborted, false);
+    events.push('authorize'); return true;
+  } };
+  const output = await readWappMcp(grant(), recent, { chatId: 'family@g.us' }, async () => {
+    events.push('read'); options.authorize = () => assert.fail('callback replaced');
+    return envelope([message()]);
+  }, options);
+  assert.deepEqual(events, ['authorize', 'read', 'authorize']);
+  assert.equal(output.messages[0].id, 'msg-43');
+});
+
+test('denied, malformed and failed host authorization never exposes data or host errors', async () => {
+  for (const decision of [false, null, undefined, {}, 'true', 1, Error('PRIVATE_CUSTODY')]) {
+    for (const denyAt of [1, 2]) {
+      let checks = 0, calls = 0, signal;
+      await assert.rejects(readWappMcp(grant(), recent, { chatId: 'family@g.us' }, async () => {
+        calls++; return envelope([message()]);
+      }, { authorize: async (_, options) => {
+        signal = options.signal; checks++;
+        if (checks !== denyAt) return true;
+        if (decision instanceof Error) throw decision;
+        return decision;
+      } }), { code: 'WHATSAPP_READ_DENIED', message: 'WHATSAPP_READ_DENIED' });
+      assert.equal(checks, denyAt); assert.equal(calls, denyAt - 1); assert.equal(signal.aborted, true);
+    }
+  }
+  for (const authorize of [null, true, 'PRIVATE', undefined]) {
+    await assert.rejects(readWappMcp(grant(), recent, { chatId: 'family@g.us' }, () => assert.fail('invalid authority'),
+      { authorize }), { code: 'WHATSAPP_READ_DENIED' });
+  }
+});
+
+test('each host check is bounded; late authorization cannot dispatch or release a result', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+  for (const heldCheck of [1, 2]) {
+    let checks = 0, calls = 0, release, signal;
+    const controller = new AbortController();
+    const result = readWappMcp(grant(), recent, { chatId: 'family@g.us' }, async () => {
+      calls++; return envelope([message()]);
+    }, { signal: controller.signal, timeoutMs: 37, authorize: (_, options) => {
+      checks++; signal = options.signal;
+      return checks === heldCheck ? new Promise(resolve => { release = resolve; }) : true;
+    } });
+    const checked = assert.rejects(result, { code: 'WHATSAPP_READ_STOPPED' });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(checks, heldCheck); t.mock.timers.tick(37); await checked;
+    assert.equal(signal.aborted, true); assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+    release(true); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls, heldCheck - 1); assert.equal(checks, heldCheck);
+  }
+});
+
+test('one revoked task does not cancel an independently authorized read', async () => {
+  let release, checks = 0;
+  const first = readWappMcp(grant(), recent, { chatId: 'family@g.us' }, () => new Promise(resolve => { release = resolve; }),
+    { authorize: () => ++checks === 1 });
+  const denied = assert.rejects(first, { code: 'WHATSAPP_READ_DENIED' });
+  await new Promise(resolve => setImmediate(resolve));
+  const second = await readWappMcp({ chatIds: ['work@g.us'], tools: [recent] }, recent, { chatId: 'work@g.us' },
+    async () => envelope([message('work-11', 'work@g.us')]), { authorize: () => true });
+  release(envelope([message()])); await denied;
+  assert.equal(second.chatId, 'work@g.us'); assert.equal(second.messages[0].id, 'work-11');
+});

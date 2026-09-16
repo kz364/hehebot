@@ -42,10 +42,44 @@ try {
   const patch = await readFile(join(plugin, 'patches/whatsapp-web.js+1.34.7.patch'));
   verify(patch, pins.patch[1]);
   assert.deepEqual(patch, await readFile(join(root, 'patch')));
+  // Reproduce the separate connector graph, never the application's dependency tree.
+  const installation = join(root, 'installation');
+  await mkdir(installation);
+  for (const name of ['package.json', 'package-lock.json', '.npmrc']) {
+    await writeFile(join(installation, name), await readFile(new URL(`../config/wappmcp/${name}`, import.meta.url)));
+  }
+  const lock = JSON.parse(await readFile(join(installation, 'package-lock.json')));
+  assert.equal(lock.lockfileVersion, 3);
+  assert.equal(lock.packages[''].dependencies.wappmcp, '0.4.0');
+  assert.equal(lock.packages['node_modules/whatsapp-web.js'].version, '1.34.7');
+  for (const [path, entry] of Object.entries(lock.packages)) {
+    if (!path) continue;
+    assert.match(entry.resolved, /^https:\/\/registry\.npmjs\.org\//);
+    assert.match(entry.integrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/);
+    assert.equal(entry.link, undefined);
+    if (path.endsWith('/whatsapp-web.js')) assert.equal(entry.version, '1.34.7');
+  }
+  const originalLock = await readFile(join(installation, 'package-lock.json'));
+  execFileSync('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: installation, stdio: 'pipe', timeout: 180000 });
+  assert.deepEqual(await readFile(join(installation, 'package-lock.json')), originalLock);
+  const installedPlugin = join(installation, 'node_modules/wappmcp');
+  const installedDependency = join(installation, 'node_modules/whatsapp-web.js');
+  assert.equal(JSON.parse(await readFile(join(installedPlugin, 'package.json'))).version, '0.4.0');
+  assert.equal(JSON.parse(await readFile(join(installedDependency, 'package.json'))).version, '1.34.7');
+  verify(await readFile(join(installedPlugin, 'patches/whatsapp-web.js+1.34.7.patch')), pins.patch[1]);
+  for (const path of ['src/structures/Reaction.js', 'src/util/Injected/Utils.js']) {
+    assert.deepEqual(await readFile(join(installedDependency, path)), await readFile(join(dependency, path)));
+  }
+  // Explicitly apply only the reviewed patch; no package postinstall is executed.
+  execFileSync('git', ['apply', '--check', join(root, 'patch')], { cwd: installation });
+  execFileSync('git', ['apply', join(root, 'patch')], { cwd: installation });
   // git apply has no fuzzy matching and --check rejects partial/double application.
   execFileSync('git', ['apply', '--check', join(root, 'patch')], { cwd: root });
   execFileSync('git', ['apply', join(root, 'patch')], { cwd: root });
   assert.throws(() => execFileSync('git', ['apply', '--check', join(root, 'patch')], { cwd: root, stdio: 'pipe' }));
+  for (const path of ['src/structures/Reaction.js', 'src/util/Injected/Utils.js']) {
+    assert.deepEqual(await readFile(join(installedDependency, path)), await readFile(join(dependency, path)));
+  }
 
   const exports = {}, calls = [];
   let stored, memoryHit = true;
@@ -93,7 +127,7 @@ try {
   }
   await assert.rejects(readWappMcp(grant, 'whatsapp_get_chat_messages', { chatId: 'stranger@g.us' }, () => assert.fail('Foreign chat reached upstream')), { code: 'WHATSAPP_READ_DENIED' });
   execFileSync(process.execPath, ['--test', 'tests/runtime-wappmcp-reads.mjs'], { stdio: 'inherit' });
-  console.log(JSON.stringify({ status: 'passed', revision, hashes: Object.fromEntries(Object.entries(pins).map(([name, [, digest]]) => [name, digest])), cleanPatch: true, syntheticCompatibility: true, livePairing: false, installed: false, productionAdmission: false }));
+  console.log(JSON.stringify({ status: 'passed', revision, hashes: Object.fromEntries(Object.entries(pins).map(([name, [, digest]]) => [name, digest])), lockedPackages: Object.keys(lock.packages).length - 1, disposableInstall: true, lifecycleScripts: false, licenseAuditComplete: false, cleanPatch: true, syntheticCompatibility: true, livePairing: false, installed: false, productionAdmission: false }));
 } finally {
   await rm(root, { recursive: true, force: true });
 }

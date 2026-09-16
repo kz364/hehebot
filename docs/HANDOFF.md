@@ -2,6 +2,40 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Parallel integration checkpoint (2026-09-16)
+
+Four workers imported `.local/parallel-baseline.bundle` from this thread's local
+main at 4756984, not origin/main. Main remains sole TODO/integration owner.
+Question worker `T-01a0a82c-d786-72fb-9a17-f84d70d69978` delivered
+`.local/question-custody.patch` (SHA256
+`5a8f06a38e03ceb6635255efab1f582a30ce7a2a68363613858434d4c0e09cec`):
+arm the admitted deadline before initial journal read; reviewed/applied, 45 runtime
+and 72 core question tests pass locally. Backup worker
+`T-01a0a82c-e317-74a6-9343-e24bb42759b9` delivered
+`.local/e10-backup-safety.patch` (SHA256
+`b1e3cb4fa9265b47ff7dc6a1b1a19e58f6ab2c12e2021383dc08dc024c2e8fda`):
+reject impossible sequential pruning states; reviewed/applied, 114 backup tests
+pass locally. Neither implies completed recovery or settlement.
+
+Portal worker `T-01a0a82c-ebaf-74ab-b3fd-1e580a92fcb3` delivered stale/offline
+recovery guards and browser fixtures. Seeded-race worker
+`T-01a0a82c-fc5e-7653-91d0-b268a3951566` delivered 200 drain/effect sequences.
+Both patches reviewed/applied; both browser fixtures and 200 seeds rerun locally,
+screenshots inspected. All four workers are complete; no deliveries outstanding.
+
+Main added optional bounded before/after host authorization in `readWappMcp`
+(15 tests), and an isolated 350-package graph under `config/wappmcp`.
+Disposable npm ci with scripts disabled and exact explicit patch passed; full
+license audit is NOT complete. See that directory's README for LGPL/missing
+declaration findings. There is still no trusted chat-grant representation or
+Worker lease/revocation assembly. A callback hook is not that implementation.
+Main also closed model-facing command/read task expiry before watchdog: three
+red/green cases, 13 focused tests. Full batch passed 1,145 control / 259 runtime
+tests, compatibility, HTTP/native/service fixtures and typecheck/build dry run
+in `.local/parallel-final-combined.log`. Desktop 16 passed in
+`.local/parallel-desktop.log`. No production gate changed. Continue credential-free
+work from TODO; completion/auth-only boundary has NOT been reached. No push/deploy.
+
 ## WhatsApp task-deadline checkpoint (2026-09-16)
 
 Scoped reads accept optional host `deadlineAt` (canonical UTC) and use the earlier

@@ -171,7 +171,7 @@ test('persisted callback deadline is capped by the original task, not by a fresh
   f.notify(); await until(async () => (await f.rows())[0].phase === 'resolved');
   assert.deepEqual((await f.rows())[0].wait, row.wait);
 });
-for (const held of ['journal', 'record']) test(`task deadline aborts initial ${held} wait exactly, without replaying late results`, async t => {
+for (const held of ['binding-read', 'journal', 'record']) test(`task deadline aborts initial ${held} wait exactly, without replaying late results`, async t => {
   const now = Date.parse('2026-09-16T02:00:00.000Z');
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now });
   const entered = deferred(), release = deferred(), rows = new Map(), calls = [];
@@ -179,7 +179,11 @@ for (const held of ['journal', 'record']) test(`task deadline aborts initial ${h
     attemptId: 'attempt-one', deadline_at: new Date(now + 500).toISOString() };
   rows.set(claim.attemptId, { threadId: 'root/one', nativeRunId: 'turn/one', rootSettled: false, status: 'running' });
   const journal = {
-    get: async key => rows.get(key),
+    get: async key => {
+      assert.equal(key, claim.attemptId);
+      if (held === 'binding-read') { entered.resolve(); await release.promise; }
+      return rows.get(key);
+    },
     putIfAbsent: async (key, row) => {
       if (held === 'journal') { entered.resolve(); await release.promise; }
       rows.set(key, row); return null;
@@ -203,9 +207,59 @@ for (const held of ['journal', 'record']) test(`task deadline aborts initial ${h
     release.resolve(); await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(calls, held === 'record' ? ['question-record'] : []);
     const row = [...rows.values()].find(row => row.questionId);
-    assert.equal(row.wait.deadlineAt, claim.deadline_at);
-    assert.equal(row.resolutionObserved, false); assert.notEqual(row.phase, 'resolved');
+    if (held === 'binding-read') {
+      assert.equal(row, undefined);
+      await binding.onNotification(resolved());
+      assert.deepEqual(calls, []); assert.equal(rows.size, 1);
+      await assert.rejects(binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 }));
+      assert.deepEqual(calls, []);
+    } else {
+      assert.equal(row.wait.deadlineAt, claim.deadline_at);
+      assert.equal(row.resolutionObserved, false); assert.notEqual(row.phase, 'resolved');
+    }
   } finally { release.resolve(); binding.close(); t.mock.timers.reset(); await callback; }
+});
+
+test('binding read finishing one millisecond before expiry permits one answer and later exact native resolution', async t => {
+  const now = Date.parse('2026-09-16T02:00:00.000Z');
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now });
+  const entered = deferred(), release = deferred(), rows = new Map(), calls = [];
+  const claim = { identity: { epoch: 7, boot_id: uuid(7) }, run_id: uuid(20), attempt: 2,
+    attemptId: 'attempt-one', deadline_at: new Date(now + 500).toISOString() };
+  rows.set(claim.attemptId, { threadId: 'root/one', nativeRunId: 'turn/one', rootSettled: false, status: 'running' });
+  const journal = {
+    get: async key => { entered.resolve(); await release.promise; return rows.get(key); },
+    putIfAbsent: async (key, row) => { const prior = rows.get(key) ?? null; if (!prior) rows.set(key, row); return prior; },
+    update: async (key, patch) => { rows.set(key, { ...rows.get(key), ...patch }); },
+  };
+  const binding = new CodexQuestionBinding({ journal, resolveBinding: async tuple => {
+    assert.deepEqual(tuple, { threadId: 'root/one', turnId: 'turn/one' }); return claim;
+  }, timeoutMs: 5000, controlTimeoutMs: 2000, control: { request: async (type, payload) => {
+    calls.push({ type, payload });
+    if (type === 'question-record') return { id: payload.question.id };
+    if (type === 'question-take') return { state: 'response_unknown', answer: answer() };
+    assert.equal(type, 'question-resolve'); return { ok: true };
+  } } });
+  try {
+    const callback = binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 });
+    await entered.promise; t.mock.timers.tick(499); release.resolve();
+    assert.deepEqual(await callback, answer());
+    const row = [...rows.values()].find(row => row.questionId);
+    assert.deepEqual(row.wait, { startedAt: new Date(now).toISOString(), deadlineAt: claim.deadline_at });
+    assert.equal(row.phase, 'handoff_unknown');
+    t.mock.timers.tick(1);
+    rows.set(claim.attemptId, { ...rows.get(claim.attemptId), rootSettled: true, status: 'finishing' });
+    binding.resolveBinding = () => assert.fail('resolution must use original custody');
+    await binding.onNotification(resolved('71')); await binding.onNotification(resolved(71, 'other-root'));
+    assert.equal(calls.length, 2);
+    await binding.onNotification(resolved()); await binding.onNotification(resolved());
+    assert.deepEqual(calls.map(c => c.type), ['question-record', 'question-take', 'question-resolve']);
+    assert.deepEqual(calls[2].payload, { identity: claim.identity, question_id: row.questionId, connection_id: binding.connectionId });
+    const final = [...rows.values()].find(row => row.questionId);
+    assert.equal(final.phase, 'resolved'); assert.deepEqual(final.wait, row.wait);
+    await assert.rejects(binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 }));
+    assert.equal(calls.length, 3);
+  } finally { release.resolve(); binding.close(); t.mock.timers.reset(); }
 });
 
 test('failed resolution retains observed/unknown evidence and never retries duplicate notification', async t => {

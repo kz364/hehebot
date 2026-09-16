@@ -5,11 +5,15 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 
-const fault = vi.hoisted(() => ({ call: 0, at: 0, after: false, afterInventoryRename: false }));
+const fault = vi.hoisted(() => ({ call: 0, at: 0, after: false, afterInventoryRename: false, receiptRename: '' }));
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return { ...actual, rename: async (source: string, destination: string) => {
+    const receipt = fault.receiptRename && destination.includes('/.prune/') &&
+      Object.values(JSON.parse(await actual.readFile(source, 'utf8')).states).includes('deleted');
+    if (receipt && fault.receiptRename === 'before') throw new Error('SYNTHETIC_RECEIPT_RENAME');
     await actual.rename(source, destination);
+    if (receipt && fault.receiptRename === 'after') throw new Error('SYNTHETIC_RECEIPT_RENAME');
     if (fault.afterInventoryRename && destination.endsWith('/inventory.json')) throw new Error('SYNTHETIC_INVENTORY_RENAME');
   }, unlink: async (path: string) => {
     const fail = path.endsWith('.age') && ++fault.call === fault.at;
@@ -43,7 +47,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await rm(fixtures, { recursive: true, force: true }); });
 beforeEach(async () => {
-  fault.call = 0; fault.at = 0; fault.after = false; fault.afterInventoryRename = false;
+  fault.call = 0; fault.at = 0; fault.after = false; fault.afterInventoryRename = false; fault.receiptRename = '';
   root = await mkdtemp(join(tmpdir(), 'hehe-prune-')); directory = join(root, 'backups'); await mkdir(directory, { mode: 0o700 });
   const timestamps = ['2026-08-31T17:00:00.000Z', '2026-09-28T16:00:00.000Z', '2026-09-28T16:59:59.999Z', '2026-09-28T17:00:00.000Z', '2026-09-06T17:00:00.000Z'];
   catalog = { version: 1, backups: encrypted.map((bytes, index) => ({ id: id(index + 1), snapshot_at: timestamps[index], bytes: bytes.length, sha256: hash(bytes) })) };
@@ -194,6 +198,57 @@ it('never converts crash-after-unlink ambiguity into a confirmed deletion', asyn
   await expect(authorize(digest)).rejects.toMatchObject({ code: 'PRUNE_OUTCOME_UNKNOWN' });
   expect((await controlBackupPruneStatus(directory, digest)).deletions.map(row => row.state)).toEqual(['deleting', 'pending']);
   expect(fault.call).toBe(1); expect(await keptBytes()).toEqual(before); expect(await live()).toHaveLength(4);
+});
+
+it.each([
+  ['pending', 'deleting'], ['pending', 'deleted'], ['deleting', 'deleting'], ['deleting', 'deleted'],
+])('rejects unreachable applying states %s/%s without trusting receipts or deleting', async (first, second) => {
+  const { digest } = await reviewControlBackups(directory, now);
+  const journalPath = join(directory, '.prune', digest + '.json');
+  const journal = JSON.parse(await readFile(journalPath, 'utf8'));
+  journal.phase = 'applying'; journal.states = { [id(2)]: second, [id(1)]: first }; // Object order is not execution order.
+  await writeFile(journalPath, JSON.stringify(journal));
+  if (second === 'deleted') await rm(path(2)); // Previously sufficient to skip this unearned receipt on apply.
+  const before = await readFile(journalPath), inventory = await readFile(join(directory, 'inventory.json'));
+  const files = await live(), kept = await keptBytes();
+  await expect(controlBackupPruneStatus(directory, digest)).rejects.toThrow('CONTROL_BACKUP_PRUNE_FAILED');
+  await expect(authorize(digest)).rejects.toThrow('CONTROL_BACKUP_PRUNE_FAILED');
+  await expect(reviewControlBackups(directory, now)).rejects.toThrow('CONTROL_BACKUP_PRUNE_FAILED');
+  expect(await readFile(journalPath)).toEqual(before); expect(await readFile(join(directory, 'inventory.json'))).toEqual(inventory);
+  expect(await live()).toEqual(files); expect(await keptBytes()).toEqual(kept); expect(fault.call).toBe(0);
+});
+
+it.each([
+  ['pending', 'pending'], ['deleting', 'pending'], ['deleted', 'pending'], ['deleted', 'deleting'], ['deleted', 'deleted'],
+])('resumes reachable applying states %s/%s in plan order despite reversed JSON keys', async (first, second) => {
+  const { digest } = await reviewControlBackups(directory, now), before = await keptBytes();
+  const journalPath = join(directory, '.prune', digest + '.json');
+  const journal = JSON.parse(await readFile(journalPath, 'utf8'));
+  journal.phase = 'applying'; journal.states = { [id(2)]: second, [id(1)]: first };
+  await writeFile(journalPath, JSON.stringify(journal));
+  if (first === 'deleted') await rm(path(1));
+  if (second === 'deleted') await rm(path(2));
+  expect((await controlBackupPruneStatus(directory, digest)).deletions.map(row => row.state)).toEqual([first, second]);
+  expect((await authorize(digest)).phase).toBe('complete');
+  expect(fault.call).toBe([first, second].filter(state => state !== 'deleted').length);
+  expect(await live()).toEqual([3, 4, 5].map(n => id(n) + '.age')); expect(await keptBytes()).toEqual(before);
+});
+
+it.each(['before', 'after'])('preserves the actual receipt boundary when %s-rename journal persistence fails', async boundary => {
+  const { digest } = await reviewControlBackups(directory, now), before = await keptBytes();
+  fault.receiptRename = boundary;
+  await expect(authorize(digest)).rejects.toThrow('SYNTHETIC_RECEIPT_RENAME'); fault.receiptRename = '';
+  expect(await live()).toEqual([2, 3, 4, 5].map(n => id(n) + '.age')); expect(fault.call).toBe(1);
+  const status = await controlBackupPruneStatus(directory, digest);
+  expect(status.deletions.map(row => row.state)).toEqual([boundary === 'before' ? 'deleting' : 'deleted', 'pending']);
+  expect(status.remote_copies_verified).toBe(false);
+  if (boundary === 'before') {
+    await expect(authorize(digest)).rejects.toThrow('PRUNE_OUTCOME_UNKNOWN'); expect(fault.call).toBe(1);
+  } else {
+    expect((await authorize(digest)).phase).toBe('complete'); expect(fault.call).toBe(2);
+  }
+  expect(await keptBytes()).toEqual(before);
+  expect((await readdir(join(directory, '.prune'))).filter(name => name.endsWith('.next'))).toEqual([]);
 });
 
 it('does not treat a missing unattempted candidate as successful deletion', async () => {

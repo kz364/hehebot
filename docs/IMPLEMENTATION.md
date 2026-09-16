@@ -4,6 +4,59 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Parallel integration checkpoint (2026-09-16; verified locally, unpushed):
+
+- Native question binding arms the admitted deadline immediately after validating
+  resolver custody, before reading the attempt journal. A stalled initial read now
+  stops at exact expiry. Late I/O cannot record/take an answer or invent resolution;
+  terminal native resolution still uses original custody. Locally rerun: 45 runtime/
+  service tests and 72 core question tests. No underlying I/O cancellation or
+  successful recovery claim.
+- Pruning rejects impossible applying-journal sequences: only a deleted prefix,
+  at most one deleting entry, then pending entries are reachable. Plan order—not
+  JSON key order—governs validation. 114 backup/retention/restore tests rerun,
+  including all nine two-candidate combinations and receipt-rename failures.
+  [Evidence and limits](CONTROL_BACKUP_JOURNAL_SAFETY.md); structural validation
+  does not authenticate receipts or prove power-loss durability.
+- Portal recovery editors recheck exact task/attempt, effect digest/status and
+  current eligibility before POST. Offline actions disable; reconnect does not
+  replay. Recovery and question browser fixtures pass locally. Desktop/narrow
+  captures inspected: dialog identity/error text and controls fit. Keyboard and
+  role=alert checks pass; this is Chromium, not Safari/touch/screen-reader proof.
+- 200 seeded real-SQLite drain/effect sequences rerun locally, matching worker
+  counts: 369 dispatches, 288 explicit unknown transitions, 600 terminal receipts,
+  700 object reconstructions, 100 lease losses and 100 drain preparations.
+  [Model and mutation evidence](DRAIN_EFFECT_RACES.md). No process-crash, disk-reopen,
+  native continuity or real provider sleep evidence is inferred.
+- Model-facing skill/routine reads and commands now enforce the admitted hard
+  deadline before watchdog reconciliation. Three claimed/running/finishing exact
+  expiry regressions failed before the fix; all 13 agent-command tests pass after.
+  Tests preserve commands, task/attempt rows, lifecycle and skill proposals across
+  rejection. Immutable admitted policy and existing receipt behavior stay intact.
+- WhatsApp reads accept an optional host-only `authorize` callback. It must return
+  exactly true before dispatch and after the response; errors deny with fixed
+  redacted codes. Both awaits share the original cancellation/deadline envelope;
+  late checks cannot start I/O or release results. The callback receives frozen
+  tool/chat identity and an owned AbortSignal, not message contents. 15 tests pass,
+  including denial on each boundary and independent task isolation. This hook does
+  not implement Worker authority: chat-scope representation and trusted lease/
+  revocation wiring are still missing. Callers must bind original task custody.
+- `config/wappmcp` locks 350 package locations separately from application deps.
+  The verifier installs them only in disposable storage with lifecycle scripts
+  disabled, checks pristine source and explicitly applies the exact approved patch.
+  Patched bytes match the independent hash-pinned extraction. Focused check passes.
+  No Chrome download/start, CLI, pairing or tool registration. Metadata review found
+  LGPL-3.0-or-later `node-webpmux`, Public Domain `jsonify`, and two missing license
+  declarations; source/asset/notice review remains open. See the installation README.
+
+Local logs: `.local/parallel-question-focused.log`, `.local/parallel-control-focused.log`,
+`.local/parallel-portal-{recovery,questions}.log`, `.local/parallel-drain-focused.log`,
+`.local/agent-deadline-{red,focused}.log`, `.local/wappmcp-locked-focused.log`.
+First integration batch passed `.local/parallel-batch-combined.log`; final complete
+batch passed **1,145 control / 259 runtime tests**, compatibility, HTTP/native/service
+fixtures and typecheck/build dry run in `.local/parallel-final-combined.log`.
+Desktop 16 tests passed (`.local/parallel-desktop.log`). Production gates false.
+
 WhatsApp task-deadline checkpoint (2026-09-16): `readWappMcp` accepts optional
 host-only canonical UTC `deadlineAt`, copied before asynchronous work. Effective
 expiry is the earlier of that admitted task deadline and the bounded relative

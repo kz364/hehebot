@@ -1,0 +1,9 @@
+{
+  "name": "hehebot-wappmcp-installation",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Isolated pinned connector graph; no automatic lifecycle scripts or activation",
+  "engines": { "node": ">=24" },
+  "dependencies": { "wappmcp": "0.4.0" },
+  "overrides": { "whatsapp-web.js": "1.34.7" }
+}

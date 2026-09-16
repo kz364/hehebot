@@ -82,6 +82,28 @@ describe('model-facing agent command boundary',()=>{
   expect(()=>boundary.accept(request(command))).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
  });
 
+ it.each(['claimed','running','finishing'])('rejects expired %s task commands and reads before watchdog reconciliation',status=>{
+  admit([SKILL_PROPOSE_POLICY,ROUTINE_MANAGE_POLICY]);
+  f.db.exec('UPDATE runs SET status=? WHERE id=?',status,runId);
+  // Leave the executor lease alive well beyond this task deadline.
+  f.db.exec("UPDATE attempts SET deadline_at='2026-09-10T00:00:20.000Z' WHERE run_id=?",runId);
+  const query={identity,run_id:runId,attempt:1},command=proposal();
+  f.setNow('2026-09-10T00:00:19.999Z');
+  const receipt=boundary.accept(request(command));expect(receipt.status).toBe('applied');
+  expect(boundary.routines(query).routines).toEqual([]);
+  const before={commands:f.db.all('SELECT * FROM commands'),runs:f.db.all('SELECT * FROM runs'),
+   attempts:f.db.all('SELECT * FROM attempts'),lifecycle:f.db.all('SELECT * FROM lifecycle'),skills:f.db.all('SELECT * FROM skill_proposals')};
+  for(const time of ['2026-09-10T00:00:20.000Z','2026-09-10T00:00:20.001Z']){
+   f.setNow(time);
+   expect(()=>boundary.accept(request(proposal()))).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+   expect(()=>boundary.accept(request({schema_version:1,type:'routine.put',payload:routine()}))).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+   expect(()=>boundary.routines(query)).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+   expect(()=>boundary.skill({...query,skill_id:randomUUID()})).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+  }
+  expect({commands:f.db.all('SELECT * FROM commands'),runs:f.db.all('SELECT * FROM runs'),
+   attempts:f.db.all('SELECT * FROM attempts'),lifecycle:f.db.all('SELECT * FROM lifecycle'),skills:f.db.all('SELECT * FROM skill_proposals')}).toEqual(before);
+ });
+
  it('rejects owner-only review and requires the matching scoped capability',()=>{
   admit([]);
   expect(()=>boundary.accept(request(proposal()))).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));

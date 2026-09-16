@@ -8,15 +8,16 @@ const integer = (value, max) => Number.isSafeInteger(value) && value >= 1 && val
 const tools = ['whatsapp_get_chat_messages', 'whatsapp_search_messages'];
 
 /** grant must come from the authenticated host's admitted task snapshot, never
- * model arguments or imported text. Caller owns current lease/revocation checks
+ * model arguments or imported text. Caller supplies current lease/revocation checks
  * and supplies deadlineAt from the admitted attempt, not model arguments.
  * Caller owns the one-installation MCP connection. This module grants no runtime access.
  */
 export async function readWappMcp(grant, name, args, call, options = {}) {
-  if (!object(options) || !Object.keys(options).every(key => ['signal', 'timeoutMs', 'deadlineAt'].includes(key)) ||
+  if (!object(options) || !Object.keys(options).every(key => ['signal', 'timeoutMs', 'deadlineAt', 'authorize'].includes(key)) ||
       options.signal !== undefined && !(options.signal instanceof AbortSignal) ||
+      Object.hasOwn(options, 'authorize') && typeof options.authorize !== 'function' ||
       !integer(Object.hasOwn(options, 'timeoutMs') ? options.timeoutMs : 120000, 120000)) fail('WHATSAPP_READ_DENIED');
-  const { signal, timeoutMs = 120000 } = options;
+  const { signal, timeoutMs = 120000, authorize } = options;
   let taskDeadline = Infinity;
   if (Object.hasOwn(options, 'deadlineAt')) {
     if (typeof options.deadlineAt !== 'string') fail('WHATSAPP_READ_DENIED');
@@ -51,11 +52,29 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
     const timer = setTimeout(stop, Math.max(0, deadline - Date.now()));
     if (signal?.aborted) { stop(); return; }
     signal?.addEventListener('abort', stop, { once: true });
-    Promise.resolve().then(() => {
+    const checkAuthority = async () => {
+      if (!authorize) return;
+      let allowed = false;
+      try {
+        allowed = await authorize(Object.freeze({ name, chatId: admitted.chatId }), { signal: controller.signal });
+      } catch { /* Never expose host custody errors or credentials. */ }
+      if (allowed !== true) fail('WHATSAPP_READ_DENIED');
+    };
+    Promise.resolve().then(async () => {
+      // Keep both host checks inside the same timeout/cancellation envelope.
+      // Never start a read after a late authorization response.
       if (controller.signal.aborted || signal?.aborted || Date.now() >= deadline) { stop(); return; }
-      return call(name, { ...admitted }, { signal: controller.signal });
-    }).then(value => finish(resolve, value), () => finish(reject,
-      Object.assign(new Error('WHATSAPP_READ_FAILED'), { code: 'WHATSAPP_READ_FAILED' })));
+      if (authorize) await checkAuthority();
+      if (controller.signal.aborted || signal?.aborted || Date.now() >= deadline) { stop(); return; }
+      let value;
+      try { value = await call(name, { ...admitted }, { signal: controller.signal }); }
+      catch { fail('WHATSAPP_READ_FAILED'); }
+      if (controller.signal.aborted || signal?.aborted || Date.now() >= deadline) { stop(); return; }
+      if (authorize) await checkAuthority();
+      return value;
+    }).then(value => finish(resolve, value), error => {
+      controller.abort(); finish(reject, error);
+    });
   });
   if (signal?.aborted || controller.signal.aborted || Date.now() >= deadline) {
     controller.abort(); fail('WHATSAPP_READ_STOPPED');

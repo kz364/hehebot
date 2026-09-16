@@ -141,6 +141,14 @@ function validateJournal(value, digest) {
   if (!Object.values(value.states).every(state => ['pending', 'deleting', 'deleted'].includes(state)) ||
       value.phase === 'reviewed' && Object.values(value.states).some(state => state !== 'pending') ||
       value.phase === 'complete' && Object.values(value.states).some(state => state !== 'deleted')) fail();
+  // Apply is sequential: a deleted prefix, at most one uncertain deletion, then
+  // pending entries. Use the plan's execution order, never JSON object key order.
+  let previous = 'deleted';
+  for (const entry of plan.entries) if (Object.hasOwn(value.states, entry.id)) {
+    const state = value.states[entry.id];
+    if (previous !== 'deleted' && state !== 'pending') fail();
+    previous = state;
+  }
   return value;
 }
 async function journals(directory) {

@@ -278,7 +278,17 @@ function editRoster(){
  draw();$('editor').classList.add('roster-editor');openEditor('Organize bots',[container,node('p','Concurrent edits are rejected. If the revision changed, close and reopen this editor to review the latest layout.','hint')],()=>command('roster.set',{expected_revision:draft.revision,sections:draft.sections,hidden_persona_ids:draft.hidden_persona_ids}));
 }
 $('roster-search').oninput=()=>renderRoster();$('organize-roster').onclick=()=>editRoster();
+function currentRecovery(runId,attempt){
+ const source=recoveryView?.conversationId===selected?recoveryView.page:snapshot;
+ const run=source?.runs?.find(row=>row.id===runId);
+ if($('connection').textContent!=='Connected'||run?.current_attempt!==attempt)throw new Error('Recovery status is stale or the task attempt changed. Close this editor and refresh before reviewing again.');
+ const recovery=source?.recovery?.find(row=>row.run_id===runId&&row.attempt===attempt);
+ if(!recovery)throw new Error('This recovery task is no longer available. Close this editor and refresh.');
+ return recovery;
+}
 function renderRecovery(card,run,recovery,title){
+ const connected=$('connection').textContent==='Connected';
+ if(!connected)card.append(node('p','Recovery status is stale. Refresh before recording an outcome or releasing locks.','review-notice'));
  card.append(node('p',recovery.executor_terminated?(recovery.effects.length?'Executor termination confirmed. External effects still need separate review.':'Executor termination confirmed. No unresolved effects are recorded for this task.'):'Executor termination is not confirmed. Recovery actions are unavailable.','review-notice'));
  if(recovery.unresolved_questions)card.append(node('p',`${recovery.unresolved_questions} question request(s) remain unresolved. Review their question cards before closing recovery.`,'hint'));
  for(const [blocked,message] of [[recovery.unresolved_operations,'Operation records are unresolved.'],[recovery.descendants_unsettled,'Recover unfinished descendants before this task.'],[recovery.stale_locks,'A retained lock belongs to a different attempt. Administrative reconciliation is required.']])if(blocked)card.append(node('p',message,'hint'));
@@ -289,14 +299,21 @@ function renderRecovery(card,run,recovery,title){
    const key=crypto.randomUUID(),evidence=field('Evidence reference (no URL or private text)','evidence_ref');evidence.querySelector('input').pattern='[A-Za-z0-9:._-]{1,128}';evidence.querySelector('input').maxLength=128;
    const outcome=selectField('Observed outcome','outcome',[['','Choose an outcome'],['confirmed','The effect occurred'],['failed','The effect did not occur']],'');outcome.querySelector('select').required=true;
    const affirmation=node('label',undefined,'check'),check=node('input');check.type='checkbox';check.required=true;affirmation.append(check,document.createTextNode('I checked the external destination and can account for this exact effect.'));
-   openEditor('Record an owner effect decision',[node('p',`Selected effect: ${effect.id}`,'message-body'),node('p','This records your decision, not provider-verified evidence. If the outcome is still unknown, cancel and keep it unresolved. This does not resend the action or release its locks.','review-notice'),outcome,evidence,affirmation],form=>command('effect.reconcile',{run_id:run.id,expected_attempt:recovery.attempt,effect_id:effect.id,expected_request_digest:effect.request_digest,outcome:form.get('outcome'),evidence_ref:form.get('evidence_ref')},key));
-  },'quiet');decide.dataset.action='effect-reconcile';decide.disabled=!recovery.can_decide_effects||effect.status!=='outcome_unknown';row.append(decide);card.append(row);
+   openEditor('Record an owner effect decision',[node('p',`Task ${run.id} · attempt ${recovery.attempt} · Selected effect: ${effect.id}`,'message-body'),node('p','This records your decision, not provider-verified evidence. If the outcome is still unknown, cancel and keep it unresolved. This does not resend the action or release its locks.','review-notice'),outcome,evidence,affirmation],form=>{
+    const current=currentRecovery(run.id,recovery.attempt),latest=current.effects.find(row=>row.id===effect.id);
+    if(!current.can_decide_effects||latest?.status!=='outcome_unknown'||latest.request_digest!==effect.request_digest)throw new Error('This effect or its recovery authority changed. Close this editor and review the current effect.');
+    return command('effect.reconcile',{run_id:run.id,expected_attempt:recovery.attempt,effect_id:effect.id,expected_request_digest:effect.request_digest,outcome:form.get('outcome'),evidence_ref:form.get('evidence_ref')},key);
+   });
+  },'quiet');decide.dataset.action='effect-reconcile';decide.disabled=!connected||!recovery.can_decide_effects||effect.status!=='outcome_unknown';row.append(decide);card.append(row);
  }
  if(recovery.effects_truncated)card.append(node('p','Showing the first 20 unresolved effects. Additional effects remain blocked; refresh after reviewing this page.','hint'));
  const close=button('Close recovery and release locks',()=>{
   const key=crypto.randomUUID(),affirmation=node('label',undefined,'check'),check=node('input');check.type='checkbox';check.required=true;affirmation.append(check,document.createTextNode('Release this stopped attempt’s resource locks and close its recovery state.'));
-  openEditor(`Close recovery: ${title}`,[node('p','This records the task as failed or cancelled, never successful. It does not retry the native task. Any previously requested deferred follow-ups may become eligible. The server rechecks effects, descendants and termination.','review-notice'),affirmation],()=>command('run.recover',{run_id:run.id,expected_attempt:recovery.attempt,release_resources:true},key));
- },'quiet danger');close.dataset.action='run-recover';close.disabled=!recovery.can_recover;card.append(close);
+  openEditor(`Close recovery: ${title}`,[node('p',`Task ${run.id} · attempt ${recovery.attempt}`,'message-body'),node('p','This records the task as failed or cancelled, never successful. It does not retry the native task. Any previously requested deferred follow-ups may become eligible. The server rechecks effects, descendants and termination.','review-notice'),affirmation],()=>{
+   if(!currentRecovery(run.id,recovery.attempt).can_recover)throw new Error('This task is no longer eligible for recovery closure. Close this editor and review its remaining blockers.');
+   return command('run.recover',{run_id:run.id,expected_attempt:recovery.attempt,release_resources:true},key);
+  });
+ },'quiet danger');close.dataset.action='run-recover';close.disabled=!connected||!recovery.can_recover;card.append(close);
 }
 function lines(value){return String(value??'').split('\n').map(x=>x.trim()).filter(Boolean);}
 function detail(label,value){const wrap=node('section',undefined,'skill-detail');wrap.append(node('h4',label));if(Array.isArray(value)){const list=node('ul');for(const item of value)list.append(node('li',item));wrap.append(list);}else wrap.append(node('p',value||'Not specified'));return wrap;}
