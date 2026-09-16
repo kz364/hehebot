@@ -4,6 +4,40 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native client/child-stream integration (2026-09-16; verified locally):
+the reviewed `macos/` delivery is independent SwiftUI/WKWebView source targeting
+macOS 14+, not a built Mac release. Five Node checks (one executable script test,
+four structural checks), shell syntax and plist parsing pass. Main installed the
+signature-verified official Swift 6.3.3 Debian compiler and ran four real Foundation
+XCTest methods successfully. Optional checksum-pinned setup is committed under
+`macos/scripts/` and opt-in through `.agents/setup`; no Apple SDK or renderer is
+available. Native app compilation, permission enforcement, cookies/login, rendering,
+signing/notarization, updates, notifications and energy remain unverified/unimplemented.
+
+Actual `--plan-child` was rerun successfully: the default spawned child does not
+inherit root Plan mode. Literal plan tags are child message deltas, not Plan events.
+Exact child cancellation closes HTTP but leaves an active message and unknown
+coverage, so completion and sleep stay denied. See [evidence](CODEX_CHILD_PLAN_EVIDENCE.md).
+This mode and Mac source checks now join the combined verifier; no child Plan
+acceptance or successful native recovery is inferred.
+The integrated verifier passed 1,154 control / 262 runtime tests, eight auditor
+tests, five Mac source/script checks, all HTTP/native/service modes and build dry
+run. Four Swift XCTest methods passed separately; desktop 16 tests passed.
+Logs: `.local/native-client-integration-combined.log`, `.local/macos-swift-policy-final.log`,
+`.local/native-client-desktop.log`. Native UI was not rendered: Apple frameworks
+are unavailable. Source review found routine Delete's browser `confirm` is denied
+by the native shell; moving it into the portal editor is the next local UI gap.
+
+WhatsApp transport investigation: the locked MCP SDK 1.30.0's
+[`Protocol.request`](https://github.com/modelcontextprotocol/typescript-sdk/blob/2d889f2b329e46680ec9bdd565de4616c497825a/src/shared/protocol.ts#L681-L834)
+deletes the response handler and rejects locally on timeout/abort; cancellation
+notification delivery/remote settlement is not awaited. Its
+[`StdioClientTransport.close`](https://github.com/modelcontextprotocol/typescript-sdk/blob/2d889f2b329e46680ec9bdd565de4616c497825a/src/client/stdio.ts#L201-L240)
+can return after sending SIGKILL without observing process close. Future transport
+assembly must retain unknown in-flight obligations and independently confirm process
+and browser-descendant termination; neither a rejected call nor resolved close is
+safe-sleep evidence. No SDK installation or connector launch was added by this review.
+
 WhatsApp authority-deadline follow-up (2026-09-16; verified locally):
 `readWappMcp` now accepts the exact Worker `{allowed:true,deadline_at}` authorization
 response as well as the existing boolean host callback contract. The initial

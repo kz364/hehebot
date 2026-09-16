@@ -15,6 +15,7 @@ node scripts/probe-codex.mjs
 npm test
 npm run test:runtime
 node --test tests/audit-wappmcp-licenses.mjs
+node --test macos/tests/*.test.mjs
 node scripts/verify-wappmcp.mjs
 npm run test:e2e
 node scripts/test-control-questions.mjs
@@ -36,6 +37,7 @@ bash scripts/test-codex-service.sh --submission-ack
 bash scripts/test-codex-service.sh --operation-pages
 bash scripts/test-codex-service.sh --reasoning
 bash scripts/test-codex-service.sh --plan
+bash scripts/test-codex-service.sh --plan-child
 bash scripts/test-codex-service.sh --history
 bash scripts/test-codex-service.sh --history-child
 bash scripts/test-codex-service.sh --questions

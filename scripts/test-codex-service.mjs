@@ -2,7 +2,7 @@
 // Disposable actual Codex -> assembled host -> MCP -> HTTPS Worker -> SQLite.
 // Sprite Tasks transport is synthetic; this does not verify live provider holds.
 import assert from 'node:assert/strict';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { createHash, randomUUID, randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { EventEmitter } from 'node:events';
 import { execFile, spawn } from 'node:child_process';
@@ -19,7 +19,8 @@ import { inspectCodexRecovery } from '../runtime/codex-recovery-inspect.mjs';
 const root = resolve(import.meta.dirname, '..');
 const effectsMode = process.argv.includes('--child-effects');
 const historyChildMode = process.argv.includes('--history-child');
-const childMode = process.argv.includes('--child') || effectsMode || historyChildMode;
+const planChildMode = process.argv.includes('--plan-child');
+const childMode = process.argv.includes('--child') || effectsMode || historyChildMode || planChildMode;
 const crashMode = process.argv.includes('--crash');
 const historyMode = process.argv.includes('--history') || historyChildMode;
 const questionCancelMode = process.argv.includes('--questions-cancel');
@@ -27,10 +28,10 @@ const questionsMode = process.argv.includes('--questions') || questionCancelMode
 const submissionAckMode = process.argv.includes('--submission-ack');
 const operationPagesMode = process.argv.includes('--operation-pages');
 const reasoningMode = process.argv.includes('--reasoning');
-const planMode = process.argv.includes('--plan');
+const planMode = process.argv.includes('--plan') || planChildMode;
 const expectedToolCalls = operationPagesMode ? 101 : 1;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -68,6 +69,7 @@ async function send(res, output, duringPlan = undefined) {
         await duringPlan(() => event('response.output_text.delta', {
           output_index, item_id: item.id, content_index: 0, delta: text.slice(continuation, split),
         }));
+        if (res.destroyed) return; // Exact child interruption can close an open Plan stream.
         event('response.output_text.delta', { output_index, item_id: item.id, content_index: 0, delta: text.slice(split) });
       } else event('response.output_text.delta', { output_index, item_id: item.id, content_index: 0, delta: text });
       event('response.output_text.done', { output_index, item_id: item.id, content_index: 0, text: item.content[0].text });
@@ -216,7 +218,7 @@ try {
             ] }) }]);
           return;
         }
-        if (childMode) {
+        if (childMode && !planChildMode) {
           childHeld = true;
           res.once('close', () => { if (!res.writableEnded) childClosed = true; });
           return;
@@ -228,6 +230,58 @@ try {
         }
         await send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
           content: [{ type: 'output_text', text: planMode ? 'SERVICE_ASSEMBLY_OK\n<proposed_plan>\nPLAN_START_19\nPRIVATE_PLAN_43\n</proposed_plan>' : 'SERVICE_ASSEMBLY_OK', annotations: [] }] }], planMode ? async continuePlan => {
+            if (planChildMode) {
+              // 0.154.0 spawn_agent starts its child in Default mode, even when
+              // the parent is in Plan. Prove native behavior, not invented Plan events.
+              const row = await wait(async () => {
+                const current = await service.observe();
+                const owner = Object.values(current.childObligations ?? {})[0];
+                return Object.keys(owner?.messageStarts ?? {}).length === 2 && current;
+              }, 'open native child message containing proposed_plan');
+              const [childKey] = Object.keys(row.childObligations);
+              const owner = row.childObligations[childKey];
+              const [threadId, turnId] = JSON.parse(childKey);
+              const messageId = Object.keys(owner.messageStarts).find(id => !Object.hasOwn(owner.outputItems ?? {}, id));
+              assert.equal(threadId, childThreadId); assert.notEqual(threadId, row.threadId);
+              assert.equal(row.rootSettled, true); assert.equal(row.childTurns[childKey], 'inProgress');
+              assert.deepEqual(row.planItems ?? {}, {}); assert.deepEqual(owner.planItems ?? {}, {});
+              assert.ok(notifications.some(n => n.method === 'item/started' && n.params.threadId === threadId &&
+                n.params.turnId === turnId && n.params.item.id === messageId && n.params.item.type === 'agentMessage'));
+              await wait(() => notifications.some(n => n.method === 'item/agentMessage/delta' && n.params.threadId === threadId &&
+                n.params.turnId === turnId && n.params.itemId === messageId && n.params.delta.includes('<proposed_plan>')), 'literal child plan tag delta');
+              const before = await service.supervisor.operations();
+              const active = before.filter(op => op.kind === 'inference' && op.status === 'active');
+              assert.equal(active.length, 2); // Open message plus its quiet-inference phase, not a Plan item.
+              const timing = owner.operationTimes[JSON.stringify(['messageStarts', messageId])];
+              for (const op of active) {
+                assert.equal(op.run_id, queued.resource_id);
+                assert.equal(op.started_at, timing.startedAt);
+                assert.equal(op.last_progress_at, timing.lastProgressAt);
+                assert.equal(Date.parse(op.deadline_at) - Date.parse(op.started_at), 300000);
+              }
+              // Pin the child namespace independently of timestamps (root and
+              // child clocks may coincide). Heartbeats charge the logical root.
+              const hex = createHash('sha256').update(JSON.stringify([dispatched.attemptId, queued.resource_id,
+                dispatched.claim.run.current_attempt, [childKey, 'messageStarts', messageId]])).digest('hex');
+              const expectedId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+              assert.ok(active.some(op => op.id === expectedId));
+              await sleep(40); // A refreshed clock cannot accidentally equal the original millisecond.
+              continuePlan();
+              await wait(() => notifications.some(n => n.method === 'item/agentMessage/delta' && n.params.threadId === threadId &&
+                n.params.turnId === turnId && n.params.itemId === messageId && n.params.delta.includes('PRIVATE_PLAN_43')), 'exact child message delta');
+              assert.deepEqual(await service.observe(), row);
+              assert.deepEqual(await service.supervisor.operations(), before);
+              await service.maintain();
+              assert.deepEqual(heartbeatPages.at(-1), before);
+              await assert.rejects(service.supervisor.complete({ attemptId: dispatched.attemptId, nativeRunId: row.nativeRunId, rootSettled: true }), { code: 'NATIVE_SETTLEMENT_INCOMPLETE' });
+              await assert.rejects(service.supervisor.drain({ state: 'open-child-plan-tag' }), { code: 'SLEEP_DENIED' });
+              Object.assign(report, { childPlanEmission: false, childPlanTagIsMessageDelta: true,
+                exactChildMessageNamespace: true, childDeltaClockUnchanged: true,
+                activeChildStreamHeartbeatAccepted: true, openChildStreamPreventsSettlementAndSleep: true });
+              childHeld = true;
+              await new Promise(resolve => res.once('close', () => { childClosed = !res.writableEnded; resolve(); }));
+              return;
+            }
             const row = await wait(async () => {
               const current = await service.observe();
               return Object.values(current.planItems ?? {}).includes('inProgress') && current;
@@ -513,7 +567,7 @@ try {
   const operations = await service.supervisor.operations();
   assert.equal(native.initialInference, 'completed');
   const quietPhases = [native, ...Object.values(native.childObligations ?? {})].flatMap(owner => Object.values(owner.quietPhases ?? {}));
-  const messageCount = childMode ? 2 : crashMode || questionCancelMode ? 0 : 1;
+  const messageCount = childMode ? 2 + Number(planChildMode) : crashMode || questionCancelMode ? 0 : 1;
   assert.equal([native, ...Object.values(native.childObligations ?? {})].reduce((n, owner) => n + Object.keys(owner.messageStarts ?? {}).length, 0), messageCount);
   if (!crashMode && !historyMode) {
     const owners = [native, ...Object.values(native.childObligations ?? {})];
@@ -531,7 +585,7 @@ try {
   assert.equal(operations.length, (childMode ? 8 : expectedToolCalls + 3 + Number(reasoningMode) + Number(planMode)) + quietPhases.length + messageCount);
   if (childMode) {
     assert.ok(Object.values(native.childObligations).every(child => child.initialInference === 'completed'));
-    assert.equal(operations.filter(operation => operation.kind === 'inference' && operation.status === 'settled').length, 3 + quietPhases.length + messageCount);
+    assert.equal(operations.filter(operation => operation.kind === 'inference' && operation.status === 'settled').length, 3 + quietPhases.length + messageCount - Number(planChildMode));
     const startup = operations.filter(operation => operation.kind === 'child' && operation.deadline_at < dispatched.claim.deadline_at);
     assert.equal(startup.length, 1); assert.equal(startup[0].status, 'settled');
     const [spawnId] = Object.keys(native.spawns);
@@ -539,7 +593,7 @@ try {
     assert.equal(Date.parse(startup[0].deadline_at) - Date.parse(startup[0].started_at), 120000);
     report.childStartupClockObserved = true;
   }
-  if (reasoningMode || planMode) {
+  if (reasoningMode || (planMode && !planChildMode)) {
     assert.deepEqual(Object.values(native[planMode ? 'planItems' : 'reasoningItems']), ['completed']);
     assert.doesNotMatch(JSON.stringify(native), /PRIVATE_SYNTHETIC_REASONING_43|PRIVATE_PLAN_43/);
     const phases = operations.filter(operation => operation.kind === 'inference' && operation.deadline_at < dispatched.claim.deadline_at);
@@ -551,6 +605,28 @@ try {
       assert.ok(notifications.some(n => n.method === 'item/completed' && n.params.item.type === 'plan' && n.params.item.text.includes('PRIVATE_PLAN_43')));
       report.planPhaseObserved = true; report.planContentExcluded = true;
     } else { report.reasoningPhaseObserved = true; report.reasoningContentExcluded = true; }
+  }
+  if (planChildMode) {
+    const [childKey] = Object.keys(native.childObligations);
+    const owner = native.childObligations[childKey];
+    const [threadId, turnId] = JSON.parse(childKey);
+    const messageId = Object.keys(owner.messageStarts).find(id => !Object.hasOwn(owner.outputItems ?? {}, id));
+    assert.equal(typeof messageId, 'string');
+    assert.deepEqual(native.planItems ?? {}, {}); assert.deepEqual(owner.planItems ?? {}, {});
+    const childEvents = notifications.filter(n => n.params?.threadId === threadId &&
+      (n.params.turnId === turnId || n.params.turn?.id === turnId));
+    assert.equal(childEvents.some(n => n.method === 'item/plan/delta' || n.params.item?.type === 'plan'), false);
+    assert.equal(childEvents.some(n => n.method === 'item/completed' && n.params.item.id === messageId), false);
+    assert.equal(operations.filter(op => op.status === 'active').length, 1);
+    assert.equal(operations.find(op => op.status === 'active').kind, 'inference');
+    assert.deepEqual(heartbeatPages.at(-1), operations);
+    // Inspect persisted host records as well as the in-memory observation. This
+    // does not claim native Codex history redaction or completed-message privacy.
+    for (const name of await readdir(join(stateDirectory, 'journal'))) {
+      assert.doesNotMatch(await readFile(join(stateDirectory, 'journal', name), 'utf8'), /PRIVATE_PLAN_43|PLAN_START_19|<proposed_plan>/);
+    }
+    Object.assign(report, { childPlanEvents: 0, interruptedMessageCompletionObserved: false,
+      interruptedMessageRemainsActive: true, childStreamTextExcludedFromHostJournal: true });
   }
   if (operationPagesMode) {
     const total = 104 + quietPhases.length + messageCount, pageCount = Math.ceil(total / 100);

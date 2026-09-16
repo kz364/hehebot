@@ -4,13 +4,28 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
-Third wave: `.local/next-coverage.bundle` containing source local main 9479cb7
-(not origin/main) was uploaded to both new workers. Child-Plan worker
-`T-01a0a864-4f76-7568-979b-816d30d8c194` owns `scripts/test-codex-service.mjs`
-and a dedicated evidence doc/helper for actual native child Plan streams.
-SwiftUI worker `T-01a0a864-5c5a-721e-b726-9efe599ca7ad` owns new `macos/` source,
-tests and README. Both reply with transferable commits/evidence; do not poll or
-duplicate their work. They do not edit shared checklist/progress/spec/verifier.
+Third wave is delivered/reviewed/applied. Both workers used the uploaded
+`.local/next-coverage.bundle` at source local main 9479cb7, not origin/main.
+Child worker `T-01a0a864-4f76-7568-979b-816d30d8c194` delivered the fixture and
+`docs/CODEX_CHILD_PLAN_EVIDENCE.md`; the actual default child emits message deltas,
+not Plan events. Main rerun passed with active message/unknown coverage retained
+after exact interruption; no settlement/sleep or child Plan acceptance claim.
+SwiftUI worker `T-01a0a864-5c5a-721e-b726-9efe599ca7ad` delivered `macos/` source.
+Main additionally installed signature-verified Swift 6.3.3 Debian compiler, ran
+four real Foundation XCTest methods, and prepared hash-pinned optional setup.
+Five Node checks and plist/shell checks pass. `.agents/setup` with
+`HEHEBOT_SWIFT_POLICY_TESTS=1` passed twice (~32s Swift extraction each), as did
+policy tests afterward and compiler invocation from a new login shell.
+Native app build/render/permissions/login/storage/energy need Mac acceptance;
+unsigned packaging does not activate sandbox entitlements. No worker is pending.
+Combined integration rerun passed in `.local/native-client-integration-combined.log`:
+1,154 control / 262 runtime tests, eight auditor tests, five Mac checks and all
+HTTP/native/service/build modes. It includes `--plan-child`; desktop 16 tests pass.
+Next UI gap: routine Delete uses `confirm` in `public/app.js`; the native shell
+denies JS confirms. Move it into the existing portal editor with current revision/
+selection checks and rendered offline/stale/keyboard coverage before claiming parity.
+Next transport work must preserve unresolved MCP I/O across SDK timeout/abort;
+see IMPLEMENTATION's pinned SDK investigation. No actual connector was launched.
 Main owns runtime read-boundary work: `authorize` may now return exact Worker
 `{allowed:true,deadline_at}`, tightening but never extending the original cap.
 18 focused tests and HTTPS composition pass; combined rerun passed 1,154 control /

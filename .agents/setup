@@ -28,3 +28,10 @@ time npm ci --prefer-offline --no-audit --no-fund
 export WRANGLER_SEND_METRICS=false
 echo "Generating local Worker types"
 time npm run types
+
+# Explicit opt-in: the Swift compiler archive is about 1 GiB. This only enables
+# Foundation policy tests in Linux; it cannot build or render the macOS app.
+if [[ "${HEHEBOT_SWIFT_POLICY_TESTS:-0}" == 1 ]]; then
+  echo "Installing pinned Swift for portable client policy tests"
+  time bash macos/scripts/setup-linux-swift.sh
+fi
