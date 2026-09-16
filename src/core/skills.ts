@@ -7,6 +7,15 @@ const normalized=(value:string)=>value.trim().toLocaleLowerCase('en-US').replace
 
 export class SkillCatalog {
  constructor(private store:Store,private now:()=>string,private uuid:()=>string){}
+ history(skillId:string,before?:number,limit=10){
+  requireThat(before===undefined||Number.isSafeInteger(before)&&before>0,'INVALID_INPUT','Invalid revision cursor.',422);
+  requireThat(Number.isInteger(limit)&&limit>=1&&limit<=20,'INVALID_INPUT','Limit must be 1–20.',422);
+  const current=this.store.get(skillId,'skill');
+  const rows=this.store.db.all<{revision:number;body_json:string;created_at:string}>(
+   'SELECT revision,body_json,created_at FROM object_revisions WHERE object_id=? AND (? IS NULL OR revision<?) ORDER BY revision DESC LIMIT ?',skillId,before??null,before??null,limit+1);
+  const revisions=rows.slice(0,limit).map(({body_json,...row})=>({...row,body:JSON.parse(body_json) as SkillBody}));
+  return {skill_id:skillId,current_revision:current.revision,revisions,next_cursor:rows.length>limit?revisions.at(-1)!.revision:null};
+ }
  propose(owner:string,commandId:string,p:SkillProposal):string {
   requireThat(!p.executable_files_changed,'CAPABILITY_UNAVAILABLE','Executable skill files require a separately configured capability review.');
   const existing=this.store.db.all<{revision:number;kind:string;deleted_at:string|null}>('SELECT revision,kind,deleted_at FROM objects WHERE id=?',p.skill_id)[0];

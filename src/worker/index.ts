@@ -28,6 +28,13 @@ export default {
    // Auth is applied before assets as well as API. Local dev is loopback-only.
    const owner=await authenticateOwner(request,env);
    if(path==='/v1/schedules/preview'&&request.method==='GET')return json(unwrap(await control.getSchedulePreview(owner,url.searchParams.get('cron')??'',url.searchParams.get('timezone')??'')));
+   const skillHistory=path.match(/^\/v1\/skills\/([0-9a-f-]{36})\/revisions$/i);
+   if(skillHistory&&request.method==='GET'){
+    const before=url.searchParams.get('before'),limit=url.searchParams.get('limit');
+    requireThat(before===null||/^[1-9]\d*$/.test(before)&&Number.isSafeInteger(Number(before)),'INVALID_INPUT','Invalid revision cursor.',422);
+    requireThat(limit===null||/^[1-9]\d*$/.test(limit)&&Number(limit)<=20,'INVALID_INPUT','Limit must be 1–20.',422);
+    return json(unwrap(await control.getSkillHistory(owner,skillHistory[1],before===null?undefined:Number(before),limit===null?10:Number(limit))));
+   }
    if(path==='/v1/commands'&&request.method==='POST'){
     assertSameOrigin(request);requireThat(request.headers.get('Content-Type')?.split(';')[0]==='application/json','INVALID_INPUT','Use application/json.',422);
     const input=parseJson(await readBounded(request));const key=request.headers.get('Idempotency-Key')??'';

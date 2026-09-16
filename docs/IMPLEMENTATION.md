@@ -4,6 +4,23 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Skill revision reads (2026-09-17 Asia/Jakarta): owner-authenticated
+`GET /v1/skills/:id/revisions?before=<positive revision>&limit=<1..20>` returns
+`{skill_id,current_revision,revisions:[{revision,body,created_at}],next_cursor}`.
+Default limit10; descending rows use an exclusive cursor and limit-plus-one
+lookahead. Gaps remain gaps; new revisions do not duplicate older pages. Only live
+skill IDs are readable. Proposals and actor/source metadata are not returned.
+The RPC uses the shared owner read-rate limit without reconciliation/alarm work;
+no scheduler, inference or provider action is triggered by this read. Core/HTTP
+fixtures cover real SQLite, signed owner/wrong-owner and runtime-bearer denial,
+pagination, exact bodies, pending-draft exclusion and mutation custody.36 focused
+tests and typecheck pass. Initial combined failure was a fixture bypassing the
+required command receipt; it now stages through command ingress. The failed log
+is `.local/skill-history-combined.log`; final rerun exits0 with1,386 backend/434
+runtime tests plus native/browser/service/build checks in
+`.local/skill-history-combined-final.log`; desktop16 pass. Portal history/restore controls are next;
+the alpha gateway still disallows this route and all skill mutations.
+
 Skill draft retry custody (2026-09-17 Asia/Jakarta): a real Chromium HTTP fixture
 reproduced a new proposal UUID and idempotency key on each retry. The editor now
 captures both once and freezes its first submitted payload. An unchanged explicit

@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest E05 prerequisite: SkillCatalog.history and authenticated GET
+/v1/skills/:id/revisions?before=<positive revision>&limit=<1..20> return
+{skill_id,current_revision,revisions:[{revision,body,created_at}],next_cursor}.
+Default10, exclusive descending cursor, only live skill IDs, no drafts/actor/source.
+Rate-only RPC does not reconcile or arm alarms.36 focused core/HTTP/restore tests
+and typecheck pass. First combined failed on host-added fixture's missing command
+receipt, corrected via command ingress; final rerun exits0 with1,386 backend/434
+runtime plus native/browser/service/build in .local/skill-history-combined-final.log;
+desktop16 pass. No active workers or live actions.
+Next: portal history selection and staged skill.restore, followed by existing
+review flow; preserve alpha gateway restrictions, stale/offline/uncertain identity
+and inspect rendered states. Cloudflare decision remains pending; do not re-ask.
+
 Newest independent P1 fix: skill draft/update editor retains one proposal UUID,
 command key and first submitted payload; unchanged explicit retries reuse them.
 Changed body/target and offline/stale/deleted/missing targets dispatch nothing.
