@@ -4,6 +4,26 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+Current parallel wave received `.local/memory-shutdown.bundle` from unpublished
+host local main 4992486, not origin/main. Memory editor worker
+`T-01a0a8eb-6453-7613-a106-ee1aae24f4bf` owns public/app.js and its focused browser
+fixture; shutdown worker `T-01a0a8eb-73bc-732e-9d2b-fc0c92f74ad3` owns a new pinned
+upstream signal/destroy fixture and evidence doc. Shutdown is now reviewed and
+integrated: 19 cases/13 synthetic children passed the host artifact verifier.
+Memory is also reviewed/integrated: 12-command Chromium fixture and four neighboring
+browser regressions pass; three DPR2 captures inspected. Metadata and original
+persona/revision/scope are preserved; retries keep payload/key only within the
+dialog. Neither worker remains pending. Main owns runtime authorization and verifier
+integration. Main reproduced/fixed post-intent revocation dispatch: revalidate
+captured authority after fsync, pass tighter live cap, retain original journal
+custody/unknown intent and prevent late allow dispatch. 67 focused tests and the
+HTTPS held-intent cancellation fixture pass. Final combined/desktop batch runs
+passed in `.local/shutdown-reauthorize-{combined,desktop}.log`: 1,206 control /
+287 runtime tests, all included artifact/native/service fixtures and typecheck/build
+dry run; 16 desktop tests. Next priority remains owned connector process/descendant
+custody, not live admission or another unapproved upstream patch.
+Production gates remain false.
+
 New independent E05 workers received `.local/skill-review-restore.bundle` containing
 host unpublished local main 94aedd2, not origin/main: portal comparison in
 `T-01a0a8d1-cb45-714e-a8c6-aa23a4b20c46` owns public UI/browser fixtures; restore
@@ -13,7 +33,7 @@ reran 30 focused tests successfully. Only new restore tests/evidence were added;
 no production defect found. Portal comparison also delivered and is reviewed/applied.
 Main reran the skill-review Chromium fixture, including added scroll/footer geometry
 checks, and inspected desktop/narrow/default/new/offline/error captures. Routine-delete
-and recovery browser regressions pass. No worker remains pending. Full batch verifier
+and recovery browser regressions pass. No E05 worker remains pending. Full batch verifier
 passed (exit 0) in `.local/skill-review-integration-combined.log`: 1,206 control /
 281 runtime tests, all artifact/native/service checks and typecheck/build dry run.
 Production admission remains false; E05 is still partial.
@@ -24,16 +44,14 @@ Full verifier passed 1,197 control / 281 runtime tests and all fixtures/build ch
 in `.local/tasks-deadline-combined.log`; desktop rerun passed 16 tests.
 Timeout retains unknown mutation outcome, not rollback or permission to sleep.
 
-Next connector lifecycle investigation has a supported non-logout starting point:
-pinned wappmcp `src/cli/mcp.ts` registers SIGINT/SIGTERM through
-`src/lib/signal-handler.ts`, awaiting `WhatsAppSession.destroy()` in
-`src/lib/whatsapp/session.ts` (revision 9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8).
-Static source inspection finds a hard-coded 5-second destroy race followed on
-failure by browser disconnect/direct PID kill, then process exit. This does not
-prove descendant termination, and no graceful shutdown MCP tool/timeout option
-is exposed. Preserve LocalAuth and do not substitute logout. Verify pinned source
-and actual signal behavior in a credential-free fixture before choosing production
-ownership; SDK close and upstream process exit alone remain insufficient.
+Connector lifecycle remains blocked: pinned `src/cli/mcp.ts` unconditionally
+unregisters signal handlers in `finally`, even after successful ready/keep=true
+return. The primitive signal fixture is not a successful CLI lifecycle test.
+Actual installed destroy retains LocalAuth, but its five-second fallback and
+concurrent calls can return before termination. See [shutdown evidence](WAPPMCP_SHUTDOWN.md).
+Preserve LocalAuth; do not substitute logout or add an unapproved dependency patch.
+An owned process/descendant boundary remains necessary; SDK close, destroy return
+and direct process exit are not settlement proof.
 
 Two independent workers imported `.local/parallel-readiness-security.bundle`,
 source unpublished local main 8915a47 (not origin/main): readiness classification

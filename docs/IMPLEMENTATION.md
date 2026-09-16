@@ -4,6 +4,50 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Portal memory editing (2026-09-16): text-only edits previously reset sensitivity
+to ordinary and expiry to null. The reviewed fix preserves metadata/provenance,
+binds original persona/revision/scope, and fences observed stale/deleted/offline
+state and navigation, including away/back. First payload/ID/key remain stable for
+explicit retry only; close/reload does not persist retry identity. Main reran
+`node scripts/test-portal-memory-edit.mjs`: 12 exact synthetic requests passed in
+`.local/memory-integrated-browser.log`, plus routine-delete/profile/skill-review/
+recovery regressions. Three DPR2 desktop/narrow captures were inspected: readable
+metadata/error disclosures and unclipped controls. This is synthetic Chromium
+evidence, not native/live E06 acceptance. See [memory editor limits](PORTAL_MEMORY_EDIT.md).
+
+Post-intent WhatsApp reauthorization (2026-09-16): permission could be revoked
+while `readJournaledWappMcp` awaited durable intent, after the initial host check.
+The regression observed one dispatch before the final result check denied data.
+It now rechecks the same captured task/tool/chat authority immediately after
+persistence, before transport dispatch. The helper lives inside `readWappMcp`'s
+original cancellation/deadline envelope; no duplicated authorization parser or
+new grant is introduced. New authority caps can tighten but never widen the wait.
+The transport gets only signal/deadline; the durable intent keeps its original
+custody bound. Revocation, timeout or cancelled recheck retains non-replayable
+intent rather than fabricating a response or releasing browser coverage.
+Six new regression/boundary cases and related suites pass (67 tests):
+`.local/wapp-reauthorize-focused-final.log`. Exact 36/37ms cases distinguish success
+from expiry, late allow responses cannot dispatch after cancellation/timeout, and
+response persistence checks the tightened clock even before the timer callback.
+The HTTPS Worker fixture passed cancellation during held intent persistence with
+zero dispatch plus retained intent in `.local/wapp-reauthorize-http.log`.
+The final combined run passed 1,206 control / 287 runtime tests and all included
+artifact/native/service fixtures and typecheck/build dry run in
+`.local/shutdown-reauthorize-combined.log`; desktop reinstall/tests passed 16 in
+`.local/shutdown-reauthorize-desktop.log`. This does not make remote revocation
+and external dispatch atomic, register a connector, prove recent-read SDK
+compatibility or permit sleep. Production gates remain false.
+
+Pinned shutdown integration (2026-09-16): `node scripts/verify-wappmcp.mjs`
+passed all 12 signal and seven destroy/profile cases across 13 synthetic children
+in `.local/wapp-shutdown-integration-focused.log`. Actual installed primitives
+preserve the disposable profile; actual logout deletes the negative-control canary.
+Destroy timeout/rejection and concurrent calls do not establish termination.
+Pinned CLI static inspection finds unconditional signal-handler unregister even
+on successful startup; the CLI was not executed. Readiness now names that blocker.
+See [shutdown methodology and limits](WAPPMCP_SHUTDOWN.md). No production lifecycle,
+process-tree settlement, account pairing or E09 completion is claimed.
+
 Native Tasks elapsed deadline (2026-09-16): `createSpritesTaskTransport` previously
 used Node request socket inactivity timeout, which incoming bytes can postpone.
 An owned elapsed timer now bounds the full async wait, destroys the request at
