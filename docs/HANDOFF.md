@@ -2,6 +2,18 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## WhatsApp task-deadline checkpoint (2026-09-16)
+
+Scoped reads accept optional host `deadlineAt` (canonical UTC) and use the earlier
+of task expiry/relative timeout. Invalid/expired values deny I/O; captured deadlines
+cannot be extended through options mutation. 11 scoped-read tests passed
+(`.local/wappmcp-deadline-focused.log`). Combined verification passed 931 control /
+253 runtime tests, WhatsApp/native/service fixtures and typecheck/build dry run
+(`.local/wappmcp-deadline-combined.log`). This primitive is not trusted assembly:
+task grant/lease/revocation wiring must supply the admitted deadline. Installer,
+transport and other credential-free work remain open. No connector activation;
+production gates false and schedule unchanged.
+
 ## Approved WhatsApp patch checkpoint (2026-09-16)
 
 Owner-approved exception merged from the coordination thread into AGENTS/SPEC,

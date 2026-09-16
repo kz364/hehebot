@@ -6,9 +6,9 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest checkpoint:** approved wappmcp patch compatibility, 2026-09-16. Local, not pushed or deployed. Merged only the approved AGENTS/SPEC exception, preserving progress and authority guidance; added pinned-artifact verification to the combined check.
-- **Verified:** `node scripts/verify-wappmcp.mjs` passed SHA256 checks, distributed/source patch equality, clean application to exactly 1.34.7, corruption/double-apply negative controls, both key formats and last-message lookups, 20 denied upstream tools, and 9 scoped-read tests. Log: `.local/wappmcp-approved-check.log`.
-- **Combined:** `bash scripts/verify-codex.sh` passed **931 control / 251 runtime tests**, the new pinned WhatsApp check, native/service fixtures, typecheck and build dry run. Log: `.local/wappmcp-approved-combined.log`; final status `passed`, production admission false.
+- **Latest checkpoint:** WhatsApp read task-deadline cap, 2026-09-16. Local, not pushed or deployed. Host-only `deadlineAt` caps the relative read timeout and suppresses expired I/O/results; connector assembly remains absent.
+- **Verified:** **11 scoped-read tests passed**, including asymmetric task/operation deadlines, −1ms/exact boundary, options mutation, invalid/expired timestamps and expiry before dispatch. Log: `.local/wappmcp-deadline-focused.log`.
+- **Combined:** `bash scripts/verify-codex.sh` passed **931 control / 253 runtime tests**, pinned WhatsApp compatibility, native/service fixtures, typecheck and build dry run. Log: `.local/wappmcp-deadline-combined.log`; final status `passed`, production admission false.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
 - **Next implementation priority:** E09 trusted scoped WhatsApp transport/setup with a locked installation graph; E01 deadline/activity accounting and E02 recovery remain open. These are queued, not claims that an agent is currently running them.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
@@ -89,8 +89,9 @@ Do not perform these implicitly. [AUTH_SETUP.md](docs/AUTH_SETUP.md) contains de
 **E09 selected WhatsApp integration:** owner-selected `wappmcp` 0.4.0 at
 `9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8` is now specified in SPEC.md. Setup/catalog
 remains unimplemented. An unregistered scoped read boundary now has synthetic
-contract and cancellation/timeout tests; trusted task-grant/lease/revocation,
-task-deadline capping and transport wiring remain.
+contract and cancellation/timeout tests. Host-only canonical UTC `deadlineAt`
+can cap the relative timeout; trusted task-grant/lease/revocation and transport
+wiring must supply the admitted deadline and remain unimplemented.
 The owner approved only the pinned upstream 1.34.7 patch; AGENTS.md and SPEC.md
 now contain that exception. `scripts/verify-wappmcp.mjs` pins both tarball hashes
 and source patch hash, verifies clean application in disposable storage and executes

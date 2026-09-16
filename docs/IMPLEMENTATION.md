@@ -4,6 +4,19 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+WhatsApp task-deadline checkpoint (2026-09-16): `readWappMcp` accepts optional
+host-only canonical UTC `deadlineAt`, copied before asynchronous work. Effective
+expiry is the earlier of that admitted task deadline and the bounded relative
+timeout. Invalid timestamps reject before I/O; exact expiry prevents dispatch and
+suppresses late results. Omitting it preserves the standalone two-minute ceiling;
+future trusted task assembly must supply it from custody, never model arguments.
+11 scoped-read tests pass (`.local/wappmcp-deadline-focused.log`), including shorter
+task versus shorter operation windows, exact expiry, attempted options extension
+and pre-microtask expiry. Combined verification passed 931 control / 253 runtime
+tests, pinned WhatsApp compatibility, native/service fixtures and typecheck/build
+dry run (`.local/wappmcp-deadline-combined.log`). No grant issuance, lease/revocation transport,
+connector installation, native termination or production admission is implied.
+
 Approved WhatsApp compatibility checkpoint (2026-09-16): the owner-authorized
 exception from the coordination thread is merged into AGENTS.md/SPEC.md without
 removing local progress links or native-descendant authority guidance. It supersedes

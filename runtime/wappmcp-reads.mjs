@@ -9,13 +9,21 @@ const tools = ['whatsapp_get_chat_messages', 'whatsapp_search_messages'];
 
 /** grant must come from the authenticated host's admitted task snapshot, never
  * model arguments or imported text. Caller owns current lease/revocation checks
- * and the one-installation MCP connection. This module grants no runtime access.
+ * and supplies deadlineAt from the admitted attempt, not model arguments.
+ * Caller owns the one-installation MCP connection. This module grants no runtime access.
  */
 export async function readWappMcp(grant, name, args, call, options = {}) {
-  if (!object(options) || !Object.keys(options).every(key => ['signal', 'timeoutMs'].includes(key)) ||
+  if (!object(options) || !Object.keys(options).every(key => ['signal', 'timeoutMs', 'deadlineAt'].includes(key)) ||
       options.signal !== undefined && !(options.signal instanceof AbortSignal) ||
       !integer(Object.hasOwn(options, 'timeoutMs') ? options.timeoutMs : 120000, 120000)) fail('WHATSAPP_READ_DENIED');
   const { signal, timeoutMs = 120000 } = options;
+  let taskDeadline = Infinity;
+  if (Object.hasOwn(options, 'deadlineAt')) {
+    if (typeof options.deadlineAt !== 'string') fail('WHATSAPP_READ_DENIED');
+    taskDeadline = Date.parse(options.deadlineAt);
+    if (!Number.isFinite(taskDeadline) ||
+        new Date(taskDeadline).toISOString() !== options.deadlineAt) fail('WHATSAPP_READ_DENIED');
+  }
   if (!exact(grant, ['chatIds', 'tools']) || !Array.isArray(grant.chatIds) || grant.chatIds.length > 100 ||
       !grant.chatIds.every(id => string(id, 256)) || new Set(grant.chatIds).size !== grant.chatIds.length ||
       !Array.isArray(grant.tools) || !grant.tools.every(tool => tools.includes(tool)) ||
@@ -30,7 +38,8 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
   if (!integer(limit, 100) || !integer(page, 100)) fail('WHATSAPP_READ_DENIED');
   // Copy all admitted values before awaiting untrusted upstream code.
   const admitted = { chatId: args.chatId, limit, ...(search ? { query: args.query, page } : {}) };
-  const controller = new AbortController(), deadline = Date.now() + timeoutMs;
+  const controller = new AbortController(), deadline = Math.min(Date.now() + timeoutMs, taskDeadline);
+  if (Date.now() >= deadline) fail('WHATSAPP_READ_STOPPED');
   const result = await new Promise((resolve, reject) => {
     let done = false;
     const finish = (fn, value) => {
@@ -39,7 +48,7 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
     };
     const stopped = () => Object.assign(new Error('WHATSAPP_READ_STOPPED'), { code: 'WHATSAPP_READ_STOPPED' });
     const stop = () => { finish(reject, stopped()); controller.abort(); };
-    const timer = setTimeout(stop, timeoutMs);
+    const timer = setTimeout(stop, Math.max(0, deadline - Date.now()));
     if (signal?.aborted) { stop(); return; }
     signal?.addEventListener('abort', stop, { once: true });
     Promise.resolve().then(() => {

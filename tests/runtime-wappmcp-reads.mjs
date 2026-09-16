@@ -71,6 +71,37 @@ test('response mismatch rejects the entire batch without leaking errors or unrel
   }
 });
 
+test('trusted task deadline caps the read without extending a shorter operation timeout', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+  for (const [timeoutMs, remaining, cap] of [[100, 37, 37], [19, 83, 19]]) {
+    let release, signal, stopped = false;
+    const options = { timeoutMs, deadlineAt: new Date(Date.now() + remaining).toISOString() };
+    const result = readWappMcp(grant(), recent, { chatId: 'family@g.us' }, (_, __, input) => {
+      signal = input.signal; options.deadlineAt = new Date(Date.now() + 99999).toISOString();
+      return new Promise(resolve => { release = resolve; });
+    }, options);
+    const checked = assert.rejects(result, { code: 'WHATSAPP_READ_STOPPED' }).then(() => { stopped = true; });
+    await Promise.resolve(); t.mock.timers.tick(cap - 1); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(stopped, false); assert.equal(signal.aborted, false);
+    t.mock.timers.tick(1); await checked; assert.equal(signal.aborted, true);
+    release(envelope([message()])); await new Promise(resolve => setImmediate(resolve));
+  }
+});
+
+test('invalid or expired task deadlines deny I/O, including expiry before the dispatch microtask', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100 });
+  const call = () => assert.fail('expired or invalid read reached upstream');
+  for (const deadlineAt of [null, undefined, 123, {}, Symbol('private'), 'invalid', '1970-01-01T00:00:01Z', '1970-01-01T01:00:01.000+01:00']) {
+    await assert.rejects(readWappMcp(grant(), recent, { chatId: 'family@g.us' }, call, { deadlineAt }), { code: 'WHATSAPP_READ_DENIED' });
+  }
+  for (const end of [99, 100]) {
+    await assert.rejects(readWappMcp(grant(), recent, { chatId: 'family@g.us' }, call, { deadlineAt: new Date(end).toISOString() }), { code: 'WHATSAPP_READ_STOPPED' });
+  }
+  const result = readWappMcp(grant(), recent, { chatId: 'family@g.us' }, call, { deadlineAt: new Date(101).toISOString() });
+  t.mock.timers.setTime(101);
+  await assert.rejects(result, { code: 'WHATSAPP_READ_STOPPED' });
+});
+
 test('two-minute deadline stops exactly and late upstream completion cannot return data', async t => {
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
   const controller = new AbortController(); let release, upstreamSignal, calls = 0, stopped = false;
