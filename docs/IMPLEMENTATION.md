@@ -22,6 +22,14 @@ root by UUID; no public spawn-only filter exists. `runOwnerAlpha` now refuses
 background mode before filesystem/service/account work, with24 focused tests
 passing in `.local/owner-background-live-gate.log` after the full verifier.
 See [exact sources and boundary](OWNER_BACKGROUND_NATIVE.md#cross-root-authority-blocker).
+The later `--foreign-close` native probe confirms selected A can remove unrelated
+loaded S and receive its completed text. It uses a host-started second A turn and
+known S UUID, not automatic reactivation or ID discovery. Nine loopback requests,
+persisted output, unchanged config and cleanup pass; default seven-request mode
+also passes. Logs: `.local/owner-background-foreign-close-final.log` and
+`.local/owner-background-default-after-probe.log`. The wrong-argument initial run
+is retained and not counted as containment. No full combined rerun was needed
+for this optional fixture-only diagnostic; live background stays blocked.
 V2 target paths check the tree registry, but native positive/foreign-target and
 capacity behavior is under investigation, not adopted. No live session used
 background mode, no provider/account/production action occurred, and default

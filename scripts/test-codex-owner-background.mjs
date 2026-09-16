@@ -10,6 +10,8 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
 
+const foreignClose = process.argv.includes('--foreign-close');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => arg === '--foreign-close'));
 const binary = resolve(import.meta.dirname, '../.local/codex-runtime/node_modules/.bin/codex');
 const directory = await mkdtemp(join(tmpdir(), 'hehe-owner-background-'));
 const home = join(directory, 'home');
@@ -90,7 +92,7 @@ try {
       const chunks = []; let bytes = 0;
       for await (const chunk of req) { assert.ok((bytes += chunk.length) <= 2 * 1024 * 1024); chunks.push(chunk); }
       const body = JSON.parse(Buffer.concat(chunks)); raw.requests.push(body); modelRequests++;
-      assert.ok(modelRequests <= 7); assert.equal(body.model, 'fixture-model'); assert.equal(body.stream, true);
+      assert.ok(modelRequests <= (foreignClose ? 9 : 7)); assert.equal(body.model, 'fixture-model'); assert.equal(body.stream, true);
       const catalog = names(body);
       assert.ok(!catalog.some(name => /web_search|image_generation|mcp|tool_suggest/.test(name)), 'DISABLED_PROVIDER_SURFACE');
       const text = body.input.filter(item => item.role === 'user' || item.type === 'agent_message')
@@ -98,6 +100,18 @@ try {
       const label = ['CHILD_A', 'ROOT_A', 'ROOT_S'].find(value => text.includes(marker(value)));
       assert.ok(label, 'UNKNOWN_SCRIPTED_REQUEST');
       const output = body.input.filter(item => item.type === 'function_call_output').at(-1);
+      if (foreignClose && text.includes(marker('FOREIGN_CLOSE'))) {
+        if (output?.call_id === 'foreign_close') {
+          report.foreignCloseReply = output.output;
+          send(res, message('FOREIGN_CLOSE_RETURNED')); return;
+        }
+        const tool = body.tools.find(item => item.name === 'close_agent' || item.tools?.some(nested => nested.name === 'close_agent'));
+        assert.ok(tool, 'SELECTED_ROOT_CLOSE_ADVERTISED');
+        send(res, [{ id: 'fc_foreign_close', type: 'function_call', status: 'completed', call_id: 'foreign_close',
+          ...(tool.type === 'namespace' ? { namespace: tool.name } : {}), name: 'close_agent',
+          arguments: JSON.stringify({ target: report.identities.rootS.threadId }) }]);
+        return;
+      }
       if (label === 'ROOT_A' && !output) { report.rootAToolCatalog = catalog; send(res, spawn(body, 'CHILD_A')); return; }
       if (label === 'ROOT_A' && output && !body.input.some(item => spawnCalls.get(item.call_id) === 'SECOND_A')) {
         const receipt = JSON.parse(output.output); children.set('CHILD_A', receipt.agent_id); send(res, spawn(body, 'SECOND_A')); return;
@@ -190,10 +204,29 @@ try {
     rootS: { multi_agent: false, multi_agent_v2: false } };
   report.outputs = { rootA: 'ROOT_A_CAP_DENIAL_VISIBLE', rootS: 'ROOT_S_DEFAULT_DENIAL_VISIBLE',
     secondChild: report.secondChildDenial, grandchild: report.grandchildDenial, rootSDefault: report.rootSDenial };
+  if (foreignClose) {
+    const before = await transport.request('thread/loaded/list', {});
+    assert.ok(before.data.includes(rootS.threadId), 'FOREIGN_ROOT_WAS_LOADED');
+    // Host supplies the known foreign ID only to this synthetic model response.
+    // A second turn on A tests native target authorization, not automatic reactivation.
+    const probe = (await transport.request('turn/start', { threadId: rootA.threadId,
+      input: [{ type: 'text', text: marker('FOREIGN_CLOSE') }] })).turn;
+    await wait(() => completed.get(rootA.threadId)?.get(probe.id) === 'completed', 'FOREIGN_CLOSE_RETURN');
+    assert.deepEqual(JSON.parse(report.foreignCloseReply), { previous_status: { completed: 'ROOT_S_DEFAULT_DENIAL_VISIBLE' } });
+    const after = await transport.request('thread/loaded/list', {});
+    assert.ok(!after.data.includes(rootS.threadId), 'FOREIGN_ROOT_MUST_BE_REMOVED_TO_CONFIRM_GAP');
+    assert.ok(after.data.includes(rootA.threadId) && after.data.includes(childThread));
+    assert.equal(held.get('CHILD_A').closed, false);
+    const persisted = (await transport.request('thread/read', { threadId: rootA.threadId, includeTurns: true })).thread;
+    assert.deepEqual(persisted.turns.find(turn => turn.id === probe.id).items.filter(item => item.type === 'agentMessage').map(item => item.text), ['FOREIGN_CLOSE_RETURNED']);
+    report.foreignClose = { unsafeCrossRootCloseObserved: true, sourceThread: rootA.threadId,
+      sourceTurn: probe.id, targetThread: rootS.threadId, targetPreviouslyLoaded: true,
+      targetRemoved: true, foreignCompletionTextReturned: true, ownChildStillActive: true, automaticRootReactivationProved: false };
+  }
   const childTurn = active.get(childThread); await interrupt(childThread, childTurn);
   await wait(() => held.get('CHILD_A').closed, 'CHILD_HTTP_CLOSED');
   assert.equal(active.size, 0); assert.deepEqual(raw.failures, []);
-  assert.equal(modelRequests, 7);
+  assert.equal(modelRequests, foreignClose ? 9 : 7);
   report.cleanup = { interrupted: { threadId: childThread, turnId: childTurn }, activeTurns: 0, heldRequests: held.size,
     closedHeldRequests: [...held.values()].filter(row => row.closed).length };
   report.status = 'passed';

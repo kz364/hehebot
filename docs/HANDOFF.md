@@ -13,6 +13,17 @@ work with OWNER_BACKGROUND_AUTHORITY_UNVERIFIED.24 focused tests pass after the
 full combined run. Do not remove this gate based on earlier scripted success.
 Details/citations: OWNER_BACKGROUND_NATIVE.md#cross-root-authority-blocker.
 
+V1 gap now behaviorally confirmed with optional native --foreign-close mode.
+Host-started second turn on selected A calls advertised close_agent with target
+set to actual S UUID. Loaded S disappears; tool result returns S's completed
+text; A and its held child remain loaded. Nine requests, persisted output,
+config unchanged, exact child interruption and process exit pass. Default mode
+still passes seven requests. Logs `.local/owner-background-foreign-close-final.log`
+and `.local/owner-background-default-after-probe.log`. Initial wrong id argument
+failed for missing target; not containment evidence. At max_depth1 direct child
+has no collaboration tools; caller is A. No automatic reactivation/ID discovery/
+integrated exploit claim. V2 worker received these findings; assignment unchanged.
+
 Active [V2 native worker](https://ampcode.com/threads/T-01a0ab2c-d340-7198-8811-fbb800f5ed2c)
 owns only new scripts/test-codex-owner-background-v2.mjs and
 docs/OWNER_BACKGROUND_V2_NATIVE.md. It uses the existing79d93fd bundle plus host
