@@ -98,9 +98,22 @@ including spawn ([spec_plan.rs lines 637–652](https://github.com/openai/codex/
 The upstream residency test explicitly spawns worker-2 after evicting worker-1
 ([residency_tests.rs lines 22–68](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control/residency_tests.rs#L22-L68)).
 
-Thus the tested pin has no supported mandatory descendant tool veto, V2 depth
-limit, or cumulative logical-child quota implementing the current direct-child
-policy. Registry isolation is useful evidence, but adopting arbitrary V2 trees
-would require different custody/lifecycle handling and a reviewed policy change.
-Keep `OWNER_BACKGROUND_AUTHORITY_UNVERIFIED`; do not substitute role prompts,
-fixture-only metadata, or an idle-residency limit for an enforced boundary.
+The absence of a role veto or explicit V2 depth field does **not** establish
+absence of an enforced depth bound. Host follow-through challenged that inference:
+the total cap2 becomes one non-root slot, shared across the tree through
+`Arc<V2Residency>` ([control.rs lines 124–147](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control.rs#L124-L147)).
+Spawn reserves before creation ([control/spawn.rs lines 616–654](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control/spawn.rs#L616-L654));
+an executing child cannot be evicted because unload requires terminal status,
+no active turn and no pending mailbox ([residency.rs lines 233–239](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control/residency.rs#L233-L239)).
+Atomic pending-slot accounting prevents competing reservations from taking the
+same slot. Child model/role overrides cannot increase the inherited cap.
+
+This supports an effective depth-one invariant even when the child advertises
+V2 collaboration: its own live residency exhausts the sole child slot. It remains
+source-supported pending a native fixture with V2-capable child metadata. The
+initial fixture's unsupported-tool result alone does not test this mechanism.
+The worker is testing that case and positive sequential child replacement next.
+Lifetime logical-child count remains unbounded by residency; all evicted children
+still require custody/lifecycle accounting. Keep `OWNER_BACKGROUND_AUTHORITY_UNVERIFIED`
+until this native evidence and service integration are reviewed. Do not substitute
+role prompts or fixture-only metadata for enforcement.

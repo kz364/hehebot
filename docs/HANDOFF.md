@@ -31,10 +31,14 @@ Host syntax/native run passes23 loopback requests; actual S foreign-target denia
 same-tree positive calls, independent S response and zero-active-turn cleanup.
 All3 held responses close, native stops, config unchanged. Evidence:
 `.local/owner-background-v2-host.json`; details OWNER_BACKGROUND_V2_NATIVE.md.
-Do not adopt V2 yet: child model metadata can enable recursive tools, roles cannot
-disable multi_agent_v2/agents.enabled, and residency eviction allows more logical
-children. No supported config supplies current model-independent direct-child
-policy. Live authority gate remains. No worker is active and no live session runs.
+Do not adopt V2 yet. Correction after host challenged source analysis: although
+child metadata can enable recursive tools and roles cannot disable V2, shared
+cap2 residency may itself enforce depth1. A live child occupies the sole non-root
+slot and cannot be evicted. No lifetime logical-child quota follows from this.
+The same V2 worker is active again, owning only its existing script, to prove actual
+capacity denial with a V2-capable child catalog and sequential idle replacement.
+It will deliver a followup patch relative to its first script. Host owns docs;
+no other worker or live session runs. Keep live authority gate closed.
 
 Current wave: fixed cross-scope background-summary leakage in ControlCore.context.
 Exact captured scope filters before LIMIT30; unknown legacy scope is omitted.
@@ -79,14 +83,23 @@ Absence preserves exact old behavior/serialization. Both integration workers are
 `.local/owner-background-base.bundle` is the pre-scope-fix base intentionally;
 neither worker owns ControlCore.context or shared docs.
 
-Next: exact-turn provisional-output recovery is an independent P0.4 local gap.
-CodexAdapter.#reconcileHistory currently recovers statuses but ignores persisted
-agentMessage output after a missed notification. Recover only exact acknowledged
-turns, preserve versions/digests and reject ambiguous history atomically; never
-replay inference, infer settlement or automatically restart the live runtime.
-Root-only alpha remains usable; V2 requires a supported boundary or separately
-reviewed tree-policy/lifecycle design. Preserve all old sessions. No live
-background session has run and no production gate changed.
+Exact-turn provisional-output recovery is implemented locally: completed turns
+recover bounded digests/previews; other statuses do not freeze partial messages.
+History must contain every known message before replacing the preview; conflicting
+digests/duplicate IDs reject atomically. No new clocks, inference replay, effect
+settlement or sleep permission.67 focused adapter/event and11 SQLite task-control
+tests passed, plus native root/child/cold-output recovery. Combined initially
+failed the steering fixture's stale no-preview-change expectation; updated exact
+child text/digest/version assertion passes. Final combined run passed1,298
+control/387 runtime and all native/browser/service checks, then failed build on
+test-only undeclared adapter.rpc assignment. Replaced with public-constructor
+reopen;11 targeted tests plus build/typecheck/dry run pass afterward. Desktop16/16
+passes. Full command not repeated after test-only correction; retain both failure
+logs and `.local/output-recovery-{control,build}-final.log`. Four added boundary
+tests cover failed/interrupted output exclusion and1024/1025 tracking limits.
+Next: integrate V2 capacity/lifecycle evidence, not arbitrary live restart.
+Recovery-only alpha assembly still needs a safe stopped-executor boundary.
+Preserve old sessions. No live background or production gate change.
 
 Continuation: the owner-access session expired with zero admitted tasks/runs/previews
 (`.local/owner-alpha-access-session/expiry-readback.json`), nativeStopped:true.

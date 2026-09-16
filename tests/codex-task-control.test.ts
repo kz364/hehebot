@@ -55,6 +55,38 @@ async function spawn(thread: string, receiver: string) {
   await adapter.observe('native', { method: 'turn/started', params: { threadId: receiver, turn: { id: 'turn', status: 'inProgress' } } });
 }
 
+it('publishes recovered exact root and child replies once without changing task custody', async () => {
+  life.submitted(identity, parentId, 1, 'turn');
+  await spawn('root', 'child-a');
+  const tasks = mapper(), mapped = await tasks.sync();
+  const childId = mapped['["child-a","turn"]'].runId;
+  const runs = f.db.all('SELECT * FROM runs'), attempts = f.db.all('SELECT * FROM attempts');
+  adapter = new CodexAdapter({ journal: new FileJournal(directory), cwd: directory, rpc: async (method: string, params: any) => {
+    expect(method).toBe('thread/read');
+    return { thread: { id: params.threadId,
+      ...(params.threadId === 'child-a' ? { source: { subAgent: { thread_spawn: { parent_thread_id: 'root' } } } } : {}),
+      turns: [{ id: 'turn', status: 'completed', items: [{ id: 'message', type: 'agentMessage',
+        text: params.threadId === 'root' ? 'Recovered root reply' : 'Recovered child reply', phase: 'final_answer' }] }] } };
+  } });
+  await adapter.reconcile('native');
+  await adapter.reconcileChild('native', { threadId: 'child-a', turnId: 'turn' });
+  let publications = 0;
+  const request = tasks.control.request;
+  tasks.control.request = async (method: string, params: any) => {
+    if (method === 'output-preview') publications++;
+    return request(method, params);
+  };
+  await tasks.publishOutputs();
+  await tasks.publishOutputs();
+  expect(publications).toBe(2);
+  const previews = new OutputPreviews(f.store, () => f.core.now());
+  expect(previews.read(parentId, 1)?.text).toBe('Recovered root reply');
+  expect(previews.read(childId, 1)?.text).toBe('Recovered child reply');
+  expect(f.db.all('SELECT * FROM runs')).toEqual(runs);
+  expect(f.db.all('SELECT * FROM attempts')).toEqual(attempts);
+  expect(adapter.sleepReadiness().allowed).toBe(false);
+});
+
 it('publishes exact root/child messages with lost-ack replay and cancellation fencing, never settling work',async()=>{
  life.submitted(identity,parentId,1,'turn');
  await spawn('root','child-a');await spawn('root','child-b');const tasks=mapper(),mapped=await tasks.sync();

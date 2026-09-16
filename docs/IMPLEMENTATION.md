@@ -4,6 +4,29 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Missed-output recovery (2026-09-16): exact acknowledged completed-turn history now
+restores bounded provisional message digests/previews in one journal update.
+In-progress/failed/interrupted turns cannot freeze partial text; missing known
+messages retain the prior preview, duplicate IDs/conflicting digests reject before
+writing, and identical readback is a no-op. History adds no activity clocks and
+does not settle tools/effects/descendants or permit sleep. Two initial regressions
+failed before the change;67 focused adapter/event tests and11 SQLite task-control
+tests then passed. Root/child previews publish once without changing run/attempt
+custody. Native fixtures recover exact root output, child final output after an
+earlier preview, and missing output from disk after a controlled native restart.
+Logs `.local/output-recovery-{red,focused,control,steering,native-final}.log`.
+The first combined run passed1,298 control/383 runtime tests but correctly exposed
+the steering fixture's old expectation that history never changes preview content.
+That expectation now requires the exact final child message/digest/version while
+preserving all other custody. The final combined run passed1,298 control/387
+runtime and all native/browser/service checks, then failed the final build on the
+new test assigning an undeclared adapter.rpc property. The test now reopens via
+the public constructor;11 targeted tests and build/typecheck/dry run pass in
+`.local/output-recovery-{control,build}-final.log`. Desktop16/16 also passes.
+The full combined command was not repeated after this test-only correction;
+both unsuccessful full logs are retained. This does not enable automatic live
+restart or add a recovery-only owner-alpha entrypoint.
+
 Opt-in integration / authority blocker (2026-09-16): the runtime accepts a true-only
 `background_first_root` policy and consumes only an exact persisted claim marker,
 not model text or family order. Submission captures the marker before awaits and
@@ -36,12 +59,13 @@ foreign S UUID denied for message/followup/interrupt, positive same-tree control
 independent S completion, zero active turns and all3 held responses closed.
 Config bytes remain unchanged; `.local/owner-background-v2-host.json` retains
 host evidence. [V2 decision](OWNER_BACKGROUND_V2_NATIVE.md) records why child-role
-overrides cannot supply the missing model-independent depth boundary and why
-residency is not a logical-child quota. It is not adopted. No live session used
+overrides cannot disable V2, but shared cap2 residency may itself enforce depth1:
+an executing child occupies the only non-root slot and cannot be evicted. That
+source-supported correction is pending a native V2-capable child-catalog fixture.
+Residency is not a logical-child quota. It is not adopted. No live session used
 background mode, no provider/account/production action occurred, and default
-root-only alpha is unchanged. Next independent P0.4 work is recovering exact-turn
-provisional output missed before journal persistence, without replay or automatic
-restart; existing reconciliation handles statuses, not agent messages.
+root-only alpha is unchanged. Exact-turn output recovery is implemented above;
+safe live replacement and recovery-only assembly remain separate prerequisites.
 
 Background scope and native prerequisite (2026-09-16): task summaries previously
 selected every same-persona background title, including private titles for a room

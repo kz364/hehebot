@@ -434,6 +434,32 @@ export class CodexAdapter {
       if (prior !== 'inProgress' && prior !== turn.status) fail('SETTLEMENT_CONFLICT');
       const owner = child ? row.childObligations?.[key] ?? {} : row;
       const recovered = {};
+      // Only successful terminal history has final message text. In-progress or
+      // interrupted streams cannot establish an immutable output digest.
+      if (turn.status === 'completed') {
+        const messages = (turn.items ?? []).filter(item => item?.type === 'agentMessage');
+        const seen = owner.outputItems ?? {}, history = Object.create(null);
+        let added = 0, last;
+        for (const item of messages) {
+          if (typeof item.id !== 'string' || !item.id || item.id.length > 256) fail('CODEX_PROTOCOL_ERROR');
+          if ((turn.items ?? []).filter(candidate => candidate?.id === item.id).length !== 1) fail('RECONCILIATION_INCOMPLETE');
+          const message = projectOutputMessage(item);
+          if (Object.hasOwn(seen, item.id)) {
+            if (seen[item.id] !== message.outputDigest) fail('OUTPUT_MESSAGE_CONFLICT');
+          } else added++;
+          history[item.id] = message.outputDigest;
+          last = message;
+        }
+        // An omitted known message makes the snapshot insufficient to replace
+        // the latest preview. Validate first; never partially persist history.
+        if (added && Object.keys(seen).every(id => Object.hasOwn(history, id))) {
+          if (observationOwners(row).reduce((n, value) => n + Object.keys(value.outputItems ?? {}).length, 0) + added > 1024 ||
+              !owner.outputPreview && observationOwners(row).filter(value => value.outputPreview).length >= 101) fail('OUTPUT_TRACKING_LIMIT');
+          recovered.outputItems = { ...seen, ...history };
+          recovered.outputPreview = { version: (owner.outputPreview?.version ?? 0) + added,
+            text: last.text, truncated: last.truncated };
+        }
+      }
       for (const [field, type] of Object.entries({ commands: 'commandExecution', mcpCalls: 'mcpToolCall',
         dynamicCalls: 'dynamicToolCall', fileChanges: 'fileChange' })) {
         const values = { ...owner[field] }; let changed = false;
@@ -462,8 +488,8 @@ export class CodexAdapter {
         if (child) patch.childObligations = { ...row.childObligations, [key]: { ...owner, ...recovered } };
         else Object.assign(patch, recovered);
       }
-      // No new items, statusless-tool inference, descendant census, or effect
-      // settlement. Identical readback produces no journal write.
+      // No new tool obligations, statusless-tool inference, descendant census,
+      // effect settlement or progress clocks. Identical readback does not write.
       return Object.keys(patch).length ? this.journal.update(attemptId, patch) : row;
     });
     this.#observations = next.catch(() => {});

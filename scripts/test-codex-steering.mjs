@@ -211,15 +211,21 @@ try {
   const recoveryJournal = new FileJournal(join(directory, 'recovery-journal'));
   const beforeChildTerminal = await adapter.requireRun(attemptId);
   await recoveryJournal.putIfAbsent(attemptId, beforeChildTerminal);
-  send(childNext.res, message('CHILD_FINISHED'));
+  const finalChildMessage = message('CHILD_FINISHED');
+  send(childNext.res, finalChildMessage);
   await wait(() => terminal.has(JSON.stringify([child.threadId, child.turnId])), 'CHILD_TERMINAL'); await router.flush();
   const recovery = new CodexAdapter({ rpc: async (method, params) => {
     assert.equal(method, 'thread/read'); return transport.request(method, params);
   }, journal: recoveryJournal, cwd });
   const recovered = await recovery.reconcileChild(attemptId, child);
   check('read-only reopened child history restores a missed terminal event with exact native parent and leaves sibling live', () => {
+    const childKey = JSON.stringify([child.threadId, child.turnId]);
+    const priorChild = beforeChildTerminal.childObligations[childKey];
     assert.deepEqual(recovered, { ...beforeChildTerminal, childTurns: { ...beforeChildTerminal.childTurns,
-      [JSON.stringify([child.threadId, child.turnId])]: 'completed' } });
+      [childKey]: 'completed' }, childObligations: { ...beforeChildTerminal.childObligations,
+      [childKey]: { ...priorChild, outputItems: { ...priorChild.outputItems,
+        [finalChildMessage[0].id]: sha(JSON.stringify(['CHILD_FINISHED', null])) },
+        outputPreview: { version: 2, text: 'CHILD_FINISHED', truncated: false } } } });
     siblingUnchanged(sibling, siblingHash); assert.equal(recovery.sleepReadiness().allowed, false);
   });
   assert.deepEqual(await reopened().steerChild(attemptId, child, childInstruction), childAccepted);

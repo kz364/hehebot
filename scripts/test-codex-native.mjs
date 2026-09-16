@@ -230,6 +230,9 @@ try {
     rpc: (method, params) => { assert.equal(method, 'thread/read'); return transport.request(method, params); } });
   const recovered = await recovery.reconcile('recovery-proof');
   assert.equal(recovered.rootSettled, true); assert.equal(recovered.nativeOutcome, 'completed');
+  assert.deepEqual(recovered.outputPreview, { version: 1, text: `${marker}:${payload}`, truncated: false });
+  assert.deepEqual(await recovery.reconcile('recovery-proof'), recovered);
+  report.missedOutputRecovered = true;
   assert.equal(recovery.sleepReadiness().allowed, false);
   report.readOnlyRootRecovery = true;
 
@@ -382,6 +385,9 @@ try {
 
   // A new native process must recover disk-backed history, not a live server cache.
   // EOF after observed unload, without sending a termination signal.
+  await new FileJournal(journalPath).putIfAbsent('cold-output-proof', {
+    threadId, nativeRunId: turn.turn.id, status: 'running', rootSettled: false,
+  });
   transport.child.stdin.end();
   await waitFor(() => transport.child.exitCode !== null || transport.child.signalCode !== null, 'native restart stop', 5000);
   assert.equal(transport.child.exitCode, 0); assert.equal(transport.child.signalCode, null);
@@ -398,6 +404,9 @@ try {
   const restartedAdapter = new CodexAdapter({ cwd: workspace, journal: restartedJournal,
     rpc: (method, params) => { assert.equal(method, 'thread/read'); return transport.request(method, params); } });
   assert.equal((await restartedAdapter.reconcile('recovery-proof')).nativeOutcome, 'completed');
+  assert.deepEqual((await restartedJournal.get('recovery-proof')).outputPreview, recovered.outputPreview);
+  assert.deepEqual((await restartedAdapter.reconcile('cold-output-proof')).outputPreview, recovered.outputPreview);
+  report.coldMissedOutputRecovered = true;
   assert.equal((await restartedAdapter.reconcile('background-proof')).commands[commandAtRoot.id], 'completed');
   assert.equal((await restartedJournal.get('background-missed-proof')).commands[commandAtRoot.id], 'inProgress');
   assert.equal((await restartedAdapter.reconcile('background-missed-proof')).commands[commandAtRoot.id], 'completed');

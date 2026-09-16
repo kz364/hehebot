@@ -371,6 +371,88 @@ test('reopened adapter recovers only the exact acknowledged turn without replay 
   assert.equal(calls.length, 4);
 });
 
+test('terminal exact-turn history recovers missed output without replay, clocks or sleep permission', async t => {
+  const { adapter, journal, cwd } = await fixture(t);
+  await adapter.submit(input);
+  const calls = [];
+  const items = [
+    { id: 'first', type: 'agentMessage', text: 'Earlier commentary', phase: 'commentary' },
+    { id: 'last', type: 'agentMessage', text: 'Recovered provisional reply', phase: 'final_answer' },
+  ];
+  const restored = new CodexAdapter({ cwd, journal: new FileJournal(cwd), rpc: async (method, params) => {
+    calls.push(method); assert.deepEqual(params, { threadId: 'thread-a', includeTurns: true });
+    return { thread: { id: 'thread-a', turns: [
+      { id: 'newer-unrelated', status: 'completed', items: [{ id: 'wrong', type: 'agentMessage', text: 'DO NOT ADOPT' }] },
+      { id: 'turn-b', status: 'completed', items },
+    ] } };
+  } });
+  const recovered = await restored.reconcile(input.attemptId);
+  assert.deepEqual(recovered.outputPreview, { version: 2, text: 'Recovered provisional reply', truncated: false });
+  assert.deepEqual(Object.keys(recovered.outputItems), ['first', 'last']);
+  assert.equal(recovered.operationTimes, undefined);
+  assert.equal(recovered.quietPhases, undefined);
+  assert.equal(restored.sleepReadiness().allowed, false);
+  const update = restored.journal.update.bind(restored.journal);
+  restored.journal.update = () => assert.fail('identical history must not write');
+  assert.deepEqual(await restored.reconcile(input.attemptId), recovered);
+  restored.journal.update = update;
+  assert.deepEqual(await journal.get(input.attemptId), recovered);
+  assert.deepEqual(calls, ['thread/read', 'thread/read']);
+});
+
+test('history cannot freeze partial output or regress an existing preview with omitted/conflicting items', async t => {
+  const { adapter, journal } = await fixture(t);
+  await adapter.submit(input);
+  let turn = { id: 'turn-b', status: 'inProgress', items: [{ id: 'stream', type: 'agentMessage', text: 'partial' }] };
+  adapter.rpc = async method => { assert.equal(method, 'thread/read'); return { thread: { id: 'thread-a', turns: [turn] } }; };
+  const before = await journal.get(input.attemptId);
+  assert.deepEqual(await adapter.reconcile(input.attemptId), before);
+  const live = { id: 'live', type: 'agentMessage', text: 'Already visible', phase: 'final_answer' };
+  await adapter.observe(input.attemptId, { method: 'item/completed', params: { threadId: 'thread-a', turnId: 'turn-b', item: live } });
+  turn = { ...turn, status: 'completed', items: [{ id: 'old', type: 'agentMessage', text: 'Older omitted snapshot' }] };
+  const retained = await adapter.reconcile(input.attemptId);
+  assert.equal(retained.outputPreview.text, 'Already visible');
+  assert.equal(retained.outputPreview.version, 1);
+  assert.deepEqual(Object.keys(retained.outputItems), ['live']);
+  for (const items of [[live, { ...live }], [{ ...live, text: 'Conflicting text' }],
+    [live, { id: '', type: 'agentMessage', text: 'bad id' }]]) {
+    turn.items = items;
+    await assert.rejects(adapter.reconcile(input.attemptId));
+    assert.deepEqual(await journal.get(input.attemptId), retained);
+  }
+  turn.items = [{ id: 'old', type: 'agentMessage', text: 'Earlier' }, live,
+    { id: 'final', type: 'agentMessage', text: 'Later final reply' }];
+  const recovered = await adapter.reconcile(input.attemptId);
+  assert.deepEqual(recovered.outputPreview, { version: 3, text: 'Later final reply', truncated: false });
+});
+
+for (const status of ['failed', 'interrupted']) test(`${status} history does not freeze partial message text`, async t => {
+  const { adapter } = await fixture(t);
+  await adapter.submit(input);
+  adapter.rpc = async () => ({ thread: { id: 'thread-a', turns: [{ id: 'turn-b', status,
+    items: [{ id: 'partial', type: 'agentMessage', text: 'unfinished text' }] }] } });
+  const recovered = await adapter.reconcile(input.attemptId);
+  assert.equal(recovered.nativeOutcome, status);
+  assert.equal(recovered.outputPreview, undefined);
+  assert.equal(recovered.outputItems, undefined);
+});
+
+for (const count of [1024, 1025]) test(`history output limit is atomic at ${count} messages`, async t => {
+  const { adapter, journal } = await fixture(t);
+  await adapter.submit(input);
+  const before = await journal.get(input.attemptId);
+  adapter.rpc = async () => ({ thread: { id: 'thread-a', turns: [{ id: 'turn-b', status: 'completed',
+    items: Array.from({ length: count }, (_, id) => ({ id: `message-${id}`, type: 'agentMessage', text: `Reply ${id}` })) }] } });
+  if (count === 1025) {
+    await assert.rejects(adapter.reconcile(input.attemptId), { code: 'OUTPUT_TRACKING_LIMIT' });
+    assert.deepEqual(await journal.get(input.attemptId), before);
+  } else {
+    const recovered = await adapter.reconcile(input.attemptId);
+    assert.deepEqual(recovered.outputPreview, { version: 1024, text: 'Reply 1023', truncated: false });
+    assert.equal(Object.keys(recovered.outputItems).length, 1024);
+  }
+});
+
 test('missing or duplicate history and lost submission acknowledgment cannot be guessed', async t => {
   const { adapter, journal } = await fixture(t);
   await adapter.submit(input);
