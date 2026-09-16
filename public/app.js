@@ -163,7 +163,7 @@ function render(){
  }if(!$('routines').children.length)$('routines').append(node('p','No routines for this bot yet.','muted'));
  $('add-routine').disabled=object?.kind!=='persona';
  $('memories').replaceChildren();for(const m of items('memory').filter(x=>x.body.scope.kind==='global'||x.body.scope.kind==='persona'&&x.body.scope.id===selected)){
-  const card=node('div',undefined,'card');card.append(node('span',m.body.scope.kind==='global'?'Shared preference':'Bot memory','status'),node('p',m.body.text));const actions=node('div',undefined,'actions');actions.append(button('Edit',()=>editMemory(m)),button('Forget',()=>act(()=>command('memory.delete',{id:m.id,expected_revision:m.revision,purge_transcripts:false})),'danger'));card.append(actions);$('memories').append(card);
+  const card=node('div',undefined,'card');card.append(node('span',m.body.scope.kind==='global'?'Shared preference':'Bot memory','status'),node('p',m.body.text));const actions=node('div',undefined,'actions');const forget=button('Forget',()=>deleteMemory(m),'danger');forget.dataset.action='delete-memory';forget.disabled=$('connection').textContent!=='Connected'||!navigator.onLine;actions.append(button('Edit',()=>editMemory(m)),forget);card.append(actions);$('memories').append(card);
  }if(!$('memories').children.length)$('memories').append(node('p','Save preferences you want your bots to remember.','muted'));
 }
 function renderTaskStrip(){
@@ -491,6 +491,25 @@ function routineSchedulePicker(schedule,defaultZone){
  if(schedule&&schedule.timezone!==defaultZone)element.append(node('p',`This routine uses ${schedule.timezone}, not the installation default ${defaultZone}. Saving does not silently change it.`,'review-notice'));
  element.append(previewButton,output);element.addEventListener('input',invalidate);element.addEventListener('change',invalidate);invalidate();
  return {element,reviewed:()=>{const current=read();if(approved!==JSON.stringify(current))throw new Error('Preview the current schedule before saving.');return current;}};
+}
+function deleteMemory(object){
+ const original=structuredClone(object),owner=selected,version=selectionVersion,identity=current(),identityRevision=identity?.revision,key=crypto.randomUUID();
+ const payload={id:original.id,expected_revision:original.revision,purge_transcripts:false},affirmation=node('label',undefined,'check'),check=node('input');check.type='checkbox';check.name='confirm';check.required=true;
+ affirmation.append(check,document.createTextNode('I confirm forgetting this exact memory.'));
+ $('editor').classList.add('roster-editor');
+ openEditor('Forget this memory',[
+  node('p',original.body.text,'message-body'),
+  node('p',`Memory ${original.id} · revision ${original.revision} · ${original.body.scope.kind==='global'?'Shared with all bots':`Bot ${original.body.scope.id}`}`,'hint message-body'),
+  node('p','This purges current and prior canonical memory text. Queued contexts containing this memory are invalidated; cancellation is requested for active contexts. Cancellation is not confirmed, and recovery may still be required.','review-notice'),
+  node('p','Past conversations and completed task copies may remain. Native transcript cleanup is not requested. Native transcripts, backups and third-party copies are not proven removed. This does not undo external actions or forget this information everywhere.','hint'),
+  node('p','A lost reply may still mean deletion succeeded. Only an explicit retry sends the same deletion with the same key. If the memory changed or disappeared, close and refresh; no retry is sent automatically.','hint'),affirmation
+ ],form=>{
+  const latest=items('memory').find(row=>row.id===original.id),currentIdentity=current();
+  if($('connection').textContent!=='Connected'||!navigator.onLine||selected!==owner||selectionVersion!==version||!identity||!currentIdentity||currentIdentity.deleted_at||currentIdentity.body.archived||currentIdentity.revision!==identityRevision||!latest||latest.deleted_at||latest.revision!==original.revision||latest.body.scope?.kind!==original.body.scope.kind||latest.body.scope?.id!==original.body.scope.id)throw new Error('Changed or offline. Close and refresh before forgetting.');
+  if(form.get('confirm')!=='on')throw new Error('Confirm deletion of this exact memory.');
+  $('editor-form').querySelector('button[type="submit"]').textContent='Retry same deletion';
+  return command('memory.delete',payload,key);
+ },'Forget memory');
 }
 function editMemory(object){
  const owner=selected,version=selectionVersion,persona=items('persona').find(row=>row.id===owner),original=object?structuredClone(object):null;
