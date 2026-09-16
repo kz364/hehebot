@@ -4,6 +4,19 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Disabled-admission retry checkpoint (2026-09-16): `retryDue` previously deleted a
+due retry even when execution was disabled, leaving waiting work without its timer.
+It now retains that timer until admission reopens, while still removing stale timers
+for cancelled work and moving unresolved-question work to recovery. Both new tests
+failed before the fix. Focused recovery/lifecycle: 66 passed
+(`.local/disabled-retry-focused.log`; red evidence `.local/disabled-retry-red.log`).
+Tests verify repeated reconciliation preserves timer/run/lifecycle, cancellation
+prevents revival and re-enablement advances queue sequence/attempt exactly once.
+Worker alarm scheduling already excludes disabled retries; retaining them adds no
+retry alarm loop. Combined verification passed 919 control / 251 runtime tests,
+native/service fixtures and typecheck/build dry run (`.local/disabled-retry-combined.log`).
+This is local retry custody, not native recovery or live provider acceptance.
+
 Terminal-cancellation follow-up checkpoint (2026-09-16): cancelling queued/waiting
 work now invokes the existing descendant-settlement-aware follow-up flush. Earlier
 pending follow-ups otherwise remained stranded, unlike follow-ups submitted after

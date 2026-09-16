@@ -12,6 +12,25 @@ function running(){
  return {life,identity,runId:claim.run.id};
 }
 describe('bounded recovery',()=>{
+ it.each([false,true])('retains a due retry while admission is disabled without reviving cancelled work: cancel=%s',cancel=>{
+  const {life,identity,runId}=running();
+  life.complete(identity,runId,1,{status:'failed',text:'Transient fixture',error_code:'TEMPORARY_UNAVAILABLE'});
+  const timer=f.db.all('SELECT * FROM retry_queue'),run=f.store.run(runId),state=life.get();
+  f.core.options.executionEnabled=false;
+  f.setNow('2026-09-10T08:00:10.000Z');life.retryDue();
+  f.setNow('2026-09-10T08:00:20.000Z');life.retryDue();
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual(timer);
+  expect(f.store.run(runId)).toEqual(run);expect(life.get()).toEqual(state);
+  if(cancel){
+   expect(f.accept({schema_version:1,type:'run.cancel',payload:{run_id:runId,reason:'No retry'}}).status).toBe('applied');
+   life.retryDue();expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+  }
+  f.core.options.executionEnabled=true;life.retryDue();life.retryDue();
+  expect(f.store.run(runId).status).toBe(cancel?'cancelled':'queued');
+  expect(life.get().queue_sequence).toBe(state.queue_sequence+(cancel?0:1));
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+  expect(life.claim(identity)?.run.current_attempt??null).toBe(cancel?null:2);
+ });
  it('explicit retry replaces the old timer without shortening the next automatic backoff',()=>{
   const {life,identity,runId}=running();
   const failure={status:'failed' as const,text:'Retryable fixture',error_code:'TEMPORARY_UNAVAILABLE'};

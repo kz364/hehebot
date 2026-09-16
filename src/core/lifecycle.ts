@@ -181,7 +181,9 @@ export class LifecycleCore {
     const run=this.store.run(retry.run_id);
     if(run.status==='waiting'&&this.core.questions.list().some(question=>question.run_id===run.id)){
      this.store.db.exec("UPDATE runs SET status='recovery_required',error_code='NATIVE_QUESTION_UNRESOLVED',updated_at=? WHERE id=?",this.core.now(),run.id);
-    }else if(run.status==='waiting'&&this.core.options.executionEnabled){
+    }else if(run.status==='waiting'){
+     // Disabled admission pauses the timer; it must not discard durable work.
+     if(!this.core.options.executionEnabled)continue;
      this.store.db.exec("UPDATE runs SET status='queued',updated_at=? WHERE id=?",this.core.now(),run.id);
      this.store.db.exec("UPDATE lifecycle SET queue_sequence=queue_sequence+1,desired_state='RUN',phase=CASE WHEN phase='DRAINING' THEN 'READY' ELSE phase END,stop_token=CASE WHEN phase='DRAINING' THEN NULL ELSE stop_token END,wake_after_stop=CASE WHEN phase IN ('STOP_COMMITTED','STOPPING') THEN 1 ELSE wake_after_stop END WHERE singleton=1");
     }

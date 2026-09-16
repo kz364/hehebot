@@ -2,6 +2,17 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Disabled-admission retry checkpoint (2026-09-16)
+
+Due automatic retries now survive disabled execution instead of losing their timer.
+Cancelled work still discards stale retry entries; re-enablement queues once.
+Two red/green regression cases and the focused recovery/lifecycle suite passed
+66 tests (`.local/disabled-retry-focused.log`). Combined verification passed 919
+control / 251 runtime tests, native/service fixtures and typecheck/build dry run
+(`.local/disabled-retry-combined.log`). Existing Worker alarm filtering prevents
+disabled retry polling. Full recovery and other credential-free work remain open;
+no provider use or gate changes, schedule unchanged.
+
 ## Terminal-cancellation follow-up checkpoint (2026-09-16)
 
 Owner cancellation of queued/waiting work now checks pending follow-ups through
