@@ -4,6 +4,44 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+Current wave: fixed cross-scope background-summary leakage in ControlCore.context.
+Exact captured scope filters before LIMIT30; unknown legacy scope is omitted.
+Two new SQLite regressions and all1,281 control tests/typecheck pass; restricted
+background native/service still passes with original families/unknowns retained.
+New test-codex-owner-background.mjs passes seven scripted native requests, actual
+second-child/grandchild/default-root spawn denials, persisted independent status
+reply while direct child is held, exact interruption/exit and unchanged config.
+See OWNER_BACKGROUND_NATIVE.md. Combined verifier includes it and passed1,281
+control/364 runtime plus all native/browser/service/build gates, exit0 in
+`.local/background-scope-combined-retry.log`. First attempt retained EADDRINUSE
+in a tool fixture before inference. Existing live sessions remain stopped.
+
+Active isolated workers, both based on host unpublished main79d93fd bundle:
+- [Control](https://ampcode.com/threads/T-01a0ab14-10bd-75eb-9af9-cf0db2cf434f)
+  owns owner-alpha/lifecycle/native-task/runtime types/Worker and focused tests.
+- [Runtime](https://ampcode.com/threads/T-01a0ab14-c3e5-70da-9831-09c963d2c317)
+  owns policy/bridge/adapter/service and runtime tests.
+Host owns scripts/test-codex-service.mjs new --owner-alpha-background mode, not
+yet run against integrated changes. Agreed optional policy is
+`background_first_root:true`; selected first claim alone carries
+`owner_alpha_background:true`, mapped to submit `ownerAlphaBackground:true`.
+Absence preserves exact old behavior/serialization. Both workers will upload
+owned-file patches and report; do not duplicate their assignments. Bundle
+`.local/owner-background-base.bundle` is the pre-scope-fix base intentionally;
+neither worker owns ControlCore.context or shared docs.
+
+Next P0 implementation: explicit opt-in immutable policy selecting only the first
+durably admitted coordinator for V1 direct-child capability. Default alpha must
+remain root-only. The native cap is per root, so enabling every root is incorrect.
+Carry selection in a control-owned claim field, not runtime family ordering; bind
+it into native submission fingerprint. Child ledger observations need exact
+selected-parent ownership, same persona/deadline and durable restart validation;
+current alpha denies children and counts every attempt as an admitted root, so
+both checks need deliberate extension. Preserve late cancellation observations,
+unknown operations, all-family accounting and root-level read-MCP provenance.
+Do not infer a one-child-ever limit from the native concurrent-child cap or treat
+root completion as slot release. No live child capability is enabled by this wave.
+
 Continuation: the owner-access session expired with zero admitted tasks/runs/previews
 (`.local/owner-alpha-access-session/expiry-readback.json`), nativeStopped:true.
 Gateway/Worker stopped on their deadline at15:54:33Z with stopConfirmed:true;

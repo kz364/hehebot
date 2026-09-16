@@ -4,6 +4,30 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Background scope and native prerequisite (2026-09-16): task summaries previously
+selected every same-persona background title, including private titles for a room
+or unrelated routine. They now filter by exact captured `scope_key` before LIMIT30,
+with deterministic ties and missing-scope legacy rows omitted. Two SQLite tests
+cover six asymmetric scopes and an older matching row behind31 unrelated rows,
+including no-write/lifecycle/attempt invariants. All1,281 control tests and
+typecheck pass (`.local/task-summary-scope-control.log`); the restricted service
+background fixture passes (`.local/task-summary-scope-native.log`) with three
+retained families, independent status/B, exact cancellation and sleep refusal.
+
+The [native background prerequisite](OWNER_BACKGROUND_NATIVE.md) now tests actual
+forbidden spawn calls rather than catalog absence. Seven loopback requests prove
+one selected V1 root can hold a direct child while a default root responds;
+second-child capacity and grandchild/default-root dispatch reject correctly.
+Persisted root messages, exact identities, interruption, closed held request,
+native exit and unchanged configuration are verified. The child cap is per root,
+not app-server-wide. This is not service admission or live child authorization;
+owner alpha remains root-only. Combined verification now includes this fixture;
+`.local/background-scope-combined-retry.log` exits0 with1,281 control/364 runtime
+and all native/browser/service/build checks. Initial run
+`.local/background-scope-combined.log` stopped at a tool-fixture EADDRINUSE before
+inference; retained separately, not suppressed. No live account/model, provider,
+production gate, push or deployment changes.
+
 Private follow-up continuity (2026-09-16): the delegated two-message root-only
 alpha fixture reproduced absence of first-task information in second-root input.
 ControlCore now captures bounded same-persona history before the current command
