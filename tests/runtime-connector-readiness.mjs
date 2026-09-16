@@ -85,6 +85,7 @@ test('pinned baseline names missing prerequisites and recent blocker even when d
     const claim = result.missing.join('\n');
     for (const required of [/Installation is not established/, /Node 24\+.*Chrome/, /private persistent LocalAuth/,
       /single-installation process\/descendant/, /Separately authorized QR pairing/, /Separate live selected-chat/,
+      /CLI unregisters successful-start signal handlers/, /graceful CLI shutdown and process-tree settlement remain unverified/,
       /structuredContent is an array; SDK 1\.30\.0 requires an object/, /Scoped search is not recent-history coverage/,
       /account\/platform terms/, /cost evidence/, /license.*review/, /Fresh Worker authorization/]) assert.match(claim, required);
     assert.match(result.evidenceScope, /no installed, paired or callable runtime/);

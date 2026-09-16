@@ -33,6 +33,15 @@ unknown and cannot replay. Fixture cleanup separately stops that descendant and
 checks its PID/start-time is no longer executing. No real plugin or browser starts;
 this negative contract does not verify a production process-tree supervisor.
 
+The pinned shutdown fixture exercises actual signal/destroy primitives with
+synthetic children and retains a disposable LocalAuth profile without logout.
+It does not prove graceful CLI shutdown: the pinned CLI unconditionally unregisters
+signal handlers in `finally`, including after successful ready/keep=true return.
+The five-second destroy fallback can return before browser termination, and
+concurrent destroy calls need not await each other. See
+[shutdown evidence](../../docs/WAPPMCP_SHUTDOWN.md). CLI lifecycle, descendant
+settlement and E09 completion remain unverified; no additional patch is authorized.
+
 Pins: wappmcp 0.4.0, source revision
 `9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8`; whatsapp-web.js exactly 1.34.7.
 The only approved patch is that revision's

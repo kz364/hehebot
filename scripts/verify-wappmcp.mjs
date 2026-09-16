@@ -11,6 +11,7 @@ import { runInNewContext } from 'node:vm';
 import { readWappMcp } from '../runtime/wappmcp-reads.mjs';
 import { verifyWappMcpSdk } from './test-wappmcp-sdk.mjs';
 import { verifyWappMcpStdio } from './test-wappmcp-stdio.mjs';
+import { verifyWappMcpShutdown } from './test-wappmcp-shutdown.mjs';
 
 const revision = '9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8';
 const pins = {
@@ -132,7 +133,8 @@ try {
   assert.deepEqual(await readFile(join(installedPlugin, 'dist/lib/mcp/helpers.js')), await readFile(join(plugin, 'dist/lib/mcp/helpers.js')));
   const sdk = await verifyWappMcpSdk(installation);
   const stdio = await verifyWappMcpStdio(installation);
-  console.log(JSON.stringify({ status: 'passed', scope: 'patch, read boundary and SDK positive/negative contracts', revision, hashes: Object.fromEntries(Object.entries(pins).map(([name, [, digest]]) => [name, digest])), lockedPackages: Object.keys(lock.packages).length - 1, disposableInstall: true, lifecycleScripts: false, licenseAuditComplete: false, cleanPatch: true, syntheticCompatibility: false, sdk, stdio, livePairing: false, installed: false, productionAdmission: false }));
+  const shutdown = await verifyWappMcpShutdown(installation);
+  console.log(JSON.stringify({ status: 'passed', scope: 'patch, read boundary and SDK/shutdown positive/negative contracts', revision, hashes: Object.fromEntries(Object.entries(pins).map(([name, [, digest]]) => [name, digest])), lockedPackages: Object.keys(lock.packages).length - 1, disposableInstall: true, lifecycleScripts: false, licenseAuditComplete: false, cleanPatch: true, syntheticCompatibility: false, sdk, stdio, shutdown, livePairing: false, installed: false, productionAdmission: false }));
 } finally {
   await rm(root, { recursive: true, force: true });
 }

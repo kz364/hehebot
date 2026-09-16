@@ -36,6 +36,7 @@
       "Node 24+ and Chrome/Chromium with verified headless operation",
       "One installation-owned private persistent LocalAuth profile and linked session shared across personas",
       "Supported host MCP integration and verified single-installation process/descendant lifecycle",
+      "Pinned CLI unregisters successful-start signal handlers; graceful CLI shutdown and process-tree settlement remain unverified",
       "Separately authorized QR pairing and persistent reconnect without logout on sleep",
       "Separate live selected-chat read/isolation and measured reconnect/history-gap coverage",
       "Current account/platform terms review for unofficial WhatsApp Web automation",
