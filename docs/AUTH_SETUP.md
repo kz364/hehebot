@@ -30,6 +30,35 @@ Cloudflare Worker using Access is rejected; do not remove that check or set
 production flags to make the trial start. The earlier orb trial is not a deployed
 Cloudflare/Sprite architecture.
 
+Access installations now persist an `installation_owner` binding in application
+`runtime_metadata` before seeding. It pins auth mode, installation ID, exact issuer,
+audience and owner subject. Reconstructing with a different binding, including a
+downgrade to local auth, fails with `OWNER_MIGRATION_REQUIRED`. Fresh invalid
+Access configuration writes nothing. Existing populated unbound databases cannot
+silently acquire a new owner; they require an explicit migration workflow, which
+is not implemented. Do not delete the binding to bypass this refusal. Existing
+unbound local installations remain unchanged. Application export/import retains
+the binding but still grants no restore activation authority.
+
+The smallest future hosted bounded mode should reuse the existing command,
+quota, deadline and native-custody paths, while making these changes explicit:
+
+- Bind the operator's expected owner/installation and exact control origin into
+  the runtime's fresh session intent and verify them against authenticated control
+  status before boot. A valid runtime bearer is not permission to select another
+  owner. Do not expose credentials in the status response.
+- Retain the owner-alpha no-replay/no-sleep/no-effects limits and immutable quota.
+  Keep this mode distinct from both local alpha and production; merely permitting
+  Access in the local parser is insufficient. No hosted mode is enabled today.
+- Require the existing Sprite activity guard instead of the local alpha's no-op
+  guard. Verify hold receipt/renewal before admission and reconcile a lost/expired
+  hold without restarting inference. A hold prevents idle freeze; it is not a
+  protected termination boundary or evidence of settlement.
+- Require supported sandbox/credential isolation on the actual provider and one
+  refresh owner. End the bounded trial with retained unknown obligations; do not
+  promise autonomous recovery or release holds as though root completion settled
+  descendants. Provider-specific behavior still needs authorized live evidence.
+
 Before requesting a concrete hosted deployment, prepare these inputs locally:
 
 | Input | Required review / current boundary |

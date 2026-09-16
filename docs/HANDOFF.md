@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+Newest hosted prerequisite: Worker Access data now binds auth mode, installation,
+issuer, audience and owner subject before seed. Drift/local downgrade or adopting
+populated unbound data rejects OWNER_MIGRATION_REQUIRED. Local alpha is unchanged;
+no hosted execution is enabled.65 focused tests pass, including actual DO startup,
+reconstruction, private-data preservation and export/import; host added object-only
+unbound adoption coverage. Combined verifier `.local/owner-binding-combined.log`
+exits0 with1,333 backend/406 runtime tests and native/browser/service/build checks.
+No subagent remains active; no account/model/provider/shared-state action occurred.
+Next is hosted runtime/control identity binding and activity holds under a distinct
+bounded mode, not relaxing the local parser. AUTH_SETUP records design constraints.
+Unbound existing Access data needs explicit migration; none is implemented. Do not
+delete custody or restart the retained live alpha to work around a refusal.
+
 Newest continuation: real subprocess crash tests now cover four claim/submission
 boundaries and fresh-process journal recovery, plus a successful control. External
 call counters survive worker death; unknown work never replays, and a known native

@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
 import { timingSafeEqual } from 'node:crypto';
 import { ControlError } from '../core/errors';
+import type { Database } from '../core/store';
 
 export interface AuthConfig {
   AUTH_MODE: string;
@@ -14,6 +15,36 @@ const resolvers = new Map<string, JWTVerifyGetKey>();
 const unauthorized = () => new ControlError('UNAUTHORIZED', 'Authentication is required.', 401);
 const configurationError = () => new ControlError('AUTH_CONFIGURATION_REQUIRED', 'Authentication is not configured.', 503);
 
+function accessIssuer(config: AuthConfig): URL {
+  if (config.AUTH_MODE !== 'access' || !config.ACCESS_ISSUER || !config.ACCESS_AUD || !config.OWNER_SUB) throw configurationError();
+  let issuer: URL;
+  try { issuer = new URL(config.ACCESS_ISSUER); } catch { throw configurationError(); }
+  // Issuer is trusted deployment configuration, never a value taken from token claims.
+  if (issuer.protocol !== 'https:' || !/^[a-z0-9-]+\.cloudflareaccess\.com$/.test(issuer.hostname) ||
+      issuer.port || issuer.username || issuer.password || issuer.search || issuer.hash || issuer.pathname !== '/') throw configurationError();
+  return issuer;
+}
+
+/** Bind hosted data before seeding it. Configuration changes are not ownership migration. */
+export function bindOwnerAuth(db: Database, config: AuthConfig): void {
+  db.transaction(() => {
+    const key = 'installation_owner';
+    const saved = db.all<{ value_json: string }>('SELECT value_json FROM runtime_metadata WHERE key=?', key)[0];
+    if (!saved && config.AUTH_MODE !== 'access') return; // Preserve existing local-only installations.
+    const binding = JSON.stringify({ auth_mode: config.AUTH_MODE, installation_id: config.INSTALLATION_ID,
+      issuer: config.ACCESS_ISSUER, audience: config.ACCESS_AUD, owner_subject: config.OWNER_SUB });
+    const migrationRequired = () => new ControlError('OWNER_MIGRATION_REQUIRED', 'Installation ownership differs or is unbound. Explicit migration is required.', 503);
+    if (saved) {
+      if (saved.value_json !== binding) throw migrationRequired();
+      return;
+    }
+    accessIssuer(config);
+    if (!config.INSTALLATION_ID) throw configurationError();
+    if (db.all('SELECT 1 FROM objects UNION ALL SELECT 1 FROM commands UNION ALL SELECT 1 FROM runtime_metadata LIMIT 1').length) throw migrationRequired();
+    db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)', key, binding);
+  });
+}
+
 /** Local bypass is only for a loopback-bound wrangler dev process. Never expose that
  * listener through a reverse proxy/tunnel: URL host validation is not a network ACL.
  * X-Forwarded-Host and identity/email headers are deliberately ignored.
@@ -23,12 +54,7 @@ export async function authenticateOwner(request: Request, config: AuthConfig, op
     if (config.INSTALLATION_ID !== 'local-only' || !['localhost', '127.0.0.1', '[::1]'].includes(new URL(request.url).hostname)) throw unauthorized();
     return 'local-owner';
   }
-  if (config.AUTH_MODE !== 'access' || !config.ACCESS_ISSUER || !config.ACCESS_AUD || !config.OWNER_SUB) throw configurationError();
-  let issuer: URL;
-  try { issuer = new URL(config.ACCESS_ISSUER); } catch { throw configurationError(); }
-  // Issuer is trusted deployment configuration, never a value taken from token claims.
-  if (issuer.protocol !== 'https:' || !/^[a-z0-9-]+\.cloudflareaccess\.com$/.test(issuer.hostname) ||
-      issuer.port || issuer.username || issuer.password || issuer.search || issuer.hash || issuer.pathname !== '/') throw configurationError();
+  const issuer = accessIssuer(config);
   const token = request.headers.get('Cf-Access-Jwt-Assertion');
   if (!token || token.length > 16_384) throw unauthorized();
   let jwks = options.jwks ?? resolvers.get(config.ACCESS_ISSUER);

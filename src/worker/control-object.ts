@@ -1,5 +1,6 @@
 import {FlightRestoreIntegration} from '../core/flight-integration';
 import { DurableObject } from 'cloudflare:workers';
+import {bindOwnerAuth} from './auth';
 import {migrateApplication} from '../core/migrations';
 import {NativeTaskLedger} from '../core/native-tasks';
 import {ResourceLedger} from '../core/resources';
@@ -55,6 +56,7 @@ export class PersonalControl extends DurableObject<Env> {
   this.ctx.blockConcurrencyWhile(async()=>{
    if(!db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_versions'").length)db.exec(schema.replace('PRAGMA foreign_keys = ON;',''));
    migrateApplication(db,this.core.now());
+   bindOwnerAuth(db,env);
    this.flights.initialize();
    const config=JSON.parse(env.PROVIDER_CONFIG) as {ref?:RuntimeRef};
    this.lifecycle.initialize(config.ref??{});

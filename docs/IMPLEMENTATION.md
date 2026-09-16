@@ -4,6 +4,23 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Hosted owner binding (2026-09-16): Worker startup now pins Access auth mode,
+installation ID, issuer, audience and owner subject in `runtime_metadata` before
+seed. Same binding reconstructs without writes; changed identity/local downgrade
+fails OWNER_MIGRATION_REQUIRED without replacing private state. First adoption of
+populated unbound data also refuses. Existing unbound local data remains unchanged;
+no schema version change or hosted-alpha enablement is involved. The common Access
+issuer validation was extracted and its20 existing auth tests passed before the
+behavior change. Real DO-host-shim/SQLite and application export/import coverage
+now pass65 focused binding/auth/alpha tests. Delegated tests were reviewed and an
+object-only unbound-data case added. Full combined verification exits0 with1,333
+backend/406 runtime tests and native/browser/service/build checks in
+`.local/owner-binding-combined.log`; `.local/owner-binding-focused.log` retains the
+focused pass. No account/provider/deployment action occurred. AUTH_SETUP records
+the remaining hosted owner/origin runtime binding and activity-guard requirements.
+Existing unbound hosted data requires an explicit migration workflow; none is
+implemented and deleting the binding is not a supported bypass.
+
 Process-crash custody (2026-09-16): `tests/runtime-process-crash.mjs` forks real
 Node workers using FileJournal/ExecutionBridge, kills at deterministic durable
 claim_unknown, lost claim response, lost native submission response and lost
