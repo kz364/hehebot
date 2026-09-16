@@ -153,6 +153,67 @@ test('shutdown during native preparation cannot later launch or acknowledge read
   assert.equal(f.calls.includes('launch'), false); assert.equal(f.calls.includes('ready'), false);
 });
 
+test('shutdown during initial file checks cannot later contact control or create boot intent', async t => {
+  const f = await fixture(t);
+  const started = f.service.start();
+  const rejected = assert.rejects(started, { code: 'SERVICE_RECOVERY_REQUIRED' });
+  await f.service.stop(); await rejected;
+  assert.deepEqual(f.calls, []);
+  assert.deepEqual(await readdir(f.directory), ['token']);
+});
+
+for (const phase of ['starting', 'running']) test(`shutdown during ${phase} journal write cannot advance startup or report success`, async t => {
+  const f = await fixture(t), request = f.dependencies.control.request;
+  let entered, release;
+  const blocked = new Promise(resolve => { entered = resolve; });
+  const held = new Promise(resolve => { release = resolve; });
+  f.dependencies.control.request = async (type, payload) => {
+    if (type === 'boot') {
+      const write = f.service.journal.write.bind(f.service.journal);
+      f.service.journal.write = async (id, row) => {
+        if (id === 'service' && row.phase === phase) { entered(); await held; }
+        return write(id, row);
+      };
+    }
+    return request(type, payload);
+  };
+  const started = f.service.start();
+  const rejected = assert.rejects(started, { code: 'SERVICE_RECOVERY_REQUIRED' });
+  await blocked;
+  const stopping = f.service.stop();
+  release(); await Promise.all([stopping, rejected]);
+  assert.equal(f.service.phase, 'recovery');
+  assert.equal((await f.service.journal.get('service')).phase, 'recovery');
+  if (phase === 'starting') {
+    assert.equal(f.calls.includes('hold'), false);
+    assert.equal(f.calls.includes('launch'), false);
+    assert.equal(f.calls.includes('ready'), false);
+  } else {
+    assert.equal(f.calls.filter(call => call.method === 'turn/start').length, 1);
+    assert.equal(f.transport.child.exitCode, 0);
+    assert.equal(f.service.supervisor.phase, 'recovery');
+  }
+});
+
+for (const phase of ['starting', 'running']) test(`shutdown after ${phase} write resolution still fences the next action`, async t => {
+  const f = await fixture(t), request = f.dependencies.control.request;
+  f.dependencies.control.request = async (type, payload) => {
+    if (type === 'boot') {
+      const update = f.service.journal.update.bind(f.service.journal);
+      f.service.journal.update = (id, patch) => update(id, patch).then(result => {
+        if (id === 'service' && patch.phase === phase) queueMicrotask(() => queueMicrotask(() => { void f.service.stop(); }));
+        return result;
+      });
+    }
+    return request(type, payload);
+  };
+  await assert.rejects(f.service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  await f.service.stop();
+  assert.equal(f.service.phase, 'recovery');
+  assert.equal((await f.service.journal.get('service')).phase, 'recovery');
+  if (phase === 'starting') assert.equal(f.calls.includes('hold'), false);
+});
+
 test('native disconnect fences a running service without claiming replacement work', async t => {
   const f = await fixture(t); await f.service.start();
   const count = f.calls.length;

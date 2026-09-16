@@ -39,9 +39,15 @@ export function createCodexService(config, dependencies) {
     } } = dependencies;
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
   let ownsIntent = false, stopping, currentTasks, currentAttempt, questions, questionNotification;
-  const starting = async promise => {
-    const result = await promise;
+  const assertStarting = () => {
     if (phase !== 'starting') fail('SERVICE_RECOVERY_REQUIRED');
+  };
+  const starting = async action => {
+    // Check before invoking, not after an eagerly evaluated side effect. A stop
+    // can run between the previous helper's resolution and its caller resuming.
+    assertStarting();
+    const result = await action();
+    assertStarting();
     return result;
   };
   const operations = dependencies.operations ?? (async () => {
@@ -77,27 +83,30 @@ export function createCodexService(config, dependencies) {
       }
       phase = 'starting';
       try {
-        await privatePath(config.stateDirectory, true);
-        await privatePath(config.runtimeTokenFile);
-        const token = (await readFile(config.runtimeTokenFile, 'utf8')).trim();
-        const access = await readAccessCredentials(config);
+        await starting(() => privatePath(config.stateDirectory, true));
+        await starting(() => privatePath(config.runtimeTokenFile));
+        const token = (await starting(() => readFile(config.runtimeTokenFile, 'utf8'))).trim();
+        const access = await starting(() => readAccessCredentials(config));
         const configuredControl = new ControlClient({ origin: config.portalOrigin, token, fetchImpl, ...access });
         control = dependencies.control ?? configuredControl;
         journal = new FileJournal(join(config.stateDirectory, 'journal'));
         const bootId = randomUUID();
+        assertStarting();
         if (await journal.putIfAbsent('service', { phase: 'boot_unknown', bootId })) fail('SERVICE_RECOVERY_REQUIRED');
         ownsIntent = true;
-        const status = await starting(control.request('status', {}));
+        assertStarting();
+        const status = await starting(() => control.request('status', {}));
         if (status?.phase !== 'BOOTING' || status.execution_enabled !== true || !Number.isSafeInteger(status.epoch)) fail('CONTROL_NOT_BOOTABLE');
-        const identity = await starting(control.request('boot', { boot_id: bootId }));
+        const identity = await starting(() => control.request('boot', { boot_id: bootId }));
         if (identity?.epoch !== status.epoch || identity.boot_id !== bootId) fail('INVALID_BOOT_IDENTITY');
-        await journal.update('service', { phase: 'starting', identity });
+        await starting(() => journal.update('service', { phase: 'starting', identity }));
         activity = new SpritesActivityGuard({ tasks, id: `hehe-${identity.epoch}-${bootId}`, now, onUnsafe: recover });
-        await starting(activity.ensure());
-        await starting(checkVersion(config.binary));
+        await starting(() => activity.ensure());
+        await starting(() => checkVersion(config.binary));
         const home = join(config.stateDirectory, 'codex-home'), workspace = join(config.stateDirectory, 'workspace');
-        await mkdir(home, { mode: 0o700 }); await mkdir(workspace, { mode: 0o700 });
-        await starting(prepareNative(home));
+        await starting(() => mkdir(home, { mode: 0o700 })); await starting(() => mkdir(workspace, { mode: 0o700 }));
+        await starting(() => prepareNative(home));
+        assertStarting();
         if (config.ownerQuestions === true) questions = new CodexQuestionBinding({ journal, control, timeoutMs: 300000,
           resolveBinding: async ({ threadId, turnId }) => {
             // A server question can precede the turn/start reply and Worker ACK.
@@ -129,7 +138,8 @@ export function createCodexService(config, dependencies) {
         }
         // Native diagnostics may contain task data; callers must not log them.
         transport.child.stderr?.resume();
-        await starting(transport.initialize());
+        await starting(() => transport.initialize());
+        assertStarting();
         adapter = new CodexAdapter({ journal, cwd: workspace, rpc: (method, params) => transport.request(method, params), testMode: true });
         const native = {
           admissionReadiness: () => adapter.admissionReadiness(),
@@ -175,11 +185,12 @@ export function createCodexService(config, dependencies) {
           personas: config.personas, events: router, activity, operations, now, onRecovery: recover,
           children: { sync: async () => (await taskController())?.sync(), cancel: async ids => (await taskController())?.cancel(ids),
             steer: async () => (await taskController())?.steer(), publishOutputs: async () => (await taskController())?.publishOutputs() } });
-        await starting(control.request('ready', { identity }));
-        const dispatched = await starting(supervisor.start());
+        await starting(() => control.request('ready', { identity }));
+        const dispatched = await starting(() => supervisor.start());
         if (supervisor.phase !== 'running') fail('SERVICE_RECOVERY_REQUIRED');
+        await starting(() => journal.update('service', { phase: 'running' }));
+        assertStarting();
         phase = 'running';
-        await journal.update('service', { phase });
         return dispatched;
       } catch (error) {
         recover(); await service.stop();
