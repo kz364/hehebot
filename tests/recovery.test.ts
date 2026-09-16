@@ -12,6 +12,30 @@ function running(){
  return {life,identity,runId:claim.run.id};
 }
 describe('bounded recovery',()=>{
+ it('explicit retry replaces the old timer without shortening the next automatic backoff',()=>{
+  const {life,identity,runId}=running();
+  const failure={status:'failed' as const,text:'Retryable fixture',error_code:'TEMPORARY_UNAVAILABLE'};
+  life.complete(identity,runId,1,failure);
+  const pending=f.db.all('SELECT * FROM retry_queue');
+  expect(pending).toEqual([{run_id:runId,due_at:'2026-09-10T08:00:10.000Z',reason:'TEMPORARY_UNAVAILABLE'}]);
+  expect(f.accept({schema_version:1,type:'run.retry',payload:{run_id:runId,expected_attempt:0}}).status).toBe('rejected');
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual(pending);
+  f.setNow('2026-09-10T08:00:01.000Z');
+  const key=randomUUID(),command={schema_version:1 as const,type:'run.retry' as const,payload:{run_id:runId,expected_attempt:1}};
+  const receipt=f.accept(command,key);expect(receipt.status).toBe('applied');
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+  expect(life.claim(identity)?.run).toMatchObject({id:runId,current_attempt:2});
+  life.submitted(identity,runId,2,'native-second');
+  f.setNow('2026-09-10T08:00:02.000Z');life.complete(identity,runId,2,failure);
+  const next=[{run_id:runId,due_at:'2026-09-10T08:01:02.000Z',reason:'TEMPORARY_UNAVAILABLE'}];
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual(next);
+  expect(f.accept(command,key)).toEqual(receipt);
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual(next);
+  f.setNow('2026-09-10T08:00:10.000Z');life.retryDue();expect(f.store.run(runId).status).toBe('waiting');
+  f.setNow('2026-09-10T08:01:01.999Z');life.retryDue();expect(f.store.run(runId).status).toBe('waiting');
+  f.setNow('2026-09-10T08:01:02.000Z');life.retryDue();expect(f.store.run(runId)).toMatchObject({status:'queued',current_attempt:2});
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+ });
  it('owner cancellation preserves recovery and unresolved custody while remaining deliverable',()=>{
   const {life,identity,runId}=running();
   life.heartbeat(identity,[{id:randomUUID(),run_id:runId,attempt:1,kind:'tool',status:'active',

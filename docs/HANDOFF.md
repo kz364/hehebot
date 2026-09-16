@@ -2,6 +2,18 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Explicit-retry timer checkpoint (2026-09-16)
+
+Accepted owner retry atomically clears the superseded automatic retry entry.
+Otherwise a second failure before the old timer fired could inherit a 10-second
+first-attempt deadline instead of its 60-second backoff. Focused tests cover
+rejected retry, new-attempt timing, old receipt replay and −1ms/exact due boundary:
+64 recovery/lifecycle tests passed (`.local/retry-timer-focused.log`). Combined check
+passed 915 control / 251 runtime tests, all native/service fixtures and typecheck/
+build dry run (`.local/retry-timer-combined.log`). Retry safety checks/limits remain;
+no provider use or production-gate change. Full recovery remains open; schedule
+unchanged.
+
 ## Recovery-cancellation checkpoint (2026-09-16)
 
 Owner cancel now leaves recovery-required work in recovery rather than starting

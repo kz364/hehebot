@@ -4,6 +4,18 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Explicit-retry timer checkpoint (2026-09-16): accepting `run.retry` now deletes the
+prior attempt's automatic timer in the same transaction. Previously a fast second
+failure could hit `scheduleRetry`'s conflict-preserving insert and retain the first
+attempt's earlier timer instead of the second attempt's 60-second delay. Tests
+verify rejected commands preserve the old timer, accepted commands supersede it,
+old receipt replay cannot delete the newer timer, and due admission respects the
+second failure's exact deadline. Focused recovery/lifecycle suite: 64 passed
+(`.local/retry-timer-focused.log`); combined verification passed 915 control / 251
+runtime tests, all native/service fixtures and typecheck/build dry run
+(`.local/retry-timer-combined.log`). Admission/uncertainty checks and retry limits are
+unchanged. No provider action, native replay authority or production gate change.
+
 Recovery-cancellation checkpoint (2026-09-16): `run.cancel` previously moved an
 already recovery-required run back to cancelling. It now preserves recovery while
 recording owner cancellation intent and a current event. Heartbeat already includes

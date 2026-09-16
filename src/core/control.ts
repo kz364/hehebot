@@ -242,6 +242,8 @@ export class ControlCore {
     requireThat(!descendants.length,'CANCEL_UNCONFIRMED','Native descendants must settle before retrying their coordinator.');
     requireThat(!this.budget.blocks({...run,status:'queued'}),'BUDGET_BLOCKED','Review the budget and use an explicit one-run override.');
     this.store.db.exec('UPDATE runs SET status=?,error_code=?,updated_at=? WHERE id=?',this.options.executionEnabled?'queued':'waiting',this.options.executionEnabled?null:'CAPABILITY_UNAVAILABLE',now,run.id);
+    // An accepted explicit retry supersedes the prior attempt's automatic timer.
+    this.store.db.exec('DELETE FROM retry_queue WHERE run_id=?',run.id);
     if(this.options.executionEnabled)this.noteRunnable();return run.id;
    }
    case 'approval.resolve': {
