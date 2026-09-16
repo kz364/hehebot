@@ -73,6 +73,14 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
       if (Date.now() >= deadline) { stop(); return; }
       timer = setTimeout(stop, deadline - Date.now());
     };
+    // Host preparation (for example fsyncing intent) may await after the first
+    // check. Revalidate with the same captured custody and timeout before dispatch.
+    const revalidate = async () => {
+      if (done || controller.signal.aborted || Date.now() >= deadline) throw stopped();
+      await checkAuthority();
+      if (done || controller.signal.aborted || Date.now() >= deadline) { stop(); throw stopped(); }
+      return { signal: controller.signal, deadlineAt: new Date(deadline).toISOString() };
+    };
     Promise.resolve().then(async () => {
       // Keep both host checks inside the same timeout/cancellation envelope.
       // Never start a read after a late authorization response.
@@ -80,7 +88,7 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
       if (authorize) await checkAuthority();
       if (controller.signal.aborted || signal?.aborted || Date.now() >= deadline) { stop(); return; }
       let value;
-      try { value = await call(name, { ...admitted }, { signal: controller.signal, deadlineAt: new Date(deadline).toISOString() }); }
+      try { value = await call(name, { ...admitted }, { signal: controller.signal, deadlineAt: new Date(deadline).toISOString(), revalidate }); }
       catch { fail('WHATSAPP_READ_FAILED'); }
       if (controller.signal.aborted || signal?.aborted || Date.now() >= deadline) { stop(); return; }
       if (authorize) await checkAuthority();

@@ -30,7 +30,8 @@ export function readJournaledWappMcp({ journal, attemptId, operationId }, grant,
       typeof call !== 'function' || typeof options?.authorize !== 'function' || !time(options?.deadlineAt)) fail();
   return readWappMcp(grant, name, args, async (tool, admitted, transportOptions) => {
     const { signal, deadlineAt } = transportOptions;
-    const stopped = () => signal.aborted || Date.now() >= Date.parse(deadlineAt);
+    let waitDeadline = deadlineAt;
+    const stopped = () => signal.aborted || Date.now() >= Date.parse(waitDeadline);
     await journal.serial(async () => {
       if (stopped()) fail();
       const row = await journal.get(attemptId);
@@ -43,7 +44,10 @@ export function readJournaledWappMcp({ journal, attemptId, operationId }, grant,
     });
     // A queued/fsynced intent can outlive its authority. Never dispatch late.
     if (stopped()) fail();
-    const result = await call(tool, admitted, transportOptions);
+    const currentAuthority = await transportOptions.revalidate();
+    waitDeadline = currentAuthority.deadlineAt;
+    if (stopped()) fail();
+    const result = await call(tool, admitted, currentAuthority);
     if (stopped()) fail();
     // Only a protocol result object is eligible. Content validation and the final
     // authority check still happen inside readWappMcp before any data is released.

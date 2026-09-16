@@ -11,6 +11,8 @@ import { join } from 'node:path';
 import { Agent } from 'undici';
 import { ControlClient } from '../runtime/control-client.mjs';
 import { readWappMcp } from '../runtime/wappmcp-reads.mjs';
+import { readJournaledWappMcp } from '../runtime/wappmcp-operations.mjs';
+import { FileJournal } from '../runtime/file-journal.mjs';
 
 const directory = await mkdtemp(join(tmpdir(), 'hehe-whatsapp-http-'));
 const wait = async fn => { const end = Date.now() + 45000; while (Date.now() < end) { if (await fn()) return; await new Promise(r => setTimeout(r, 50)); } throw Error('FIXTURE_TIMEOUT'); };
@@ -60,12 +62,24 @@ try {
  let calls = 0;
  const output = await readWappMcp(grant, tool, { chatId: grant.chatIds[0] }, async () => { calls++; return { structuredContent: [message] }; }, { authorize, deadlineAt: claim.deadline_at });
  assert.equal(output.messages[0].id, 'synthetic-17');
+ const journal = new FileJournal(join(directory, 'journal')), attemptId = 'synthetic-attempt', operationId = 'cancel-during-intent';
+ await journal.putIfAbsent(attemptId, { attemptId, status: 'running', rootSettled: false });
+ let persisted = false, releaseIntent, journalCalls = 0;
+ const released = new Promise(resolve => { releaseIntent = resolve; }), write = journal.write.bind(journal);
+ journal.write = async (...args) => { const row = await write(...args); persisted = true; await released; return row; };
+ const pending = readJournaledWappMcp({ journal, attemptId, operationId }, grant, tool, { chatId: grant.chatIds[0] },
+  () => { journalCalls++; return { structuredContent: [message] }; }, { authorize, deadlineAt: claim.deadline_at });
+ const deniedAfterWrite = assert.rejects(pending);
+ await wait(() => persisted);
  await assert.rejects(readWappMcp(grant, tool, { chatId: grant.chatIds[0] }, async () => {
   calls++; await owner('run.cancel', { run_id: claim.run.id, reason: 'Cancel during synthetic read' }); return { structuredContent: [message] };
  }, { authorize, deadlineAt: claim.deadline_at }), { code: 'WHATSAPP_READ_DENIED' });
+ releaseIntent(); await deniedAfterWrite;
+ assert.equal(journalCalls, 0, 'Worker cancellation during persistence must prevent dispatch');
+ assert.equal((await journal.get(attemptId)).whatsappReads[operationId].status, 'intent');
  await assert.rejects(readWappMcp(grant, tool, { chatId: grant.chatIds[0] }, () => assert.fail('Cancelled task dispatched'), { authorize, deadlineAt: claim.deadline_at }), { code: 'WHATSAPP_READ_DENIED' });
  assert.equal(calls, 2); assert.equal((await state()).runs.find(r => r.id === claim.run.id).status, 'cancelling');
- console.log('PASS: HTTPS Worker scoped read authority, exact registry snapshot, wrong token/chat/attempt/epoch/mutation denial, no query writes, bounded read composition and post-read cancellation suppression. Two synthetic reads; no WhatsApp account, browser, MCP or live provider calls.');
+ console.log('PASS: HTTPS Worker scoped read authority, exact registry snapshot, wrong token/chat/attempt/epoch/mutation denial, no query writes, bounded reads, post-read cancellation suppression and post-intent authorization before dispatch. Two synthetic reads; cancelled journaled read never dispatched. No WhatsApp account, browser, MCP or live provider calls.');
 } finally {
  if (worker && worker.exitCode === null && worker.signalCode === null) {
   worker.kill('SIGTERM'); await wait(() => worker.exitCode !== null || worker.signalCode !== null);

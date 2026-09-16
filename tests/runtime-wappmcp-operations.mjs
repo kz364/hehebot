@@ -115,6 +115,78 @@ test('intent write failure prevents dispatch; lost response write retains uncert
   }
 });
 
+test('authority revoked while intent persists prevents dispatch and retains non-replayable intent', async t => {
+  const f = await fixture(t), write = f.journal.write.bind(f.journal);
+  let persisted = false, calls = 0;
+  f.journal.write = async (...args) => { const row = await write(...args); persisted = true; return row; };
+  await assert.rejects(f.read('revoked-at-write', () => { calls++; return reply; }, {
+    authorize: () => !persisted,
+  }));
+  assert.equal(calls, 0, 'revoked authority must be checked after the durable intent wait');
+  assert.equal((await f.journal.get(f.attemptId)).whatsappReads['revoked-at-write'].status, 'intent');
+  await assert.rejects(f.read('revoked-at-write', () => { calls++; return reply; }));
+  assert.equal(calls, 0);
+});
+
+for (const completedAt of [36, 37]) test(`post-intent authority cap bounds transport at ${completedAt}ms`, async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+  const f = await fixture(t), entered = deferred(), released = deferred();
+  let checks = 0;
+  const result = f.read('tightened', async (_, __, options) => {
+    assert.equal(options.deadlineAt, new Date(37).toISOString());
+    assert.deepEqual(Object.keys(options).sort(), ['deadlineAt', 'signal']);
+    entered.resolve(); return released.promise;
+  }, { authorize: request => {
+    assert.deepEqual(request, { name: tool, chatId: grant.chatIds[0] });
+    assert.equal(Object.isFrozen(request), true);
+    return { allowed: true, deadline_at: new Date(++checks === 2 ? 37 : 100).toISOString() };
+  } });
+  const observed = result.then(value => ({ value }), error => ({ error }));
+  await entered.promise;
+  // The durable intent keeps its original custody bound; later checks may only
+  // tighten the live wait, never rewrite intent or imply settlement on timeout.
+  assert.equal((await f.journal.get(f.attemptId)).whatsappReads.tightened.deadlineAt, new Date(100).toISOString());
+  t.mock.timers.tick(completedAt); released.resolve(reply);
+  const outcome = await observed;
+  if (completedAt === 36) {
+    assert.deepEqual(outcome.value, { chatId: grant.chatIds[0], messages: [], coverage: 'unknown' });
+    assert.equal(checks, 3);
+  } else {
+    assert.equal(outcome.error.code, 'WHATSAPP_READ_STOPPED');
+    await new Promise(setImmediate);
+    assert.equal((await f.journal.get(f.attemptId)).whatsappReads.tightened.status, 'intent');
+  }
+});
+
+test('tightened cap guards response persistence even before its timer callback runs', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+  const f = await fixture(t); let checks = 0;
+  await assert.rejects(f.read('clock-before-timer', () => {
+    t.mock.timers.setTime(37); // Move the clock without running timer callbacks.
+    return reply;
+  }, { authorize: () => ({ allowed: true, deadline_at: new Date(++checks === 2 ? 37 : 100).toISOString() }) }));
+  assert.equal((await f.journal.get(f.attemptId)).whatsappReads['clock-before-timer'].status, 'intent');
+});
+
+for (const reason of ['timeout', 'cancel']) test(`post-intent authorization ${reason} never dispatches after a late allow`, async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+  const f = await fixture(t), entered = deferred(), late = deferred(), controller = new AbortController();
+  let checks = 0, calls = 0;
+  const result = f.read('pending-check', () => { calls++; return reply; }, {
+    deadlineAt: new Date(37).toISOString(), signal: controller.signal,
+    authorize: () => { if (++checks === 1) return true; entered.resolve(); return late.promise; },
+  });
+  const rejected = assert.rejects(result, { code: 'WHATSAPP_READ_STOPPED' });
+  await entered.promise;
+  if (reason === 'cancel') controller.abort(); else t.mock.timers.tick(37);
+  await rejected;
+  late.resolve({ allowed: true, deadline_at: new Date(500).toISOString() });
+  await new Promise(setImmediate); t.mock.timers.tick(1000);
+  assert.equal(calls, 0);
+  assert.equal((await f.journal.get(f.attemptId)).whatsappReads['pending-check'].status, 'intent');
+  assert.equal(checks, 2);
+});
+
 test('invalid authority and foreign or terminal attempt deny without creating an operation', async t => {
   const f = await fixture(t); let calls = 0;
   const call = () => { calls++; return reply; };
