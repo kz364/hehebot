@@ -1,8 +1,26 @@
 # Hehebot agent handoff
 
-Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. One authenticated provisional-reply trial is observed; it is not deployed or production operational, and full settlement remains unverified.
+Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. Authenticated chat, a scoped routine read and persisted provisional reply are observed; it is not deployed or production operational, and full settlement remains unverified.
 
 ## Active follow-up (2026-09-16)
+
+The owner authorized the corrected trial and directed no repeated permission asks
+unless spending exceeds $5. Treat that as a ceiling for this bounded work, not per
+attempt or blanket deployment/connector-write permission. The corrected session
+in `.local/owner-alpha-corrected-session` succeeded at the narrow real read/reply
+milestone: one root/attempt, one completed MCP read (HTTP 200), accurate empty-list
+reply, deadline cancellation and exact version-2 readback after control restart and
+browser reload. No 403/429 occurred. Native stop is confirmed in the host journal;
+unknown coverage still prevents settlement and the retained task shows Needs recovery.
+The orchestration report preserves a failed assertion caused by decoding a browser
+JSON string as an object. Separate corrected verification is `readback.json`,
+status passed_readback; no inference was restarted. Screenshot
+`.amp/in/artifacts/owner-alpha-corrected-reply.png` was inspected at DPR2. Both
+services are stopped; preserve state and login. No paid API fallback or Sprite
+calls. Next product step is authenticated owner access, not more repeated proof of
+this same read/reply path. Hosted/background/full settlement gates remain separate.
+
+### Earlier first trial
 
 The owner authorized and completed supported device login after the initial
 `Not logged in` result. One authorized 120-second root trial ran using the visible

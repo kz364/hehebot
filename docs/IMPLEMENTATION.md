@@ -1,8 +1,37 @@
 # Implementation status
 
-Hehebot is a locally tested foundation with one observed authenticated provisional-reply trial, not a production operational assistant. Direct Codex app-server **0.154.0** is the only supported harness. No cloud deployment has occurred; production execution and native-verification flags remain false.
+Hehebot has demonstrated authenticated chat, a scoped routine read and a persisted provisional reply, not production operation. Direct Codex app-server **0.154.0** is the only supported harness. No cloud deployment has occurred; production execution and native-verification flags remain false.
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
+
+Corrected live trial (2026-09-16): the owner authorized the follow-up and a $5
+ceiling without repeated permission asks for this bounded work. The same ChatGPT
+login and `gpt-5.6-luna` produced run `6c057062-54d2-4a28-8532-3565f1708f88`,
+attempt 1, thread `01a0aaa5-0a27-7860-9ab4-34117b553963`, native turn
+`01a0aaa5-0afe-7230-8e45-f4762ca28fa9`. Correct pre-admission routine policy
+yielded exactly one completed MCP read and HTTP 200, no 403/429. The model's
+version-2 reply accurately reported no routines in this fresh local instance,
+separating that observation from supplied alpha limitations. No routine was
+fabricated or enabled, and no connector was read or written.
+
+After the 120-second attempt deadline, the retained run became Cancelling with
+DEADLINE_EXCEEDED; native shutdown was journaled. This observes deadline bookkeeping
+for an already-finished root, not forced interruption of a still-generating model.
+Unknown coverage prevents settlement; after control restart the run remains
+recovery_required / CANCEL_UNCONFIRMED. Read-only verification preserved the exact
+preview, one run/attempt, one accepted event and zero run.result events/cards.
+Browser reconnect/reload and an inspected DPR2 screenshot show the useful reply
+and provisional/recovery disclaimers. The initial orchestration report retains
+a browser-JSON assertion failure; separately corrected readback exits 0 with
+passed_readback, without resubmission or another inference runtime.
+
+Private evidence: `.local/owner-alpha-corrected-session/{report,readback}.json`,
+receipt and journal. Screenshot: `.amp/in/artifacts/owner-alpha-corrected-reply.png`.
+Native usage is 26,380 input tokens (15,872 cached), 260 output tokens; not a
+billing receipt. Both services are stopped. No paid API fallback, Sprite call,
+deployment, policy bypass or production gate change. The narrow OWNER ALPHA
+real chat/read-only-tool/provisional-reply milestone is now demonstrated; hosted
+owner access, background behavior and full settlement remain separate work.
 
 Authorized live trial (2026-09-16): after an initial login prerequisite stop, the
 owner separately authorized and completed supported device login. Supported
