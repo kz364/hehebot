@@ -21,7 +21,7 @@ it('exports one read transaction with exact typed values, int64 and deleted-even
   transaction:fn=>f.db.transaction(()=>{transactions++;inside=true;try{return fn();}finally{inside=false;}}),
  };
  const exported=JSON.parse(exportControl(db,now));
- expect(transactions).toBe(1);expect(exported).toMatchObject({format:'hehebot-control-export',version:1,createdAt:now,schemaVersions:[9],schemaSha256:'15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c'});
+ expect(transactions).toBe(1);expect(exported).toMatchObject({format:'hehebot-control-export',version:1,createdAt:now,schemaVersions:[10],schemaSha256:'682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4'});
  const table=(name:string)=>exported.tables.find((value:{name:string})=>value.name===name);
  expect(table('rate_limits')).toEqual({name:'rate_limits',columns:['subject','window_start','count'],rows:[[
   {type:'text',value:'huge'},{type:'integer',value:'-9223372036854775808'},{type:'integer',value:'9223372036854775807'},
@@ -45,6 +45,16 @@ it.each(['raw','escaped','rows'])('rejects oversized %s before returning a parti
  if(kind==='rows')f.db.exec("WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n<10001) INSERT INTO rate_limits SELECT CAST(n AS TEXT),1,1 FROM seq");
  else f.db.exec('INSERT INTO rate_limits VALUES(?,1,1)',kind==='raw'?'x'.repeat(4*1024*1024):'\u0001'.repeat(750000));
  expect(()=>exportControl(f.db,f.core.now())).toThrowError(expect.objectContaining({code:'EXPORT_LIMIT'}));
+});
+
+it('keeps v9 exports readable without migration or fabricated release receipts',()=>{
+ f.db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json');
+ f.db.exec('UPDATE schema_versions SET version=9 WHERE version=10');
+ const before=f.db.all('SELECT total_changes() AS n');
+ const exported=JSON.parse(exportControl(f.db,f.core.now()));
+ expect(exported).toMatchObject({schemaVersions:[9],schemaSha256:'15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c'});
+ expect(exported.tables.find((t:{name:string})=>t.name==='attempts').columns).not.toContain('coordinator_release_json');
+ expect(f.db.all('SELECT total_changes() AS n')).toEqual(before);
 });
 
 it('rejects schema drift and noncanonical timestamps',()=>{

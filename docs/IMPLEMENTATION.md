@@ -14,6 +14,47 @@ record cold→read-only exec→cold and no mutation/model work. Full tree termin
 needed for safe autonomous sleep/replacement, not inherently for a persisted
 provisional reply. No text-only isolation, real-model task or production gate claim.
 
+Responsive portal/background preparation (2026-09-16): host integration passes
+`bash scripts/test-codex-service.sh --background-responsive` in
+`.local/family-background-host.log`. Actual Chromium → HTTPS Worker/SQLite → pinned
+native Codex uses six scripted loopback requests. The status turn sees A's actual
+admitted task summary, receives its own thread/grant, and leaves A unchanged;
+reload preserves its attributed provisional reply without more inference. Public
+cancellation interrupts B, then old A, at their exact native identities. All three
+families remain in 25 heartbeat operations, including three unknown coverage rows.
+No `run.result`, sleep permission, provider action or real-model claim follows.
+See [the fixture and restricted-session limits](PORTAL_BACKGROUND_ALPHA.md).
+
+The runtime fsyncs released-family custody and release intent in the same cursor
+record before sending the Worker receipt; acknowledgment is durable before another
+claim. Loss fences admission, and only the exact release receipt can be reconciled.
+All-family heartbeat/controller/output/cancel handling outlives the current cursor.
+The scheduled admission pump does not block the next lease heartbeat. Offline
+diagnostics list retained families and separately label current admission uncertainty;
+native detail selects one exact family, never granting resume/sleep authority.
+DB v10 stores an exact per-attempt coordinator-release receipt independently of
+completion. Migration, fresh/migrated schema hashes, backup and export/import are
+updated together; v8/v9 backup and v9 export/import remain supported. The initial
+combined failure on a stale v9 E2E export hash is preserved in
+`.local/family-combined.log`; it was corrected rather than suppressed.
+Final host `bash scripts/verify-codex.sh` exits0 in
+`.local/family-combined-final.log`: 1,244 control/335 runtime tests, all scripted
+native/service checks and build dry run. Desktop reinstall/tests pass16/16 in
+`.local/family-desktop.log`. Focused journal/inspection checks cover lost ACK,
+failed custody persistence, the 32-family bound, older-attempt settlement, late
+output, all-family operation coverage and unknown-current-claim diagnostics.
+
+Next alpha boundary work should reuse existing
+[positive named-profile shell/direct-child deny evidence](CODEX_PERMISSIONS.md),
+not re-run general containment refusal matrices. Pinned upstream
+[thread permissions](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/src/protocol/v2/thread.rs)
+select supported named profiles; ordinary `read-only` still permits broad reads.
+[Local stdio MCP launch](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/rmcp-client/src/stdio_server_launcher.rs)
+is not sandboxed by that profile. Review native file/tool access and the trusted
+app-server/MCP boundary with the actual service grant layout before live inference.
+Full recursive termination is not a prerequisite to provisional supervised output;
+credential/task authority still is. The current service remains disposable-only.
+
 P0 portal/native preparation (2026-09-16): owner priority now supersedes peripheral
 work. `bash scripts/test-codex-service.sh --portal-readback` passed through the actual
 browser composer, HTTPS local Worker/SQLite and pinned Codex app-server with scripted

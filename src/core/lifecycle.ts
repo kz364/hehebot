@@ -7,6 +7,7 @@ import type { RuntimeProvider, RuntimeRef, RuntimeObservation } from '../provide
 export type Phase='STOPPED'|'START_REQUESTED'|'BOOTING'|'READY'|'DRAINING'|'STOP_COMMITTED'|'STOPPING'|'RECOVERY_REQUIRED'|'IDLE_PERMITTED';
 export type Lifecycle={singleton:number;provider_ref_json:string;boot_id:string|null;epoch:number;phase:Phase;desired_state:'RUN'|'STOP';lease_until:string|null;last_heartbeat:string|null;queue_sequence:number;stop_token:string|null;provider_operation_id:string|null;wake_after_stop:number};
 export type Identity={epoch:number;boot_id:string};
+export type CoordinatorOutcome='completed'|'failed'|'interrupted';
 export type HeartbeatOperation=Operation & {run_id:string;attempt:number};
 function operationTime(value:string):string {
  const instant=Date.parse(value);
@@ -87,7 +88,24 @@ export class LifecycleCore {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
-   if(this.store.db.all("SELECT id FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling') LIMIT 1").length)return null;
+   // Root inference release is not family settlement. Uncertain roots block;
+   // provider-confirmed process termination retains the existing recovery path.
+   if(this.store.db.all(`SELECT r.id FROM runs r WHERE r.role='coordinator' AND r.status IN ('claimed','running','finishing','cancelling','recovery_required')
+   AND NOT (r.status='recovery_required' AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.status='terminated' AND a.settled_at IS NOT NULL)) AND NOT EXISTS(
+    SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?
+    AND json_extract(a.coordinator_release_json,'$.native_ref')=a.native_run_ref
+    AND json_extract(a.coordinator_release_json,'$.outcome') IN ('completed','failed','interrupted')
+   ) LIMIT 1`,identity.epoch,identity.boot_id).length)return null;
+   // Match the runtime's bounded family registry without evicting old custody.
+   const unresolved=this.store.db.all<{count:number}>(`SELECT COUNT(*) AS count FROM runs r WHERE r.role='coordinator' AND r.current_attempt>0 AND (
+    r.status IN ('claimed','running','finishing','cancelling','recovery_required')
+    OR EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.status IN ('claimed','running'))
+    OR EXISTS(SELECT 1 FROM operations o WHERE o.run_id=r.id AND o.status!='settled')
+    OR EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=r.id)
+    OR EXISTS(SELECT 1 FROM effects e WHERE e.run_id=r.id AND e.status IN ('intent','dispatched','outcome_unknown'))
+    OR NOT (${nativeDescendantsSettledSql})
+   )`)[0].count;
+   if(unresolved>=32)return null;
    const run=this.nextClaimableRun();if(!run)return null;
    const prior=JSON.parse(run.context_json) as Pick<ContextSnapshot,'instruction'|'room_id'>;
    const context=this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id);
@@ -113,6 +131,25 @@ export class LifecycleCore {
    // Retain late native receipts, but expose cancellation without waiting for an alarm.
    this.store.db.exec("UPDATE attempts SET native_run_ref=?,status='running' WHERE run_id=? AND attempt=?",nativeRef,runId,attempt);
    this.store.db.exec('UPDATE runs SET status=?,error_code=?,updated_at=? WHERE id=?',expired?'cancelling':'running',expired?'DEADLINE_EXCEEDED':run.error_code,now,runId);this.touch();
+  });
+ }
+ coordinatorRelease(identity:Identity,runId:string,attempt:number,nativeRef:string,outcome:CoordinatorOutcome):void {
+  this.store.db.transaction(()=>{
+   this.authorizeAttempt(identity,runId,attempt);const run=this.store.run(runId);
+   requireThat(run.current_attempt===attempt,'REVISION_CONFLICT','Attempt has changed.');
+   requireThat(run.role==='coordinator','FORBIDDEN','Only a coordinator may release its inference lane.');
+   requireThat(['completed','failed','interrupted'].includes(outcome),'INVALID_INPUT','Invalid root terminal outcome.',422);
+   const row=this.store.db.all<{native_run_ref:string|null;coordinator_release_json:string|null;status:string;result_json:string|null}>('SELECT native_run_ref,coordinator_release_json,status,result_json FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
+   requireThat(!!nativeRef&&row.native_run_ref===nativeRef,'REVISION_CONFLICT','Root native identity does not match its attempt.');
+   const receipt=JSON.stringify({native_ref:nativeRef,outcome});
+   if(row.coordinator_release_json!==null){
+    requireThat(row.coordinator_release_json===receipt,'IDEMPOTENCY_CONFLICT','Coordinator release differs from its committed receipt.');
+    return;
+   }
+   requireThat(['running','finishing','cancelling','recovery_required'].includes(run.status)&&row.status==='running'&&row.result_json===null,'REVISION_CONFLICT','Coordinator attempt is not awaiting root settlement.');
+   // Trusted runtime observation only: do not settle operations, publish a result,
+   // touch deadlines/lease/activity, clear cancellation, or revive an old epoch.
+   this.store.db.exec('UPDATE attempts SET coordinator_release_json=? WHERE run_id=? AND attempt=?',receipt,runId,attempt);
   });
  }
  complete(identity:Identity,runId:string,attempt:number,result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>}):void {

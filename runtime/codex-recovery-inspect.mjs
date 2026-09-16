@@ -19,7 +19,7 @@ const entries = value => { require(value === undefined || object(value)); const 
  * kernel directory lock. This function cannot prove custody or coherent state.
  * Never instantiate FileJournal: inspection must not create directories or write.
  */
-export async function inspectCodexRecovery(directory) {
+export async function inspectCodexRecovery(directory, attemptId = undefined) {
   const report = { recoveryRequired: true, resumeAllowed: false, sleepAllowed: false,
     snapshotConsistency: 'not-established; stopped executor kernel lock required',
     service: null, dispatch: null, native: null, issues: [],
@@ -110,8 +110,39 @@ export async function inspectCodexRecovery(directory) {
       bootId: service.identity?.boot_id ?? service.bootId ?? null };
     if (!service.identity) { issue('SERVICE_IDENTITY_UNKNOWN'); return report; }
   } catch { issue('SERVICE_RECORD_INVALID'); return report; }
-  const dispatch = await read(`dispatch-${hash(service.identity)}`);
+  let dispatch = await read(`dispatch-${hash(service.identity)}`);
   if (!dispatch) return report;
+  if (dispatch.families !== undefined) {
+    try {
+      require(identity(dispatch.identity) && hash(dispatch.identity) === hash(service.identity));
+      require(['claim_unknown', 'claimed', 'submission_unknown', 'submitted_unknown', 'running', 'released', 'complete_pending', 'complete'].includes(dispatch.phase));
+      require(Array.isArray(dispatch.families) && dispatch.families.length <= 32);
+      const families = dispatch.families;
+      require(new Set(families.map(row => row.attemptId)).size === families.length);
+      report.retainedFamilies = families.map(row => {
+        const run = row.claim?.run, release = row.coordinatorRelease;
+        require(identity(row.identity) && hash(row.identity) === hash(service.identity) &&
+          ['running', 'complete_pending', 'complete'].includes(row.phase) &&
+          uuid(run?.id) && Number.isSafeInteger(run.current_attempt) && run.current_attempt > 0 &&
+          row.claim.submission_key === `${run.id}:${run.current_attempt}` && /^[a-f0-9]{64}$/.test(row.attemptId) && id(row.nativeRunId));
+        require(object(release) && typeof release.acknowledged === 'boolean' && object(release.payload) &&
+          hash(release.payload.identity) === hash(service.identity) && release.payload.run_id === run.id &&
+          release.payload.attempt === run.current_attempt && release.payload.native_ref === row.nativeRunId &&
+          ['completed', 'failed', 'interrupted'].includes(release.payload.outcome));
+        return { runId: run.id, attempt: run.current_attempt, attemptId: row.attemptId, phase: row.phase,
+          nativeRunId: row.nativeRunId, outcome: release.payload.outcome, releaseAcknowledged: release.acknowledged };
+      });
+      report.admissionPhase = dispatch.phase;
+      if (dispatch.phase === 'claim_unknown') issue('DISPATCH_NATIVE_BINDING_UNKNOWN');
+      // The selected native projection is not a census of every retained family.
+      // Explicit selection permits read-only inspection of an older exact attempt.
+      if (attemptId !== undefined && attemptId !== dispatch.attemptId) {
+        dispatch = families.find(row => row.attemptId === attemptId);
+        require(dispatch);
+      } else if (dispatch.phase === 'released' || !dispatch.claim) dispatch = families.at(-1) ?? dispatch;
+    } catch { delete report.retainedFamilies; issue('FAMILY_REGISTRY_INVALID'); return report; }
+  }
+  if (attemptId !== undefined && dispatch.attemptId !== attemptId) { issue('FAMILY_BINDING_UNKNOWN'); return report; }
   try {
     require(identity(dispatch.identity) && dispatch.identity.epoch === service.identity.epoch && dispatch.identity.boot_id === service.identity.boot_id);
     require(['claim_unknown', 'claimed', 'submission_unknown', 'submitted_unknown', 'running', 'complete_pending', 'complete'].includes(dispatch.phase));

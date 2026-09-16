@@ -57,6 +57,23 @@ function settlement(row: any) {
     result: { status: 'completed', text: 'Exactly one result' } };
 }
 
+it('scheduled heartbeats continue while the admission pump is unresolved', async () => {
+  let release!: () => void, admissions = 0;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  supervisor.admission = () => { admissions++; return pending; };
+  supervisor.intervalMs = 5;
+  try {
+    await supervisor.start();
+    const deadline = Date.now() + 2000;
+    while ((admissions === 0 || calls.filter(type => type === 'heartbeat').length < 3) && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    expect(admissions).toBeGreaterThan(0);
+    expect(calls.filter(type => type === 'heartbeat').length).toBeGreaterThanOrEqual(3);
+    expect(supervisor.phase).toBe('running'); expect(releases).toBe(0);
+  } finally { supervisor.disconnect(); release(); }
+});
+
 it('fenced SQLite dispatch, settlement, idle grace and drain release in order', async () => {
   const id = enqueue(), row = await supervisor.start();
   expect(calls.slice(0, 3)).toEqual(['heartbeat', 'claim', 'submitted']);

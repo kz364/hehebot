@@ -10,12 +10,13 @@ export class ExecutionSupervisor {
   constructor({ control, native, journal, identity, installationId, personas, activity,
     operations, events = /** @type {{bind: (attemptId: string) => Promise<void>} | null} */ (null),
     children = /** @type {{sync: () => Promise<unknown>, cancel: (runIds: string[]) => Promise<unknown>, steer?: () => Promise<unknown>, publishOutputs?: () => Promise<unknown>} | null} */ (null),
+    admission = /** @type {null | (() => Promise<unknown>)} */ (null),
     now = Date.now, intervalMs = 20000, onRecovery = () => {} }) {
     if (!activity?.ensure || !activity?.releaseAfterDrain || typeof operations !== 'function' ||
         (events && typeof events.bind !== 'function') ||
         (children && (typeof children.sync !== 'function' || typeof children.cancel !== 'function')) ||
         !Number.isInteger(intervalMs) || intervalMs < 1 || intervalMs > 30000) fail('INVALID_SUPERVISOR_CONFIGURATION');
-    Object.assign(this, { control, native, journal, identity, activity, operations, children, now, intervalMs, onRecovery });
+    Object.assign(this, { control, native, journal, identity, activity, operations, children, admission, now, intervalMs, onRecovery });
     this.phase = 'stopped';
     this.leaseUntil = 0;
     this.timer = null;
@@ -101,7 +102,11 @@ export class ExecutionSupervisor {
     if (this.phase !== 'running') return;
     this.timer = setTimeout(() => {
       this.timer = null;
-      void this.maintain().then(() => this.schedule()).catch(() => {});
+      void this.maintain().then(() => {
+        // Slow native admission must not delay the next lease heartbeat.
+        void this.admission?.().catch(() => this.recover('DISPATCH_OUTCOME_UNKNOWN'));
+        this.schedule();
+      }).catch(() => {});
     }, this.intervalMs);
   }
 
@@ -119,11 +124,12 @@ export class ExecutionSupervisor {
         this.assertLease();
         await this.children?.cancel(cancellations);
         this.assertLease();
-        const row = await this.journal.get(this.bridge.cursor);
-        if (row?.phase === 'running' && cancellations.includes(row.claim.run.id)) {
-          // The native adapter durably records interrupt intent before sending it.
-          this.assertLease();
-          await this.native.cancel(row.attemptId);
+        for (const row of await this.bridge.families()) {
+          if (row.phase === 'running' && cancellations.includes(row.claim.run.id)) {
+            // The native adapter durably records interrupt intent before sending it.
+            this.assertLease();
+            await this.native.cancel(row.attemptId);
+          }
         }
         this.assertLease();
         await this.children?.steer?.();
@@ -151,12 +157,12 @@ export class ExecutionSupervisor {
           // One bounded retry of the exact Worker receipt, never native admission.
           row = await this.bridge.acknowledgeSubmission();
         }
-        if (!['running', 'complete'].includes(row.phase)) {
+        if (!['running', 'complete', 'released'].includes(row.phase)) {
           this.recover('DISPATCH_OUTCOME_UNKNOWN');
           return row;
         }
         this.assertLease();
-        if (row.phase === 'complete') this.idleSince ??= this.now();
+        if (row.phase === 'complete' && (await this.bridge.families()).every(family => family.phase === 'complete')) this.idleSince ??= this.now();
         else this.idleSince = null;
         return row;
       } catch (error) { this.recover('DISPATCH_OUTCOME_UNKNOWN'); throw error; }
@@ -172,7 +178,7 @@ export class ExecutionSupervisor {
       this.assertLease();
       // Missing settlement proof rejects without changing the current active task.
       const row = await this.bridge.complete(observation);
-      this.idleSince = this.now();
+      this.idleSince = (await this.bridge.families()).every(family => family.phase === 'complete') ? this.now() : null;
       return row;
     });
   }
@@ -188,7 +194,7 @@ export class ExecutionSupervisor {
       catch { fail('INVALID_CHECKPOINT'); }
       if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) || !Object.keys(snapshot).length) fail('INVALID_CHECKPOINT');
       const row = await this.journal.get(this.bridge.cursor);
-      if (row?.phase !== 'complete') fail('SLEEP_DENIED');
+      if (row?.phase !== 'complete' || (await this.bridge.families()).some(family => family.phase !== 'complete')) fail('SLEEP_DENIED');
       if (this.maintenance) await this.maintenance;
       this.assertLease();
       if (this.native.sleepReadiness().allowed !== true) fail('SLEEP_DENIED');

@@ -25,6 +25,24 @@
     {
       "type":"object","additionalProperties":false,
       "properties": {
+        "type":{"const":"coordinator-release"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "identity":{"$ref":"#/$defs/runtimeIdentity"},
+            "run_id":{"type":"string","format":"uuid"},
+            "attempt":{"type":"integer","minimum":1},
+            "native_ref":{"type":"string","minLength":1,"maxLength":256},
+            "outcome":{"enum":["completed","failed","interrupted"]}
+          },
+          "required":["identity","run_id","attempt","native_ref","outcome"]
+        }
+      },
+      "required":["type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
         "type":{"const":"whatsapp-read-authorize"},
         "payload": {
           "type":"object","additionalProperties":false,

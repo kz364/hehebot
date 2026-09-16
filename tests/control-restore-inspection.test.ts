@@ -42,7 +42,7 @@ it('accepts settled nested historical lineage across a newer root attempt withou
 });
 
 it('keeps exact schema8 history inspectable without flight tables', async () => {
-  db.exec('DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=9');
+  db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json; DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=10');
   const report = await inspect();
   expect(report.schema_version).toBe(8);
   expect(report.blockers).toEqual({});
@@ -55,7 +55,7 @@ it('counts pending and unknown flight restoration independently of terminal runs
     insert.run(canary, index + 1, '2026-09-20T21:00:00.000Z', 'Asia/Jakarta', '2026-09-19T21:00:00.000Z', 'routine', 'source', status, 'root-19', '{}');
   }
   const report = await inspect();
-  expect(report.schema_version).toBe(9);
+  expect(report.schema_version).toBe(10);
   expect(report.inconsistencies).toEqual({});
   expect(report.blockers).toEqual({ UNRESOLVED_FLIGHT_RESTORE: 3 });
   expect(JSON.stringify(report)).not.toContain(canary);

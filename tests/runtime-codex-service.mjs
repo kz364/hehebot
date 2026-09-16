@@ -343,3 +343,46 @@ test('opt-in question waits for acknowledged admission, takes once, and resolves
   assert.equal(f.transport.listenerCount('notification'), 0);
   await assert.rejects(launched.onUserInput(params, { signal: new AbortController().signal, requestId: 73 }), { code: 'QUESTION_CALLBACK_REJECTED' });
 });
+
+test('maintenance retains old-family coverage and late output after fresh coordinator admission', async t => {
+  const f = await fixture(t), request = f.dependencies.control.request;
+  const ids = ['77777777-0000-4000-8000-000000000017', '77777777-0000-4000-8000-000000000053'];
+  let claims = 0, threads = 0;
+  const heartbeats = [], previews = [], releases = [];
+  const service = createCodexService(f.config, { ...f.dependencies, operations: undefined,
+    control: { request: async (type, payload) => {
+      if (type === 'claim') {
+        const id = ids[claims++];
+        return id ? { submission_key: `${id}:1`, deadline_at: new Date(Date.now() + 600000).toISOString(),
+          run: { id, persona_id: 'bot', current_attempt: 1, updated_at: new Date().toISOString(), context_json: '{}' } } : null;
+      }
+      if (type === 'coordinator-release') { releases.push(payload); return {}; }
+      if (type === 'heartbeat') heartbeats.push(payload.operations);
+      if (type === 'output-preview') { previews.push(payload); return { accepted: true }; }
+      return request(type, payload);
+    } },
+  });
+  t.after(() => service.stop());
+  f.transport.request = async (method, params) => {
+    if (method === 'thread/start') return { thread: { id: `thread-${++threads}` } };
+    if (method === 'turn/start') return { turn: { id: `turn-${threads}` } };
+    throw Error(`unexpected ${method}`);
+  };
+  const first = await service.start();
+  f.transport.emit('notification', { method: 'turn/completed', params: { threadId: 'thread-1', turn: { id: 'turn-1', status: 'completed' } } });
+  const second = await service.maintain();
+  assert.equal(second.claim.run.id, ids[1]);
+  assert.equal(releases.length, 1); assert.equal(releases[0].run_id, ids[0]);
+  const item = { id: 'late-message', type: 'agentMessage', text: 'Old family output 71', phase: 'final_answer' };
+  f.transport.emit('notification', { method: 'item/completed', params: { threadId: 'thread-1', turnId: 'turn-1', item } });
+  await service.maintain();
+  assert.deepEqual([...new Set(heartbeats.at(-1).map(row => row.run_id))], ids);
+  assert.deepEqual(heartbeats.at(-1).filter(row => row.status === 'unknown').map(row => row.run_id), ids);
+  assert.equal(previews.length, 1); assert.equal(previews[0].run_id, ids[0]);
+  assert.equal((await service.observe(first.attemptId)).nativeOutcome, 'completed');
+  assert.equal((await service.observe(second.attemptId)).rootSettled, false);
+  assert.equal(service.supervisor.idleSince, null);
+  await assert.rejects(service.supervisor.drain({ test: 'no false sleep' }), { code: 'SLEEP_DENIED' });
+  assert.equal(threads, 2); assert.equal(claims, 2);
+  await service.stop();
+});

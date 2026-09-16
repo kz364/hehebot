@@ -64,5 +64,10 @@ export function migrateApplication(db:Database,now:string):void {
   requireThat(sql===FLIGHT_RESTORE_SQL.replace(' IF NOT EXISTS',''),'SCHEMA_MISMATCH','Flight deadline schema needs explicit reconciliation.',503);
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(9,?)',now);
  });
- requireThat([8,9].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===8)version=9;
+ if(version===9)db.transaction(()=>{
+  db.exec('ALTER TABLE attempts ADD COLUMN coordinator_release_json TEXT CHECK(coordinator_release_json IS NULL OR json_valid(coordinator_release_json))');
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(10,?)',now);
+ });
+ requireThat([9,10].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

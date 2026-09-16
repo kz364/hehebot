@@ -16,13 +16,56 @@ export class ExecutionBridge {
     Object.assign(this, { control, native, journal, identity, installationId, personas });
     this.cursor = `dispatch-${hash(identity)}`;
   }
+  /** Released coordinators remain active families, not completed tasks. */
+  async families() {
+    const row = await this.journal.get(this.cursor);
+    if (!row) return [];
+    const { families = [], ...current } = row;
+    return current.attemptId && !families.some(family => family.attemptId === current.attemptId)
+      ? [...families, current] : families;
+  }
+  async releaseCoordinator(observation) {
+    if (this.#busy) fail('DISPATCH_BUSY');
+    this.#busy = true;
+    try {
+      observation = structuredClone(observation);
+      const row = await this.journal.get(this.cursor);
+      if (!row?.claim || !['running', 'released'].includes(row.phase)) fail('RECOVERY_REQUIRED');
+      if (observation?.attemptId !== row.attemptId || observation.nativeRunId !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');
+      if (observation.rootSettled !== true || !['completed', 'failed', 'interrupted'].includes(observation.nativeOutcome)) fail('NATIVE_ROOT_NOT_TERMINAL');
+      const payload = { identity: structuredClone(this.identity), run_id: row.claim.run.id,
+        attempt: row.claim.run.current_attempt, native_ref: row.nativeRunId, outcome: observation.nativeOutcome };
+      let families = row.families ?? [];
+      let family = families.find(value => value.attemptId === row.attemptId);
+      if (family?.coordinatorRelease && hash(family.coordinatorRelease.payload) !== hash(payload)) fail('COORDINATOR_RELEASE_CONFLICT');
+      if (!family) {
+        const { families: _history, ...current } = row;
+        family = { ...current, coordinatorRelease: { payload, acknowledged: false } };
+        families = [...families.filter(value => value.phase !== 'complete'), family];
+        if (families.length > 32) fail('FAMILY_CAPACITY_EXCEEDED');
+        // One fsynced record retains the old family before the lane can advance.
+        await this.journal.update(this.cursor, { phase: 'released', families });
+      }
+      if (!family.coordinatorRelease.acknowledged) {
+        const reply = await this.control.request('coordinator-release', family.coordinatorRelease.payload);
+        if (!reply || typeof reply !== 'object' || Array.isArray(reply) ||
+            Object.keys(reply).length !== 0 && !(Object.keys(reply).length === 1 && reply.ok === true)) fail('INVALID_COORDINATOR_RELEASE_ACK');
+        family = { ...family, coordinatorRelease: { ...family.coordinatorRelease, acknowledged: true } };
+        families = families.map(value => value.attemptId === family.attemptId ? family : value);
+        await this.journal.update(this.cursor, { families });
+      }
+      return family;
+    } finally { this.#busy = false; }
+  }
   async claimNext() {
     if (this.#busy) fail('DISPATCH_BUSY');
     this.#busy = true;
     try {
       if (this.native.admissionReadiness().allowed !== true) fail('COMPATIBILITY_GATE_BLOCKED');
       const prior = await this.journal.get(this.cursor);
-      if (prior && prior.phase !== 'complete') return prior;
+      if (prior && !['complete', 'released'].includes(prior.phase)) return prior;
+      if (prior?.phase === 'released' && !prior.families?.find(row => row.attemptId === prior.attemptId)?.coordinatorRelease?.acknowledged) return prior;
+      if ((prior?.families ?? []).filter(row => row.phase !== 'complete').length >= 32) return prior;
       // An unanswered claim can already own work. Never issue another claim after restart.
       if (prior) await this.journal.update(this.cursor, { phase: 'claim_unknown', claim: null, attemptId: null, nativeRunId: null, result: null });
       else await this.journal.putIfAbsent(this.cursor, { phase: 'claim_unknown', identity: this.identity });
@@ -89,7 +132,9 @@ export class ExecutionBridge {
       // change identity, settlement proof or the result after journal custody.
       try { observation = JSON.parse(JSON.stringify(observation)); }
       catch { fail('INVALID_NATIVE_RESULT'); }
-      const row = await this.journal.get(this.cursor);
+      const cursor = await this.journal.get(this.cursor);
+      const archived = cursor?.families?.find(row => row.attemptId === observation?.attemptId);
+      const row = archived ?? cursor;
       if (!row?.claim || !['running', 'complete_pending', 'complete'].includes(row.phase)) fail('RECOVERY_REQUIRED');
       if (observation?.nativeRunId !== row.nativeRunId || observation.attemptId !== row.attemptId) fail('SETTLEMENT_IDENTITY_MISMATCH');
       if (!['rootSettled', 'toolsSettled', 'childrenSettled', 'effectsSettled', 'outputCommitted'].every(key => observation[key] === true)) fail('NATIVE_SETTLEMENT_INCOMPLETE');
@@ -98,12 +143,18 @@ export class ExecutionBridge {
           result.status === 'waiting' && !result.checkpoint) fail('INVALID_NATIVE_RESULT');
       if (row.result && hash(row.result) !== hash(result)) fail('RESULT_CONFLICT');
       if (row.phase === 'complete') return row;
-      await this.journal.update(this.cursor, { phase: 'complete_pending', result });
+      const update = async patch => {
+        if (!archived) return this.journal.update(this.cursor, patch);
+        const next = { ...row, ...patch };
+        await this.journal.update(this.cursor, { families: cursor.families.map(family => family.attemptId === row.attemptId ? next : family) });
+        return next;
+      };
+      await update({ phase: 'complete_pending', result });
       // Control completion is idempotent for the same fenced attempt. Explicit replay
       // sends the persisted identical result; it never resubmits native inference.
       await this.control.request('complete', { identity: this.identity, run_id: row.claim.run.id,
         attempt: row.claim.run.current_attempt, result });
-      return this.journal.update(this.cursor, { phase: 'complete' });
+      return update({ phase: 'complete', result });
     } finally { this.#busy = false; }
   }
 }

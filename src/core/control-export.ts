@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import { requireThat } from './errors';
 import type { Database } from './store';
 
-const schemaSha256='15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c';
+const schemaPins:Record<number,string>={
+ 9:'15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c',
+ 10:'682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4',
+};
 const maxBytes=4*1024*1024,maxRows=10000;
 const quote=(name:string)=>`"${name.replaceAll('"','""')}"`;
 type Cell={type:'null'|'text'|'integer';value:string|null};
@@ -17,7 +20,8 @@ export function exportControl(db:Database,createdAt:string):string {
   // rows or silently ignore any other unknown table/index/trigger.
   const schema=db.all<{type:string;name:string;tbl_name:string;sql:string}>("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' AND NOT (type='table' AND name IN ('_cf_METADATA','__miniflare_do_name')) ORDER BY type,name");
   const schemaVersions=db.all<{version:number}>('SELECT version FROM schema_versions ORDER BY version').map(row=>row.version);
-  requireThat(createHash('sha256').update(JSON.stringify(schema)).digest('hex')===schemaSha256&&schemaVersions.at(-1)===9&&schemaVersions.every((version,i)=>Number.isInteger(version)&&version>=1&&(!i||version>schemaVersions[i-1])),'UNSUPPORTED_SCHEMA','Application export requires the pinned schema.',409);
+  const schemaSha256=schemaPins[schemaVersions.at(-1)!];
+  requireThat(!!schemaSha256&&createHash('sha256').update(JSON.stringify(schema)).digest('hex')===schemaSha256&&schemaVersions.every((version,i)=>Number.isInteger(version)&&version>=1&&(!i||version>schemaVersions[i-1])),'UNSUPPORTED_SCHEMA','Application export requires the pinned schema.',409);
   const tables:{name:string;columns:string[];rows:Cell[][]}[]=[];
   let rowCount=0,rawBytes=0;
   for(const name of [...schema.filter(row=>row.type==='table').map(row=>row.name),'sqlite_sequence'].sort()){

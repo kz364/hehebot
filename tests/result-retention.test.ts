@@ -46,7 +46,7 @@ it.each(['waiting','recovery_required','pending','outcome_unknown','operation','
 
 it('ages the replacement portal copy by the current settlement, never by delivery or old creation time', () => {
  const id = finish();
- f.db.exec("INSERT INTO attempts SELECT run_id,2,'second',epoch,boot_id,native_run_ref,status,deadline_at,started_at,'2026-09-11T00:00:00.000Z','{\"text\":\"New result 103\"}' FROM attempts WHERE run_id=?", id);
+ f.db.exec("INSERT INTO attempts SELECT run_id,2,'second',epoch,boot_id,native_run_ref,status,deadline_at,started_at,'2026-09-11T00:00:00.000Z','{\"text\":\"New result 103\"}',NULL FROM attempts WHERE run_id=?", id);
  f.db.exec('UPDATE runs SET current_attempt=2 WHERE id=?', id);
  f.db.exec("UPDATE outbox SET payload_json='{\"text\":\"New result 103\"}',updated_at='2026-12-09T00:00:00.000Z' WHERE run_id=?", id);
  f.setNow('2026-12-09T00:00:00.000Z'); expect(retention.prune()).toBe(1);
@@ -58,7 +58,7 @@ it('ages the replacement portal copy by the current settlement, never by deliver
 
 it('bounds cleanup to 100 attempts and rolls back both copies on a write failure', () => {
  const id = finish();
- for (let attempt = 2; attempt <= 101; attempt++) f.db.exec('INSERT INTO attempts SELECT run_id,?,?,epoch,boot_id,native_run_ref,status,deadline_at,started_at,settled_at,result_json FROM attempts WHERE run_id=? AND attempt=1', attempt, `submission-${attempt}`, id);
+ for (let attempt = 2; attempt <= 101; attempt++) f.db.exec('INSERT INTO attempts SELECT run_id,?,?,epoch,boot_id,native_run_ref,status,deadline_at,started_at,settled_at,result_json,NULL FROM attempts WHERE run_id=? AND attempt=1', attempt, `submission-${attempt}`, id);
  f.setNow('2026-12-09T00:00:00.000Z');
  f.db.sqlite.exec("CREATE TRIGGER deny_result_prune BEFORE UPDATE ON outbox BEGIN SELECT RAISE(ABORT,'synthetic failure'); END");
  expect(() => retention.prune()).toThrow('synthetic failure');

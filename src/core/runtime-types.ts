@@ -1,5 +1,5 @@
 import type {FlightRegistration,FlightReceipt,FlightReconciliation} from './flight-integration';
-import type { Identity, HeartbeatOperation } from './lifecycle';
+import type { Identity, HeartbeatOperation, CoordinatorOutcome } from './lifecycle';
 import type {NativeChildReceipt} from './native-tasks';
 import type { EffectIntent } from './effects';
 import type {AgentCommandRequest,AgentRoutineQuery,AgentSkillQuery} from './agent-commands';
@@ -29,6 +29,7 @@ export type RuntimePayloads={
  boot:{boot_id:string};ready:Base;claim:Base;
  heartbeat:Base & {operations:HeartbeatOperation[]};
  submitted:Base & Attempt & {native_ref:string};
+ 'coordinator-release':Base & Attempt & {native_ref:string;outcome:CoordinatorOutcome};
  complete:Base & Attempt & {result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>}};
  'prepare-sleep':Base;
  'commit-sleep':Base & {stop_token:string;queue_sequence:number;checkpoint:Record<string,unknown>};

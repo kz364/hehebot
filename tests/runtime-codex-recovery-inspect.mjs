@@ -58,6 +58,35 @@ test('private real journal projects asymmetric identities and obligations withou
   assert.deepEqual(await snapshot(f.directory), before);
 });
 
+test('retained families survive an empty admission cursor and permit exact older-attempt inspection', async t => {
+  const f = await fixture(t), old = await f.journal.get(f.cursor);
+  const retained = { ...old, coordinatorRelease: { acknowledged: true, payload: {
+    identity, run_id: runId, attempt: 7, native_ref: old.nativeRunId, outcome: 'completed',
+  } } };
+  const secondId = 'b'.repeat(64), second = { ...retained, attemptId: secondId, nativeRunId: 'turn-97',
+    coordinatorRelease: { acknowledged: false, payload: { ...retained.coordinatorRelease.payload, native_ref: 'turn-97' } } };
+  await f.journal.write(secondId, { ...f.native, attemptId: secondId, threadId: 'root-83', nativeRunId: 'turn-97',
+    spawns: {}, childTurns: {}, childObligations: {} });
+  await f.journal.write(f.cursor, { identity, phase: 'complete', claim: null, attemptId: null, nativeRunId: null, families: [retained, second] });
+  const before = await snapshot(f.directory), latest = await inspectCodexRecovery(f.directory);
+  assert.equal(latest.admissionPhase, 'complete');
+  assert.deepEqual(latest.retainedFamilies.map(row => [row.attemptId, row.releaseAcknowledged]), [[attemptId, true], [secondId, false]]);
+  assert.equal(latest.native.root.turnId, 'turn-97');
+  const selected = await inspectCodexRecovery(f.directory, attemptId);
+  assert.equal(selected.native.root.turnId, 'turn-23'); assert.equal(selected.native.children[0].threadId, 'child-43');
+  assert.equal(selected.resumeAllowed, false); assert.equal(selected.sleepAllowed, false);
+  assert.doesNotMatch(JSON.stringify(selected), /PRIVATE_|context_json|prompt|grant-/);
+  assert.deepEqual(await snapshot(f.directory), before);
+  await f.journal.update(f.cursor, { phase: 'claim_unknown' });
+  const uncertain = await inspectCodexRecovery(f.directory);
+  assert.equal(uncertain.admissionPhase, 'claim_unknown');
+  assert.ok(uncertain.issues.includes('DISPATCH_NATIVE_BINDING_UNKNOWN'));
+  assert.equal(uncertain.native.root.turnId, 'turn-97');
+  await f.journal.update(f.cursor, { families: [retained, { ...second, coordinatorRelease: { ...second.coordinatorRelease,
+    payload: { ...second.coordinatorRelease.payload, native_ref: 'foreign' } } }] });
+  assert.ok((await inspectCodexRecovery(f.directory)).issues.includes('FAMILY_REGISTRY_INVALID'));
+});
+
 test('interrupted spawn observations preserve root and nested receiver custody without recovery authority', async t => {
   const f = await fixture(t), timing = { startedAt: '2026-09-15T01:02:00.000Z', lastProgressAt: '2026-09-15T01:03:00.000Z' };
   await f.journal.write(attemptId, { ...f.native,

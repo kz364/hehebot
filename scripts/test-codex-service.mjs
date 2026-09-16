@@ -17,10 +17,11 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { inspectCodexRecovery } from '../runtime/codex-recovery-inspect.mjs';
 
 const root = resolve(import.meta.dirname, '..');
+const backgroundMode = process.argv.includes('--background-responsive');
 const effectsMode = process.argv.includes('--child-effects');
 const historyChildMode = process.argv.includes('--history-child');
 const planChildMode = process.argv.includes('--plan-child');
-const childMode = process.argv.includes('--child') || effectsMode || historyChildMode || planChildMode;
+const childMode = process.argv.includes('--child') || effectsMode || historyChildMode || planChildMode || backgroundMode;
 const crashMode = process.argv.includes('--crash');
 const historyMode = process.argv.includes('--history') || historyChildMode;
 const questionCancelMode = process.argv.includes('--questions-cancel');
@@ -29,12 +30,12 @@ const submissionAckMode = process.argv.includes('--submission-ack');
 const operationPagesMode = process.argv.includes('--operation-pages');
 const reasoningMode = process.argv.includes('--reasoning');
 const planMode = process.argv.includes('--plan') || planChildMode;
-const portalMode = process.argv.includes('--portal-readback');
+const portalMode = process.argv.includes('--portal-readback') || backgroundMode;
 const browserSession = `service-${randomUUID().slice(0, 8)}`;
 const browser = (...args) => promisify(execFile)('agent-browser', ['--session', browserSession, '--ignore-https-errors', ...args], { timeout: 30000 });
 const expectedToolCalls = operationPagesMode ? 101 : 1;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback', '--background-responsive'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -87,6 +88,9 @@ const report = { status: 'failed', modelRequests: 0, nativeReceipt: false, sprit
 let worker, service, model, dispatcher, workerLogs = '', bound = false;
 let toolRequests = 0, childThreadId, childHeld = false, childClosed = false;
 let nativeTransport, nativeLaunches = 0, crashHeld = false, crashClosed = false;
+let backgroundChild, independentHeld = false, independentClosed = false;
+const statusText = 'SERVICE_STATUS_S_71', independentText = 'SERVICE_INDEPENDENT_B_103';
+const statusOutput = 'SERVICE_STATUS_PROVISIONAL_71: A remains active; this is not a completed result.';
 const interrupts = [], notifications = [];
 const errors = [], taskRequests = [];
 try {
@@ -150,8 +154,32 @@ try {
       const chunks = []; for await (const chunk of req) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString());
       report.modelRequests++;
-      assert.ok(report.modelRequests <= (childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2), 'Unexpected model continuation');
+      assert.ok(report.modelRequests <= (backgroundMode ? 6 : childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2), 'Unexpected model continuation');
       await wait(() => bound, 'service acknowledged root');
+      if (backgroundMode) {
+        // Inspect the actual provider input, not a fabricated context or the claim alone.
+        const contexts = body.input.filter(item => item.role === 'user').flatMap(item => {
+          const content = typeof item.content === 'string' ? [item.content] : (item.content ?? []).map(part => part.text);
+          return content.flatMap(text => { try { return [JSON.parse(text)]; } catch { return []; } });
+        });
+        const context = contexts.find(candidate => [statusText, independentText].includes(candidate.instruction));
+        if (context?.instruction === statusText) {
+          assert.ok(backgroundChild, 'A registered before status submission');
+          const summary = context.task_summaries?.find(task => task.id === backgroundChild.id);
+          assert.ok(summary, 'Actual S model input contains A task summary');
+          assert.equal(summary.status, 'running');
+          assert.equal(summary.title, backgroundChild.title);
+          report.statusModelSawChildSummary = true;
+          await send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
+            content: [{ type: 'output_text', text: statusOutput, annotations: [] }] }]);
+          return;
+        }
+        if (context?.instruction === independentText) {
+          independentHeld = true;
+          res.once('close', () => { if (!res.writableEnded) independentClosed = true; });
+          return;
+        }
+      }
       if (report.modelRequests === 1) {
         assert.equal((await service.observe()).initialInference, 'inProgress');
         const initial = (await service.supervisor.operations()).filter(operation => operation.kind === 'inference' &&
@@ -355,12 +383,20 @@ try {
     ...(questionsMode ? { ownerQuestions: true } : {}),
     portalOrigin: origin + '/', runtimeTokenFile, tlsCAFile: cert, installationId: 'service-fixture',
     personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model', allowedTools: ['hehebot_list_routines'] } } };
-  const submissionRequests = [], heartbeatPages = [];
+  const submissionRequests = [], heartbeatPages = [], coordinatorReleases = [];
   const dependencies = { spriteRequest, fetchImpl: async (url, init) => {
     const response = await trustedFetch(url, init);
-    if ((operationPagesMode || reasoningMode || planMode) && new URL(url).pathname === '/internal/heartbeat') {
+    if ((operationPagesMode || reasoningMode || planMode || backgroundMode) && new URL(url).pathname === '/internal/heartbeat') {
       assert.equal(response.status, 200);
       heartbeatPages.push(JSON.parse(init.body).operations);
+    }
+    if (backgroundMode && new URL(url).pathname === '/internal/coordinator-release') {
+      assert.equal(response.status, 200);
+      const input = JSON.parse(init.body);
+      const terminal = notifications.find(n => n.method === 'turn/completed' && n.params.turn.id === input.native_ref);
+      assert.ok(terminal, 'Coordinator release follows actual native terminal observation');
+      assert.equal(input.outcome, terminal.params.turn.status);
+      coordinatorReleases.push(input);
     }
     if (submissionAckMode && new URL(url).pathname === '/internal/submitted') {
       assert.equal(response.status, 200);
@@ -450,6 +486,158 @@ try {
       report.pendingQuestionCancelledWithoutAnswer = true;
     }
   }
+  if (backgroundMode) {
+    // Multi-family acceptance stays separate from legacy single-cursor totals,
+    // recovery diagnostics and cancellation assertions below.
+    const getState = async () => (await (await trustedFetch(`${origin}/v1/state`)).json());
+    await wait(() => childHeld, 'A inherited MCP receipt and held inference');
+    await service.maintain(); // Persist service-owned child registration/output before S captures context.
+    const parent = await service.observe(dispatched.attemptId);
+    assert.equal(parent.rootSettled, true);
+    const [[childKey, childStatus]] = Object.entries(parent.childTurns);
+    const [aThread, aTurn] = JSON.parse(childKey);
+    assert.equal(aThread, childThreadId); assert.equal(childStatus, 'inProgress');
+    assert.deepEqual(Object.values(parent.childObligations[childKey].mcpCalls), ['completed']);
+    const registered = await getState();
+    const children = registered.runs.filter(run => run.parent_run_id === queued.resource_id);
+    assert.equal(children.length, 1); backgroundChild = children[0];
+    assert.equal(backgroundChild.status, 'running');
+    assert.equal(childClosed, false); assert.deepEqual(interrupts, []);
+    report.parentTerminalWithHeldChild = true;
+
+    const portalSubmit = async text => {
+      await browser('open', origin); await browser('set', 'viewport', '1280', '900', '2');
+      await browser('wait', '--fn', 'document.querySelector("#connection").textContent === "Connected"');
+      await browser('click', `[data-persona-id="${persona.id}"]`);
+      await browser('eval', `window.fixtureReceipts=[];window.fixtureFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.fixtureFetch(...args);if(args[0]==='/v1/commands'&&args[1]?.method==='POST')window.fixtureReceipts.push({request:JSON.parse(args[1].body),key:args[1].headers['Idempotency-Key'],receipt:await response.clone().json()});return response;}`);
+      await browser('fill', '#message', text); await browser('click', '#send');
+      await browser('wait', '--fn', 'window.fixtureReceipts.length === 1');
+      const [observed] = JSON.parse((await browser('eval', 'window.fixtureReceipts')).stdout);
+      assert.deepEqual(observed.request, { schema_version: 1, type: 'message.send', payload: { conversation_id: persona.id, text } });
+      assert.match(observed.key, /^[0-9a-f-]{36}$/); assert.equal(observed.receipt.status, 'applied');
+      return observed.receipt;
+    };
+    const statusReceipt = await portalSubmit(statusText);
+    assert.equal((await getState()).runs.find(run => run.id === statusReceipt.resource_id).status, 'queued');
+    report.statusQueuedBehindParent = true;
+    // Only service maintenance may release the lane and pump admission. The
+    // unpatched baseline must fail here, not pass via fixture-owned dispatch.
+    await wait(async () => {
+      await service.maintain();
+      assert.deepEqual(errors, []);
+      return report.statusModelSawChildSummary;
+    }, 'maintenance admits queued S while A remains held');
+    const families = await service.supervisor.bridge.families();
+    assert.equal(families.length, 2);
+    const p = families.find(row => row.attemptId === dispatched.attemptId);
+    const s = families.find(row => row.claim.run.id === statusReceipt.resource_id);
+    assert.equal(p?.coordinatorRelease?.acknowledged, true, 'P durable coordinator-release acknowledgement');
+    assert.equal(p.phase, 'running');
+    assert.ok(s); assert.notEqual(s.attemptId, p.attemptId);
+    const statusNative = await wait(async () => {
+      const row = await service.observe(s.attemptId); return row?.rootSettled && row;
+    }, 'S root terminal');
+    assert.notEqual(statusNative.threadId, parent.threadId);
+    assert.notEqual(statusNative.threadId, aThread);
+    const pGrant = await service.journal.get(`grant-${p.attemptId}`);
+    const sGrant = await service.journal.get(`grant-${s.attemptId}`);
+    assert.equal(pGrant.runId, queued.resource_id); assert.equal(sGrant.runId, statusReceipt.resource_id);
+    assert.equal(sGrant.attempt, s.claim.run.current_attempt);
+    assert.deepEqual(await service.observe(p.attemptId), parent);
+    assert.equal(childClosed, false); assert.deepEqual(interrupts, []);
+    await service.maintain();
+    const released = coordinatorReleases.find(input => input.run_id === queued.resource_id);
+    assert.deepEqual(released, { identity: service.supervisor.identity, run_id: queued.resource_id,
+      attempt: p.claim.run.current_attempt, native_ref: p.nativeRunId, outcome: 'completed' });
+    assert.deepEqual(p.coordinatorRelease.payload, released);
+    const beforeReload = await getState(), requestCount = report.modelRequests;
+    assert.equal(beforeReload.runs.find(run => run.id === queued.resource_id).status, 'running');
+    assert.equal(beforeReload.output_previews.find(preview => preview.run_id === s.claim.run.id)?.text, statusOutput);
+    assert.equal(beforeReload.output_previews.find(preview => preview.run_id === s.claim.run.id)?.attempt, s.claim.run.current_attempt);
+    const card = `[data-run-id="${statusReceipt.resource_id}"]`;
+    await browser('reload');
+    await browser('wait', '--fn', `document.querySelector('${card} .output-preview')?.textContent.includes('SERVICE_STATUS_PROVISIONAL_71')`);
+    await browser('eval', `document.querySelector('${card}').open=true`);
+    assert.match((await browser('get', 'text', `${card} .output-preview`)).stdout, /provisional.*not a completed result/);
+    assert.equal(JSON.parse((await browser('eval', 'document.querySelectorAll(".result-outcome").length')).stdout), 0);
+    assert.equal(report.modelRequests, requestCount);
+    assert.deepEqual((await getState()).output_previews, beforeReload.output_previews);
+    Object.assign(report, { freshStatusThreadAndGrant: true, statusReloadWithoutInference: true });
+
+    const independentReceipt = await portalSubmit(independentText);
+    await wait(async () => { await service.maintain(); return independentHeld; }, 'maintenance admits independent B');
+    const allFamilies = await service.supervisor.bridge.families();
+    assert.equal(allFamilies.length, 3);
+    assert.equal(new Set(allFamilies.map(row => row.attemptId)).size, 3);
+    const b = allFamilies.find(row => row.claim.run.id === independentReceipt.resource_id);
+    assert.ok(b);
+    const bNative = await service.observe(b.attemptId);
+    assert.equal(new Set([parent.threadId, statusNative.threadId, bNative.threadId, aThread]).size, 4);
+    assert.equal((await service.journal.get(`grant-${b.attemptId}`)).runId, independentReceipt.resource_id);
+    assert.equal(bNative.rootSettled, false); assert.equal(independentClosed, false);
+    const assertCoverage = async () => {
+      await service.maintain();
+      const operations = await service.supervisor.operations();
+      for (const family of allFamilies) {
+        const owned = operations.filter(op => op.run_id === family.claim.run.id);
+        assert.equal(owned.filter(op => op.status === 'unknown').length, 1, 'Each family retains unknown coverage');
+        assert.ok(owned.every(op => op.deadline_at <= family.claim.deadline_at));
+      }
+      assert.equal(new Set(operations.map(op => op.id)).size, operations.length);
+      const pages = heartbeatPages.slice(-Math.ceil(operations.length / 100));
+      assert.deepEqual(pages.flat(), operations, 'Heartbeat includes old and current families');
+      return operations;
+    };
+    const beforeCancel = await assertCoverage();
+    for (const id of [queued.resource_id, independentReceipt.resource_id]) {
+      assert.ok(beforeCancel.some(op => op.run_id === id && op.kind === 'inference' && op.status === 'active'));
+    }
+    const cancel = async runId => {
+      const response = await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
+        'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
+      }, body: JSON.stringify({ schema_version: 1, type: 'run.cancel', payload: {
+        run_id: runId, reason: 'Disposable exact background responsiveness cancellation' } }) });
+      assert.equal(response.status, 202); assert.equal((await response.json()).status, 'applied');
+      await service.maintain();
+    };
+    await cancel(independentReceipt.resource_id);
+    await wait(() => independentClosed, 'B interrupted HTTP closure');
+    await wait(async () => (await service.observe(b.attemptId)).nativeOutcome === 'interrupted', 'B exact native interruption');
+    assert.deepEqual(interrupts, [{ threadId: bNative.threadId, turnId: bNative.nativeRunId }]);
+    assert.deepEqual(await service.observe(p.attemptId), parent);
+    assert.equal(childClosed, false);
+    assert.notEqual((await service.journal.get(service.supervisor.bridge.cursor)).attemptId, p.attemptId);
+    await cancel(backgroundChild.id);
+    await wait(() => childClosed, 'old A interrupted HTTP closure');
+    await wait(async () => (await service.observe(p.attemptId)).childTurns[childKey] === 'interrupted', 'old A exact native interruption');
+    await service.maintain(); await service.maintain();
+    assert.deepEqual(interrupts, [{ threadId: bNative.threadId, turnId: bNative.nativeRunId }, { threadId: aThread, turnId: aTurn }]);
+    const operations = await assertCoverage();
+    await assert.rejects(service.supervisor.drain({ state: 'background-responsive' }), { code: 'SLEEP_DENIED' });
+    const final = await getState();
+    assert.equal(final.runs.find(run => run.id === queued.resource_id).status, 'running');
+    assert.equal(final.runs.find(run => run.id === statusReceipt.resource_id).status, 'running');
+    for (const id of [backgroundChild.id, independentReceipt.resource_id]) assert.equal(final.runs.find(run => run.id === id).status, 'cancelling');
+    const history = await (await trustedFetch(`${origin}/v1/conversations/${persona.id}/events`)).json();
+    assert.equal(history.events.filter(event => event.type === 'run.result').length, 0);
+    for (const text of ['SERVICE_ASSEMBLY_19_43', statusText, independentText]) {
+      assert.equal(history.events.filter(event => event.type === 'message.user' && event.payload.text === text).length, 1);
+    }
+    assert.equal(report.modelRequests, 6); assert.equal(nativeLaunches, 1); assert.deepEqual(errors, []);
+    assert.deepEqual(taskRequests, ['PUT', 'GET']);
+    Object.assign(report, { backgroundResponsive: true, exactIndependentCancellation: true, exactOldChildCancellation: true,
+      familyCount: 3, heartbeatOperations: operations.length, unknownCoverage: 3, sleepDenied: true,
+      completedResultObserved: false, productionCompletion: false, p02Complete: false });
+    await service.stop();
+    for (const family of allFamilies) {
+      assert.ok(await service.journal.get(family.attemptId));
+      assert.ok(await service.journal.get(`grant-${family.attemptId}`));
+    }
+    assert.equal((await service.supervisor.bridge.families()).length, 3);
+    assert.deepEqual(await service.supervisor.operations(), operations, 'Per-family coverage survives service stop');
+    assert.deepEqual(await service.journal.get(`grant-${p.attemptId}`), pGrant);
+    assert.deepEqual(await service.journal.get(`grant-${s.attemptId}`), sGrant);
+  } else {
   if (crashMode) await wait(() => crashHeld, 'active root inference after verified MCP receipt');
   else await wait(async () => (await service.observe())?.rootSettled, 'root completion');
   if (childMode) {
@@ -779,6 +967,7 @@ try {
     assert.deepEqual(await service.journal.get(dispatched.attemptId), before);
     assert.deepEqual(taskRequests, ['PUT', 'GET']);
     Object.assign(report, { restartRefused: true, nativeLaunches, rootWorkerStatus: 'running' });
+  }
   }
   report.status = 'passed';
 } catch (error) {

@@ -4,6 +4,37 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+Latest integrated wave used `.local/alpha-family.bundle`, unpublished host main
+d96a498, not origin/main. Backend worker T-01a0a983-1f17-755f-98ab-6b7047a68ea3
+and fixture worker T-01a0a983-8f49-759d-9f1b-0d44d9067af3 both finished. All three
+backend patches (release, compatibility, E2E) and the final portal-background patch
+are applied. Do not reapply delivered patches. Host implemented durable released
+families in the dispatch record, all-family operations/controllers/cancellation,
+maintenance-driven admission without blocking lease scheduling, exact old-attempt
+completion and read-only family diagnostics. Unknown release ACK fences admission.
+DB v10 release receipts do not settle tasks, operations, effects or descendants.
+
+Host `bash scripts/test-codex-service.sh --background-responsive` passes in
+`.local/family-background-host.log`: actual portal status while A held, separate
+status thread/grant, durable provisional reload, exact B then old A interruption,
+three families/unknown coverage retained, no final result or sleep. This is scripted
+loopback native evidence, not live inference. Final combined verifier exits0 with
+1,244 control/335 runtime tests and all native/service/build checks in
+`.local/family-combined-final.log`; desktop16/16 in `.local/family-desktop.log`.
+The earlier stale v9 E2E export-hash failure is in `.local/family-combined.log`.
+No provider/account/model action or production gate change occurred this wave.
+
+Next meaningful alpha work: reuse `docs/CODEX_PERMISSIONS.md` and its already
+passing real shell/direct-child deny comparison. The current service still uses
+ordinary broad-read sandboxing and a disposable-only gate. Integrate an explicit
+stable host-selected profile and review built-in/native file access plus the
+trusted local MCP/app-server process boundary against service credential/grant
+paths. Profiles constrain agent commands, not privileged MCP/app-server processes.
+Do not claim text-only isolation, infer a model grant, or insist on full recursive
+termination before supervised provisional replies. The 32 unresolved-family cap
+is real; restart/deleting custody is not an accepted reset. Existing-state startup
+still refuses replay. Continue the schedule toward a specifically bounded alpha.
+
 Newest owner direction is a restricted OWNER ALPHA, not full-product production
 acceptance. Keep credential/effect/authority/spend safeguards, but allow disclosed
 noncritical bugs, provisional replies and manual recovery. Do not require all

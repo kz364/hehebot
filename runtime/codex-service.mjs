@@ -38,7 +38,8 @@ export function createCodexService(config, dependencies) {
       if (result.stdout.trim() !== `codex-cli ${PINNED_CODEX}`) fail('CODEX_VERSION_MISMATCH');
     } } = dependencies;
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
-  let ownsIntent = false, stopping, currentTasks, currentAttempt, questions, questionNotification;
+  let ownsIntent = false, stopping, questions, questionNotification, admission;
+  const taskControllers = new Map();
   const assertStarting = () => {
     if (phase !== 'starting') fail('SERVICE_RECOVERY_REQUIRED');
   };
@@ -52,16 +53,38 @@ export function createCodexService(config, dependencies) {
   };
   const operations = dependencies.operations ?? (async () => {
     if (!supervisor) return [];
-    const row = await journal.get(supervisor.bridge.cursor);
-    if (!row?.attemptId || !row.claim) return [];
-    return new CodexOperations({ journal, attemptId: row.attemptId, runId: row.claim.run.id,
-      attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at,
-      deadlineAt: row.claim.deadline_at }).snapshot();
+    const snapshots = [];
+    for (const row of await supervisor.bridge.families()) {
+      if (!row.nativeRunId || row.phase === 'complete') continue;
+      snapshots.push(...await new CodexOperations({ journal, attemptId: row.attemptId, runId: row.claim.run.id,
+        attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at,
+        deadlineAt: row.claim.deadline_at }).snapshot());
+    }
+    return snapshots;
   });
   const recover = () => {
     if (phase === 'recovery') return;
     phase = 'recovery'; questions?.close(); supervisor?.disconnect();
     onRecovery({ code: 'SERVICE_RECOVERY_REQUIRED' });
+  };
+  const admit = () => {
+    if (admission) return admission;
+    admission = (async () => {
+      await router.flush();
+      await supervisor.serialized(async () => {
+        supervisor.assertLease();
+        const row = await journal.get(supervisor.bridge.cursor);
+        if (row?.attemptId && ['running', 'released'].includes(row.phase)) {
+          const native = await adapter.requireRun(row.attemptId);
+          if (native.rootSettled) {
+            await supervisor.bridge.releaseCoordinator({ ...native, attemptId: row.attemptId });
+            supervisor.assertLease();
+          }
+        }
+      });
+      return supervisor.dispatch();
+    })().catch(error => { recover(); throw error; }).finally(() => { admission = null; });
+    return admission;
   };
   const service = {
     get phase() { return phase; },
@@ -114,10 +137,13 @@ export function createCodexService(config, dependencies) {
             for (let tries = 0; tries < 400; tries++) {
               if (!['starting', 'running'].includes(phase) || !supervisor) return null;
               supervisor.assertLease();
-              const row = await journal.get(supervisor.bridge.cursor);
-              if (!row?.attemptId) return null;
-              const nativeRow = await journal.get(row.attemptId);
-              if (nativeRow?.threadId !== threadId || nativeRow.nativeRunId && nativeRow.nativeRunId !== turnId) return null;
+              const families = await supervisor.bridge.families();
+              let row, nativeRow;
+              for (const candidate of families) {
+                const native = await journal.get(candidate.attemptId);
+                if (native?.threadId === threadId) { row = candidate; nativeRow = native; break; }
+              }
+              if (!row || nativeRow.nativeRunId && nativeRow.nativeRunId !== turnId) return null;
               if (row.phase === 'running') {
                 supervisor.assertLease();
                 if (row.nativeRunId !== turnId) return null;
@@ -170,21 +196,22 @@ export function createCodexService(config, dependencies) {
           },
         };
         router = new CodexEventRouter({ transport, adapter, onRecovery: recover, now });
-        const taskController = async () => {
-          const row = await journal.get(supervisor.bridge.cursor);
-          if (!row?.attemptId || !row.nativeRunId) return null;
-          if (currentAttempt !== row.attemptId) {
-            currentAttempt = row.attemptId;
-            currentTasks = new CodexTaskControl({ adapter, control, journal, identity, attemptId: row.attemptId,
-              parent: { runId: row.claim.run.id, personaId: row.claim.run.persona_id, attempt: row.claim.run.current_attempt },
-              assertLease: () => supervisor.assertLease() });
+        const eachController = async action => {
+          for (const row of await supervisor.bridge.families()) {
+            if (!row.nativeRunId || row.phase === 'complete') continue;
+            if (!taskControllers.has(row.attemptId)) {
+              taskControllers.set(row.attemptId, new CodexTaskControl({ adapter, control, journal, identity, attemptId: row.attemptId,
+                parent: { runId: row.claim.run.id, personaId: row.claim.run.persona_id, attempt: row.claim.run.current_attempt },
+                assertLease: () => supervisor.assertLease() }));
+            }
+            await action(taskControllers.get(row.attemptId));
           }
-          return currentTasks;
         };
         supervisor = new ExecutionSupervisor({ control, native, journal, identity, installationId: config.installationId,
           personas: config.personas, events: router, activity, operations, now, onRecovery: recover,
-          children: { sync: async () => (await taskController())?.sync(), cancel: async ids => (await taskController())?.cancel(ids),
-            steer: async () => (await taskController())?.steer(), publishOutputs: async () => (await taskController())?.publishOutputs() } });
+          admission: admit,
+          children: { sync: () => eachController(controller => controller.sync()), cancel: ids => eachController(controller => controller.cancel(ids)),
+            steer: () => eachController(controller => controller.steer()), publishOutputs: () => eachController(controller => controller.publishOutputs()) } });
         await starting(() => control.request('ready', { identity }));
         const dispatched = await starting(() => supervisor.start());
         if (supervisor.phase !== 'running') fail('SERVICE_RECOVERY_REQUIRED');
@@ -197,15 +224,21 @@ export function createCodexService(config, dependencies) {
         fail(error.code === 'NATIVE_COMPATIBILITY_GATE_BLOCKED' ? error.code : 'SERVICE_RECOVERY_REQUIRED');
       }
     },
-    async observe() {
+    async observe(attemptId = undefined) {
       await router?.flush();
       const cursor = supervisor && await journal.get(supervisor.bridge.cursor);
-      return cursor?.attemptId ? adapter.requireRun(cursor.attemptId) : null;
+      if (attemptId !== undefined) {
+        if (!(await supervisor.bridge.families()).some(row => row.attemptId === attemptId)) fail('UNKNOWN_ATTEMPT');
+        return adapter.requireRun(attemptId);
+      }
+      const latest = cursor?.attemptId ?? (supervisor && (await supervisor.bridge.families()).at(-1)?.attemptId);
+      return latest ? adapter.requireRun(latest) : null;
     },
     async maintain() {
       if (phase !== 'running') fail('SERVICE_RECOVERY_REQUIRED');
       await router.flush();
-      return supervisor.maintain();
+      await supervisor.maintain();
+      return admit();
     },
     stop() {
       return stopping ??= (async () => {
@@ -222,6 +255,7 @@ export function createCodexService(config, dependencies) {
           if (!exited()) fail('NATIVE_STOP_UNCONFIRMED');
         }
         if (supervisor) { await supervisor.work; await supervisor.maintenance?.catch(() => {}); }
+        await admission?.catch(() => {});
         if (ownsIntent) await journal.update('service', { phase: 'recovery', nativeStopped: true });
         phase = 'recovery';
         // Intentionally no complete/commit-sleep or activity release on shutdown.

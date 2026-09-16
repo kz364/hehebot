@@ -9,8 +9,11 @@ import { snapshotControl, verifyControl } from './backup-control.mjs';
 
 export const MAX_EXPORT_BYTES = 4 * 1024 * 1024;
 export const MAX_EXPORT_ROWS = 10000;
-const sqlHash = 'e4c47bc63091f399e0f85996c26093a7f88c5e9b3e1aee8a1cf17ffcd751c138';
-const schemaHash = '15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c';
+const sqlHash = '8c04fcebe0320505838768fa29450fbdc8a26ad745a8bad4f4b9c98cb203236a';
+const schemaPins = {
+  9: '15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c',
+  10: '682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4',
+};
 const hash = value => createHash('sha256').update(value).digest('hex');
 /** @returns {never} */
 const fail = () => { throw new Error('CONTROL_EXPORT_IMPORT_FAILED'); };
@@ -104,10 +107,10 @@ export async function importControlExport(exportFile, snapshotDirectory) {
     if (size > MAX_EXPORT_BYTES) fail();
     const input = parseExport(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, size)));
     keys(input, ['format', 'version', 'createdAt', 'schemaSha256', 'schemaVersions', 'tables']);
-    if (input.format !== 'hehebot-control-export' || input.version !== 1 || input.schemaSha256 !== schemaHash ||
-        !Array.isArray(input.schemaVersions) || input.schemaVersions.length < 1 || input.schemaVersions.length > 9 ||
-        input.schemaVersions.at(-1) !== 9 || !input.schemaVersions.every((version, i) =>
-          Number.isInteger(version) && version >= 1 && version <= 9 && (!i || version > input.schemaVersions[i - 1])) ||
+    const latest = Array.isArray(input.schemaVersions) ? input.schemaVersions.at(-1) : null;
+    if (input.format !== 'hehebot-control-export' || input.version !== 1 || ![9, 10].includes(latest) || input.schemaSha256 !== schemaPins[latest] ||
+        input.schemaVersions.length < 1 || input.schemaVersions.length > latest || !input.schemaVersions.every((version, i) =>
+          Number.isInteger(version) && version >= 1 && version <= latest && (!i || version > input.schemaVersions[i - 1])) ||
         typeof input.createdAt !== 'string' ||
         !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(input.createdAt) ||
         !Number.isFinite(Date.parse(input.createdAt)) || new Date(input.createdAt).toISOString() !== input.createdAt || !Array.isArray(input.tables)) fail();
@@ -119,8 +122,11 @@ export async function importControlExport(exportFile, snapshotDirectory) {
     const db = new DatabaseSync(source, { allowExtension: false });
     try {
       db.exec(sql.toString('utf8'));
+      // Reconstruct legacy snapshots without inventing receipts or upgrading
+      // their history. Only this disposable, empty local staging DB is changed.
+      if (latest === 9) db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json');
       const schema = db.prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name").all();
-      if (hash(JSON.stringify(schema)) !== schemaHash) fail();
+      if (hash(JSON.stringify(schema)) !== schemaPins[latest]) fail();
       const names = db.prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all().map(row => row.name);
       if (input.tables.length !== names.length) fail();
       let rows = 0;
