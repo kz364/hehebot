@@ -1,0 +1,139 @@
+# Local command receipt crash/reopen evidence
+
+This is the credential-free, disk-backed control-plane slice of E15 / SPEC §11.
+It is not production acceptance, native-runtime recovery, or provider evidence.
+Production execution and native-verification flags remain false.
+
+## Reproduce
+
+From the repository with dependencies installed, on Linux with `ps` available:
+
+```sh
+node --check scripts/test-control-crash.mjs
+node scripts/test-control-crash.mjs 2
+node scripts/test-control-crash.mjs 100 > .local/e15-crash-100.jsonl
+node scripts/test-control-restart.mjs
+```
+
+The crash script defaults to 100; an explicit count must be an integer from 1
+through 100. A smaller run is a pilot, not satisfaction of the 100-injection
+target. Each run emits per-case JSON and a final pass/fail summary. Failure exits
+nonzero and preserves private temporary logs and the failing store. Successful
+stores are deleted only after their reopened checks and process cleanup pass.
+Do not expose either harness through a public portal.
+
+## What one injection means
+
+Each case gets its own fresh disposable Worker/SQLite persistence directory and
+deterministic case/key labels. It first acknowledges an independent sibling
+message and retains that exact receipt and run as the pre-crash oracle. Then:
+
+* **Odd cases: precommit loss.** A loopback HTTP relay forwards all but the final
+  JSON byte while declaring the full Content-Length. The body cannot finish
+  parsing or reach command acceptance. A concurrent state read confirms only the
+  sibling exists. The worker is killed while that request remains incomplete.
+* **Even cases: committed response lost.** The relay forwards the complete
+  request and buffers its full HTTP 202 receipt as a test oracle. It sends no
+  response headers or bytes to its owner-facing HTTP client. The worker is then
+  killed before the relay/client connection is destroyed. The owner observes a
+  lost connection, not a receipt.
+
+The harness discovers Wrangler's descendant processes, requires live `workerd`
+children, sends them **SIGKILL**, then stops Wrangler and checks the entire
+captured process tree is no longer running and its HTTP listener is closed. It
+starts a new Wrangler/workerd tree against the **same persistence directory**.
+Wrangler can have multiple workerd children (for example runtime and proxy); their
+PIDs are recorded, but killing them together counts as **one injection**, not
+multiple durability trials. Graceful shutdown of the reopened worker is cleanup,
+not another crash. Terminated zombies are not considered running descendants;
+the directly spawned Wrangler child must emit its exit event.
+
+After reopening, every case verifies:
+
+* The acknowledged sibling receipt and full run are unchanged, including after
+  retrying its original key. Target and sibling resource IDs differ.
+* Precommit target absence, or committed target presence, before retry.
+* Original key with reordered JSON fields returns the exact committed receipt;
+  another exact retry does not create additional work. Changed body with that
+  same key returns HTTP 409 `IDEMPOTENCY_CONFLICT`.
+* Receipt lookup, exactly two run records, exactly the two expected user-message
+  events, and exactly two application command records after retries/conflict.
+* Execution remains disabled, lifecycle remains `STOPPED`, provider remains
+  unconfigured, and application `attempts`, `operations`, `effects`,
+  `controller_operations`, and `native_task_links` tables remain empty.
+
+The ledger checks use the supported `/v1/export/control` application snapshot.
+They do not open Cloudflare host tables or any Codex/third-party runtime database.
+No source instrumentation, production configuration change, or rate-limit
+bypass is used. The crash subprocess has a disposable HOME, no inherited model
+or provider secrets, and no native runtime is launched. Zero model/wake/provider
+activity is supported by this disabled/unconfigured topology and empty durable
+ledgers, **not** an independent network-call spy or a live-provider trace.
+
+## Bounds and interpretation
+
+Each separate store consumes five owner writes for precommit cases or six for
+committed-response-loss cases, including duplicates and the rejected conflict.
+These counters are asserted from the application snapshot. Normal read counts
+are eight or seven, respectively; one application export is additional. Existing
+60 writes/minute, 120 reads/minute and two exports/minute limits are unchanged.
+This is not a throughput claim about one owner at five writes/second.
+
+Startup is bounded at 45 seconds, HTTP and relay-gate waits at 10 seconds, and
+child cleanup at 15 seconds. The summary's `requests` counts the JSON request
+helper calls; it excludes injected relay requests and negative stopped-listener
+probes. Per-case time includes initial startup, crash, reopen, assertions and
+cleanup. Request labels and injection boundaries are deterministic, while UUIDs
+generated by the application, PIDs, ports and elapsed times are not.
+
+These are 100 actual process-crash/reopen trials, each with acknowledged data at
+risk, not 100 object reconstructions or response discards. Nevertheless, the
+precommit boundary is **incomplete HTTP input**, not an instrumented transaction
+rollback boundary. The committed boundary is **after a complete upstream 202**,
+not a random point inside SQLite fsync. The test does not simulate power loss,
+filesystem corruption, remote Cloudflare deployment, active execution, unknown
+external effects, model inference, provider wakes, or full E15 acceptance.
+
+The separate original restart harness retains its two graceful restarts and
+targeted-cancel/sibling-isolation assertions. Ephemeral HTTP and inspector ports
+avoid collisions between local harnesses; no public authentication bypass is
+introduced.
+
+## Measured local result — 2026-09-16
+
+Linux orb, Node v26.5.1, Wrangler 4.130.0, workerd 1.20260908.1. The source baseline
+was the coordinator's **unpushed local main**, supplied by bundle, not origin/main.
+
+| Command | Observed result |
+|---|---|
+| `node scripts/test-control-crash.mjs 100` | Passed 100/100 injections and 100 reopens in **458,672 ms (7m 38.672s)**; 50 precommit, 50 committed-response-lost |
+| `node scripts/test-control-crash.mjs 2` | Final launch-argument pilot passed 2/2 in 11,282 ms; one of each loss mode |
+| `node scripts/test-control-restart.mjs` | Passed 18 requests and two graceful restarts, including targeted cancellation; workers stopped |
+| `node --check scripts/test-control-crash.mjs` and `node --check scripts/test-control-restart.mjs` | Passed |
+| `git diff --check` | Passed |
+
+The full run recorded 200 distinct killed workerd PIDs in **100 paired process
+trees**, not 200 injections. All 100 acknowledged siblings survived; all 50
+committed-but-undelivered target receipts matched exactly after reopen. No
+owner-facing injected response contained headers or bytes. Each case passed
+conflict rejection, exact retry, timeline/run/command cardinality, stopped gates,
+empty execution/provider ledgers and child cleanup. A final process scan found
+no remaining workerd/Wrangler processes. No production defect was found.
+
+There were 1,350 JSON-helper calls, plus 100 injected relay requests (50 incomplete
+bodies), and 200 negative stopped-listener probes. Application snapshots recorded
+550 owner writes and 750 normal owner reads across the 100 separate stores, plus
+one export per store. Case duration ranged from 3,734 to 6,028 ms.
+
+The first attempt to run the old graceful script concurrently failed before
+ingress because its default inspector port 9229 collided with the crash harness.
+Both harnesses now request inspector port 0. The 100-case process was already
+running before that launch-only argument was added to the crash script; the
+subsequent two-case pilot tested the final argument while the full run continued.
+No crash/recovery assertion changed during the full run. The failed old launch
+is not included in the 100 injections, and the pilot is reported separately.
+
+The transferable evidence archive contains the patch, the full run's 100 case
+records plus summary, the final two-case pilot, and the graceful-run summary.
+Local logs and disposable databases are not included. These results complete
+this local crash-test slice, not all E15 or a production promotion gate.

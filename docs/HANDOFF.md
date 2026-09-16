@@ -2,6 +2,32 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Active follow-up (2026-09-16)
+
+Main has implemented scoped WhatsApp authority: operator registry
+`HEHEBOT_WHATSAPP_READ_POLICIES` defaults empty; admission captures exact tool/chat
+tuples; `whatsapp-read-authorize` intersects pinned/current grants and checks lease,
+attempt, deadline and native ancestor state. No MCP tool registration or live
+connector yet. 38 focused core tests and 11 ControlClient tests pass. The integrated
+verifier passed 1,154 control / 259 runtime tests, seven license-auditor tests,
+the scoped-read HTTPS fixture, two crash/reopen cases and all native/service/build
+checks (`.local/authority-integration-combined.log`). Desktop 16 tests and the
+separate 18-request/two-restart graceful fixture also passed. Gates remain false.
+
+Two independent workers imported `.local/parallel-next.bundle` (source local main
+310bac4, not origin/main). Restart worker `T-01a0a841-c306-71c9-b6e4-34d94d4e7c2c`
+delivered the crash harness with 100 passing injections. License worker
+`T-01a0a841-dfd3-720d-a7c5-76304d75bf78` delivered the artifact inventory. Both are
+reviewed/applied; no workers remain outstanding. The inventory deliberately exits
+2 (review required), with 350 SRI-verified/340 inspected locations and ten canonical
+path collisions. Main added safe interior-dot alias handling with collision tests.
+Main's concurrent 100-case rerun timed out on case 4; cleanup deadline was not
+confirmed, but subsequent process scan found no workerd survivors. Sequential
+rerun is active in `.local/integrated-crash-sequential-100.jsonl`; inspect its final
+result before marking that slice complete. Do not weaken timeouts/assertions.
+No auth-only boundary reached: trusted MCP transport/operation accounting, guided
+connector setup, and remaining E01/E02 coverage are still credential-free work.
+
 ## Parallel integration checkpoint (2026-09-16)
 
 Four workers imported `.local/parallel-baseline.bundle` from this thread's local

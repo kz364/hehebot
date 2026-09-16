@@ -21,6 +21,7 @@ import validateRuntime from '../generated/validate-runtime.js';
 import type { RuntimeCommand } from '../core/runtime-types';
 import type { RoutinePut } from '../core/types';
 import {AgentCommandBoundary} from '../core/agent-commands';
+import {parseWhatsAppReadPolicies,WhatsAppReadAccess} from '../core/whatsapp-access';
 export type TriggerPolicy={routine_id:string;event_types:string[]};
 function stringList(value:string):string[]{const parsed:unknown=JSON.parse(value);if(!Array.isArray(parsed)||!parsed.every(x=>typeof x==='string'))throw new Error('Invalid policy configuration');return parsed;}
 function delegationMap(value:string):Record<string,string[]>{
@@ -43,7 +44,7 @@ export class PersonalControl extends DurableObject<Env> {
    transaction:<T>(fn:()=>T)=>this.ctx.storage.transactionSync(fn)
   };
   this.store=new Store(db);
-  this.core=new ControlCore(this.store,{executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  this.core=new ControlCore(this.store,{executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
@@ -123,6 +124,7 @@ export class PersonalControl extends DurableObject<Env> {
   const command=input as RuntimeCommand;
   if(command.type==='status'){const state=this.lifecycle.get();return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled};}
   requireThat(this.core.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified.');
+  if(command.type==='whatsapp-read-authorize')return new WhatsAppReadAccess(this.core,this.lifecycle).authorize(command.payload);
   let result:unknown={ok:true};
   switch(command.type){
    case 'question-record':{

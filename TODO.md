@@ -6,11 +6,12 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 ## Current checkpoint
 
-- **Latest checkpoint:** four parallel deliveries integrated, plus model-command deadline checks and bounded WhatsApp host checks/locked installation, 2026-09-16. Verified locally; not pushed or deployed.
+- **Latest checkpoint:** scoped WhatsApp Worker authority and two further parallel deliveries integrated, 2026-09-16. Verified locally as bounded below; not pushed or deployed.
 - **Focused evidence:** **45 runtime/service + 186 control/backup tests passed** after reviewing and applying worker deliveries. **15 WhatsApp reads passed**; disposable 350-package installation, exact approved patch and compatibility checks passed. Logs: `.local/parallel-question-focused.log`, `.local/parallel-control-focused.log`, `.local/wappmcp-locked-focused.log`.
-- **Combined:** `bash scripts/verify-codex.sh` passed **1,145 control / 259 runtime tests**, pinned compatibility, HTTP/native/service fixtures and typecheck/build dry run. Desktop **16 passed**. Logs: `.local/parallel-final-combined.log`, `.local/parallel-desktop.log`. Final status passed; production admission false.
+- **Combined:** `bash scripts/verify-codex.sh` passed **1,154 control / 259 runtime tests**, seven artifact-auditor tests, pinned compatibility, scoped HTTPS read fixture, two actual crash/reopen cases, HTTP/native/service fixtures and typecheck/build dry run. Desktop **16 passed**; separate graceful harness passed 18 requests/two restarts. Log: `.local/authority-integration-combined.log`. Final status passed; production admission false.
 - **Evidence boundary:** scripted model/provider responses, pristine Codex 0.154.0 and local Worker/SQLite are not authenticated model judgment, complete native settlement, real provider sleep or production acceptance.
-- **Next priority:** all four worker deliveries are reviewed, integrated and verified; main retains integration/checklist ownership. Continue trusted chat-grant/lease wiring and remaining E01/E02 coverage. These are still credential-free engineering, not an auth-only boundary.
+- **Next priority:** finish the sequential crash verification, then trusted WhatsApp MCP transport/operation accounting and remaining E01/E02 coverage. All six worker deliveries are reviewed/applied; main retains integration/checklist ownership. Credential-free engineering remains; this is not an auth-only boundary.
+- **Now in progress:** the 100-case crash delivery is reviewed/applied; worker evidence passed, but main's first concurrent rerun timed out on case 4. Sequential rerun is active in `.local/integrated-crash-sequential-100.jsonl`; do not count it before completion. License inventory is integrated: 350 SRI checks, 340 inspected artifacts, ten canonical-path collisions, review required—not redistribution approval. No workers remain outstanding.
 - **Owner action needed now:** none for the next credential-free work. External acceptance actions are listed separately below; no credentials should be pasted into this file or chat.
 - **Mac direction:** SwiftUI + WKWebView native shell around the remote portal, as communicated by the owner-decision thread. Not implemented. Existing Electron code is a tested foundation, not a verified Mac release. The separate Mac-decision documentation edits have not been integrated into this checkout.
 
@@ -28,6 +29,8 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 These are useful foundations that should not be rebuilt simply because their full acceptance gates remain open.
 
+- [x] Operator-selected WhatsApp chat/tool grants are captured at admission and intersected with current registry, exact attempt/lease, hard deadline and ancestor state. HTTPS Worker composition rejects foreign scope/mutations and suppresses results after cancellation. Evidence: 38 focused core / 11 client tests, two synthetic reads, combined verifier. No actual MCP registration, pairing or browser operation.
+- [x] Reproducible pinned-artifact license evidence collection without extraction or lifecycle execution. Seven unit tests and 350 SRI checks; [findings and unresolved obligations](docs/WAPPMCP_LICENSE_EVIDENCE.md). Legal/redistribution approval stays open.
 - [x] Initial native-question journal reads obey the admitted task deadline; late I/O cannot invent an answer/resolution. Evidence: 45 question/service and 72 core question tests plus combined run. Successful recovery and native termination remain E01/E02.
 - [x] Pruning rejects impossible deletion sequences and preserves unknown receipt boundaries. Evidence: 114 backup/retention/restore tests; [limits](docs/CONTROL_BACKUP_JOURNAL_SAFETY.md). Not journal authenticity or off-host deletion proof.
 - [x] Recovery editors reject offline/stale task, effect digest/status and eligibility before POST; reconnect never replays. Evidence: recovery/question Chromium checks, keyboard/error-role assertions, inspected desktop/narrow captures. E04 remains partial.
@@ -96,8 +99,9 @@ Do not perform these implicitly. [AUTH_SETUP.md](docs/AUTH_SETUP.md) contains de
 `9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8` is now specified in SPEC.md. Setup/catalog
 remains unimplemented. An unregistered scoped read boundary now has synthetic
 contract and cancellation/timeout tests. Host-only canonical UTC `deadlineAt`
-can cap the relative timeout; trusted task-grant/lease/revocation and transport
-wiring must supply the admitted deadline and remain unimplemented.
+can cap the relative timeout. Worker task-grant/lease/revocation authority is now
+implemented and HTTPS-tested; trusted runtime transport assembly must still bind
+the admitted deadline and account for in-flight MCP operations.
 The owner approved only the pinned upstream 1.34.7 patch; AGENTS.md and SPEC.md
 now contain that exception. `scripts/verify-wappmcp.mjs` pins both tarball hashes
 and source patch hash, verifies clean application in disposable storage and executes
@@ -107,9 +111,9 @@ approved patch applied explicitly; no browser or connector was started. The pinn
 350-package graph is in `config/wappmcp/`. License metadata includes LGPL-3.0-or-later
 `node-webpmux`, Public Domain `jsonify` and two missing declarations; full source,
 asset and notice audit remains open, not a permissive-license approval.
-Optional host `authorize` checks before/after reads are bounded and redacted, but
-Worker grant/lease/revocation wiring is absent. Current snapshots contain policy IDs,
-not WhatsApp chat scopes; do not infer scopes from IDs. Guided installer/catalog,
+Optional host `authorize` checks before/after reads are bounded and redacted.
+New snapshots capture exact operator-selected chat/tool policies; legacy snapshots
+without scopes deny. The operator registry defaults empty. Guided installer/catalog,
 license review and trusted transport wiring remain credential-free work.
 Pairing, reconnect/history coverage and sleep/cost measurements require separate
 live authorization. Notification allowlists are not tool permissions; mutations

@@ -4,6 +4,64 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+WhatsApp scoped-authority follow-up (2026-09-16):
+`HEHEBOT_WHATSAPP_READ_POLICIES` is an operator-provisioned JSON registry keyed by
+policy UUID, with values `{chatIds:string[],tools:string[]}`. It defaults to `{}`
+in production and local configuration. Only the two scoped reads are accepted;
+mutations, duplicate IDs/tools, malformed IDs and >64KiB UTF-8 registry content
+reject. At most 64 policies and 100 chats per policy are accepted. No wildcard or
+empty-means-all behavior exists.
+
+Admission captures exact registry grants whose policy IDs occur in both the
+operator tool registry and persona snapshot. Routines additionally require their
+admitted action-policy IDs and the current operator action registry. The optional
+`whatsapp_read_policies` snapshot field is absent when none qualify; old snapshots
+without it deny reads. Native descendants of the same persona retain the original
+snapshot; another admitted persona captures its own scope. Policy edits do not
+silently broaden already admitted tasks.
+
+`POST /internal/whatsapp-read-authorize` uses the existing runtime bearer boundary,
+execution gates and generated schema. Input is `{identity,run_id,attempt,name,chatId}`;
+there are no caller-supplied grants or deadlines. `WhatsAppReadAccess.authorize`
+requires current executor/attempt, running/finishing task, unexpired admitted
+deadline and non-cancelled/non-stale native ancestry. The exact tool/chat pair must
+occur together under one policy in both pinned and current registry grants.
+Removing or narrowing current operator configuration denies access; current
+persona edits retain the existing immutable-task semantics, so cancel the task
+or revoke the operator policy when immediate revocation is needed.
+
+Success returns `{allowed:true,deadline_at}` using the earliest task/ancestor
+deadline. The query writes no records, renews no lease and schedules no inference.
+The ControlClient allowlist includes it. This is an authorization surface, NOT
+connector dispatch: trusted runtime composition must bind original task custody,
+use it around `readWappMcp`, supply its admitted deadline, and account for in-flight
+MCP operations. No WhatsApp tool is registered, browser started or account paired.
+
+Focused evidence: 38 core tests (9 new scoped-access cases), 11 client tests,
+generated contracts and typecheck pass. Coverage includes asymmetric tool/chat
+pairs, no policy union widening, registry expansion/narrowing, routine restriction,
+cross-persona/legacy denial, exact expiry, parent cancellation, native inheritance,
+UTF-8 bounds and rejection of injected grant/result fields. Logs:
+`.local/whatsapp-access-focused.log`, `.local/whatsapp-access-client.log`.
+The first full verifier passed in `.local/whatsapp-access-combined.log`.
+`scripts/test-control-whatsapp.mjs` also passes against a disposable HTTPS Worker:
+wrong token/chat/attempt/epoch, mutation and injected-grant fields reject; queries
+preserve run/event state; cancellation during a synthetic read suppresses its
+result and blocks another dispatch. Two synthetic reads, no live account, MCP,
+browser or provider calls. Real runtime MCP assembly remains open.
+
+Second parallel delivery integration (2026-09-16): the artifact-license auditor
+and disk-backed receipt-crash harness are reviewed and applied. The auditor's
+seven unit tests pass; all 350 locked artifacts pass SRI, 340 are inspected and
+ten retain canonical-path collision errors. Exit 2 deliberately means review
+required, never legal approval. See [license evidence](WAPPMCP_LICENSE_EVIDENCE.md).
+The worker's 100 crash/reopen trials passed; main's first rerun failed on case 4
+with an HTTP timeout during concurrent combined verification, and its cleanup
+deadline was not confirmed. A subsequent process scan found no workerd survivors.
+Do not count the failed rerun as acceptance. Integrated combined and sequential
+crash reruns are pending; [methodology](CONTROL_CRASH_RESTART.md) distinguishes
+incomplete-input loss from committed-response loss and excludes power-loss claims.
+
 Parallel integration checkpoint (2026-09-16; verified locally, unpushed):
 
 - Native question binding arms the admitted deadline immediately after validating

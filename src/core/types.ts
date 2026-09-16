@@ -1,6 +1,7 @@
 import type { BudgetPolicy } from './budget';
 import type { RosterLayout } from './roster';
 import type { NativeQuestionAnswerCommand, NativeQuestionCloseCommand } from './native-questions';
+import type { WhatsAppReadPolicies } from './whatsapp-access';
 export type Scope = { kind: 'global' | 'persona' | 'routine' | 'skill'; id: string | null };
 export type BasePut = { id: string; expected_revision: number };
 export type PersonaPut = BasePut & { name: string; role?: string; instructions: string; tool_policy_ids: string[]; archived: boolean };
@@ -47,6 +48,6 @@ export type Receipt = { id: string; status: 'accepted' | 'applied' | 'rejected';
 export type RunStatus = 'queued' | 'claimed' | 'running' | 'finishing' | 'completed' | 'waiting' | 'failed' | 'cancelling' | 'cancelled' | 'recovery_required';
 export type Run = { role:'coordinator'|'background';parent_run_id:string|null;title:string|null;id: string; command_id: string | null; occurrence_id: string | null; persona_id: string; routine_id: string | null; context_json: string; status: RunStatus; current_attempt: number; error_code: string | null; checkpoint_json: string | null; created_at: string; updated_at: string };
 export type Operation = { id: string; kind: 'inference' | 'tool' | 'child' | 'transfer' | 'node' | 'flush' | 'delivery'; status: 'active' | 'cancelling' | 'settled' | 'unknown'; started_at: string; deadline_at: string; last_progress_at: string };
-export type ContextSnapshot = {context_history_gap?:{requested_after:number;expired_through:number};task_summaries?:Array<{id:string;title:string|null;status:string;updated_at:string}>; schema_version: 1; persona: StoredObject<PersonaPut>; routine: StoredObject<RoutinePut> | null; memories: StoredObject<MemoryPut>[]; skills:StoredObject<SkillBody>[]; scope_key: string; instruction: string; room_id: string | null; context_events: TimelineEvent[]; authorization_policy_ids: string[] };
+export type ContextSnapshot = {whatsapp_read_policies?:WhatsAppReadPolicies;context_history_gap?:{requested_after:number;expired_through:number};task_summaries?:Array<{id:string;title:string|null;status:string;updated_at:string}>; schema_version: 1; persona: StoredObject<PersonaPut>; routine: StoredObject<RoutinePut> | null; memories: StoredObject<MemoryPut>[]; skills:StoredObject<SkillBody>[]; scope_key: string; instruction: string; room_id: string | null; context_events: TimelineEvent[]; authorization_policy_ids: string[] };
 export type TimelineEvent = { sequence: number; id: string; conversation_id: string | null; type: string; actor_id: string; cause_id: string | null; payload: Record<string, unknown>; created_at: string };
-export type Options = { delegations?:Record<string,string[]>;executionEnabled: boolean; actionPolicyIds: string[]; toolPolicyIds: string[]; now: () => Date; uuid: () => string };
+export type Options = { whatsappReadPolicies?:WhatsAppReadPolicies;delegations?:Record<string,string[]>;executionEnabled: boolean; actionPolicyIds: string[]; toolPolicyIds: string[]; now: () => Date; uuid: () => string };

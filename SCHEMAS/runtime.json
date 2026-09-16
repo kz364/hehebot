@@ -25,6 +25,24 @@
     {
       "type":"object","additionalProperties":false,
       "properties": {
+        "type":{"const":"whatsapp-read-authorize"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "identity":{"$ref":"#/$defs/runtimeIdentity"},
+            "run_id":{"type":"string","format":"uuid"},
+            "attempt":{"type":"integer","minimum":1},
+            "name":{"enum":["whatsapp_get_chat_messages","whatsapp_search_messages"]},
+            "chatId":{"type":"string","minLength":1,"maxLength":256}
+          },
+          "required":["identity","run_id","attempt","name","chatId"]
+        }
+      },
+      "required":["type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
         "type":{"const":"question-record"},
         "payload": {
           "type":"object","additionalProperties":false,

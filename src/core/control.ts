@@ -14,6 +14,7 @@ import {nativeDescendantsSettledSql} from './native-tasks';
 import {EffectLedger} from './effects';
 import {ResourceLedger} from './resources';
 import {OutputPreviews} from './output-preview';
+import {captureWhatsAppReadPolicies} from './whatsapp-access';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
@@ -408,7 +409,8 @@ export class ControlCore {
    if(cursor<page.expiredThrough)contextHistoryGap={requested_after:cursor,expired_through:page.expiredThrough};
    contextEvents=page.events.map(event=>this.currentContextEvent(event,personaId,now));
   }
-  return {schema_version:1,persona,routine,memories,skills:new SkillCatalog(this.store,()=>this.now(),this.options.uuid).enabled(personaId),scope_key:`${personaId}/${routineId?`routine/${routineId}`:roomId?`room/${roomId}`:'personal'}`,instruction,room_id:roomId,context_events:contextEvents,context_history_gap:contextHistoryGap,task_summaries:this.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>("SELECT id,title,status,updated_at FROM runs WHERE role='background' AND persona_id=? ORDER BY updated_at DESC LIMIT 30",personaId),authorization_policy_ids:routine?.body.action_policy_ids??[]};
+  const whatsapp=captureWhatsAppReadPolicies(this.options,persona.body,routine?.body??null);
+  return {...(Object.keys(whatsapp).length?{whatsapp_read_policies:whatsapp}:{}),schema_version:1,persona,routine,memories,skills:new SkillCatalog(this.store,()=>this.now(),this.options.uuid).enabled(personaId),scope_key:`${personaId}/${routineId?`routine/${routineId}`:roomId?`room/${roomId}`:'personal'}`,instruction,room_id:roomId,context_events:contextEvents,context_history_gap:contextHistoryGap,task_summaries:this.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>("SELECT id,title,status,updated_at FROM runs WHERE role='background' AND persona_id=? ORDER BY updated_at DESC LIMIT 30",personaId),authorization_policy_ids:routine?.body.action_policy_ids??[]};
  }
  enqueue(personaId:string,instruction:string,commandId:string|null,routineId:string|null,occurrenceId:string|null,roomId:string|null=null):string {
   const id=this.options.uuid(),now=this.now(),context=this.context(personaId,instruction,routineId,roomId);

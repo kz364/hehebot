@@ -13,7 +13,7 @@ const cwd = fileURLToPath(new URL('..', import.meta.url));
 const directory = await mkdtemp(join(tmpdir(), 'hehe-control-restart-'));
 let current, requests = 0, restarts = 0, stage = 'start';
 async function start() {
-  const child = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--env', 'local', '--ip', '127.0.0.1', '--port', '0', '--persist-to', directory], {
+  const child = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--env', 'local', '--ip', '127.0.0.1', '--port', '0', '--inspector-port', '0', '--persist-to', directory], {
     cwd, env: { ...process.env, WRANGLER_LOG_PATH: join(directory, 'wrangler'), WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';

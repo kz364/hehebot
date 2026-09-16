@@ -8,9 +8,11 @@ import type {BudgetReport} from './budget';
 import type {SteeringTarget,SteeringOutcome} from './task-steering';
 import type {OutputPreview} from './output-preview';
 import type {NativeQuestionInput} from './native-questions';
+import type {WhatsAppReadRequest} from './whatsapp-access';
 type Base={identity:Identity};type Attempt={run_id:string;attempt:number};
 export type RuntimePayloads={
  status:Record<string,never>;
+ 'whatsapp-read-authorize':WhatsAppReadRequest;
  'question-record':Base & Attempt & {question:NativeQuestionInput};
  'question-take':Base & {question_id:string;connection_id:string};
  'question-resolve':Base & {question_id:string;connection_id:string};
