@@ -1,4 +1,4 @@
-import { readWappMcp } from './wappmcp-reads.mjs';
+import { captureWappMcpResult, readWappMcp } from './wappmcp-reads.mjs';
 
 const fail = () => { throw Object.assign(new Error('WHATSAPP_OPERATION_INVALID'), { code: 'WHATSAPP_OPERATION_INVALID' }); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -47,11 +47,12 @@ export function readJournaledWappMcp({ journal, attemptId, operationId }, grant,
     const currentAuthority = await transportOptions.revalidate();
     waitDeadline = currentAuthority.deadlineAt;
     if (stopped()) fail();
-    const result = await call(tool, admitted, currentAuthority);
+    let result = await call(tool, admitted, currentAuthority);
     if (stopped()) fail();
     // Only a protocol result object is eligible. Content validation and the final
     // authority check still happen inside readWappMcp before any data is released.
     if (!object(result)) fail();
+    result = captureWappMcpResult(result);
     await journal.serial(async () => {
       if (stopped()) fail();
       const row = await journal.get(attemptId);

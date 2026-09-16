@@ -24,6 +24,23 @@ async function fixture(t) {
   return { journal, attemptId, options, config, read, snapshot: () => new CodexOperations(config).snapshot() };
 }
 
+test('response custody precedes journal response persistence and excludes payload from durable records', async t => {
+  const f = await fixture(t), timestamp = '2026-09-16T02:00:17.000Z';
+  const response = { structuredContent: [{ id: 'original-37', body: 'Original private text', timestamp, chat: { id: grant.chatIds[0] } }] };
+  const write = f.journal.write.bind(f.journal);
+  f.journal.write = async (key, row) => {
+    if (row.whatsappReads?.custody?.status === 'response') {
+      response.structuredContent[0].id = 'replacement-83';
+      response.structuredContent[0].body = 'Changed during persistence';
+    }
+    return write(key, row);
+  };
+  const result = await f.read('custody', async () => response);
+  assert.deepEqual(result.messages, [{ id: 'original-37', body: 'Original private text', timestamp }]);
+  assert.equal((await f.journal.get(f.attemptId)).whatsappReads.custody.status, 'response');
+  assert.doesNotMatch(await readFile(f.journal.path(f.attemptId), 'utf8'), /original-37|private text|replacement-83|structuredContent/);
+});
+
 test('fsynced intent precedes dispatch; actual response settles only invocation and payload never enters journal', async t => {
   const f = await fixture(t);
   let before;

@@ -10,6 +10,24 @@ const message = (id = 'msg-43', chatId = 'family@g.us') => ({ id, body: 'Untrust
   chat: { id: chatId }, attachments: ['PRIVATE_PATH'], extra: 'PRIVATE_EXTRA' });
 const envelope = structuredContent => ({ structuredContent, content: [{ type: 'text', text: 'PRIVATE_UNCHECKED' }] });
 
+for (const isError of [false, true]) test(`response custody preserves original isError=${isError} across final authority`, async () => {
+  const response = { isError, ...envelope([message('original-37')]) };
+  let checks = 0;
+  const pending = readWappMcp(grant(), recent, { chatId: 'family@g.us' }, async () => response, {
+    authorize: async () => {
+      if (++checks === 2) {
+        response.isError = !isError;
+        response.structuredContent[0].id = 'replacement-83';
+        response.structuredContent[0].body = 'Changed after response';
+      }
+      return true;
+    },
+  });
+  if (isError) await assert.rejects(pending, { code: 'WHATSAPP_READ_INVALID' });
+  else assert.deepEqual((await pending).messages, [{ id: 'original-37', body: 'Untrusted reminder text', timestamp }]);
+  assert.equal(checks, 2);
+});
+
 test('recent reads forward bounded defaults and return only attributed text records, never complete coverage', async () => {
   const calls = [];
   const result = await readWappMcp(grant(), recent, { chatId: 'family@g.us' }, async (name, args) => {

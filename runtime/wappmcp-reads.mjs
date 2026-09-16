@@ -7,6 +7,19 @@ const string = (value, max) => typeof value === 'string' && value.length > 0 && 
 const integer = (value, max) => Number.isSafeInteger(value) && value >= 1 && value <= max;
 const tools = ['whatsapp_get_chat_messages', 'whatsapp_search_messages'];
 
+// Both direct reads and journaled reads await host work after receiving a result.
+// Take custody of the bounded structured wire value first, not upstream references.
+export function captureWappMcpResult(result) {
+  try {
+    if (!object(result)) fail('WHATSAPP_READ_INVALID');
+    const isError = result.isError === true;
+    if (!Object.hasOwn(result, 'structuredContent')) return { isError };
+    const json = JSON.stringify(result.structuredContent);
+    if (typeof json !== 'string' || Buffer.byteLength(json) > 1048576) fail('WHATSAPP_READ_INVALID');
+    return { isError, structuredContent: JSON.parse(json) };
+  } catch { fail('WHATSAPP_READ_INVALID'); }
+}
+
 /** grant must come from the authenticated host's admitted task snapshot, never
  * model arguments or imported text. Caller supplies current lease/revocation checks
  * and supplies deadlineAt from the admitted attempt, not model arguments.
@@ -91,6 +104,7 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
       try { value = await call(name, { ...admitted }, { signal: controller.signal, deadlineAt: new Date(deadline).toISOString(), revalidate }); }
       catch { fail('WHATSAPP_READ_FAILED'); }
       if (controller.signal.aborted || signal?.aborted || Date.now() >= deadline) { stop(); return; }
+      value = captureWappMcpResult(value);
       if (authorize) await checkAuthority();
       return value;
     }).then(value => finish(resolve, value), error => {
@@ -105,9 +119,7 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
   let output;
   try {
     if (!object(result) || result.isError === true || !Object.hasOwn(result, 'structuredContent')) fail('WHATSAPP_READ_INVALID');
-    const json = JSON.stringify(result.structuredContent);
-    if (typeof json !== 'string' || Buffer.byteLength(json) > 1048576) fail('WHATSAPP_READ_INVALID');
-    const value = JSON.parse(json), messages = search ? value?.messages : value;
+    const value = result.structuredContent, messages = search ? value?.messages : value;
     if (search && (!exact(value, ['messages', 'meta']) || !exact(value.meta, ['q', 'chat', 'page', 'limit']) ||
         !exact(value.meta.chat, ['id']) || value.meta.chat.id !== admitted.chatId || value.meta.q !== admitted.query ||
         value.meta.page !== page || value.meta.limit !== limit)) fail('WHATSAPP_READ_INVALID');
