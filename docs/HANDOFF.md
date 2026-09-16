@@ -4,7 +4,27 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
-Current wave uses `.local/startup-history.bundle`, unpublished local main 5275c5d.
+Current wave uses `.local/cancel-journal.bundle`, unpublished local main f79006b,
+not origin/main. Task-cancellation UI worker
+`T-01a0a94e-b230-7486-9675-69972090171c` is reviewed/integrated: 13 exact synthetic
+envelopes and four neighboring browser fixtures pass; three DPR2 captures inspected.
+Memory edit/Forget and skill-review navigation regressions also pass, as does build.
+Supported containment design worker `T-01a0a94f-4a67-710c-b953-ccbd420e51d8`
+is reviewed/integrated; neither worker remains pending. Main checked central
+Sprite/kernel documentation and repeated read-only permission checks: no writable
+cgroup delegation. Next is the bounded prerequisite/ordering harness in
+`DESCENDANT_CONTAINMENT_DESIGN.md`; real kernel tests need administrator-provided
+disposable delegation. Selected-Sprite feasibility remains independently unproved.
+Main reproduced three journal value-custody failures and snapshots inputs before
+queueing, returning persisted JSON from writes while preserving undefined deletions.
+29 journal/service cases and typecheck pass; combined passed 1,227 control/301 runtime
+and scripted contracts in `.local/cancel-journal-combined.log`, desktop reinstall and
+16 tests pass. Final integrated rerun passed the same counts and all scripted/build
+checks in `.local/cancel-journal-final-combined.log` (exit 0).
+Journal, cancellation and design changes committed locally; no pending worker.
+All gates remain false; no external actions authorized.
+
+Previous wave uses `.local/startup-history.bundle`, unpublished local main 5275c5d.
 Both workers delivered and are reviewed/integrated. Conversation search plus eight
 browser regression invocations pass; four DPR2 captures inspected. Lock/journal/
 service suite passes 30 cases, including a live default-spawn child despite successful

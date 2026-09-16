@@ -4,6 +4,45 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Journal input/return custody (2026-09-16): three red tests reproduced mutations
+of queued insert/update inputs and divergence between a direct write's durable
+JSON and returned caller reference. Inserts and updates capture JSON before queueing;
+writes return the persisted wire value. Updates preserve undefined-field deletion,
+including a literal `__proto__` data key. The focused journal/service suite passes
+29 tests and typecheck (`.local/journal-custody-focused-final.log`); red evidence is
+`.local/journal-custody-red.log`. Combined verification passed 1,227 control/301
+runtime tests, scripted contracts and build dry run in `.local/cancel-journal-combined.log`;
+desktop reinstall and 16 tests passed in `.local/cancel-journal-desktop.log`.
+This is same-process value custody, not
+multi-executor exclusion, process-tree settlement or production acceptance.
+
+Exact-task cancellation review (2026-09-16): integrated both entry points with
+captured identity, task, attempt, status, navigation and offline checks, explicit
+consent and editor-local exact-request uncertain retry. Main reran the 13-envelope
+browser fixture plus question/task/recovery/conversation-search fixtures in
+`.local/task-cancel-integrated.log`, then memory edit/Forget and skill-review
+regressions in `.local/cancel-navigation-regressions.log`. All passed; three main-run
+DPR2 desktop/offline/uncertain captures were inspected. Build passed in
+`.local/cancel-journal-final-build.log`. The backend has no expected-attempt
+precondition, and a browser pre-response transport retry was observed in initial
+worker evidence; neither client guards nor cancellation prove native termination
+or effect settlement. See [bounded evidence](PORTAL_TASK_CANCEL.md).
+Final integrated combined verifier passed 1,227 control/301 runtime tests and all
+scripted/build checks in `.local/cancel-journal-final-combined.log` (exit 0).
+
+Descendant containment decision (2026-09-16): reviewed the independently produced
+[conditional design](DESCENDANT_CONTAINMENT_DESIGN.md), checked the central Sprite
+service and Linux cgroup documentation, and repeated read-only permission checks.
+Current orb scope is a root-owned domain with no writable directory/procs/kill and
+zero effective capabilities. No real containment test was possible or claimed.
+Recommendation retains the Sprite service wrapper and requires a protected manager
+plus an explicitly delegated cgroup workload subtree; same-UID writable delegation
+does not protect against workload escape. Provider stop progress is not recursive
+settlement evidence. Next local work is a bounded prerequisite/ordering harness;
+real kernel cases require an administrator-provided disposable delegation, and
+selected-Sprite support needs separately authorized inspection/provider guarantees.
+Both workers are integrated; no production or infrastructure changes.
+
 Service startup/stop fencing (2026-09-16): three red cases reproduced a control
 status call after initial shutdown, activity acquisition after shutdown during the
 starting journal write, and successful start return after shutdown during the final
