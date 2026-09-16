@@ -4,7 +4,22 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
-Current wave received `.local/forget-drain.bundle`, unpublished local main e666b73,
+Current wave is integrated from `.local/public-api-memory-inspect.bundle`,
+unpublished host local main 5223347, not origin/main. Both public-server and memory
+inspector workers delivered; neither remains pending. The host wired public ESM
+factory checks into the artifact verifier (22 tools/eight schema rejections/26 host
+denials; recent arrays still incompatible), and preserves open memory disclosures
+only across unchanged refreshes. Inspector/edit/Forget checks pass; three DPR2
+captures were inspected. Completion snapshots now precede both supervisor queueing
+and bridge awaits: five red cases, 92 focused tests and typecheck pass.
+Final combined verifier exited 0: 1,225 control/287 runtime, scripted contracts and
+build dry run; desktop 16/16. Logs: `.local/public-inspect-integration-{combined,desktop}.log`.
+All work remains local/unpublished; production gates false. Continue the owned
+one-installation service/descendant boundary before connector admission; SDK close
+and public factory transport closure do not prove browser settlement. Recent shape,
+licensing and live account/device gates remain open; E06/E09 are not complete.
+
+Prior wave received `.local/forget-drain.bundle`, unpublished local main e666b73,
 not origin/main. `T-01a0a901-126f-722c-888e-671c15e2b52f` owns guarded Forget UI
 and its browser fixture; `T-01a0a901-2475-709f-b6de-378be6605141` owns new backend
 memory purge custody tests/evidence. Both delivered and are reviewed/integrated;

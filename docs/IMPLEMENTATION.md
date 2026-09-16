@@ -4,6 +4,34 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Completion custody snapshot (2026-09-16): `ExecutionBridge.complete` retained the
+caller's observation/result object across journal and control awaits. Three red
+cases showed changed identity or divergence between durable result and Worker
+payload. The bridge now captures the JSON wire value before the first await;
+identity, settlement flags, nested checkpoint and result stay bound to that call.
+Six new cases cover three mutation boundaries, denied late proof upgrade, cyclic/
+BigInt rejection before I/O and subsequent valid completion. Two further red cases
+exposed the same gap while the supervisor queue waits; it now snapshots at entry
+as well. All 92 bridge/supervisor tests and typecheck pass in
+`.local/completion-custody-focused-final.log`; red evidence is in
+`.local/completion-custody-red.log` and `.local/completion-queue-red.log`.
+This is a synthetic caller-race reproduction, not authenticated native settlement
+or successful restart acceptance.
+
+Integrated public-server and memory-inspector evidence (2026-09-16): the locked
+public ESM factory passes 22-tool catalog, eight schema rejection and 26 host
+denial checks; actual recent arrays still fail server-side SDK validation.
+See [bounded methodology](WAPPMCP_PUBLIC_SERVER.md). No session/browser settlement
+or connector admission is implied. Memory metadata uses textContent, distinguishes
+null expiry from absent expiry and fetches no source text. Unchanged refresh keeps
+disclosures open; changed content/revision, deletion or navigation resets them.
+Inspector, 12-command edit and eight-command Forget browser fixtures pass in
+`.local/memory-inspect-integrated.log`; three DPR2 captures were inspected.
+Final `bash scripts/verify-codex.sh` exited 0 with 1,225 control/287 runtime tests,
+all scripted contracts and build dry run; desktop tests passed 16/16. Logs:
+`.local/public-inspect-integration-{combined,desktop}.log`. Local only; all
+production/model gates remain false and E06/E09 remain partial.
+
 Memory forgetting integration (2026-09-16): exact-memory consent now precedes
 `memory.delete`, preserving revision/scope/identity/navigation fences and stable
 explicit retry keys. `purge_transcripts` remains false. Main added disclosure of
