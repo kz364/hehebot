@@ -4,6 +4,18 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Terminal-cancellation follow-up checkpoint (2026-09-16): cancelling queued/waiting
+work now invokes the existing descendant-settlement-aware follow-up flush. Earlier
+pending follow-ups otherwise remained stranded, unlike follow-ups submitted after
+cancellation. Active/recovery cancellation does not flush. Two waiting-checkpoint
+fixtures cover immediate delivery versus live-grandchild deferral, exact target/text,
+unchanged sibling/attempt and duplicate receipt/flush prevention. Focused
+orchestration/retention/recovery suite: 26 passed
+(`.local/cancel-followup-focused.log`). Combined verification passed 917 control /
+251 runtime tests, all native/service fixtures and typecheck/build dry run
+(`.local/cancel-followup-combined.log`). Synthetic checkpoints do not prove native
+parking/restart; no production gates or provider state changed.
+
 Explicit-retry timer checkpoint (2026-09-16): accepting `run.retry` now deletes the
 prior attempt's automatic timer in the same transaction. Previously a fast second
 failure could hit `scheduleRetry`'s conflict-preserving insert and retain the first

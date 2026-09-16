@@ -69,6 +69,35 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(f.store.run(b.id)).toEqual(b);
   });
 
+  it.each([false,true])('terminal owner cancellation releases a waiting-task followup only after descendants settle: nested=%s', nested => {
+    const p=parent(),a=tasks.register(identity,receipt(p)),b=tasks.register(identity,receipt(p,'Unrelated sibling'));
+    const grandchild=nested?tasks.register(identity,receipt(a.id,'Nested work')):null;
+    finish(p);
+    life.complete(identity,a.id,1,{status:'waiting',text:'Checkpointed fixture',checkpoint:{fixture:'restartable'}});
+    const followup=f.accept({schema_version:1,type:'run.followup',payload:{run_id:a.id,text:'Review this cancelled task only'}});
+    expect(followup.status).toBe('applied');
+    expect(f.db.all('SELECT status FROM task_followups')).toEqual([{status:'pending'}]);
+    const key=randomUUID(),command={schema_version:1 as const,type:'run.cancel' as const,payload:{run_id:a.id,reason:'Stop checkpointed task'}};
+    const accepted=f.accept(command,key);expect(accepted.status).toBe('applied');
+    expect(f.store.run(a.id).status).toBe('cancelled');
+    if(grandchild){
+      expect(f.db.all('SELECT status FROM task_followups')).toEqual([{status:'pending'}]);
+      expect(life.claim(identity)).toBeNull();
+      finish(grandchild.id);
+    }
+    const queued=f.db.all<{status:string;coordinator_run_id:string}>('SELECT status,coordinator_run_id FROM task_followups WHERE id=?',followup.resource_id!)[0];
+    expect(queued.status).toBe('coordinator_queued');
+    const continuation=life.claim(identity)!.run;
+    expect(continuation.id).toBe(queued.coordinator_run_id);
+    expect(JSON.parse(continuation.context_json).instruction).toContain(a.id);
+    expect(JSON.parse(continuation.context_json).instruction).toContain('Review this cancelled task only');
+    expect(f.accept(command,key)).toEqual(accepted);
+    f.core.flushFollowups(a.id);
+    expect(f.db.all('SELECT id FROM runs WHERE command_id=?',followup.id)).toHaveLength(1);
+    expect(f.store.run(b.id)).toEqual(b);
+    expect(f.db.all('SELECT status FROM attempts WHERE run_id=?',a.id)).toEqual([{status:'waiting'}]);
+  });
+
   it('defers a task followup through its live grandchild, then queues it once without waiting for an unrelated sibling', () => {
     const p=parent(),a=tasks.register(identity,receipt(p)),b=tasks.register(identity,receipt(p,'Unrelated sibling'));
     const grandchild=tasks.register(identity,receipt(a.id,'Nested work'));

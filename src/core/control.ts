@@ -216,7 +216,9 @@ export class ControlCore {
     const status=run.status==='recovery_required'?'recovery_required':['queued','waiting'].includes(run.status)?'cancelled':'cancelling';
     // While cancelling, updated_at is the watchdog's original grace anchor.
     this.store.db.exec("UPDATE runs SET status=?,error_code='OWNER_CANCELLED',updated_at=? WHERE id=?",status,run.status==='cancelling'?run.updated_at:now,run.id);
-    this.store.event(this.options.uuid(),run.persona_id,'run.cancellation_requested',owner,commandId,{run_id:run.id,status,reason:command.payload.reason},now);return run.id;
+    this.store.event(this.options.uuid(),run.persona_id,'run.cancellation_requested',owner,commandId,{run_id:run.id,status,reason:command.payload.reason},now);
+    if(status==='cancelled')this.flushFollowups(run.id);
+    return run.id;
    }
    case 'run.retry': {
     const run=this.store.run(command.payload.run_id);

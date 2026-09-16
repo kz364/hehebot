@@ -2,6 +2,18 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Terminal-cancellation follow-up checkpoint (2026-09-16)
+
+Owner cancellation of queued/waiting work now checks pending follow-ups through
+existing descendant settlement. Active/recovery cancellation does not flush. The
+waiting-checkpoint fixtures prove immediate delivery or live-grandchild deferral,
+target isolation and no duplicate continuation. Focused orchestration/retention/
+recovery suite: 26 passed (`.local/cancel-followup-focused.log`). Combined verification
+passed 917 control / 251 runtime tests, all native/service fixtures and typecheck/
+build dry run (`.local/cancel-followup-combined.log`). Native checkpoint/restart and
+full E03 acceptance remain open, as does other credential-free work. No provider
+use or production-gate change; schedule unchanged.
+
 ## Explicit-retry timer checkpoint (2026-09-16)
 
 Accepted owner retry atomically clears the superseded automatic retry entry.
