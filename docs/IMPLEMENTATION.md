@@ -4,6 +4,39 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Service startup/stop fencing (2026-09-16): three red cases reproduced a control
+status call after initial shutdown, activity acquisition after shutdown during the
+starting journal write, and successful start return after shutdown during the final
+running write. File/journal awaits now recheck startup phase; the in-memory running
+transition follows the acknowledged journal write. Two more red cases reproduced
+the promise-resolution gap after a helper check; startup now passes lazy actions
+to the helper so phase is checked before invocation, with explicit checks before
+native setup and final success. All 26 service/journal cases and typecheck pass;
+red logs are `.local/startup-stop-{red,microtask-red}.log`, final focused log is
+`.local/startup-stop-focused-final.log`. Preliminary combined verification passed;
+final batch passed 1,227 control/298 runtime tests, scripted contracts and build dry
+run in `.local/startup-history-final-combined.log` (exit 0). This does not prove complete
+descendant ownership, native settlement, successful recovery or production readiness.
+
+Lock descendant evidence (2026-09-16): host reviewed/integrated the real Node
+inherited-versus-default-spawn fixture and reran 30 lock/journal/service tests.
+Explicit fd inheritance preserves exclusion after parent exit; default spawn leaves
+a live child while a contender enters. Both children were confirmed reaped.
+`.local/startup-lock-integrated.log` records the identities and outcomes. Successful
+flock acquisition is not safe takeover, settlement or sleep authority. See
+[bounded Linux evidence](EXECUTOR_LOCK_DESCENDANTS.md). No launcher change was made.
+
+Loaded conversation search (2026-09-16): reviewed and integrated message-text-only
+filtering with truthful loaded counts, navigation reset and collapsed active-filter
+indicator. Questions/tasks/safety notices remain visible; unfiltered history still
+owns pagination and retention floors. Main reran the focused fixture plus eight
+history/memory/question/task/recovery/result regression invocations successfully
+in `.local/conversation-search-integrated.log`, and inspected four matched/empty/
+narrow DPR2 captures. No added search request, source retrieval or inference. See
+[scope and limits](PORTAL_CONVERSATION_SEARCH.md). Integrated build and desktop 16/16
+passed in `.local/startup-history-final-{build,desktop}.log`; desktop reinstall also
+passed. Both workers are integrated; all work remains local and gates remain false.
+
 WhatsApp result custody (2026-09-16): two synthetic red cases changed an already
 returned message during final authority checking or journal response persistence.
 The shared capture boundary now detaches bounded structured data and error status

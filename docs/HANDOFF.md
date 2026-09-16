@@ -4,7 +4,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
-Current wave uses `.local/search-expiry.bundle`, unpublished local main f5799f9.
+Current wave uses `.local/startup-history.bundle`, unpublished local main 5275c5d.
+Both workers delivered and are reviewed/integrated. Conversation search plus eight
+browser regression invocations pass; four DPR2 captures inspected. Lock/journal/
+service suite passes 30 cases, including a live default-spawn child despite successful
+contender acquisition. Both real fixture children were confirmed reaped.
+Main startup/stop fencing has five red/green regressions (held I/O and promise
+resolution); 26 service/journal tests plus typecheck pass. Final combined passed
+1,227 control/298 runtime tests and all scripted/build checks in
+`.local/startup-history-final-combined.log`. Integrated build and desktop 16/16 pass
+in `.local/startup-history-final-{build,desktop}.log`; reinstall also passed.
+No worker remains pending; all commits unpublished. Continue installation-owned
+descendant containment before connector admission. Lock availability and direct
+child exit do not establish tree settlement. All gates remain false; no live actions.
+
+Previous wave uses `.local/search-expiry.bundle`, unpublished local main f5799f9.
 Both workers delivered and are reviewed/integrated. Portal search, inspector,
 edit and Forget fixtures pass; three main-generated DPR2 search captures inspected.
 Expiry/runtime composition passes 72 related tests plus typecheck. Main reproduced
