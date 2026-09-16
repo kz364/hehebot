@@ -171,6 +171,15 @@ test('an expired result is refused even before the timer callback runs', async t
   assert.equal(upstreamSignal.aborted, true);
 });
 
+test('result capture crossing the deadline cannot start another authority request', async t => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 0 });
+  let checks = 0;
+  await assert.rejects(readWappMcp(grant(), recent, { chatId: 'family@g.us' }, async () => envelope({
+    toJSON: () => { t.mock.timers.setTime(37); return []; },
+  }), { timeoutMs: 37, authorize: () => { checks++; return true; } }), { code: 'WHATSAPP_READ_STOPPED' });
+  assert.equal(checks, 1);
+});
+
 test('upstream cannot retarget the admitted request; valid maximum bound is accepted', async () => {
   const args = { chatId: 'family@g.us', limit: 100 }, scope = grant();
   const result = await readWappMcp(scope, recent, args, async (_, forwarded) => {

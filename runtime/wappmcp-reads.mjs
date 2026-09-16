@@ -105,6 +105,7 @@ export async function readWappMcp(grant, name, args, call, options = {}) {
       catch { fail('WHATSAPP_READ_FAILED'); }
       if (controller.signal.aborted || signal?.aborted || Date.now() >= deadline) { stop(); return; }
       value = captureWappMcpResult(value);
+      if (controller.signal.aborted || signal?.aborted || Date.now() >= deadline) { stop(); return; }
       if (authorize) await checkAuthority();
       return value;
     }).then(value => finish(resolve, value), error => {
