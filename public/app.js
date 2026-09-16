@@ -7,6 +7,7 @@ let taskFeed=null;
 let snapshot=null,selected=localStorage.getItem('personal.selected'),events=[],loading=false,lastSignature='',editing=null;
 let selectionVersion=0;
 let memorySearchSelection='';
+let conversationSearchSelection='';
 const names={IDLE_PERMITTED:'Idle — hibernation permitted',STOPPED:'Sleeping',START_REQUESTED:'Waking',BOOTING:'Starting',READY:'Awake',DRAINING:'Finishing up',STOP_COMMITTED:'Stopping',STOPPING:'Stopping',RECOVERY_REQUIRED:'Recovery needed'};
 const statuses={queued:'Queued',claimed:'Starting',running:'Working',finishing:'Saving result',completed:'Completed',waiting:'Waiting',failed:'Failed',cancelling:'Cancelling',cancelled:'Cancelled',recovery_required:'Needs recovery'};
 const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
@@ -53,6 +54,9 @@ async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=nul
 }
 function render(){
  if(!snapshot)return;
+ const searchSelection=JSON.stringify([selected,selectionVersion,recoveryView?.kind]);
+ if(conversationSearchSelection!==searchSelection){$('conversation-search').value='';conversationSearchSelection=searchSelection;}
+ $('conversation-search-panel').hidden=skillsSelected()||Boolean(recoveryView);
  renderBudget();renderMonitoring();renderTaskStrip();renderRoster();
  for(const [kind,target] of [['room','rooms']]){
   $(target).replaceChildren();
@@ -69,11 +73,17 @@ function render(){
  $('runtime-banner').textContent='Your messages and routines are saved. The assistant is waiting for its runtime connection and sign-in before it can work.';
  const view=recoveryView?.conversationId===selected?recoveryView:null;
  const conversation=view?[]:events.filter(x=>x.conversation_id===selected);const runs=view?(view.page?.runs??[]):snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
+ const query=$('conversation-search').value.slice(0,200).trim().toLowerCase();
+ const messages=conversation.filter(event=>event.type==='message.user'||event.type==='run.result');
+ const matches=new Set(messages.filter(event=>!query||(event.payload.text??'').toLowerCase().includes(query)));
+ $('conversation-search-status').textContent=`${matches.size} of ${messages.length} loaded messages shown.${query&&!matches.size?' No loaded messages match.':''}`;
+ $('conversation-search-panel').querySelector('summary').textContent=`Search loaded messages${query?` · Filter active (${matches.size}/${messages.length})`:''}`;
+ $('clear-conversation-search').disabled=!$('conversation-search').value;
  const steering=(view?.kind==='tasks'?view.page?.steering??[]:snapshot.steering??[]).filter(x=>runs.some(run=>run.id===x.run_id));
  const recovery=(view?(view.page?.recovery??[]):snapshot.recovery??[]).filter(x=>runs.some(run=>run.id===x.run_id));
  const previews=(view?.kind==='tasks'?view.page?.output_previews??[]:snapshot.output_previews??[]).filter(x=>runs.some(run=>run.id===x.run_id&&run.current_attempt===x.attempt&&['running','finishing','recovery_required'].includes(run.status)&&!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code)));
  const questions=(snapshot.questions??[]).filter(q=>q.conversation_id===selected||q.persona_id===selected);
- const signature=JSON.stringify([selected,conversation,runs,steering,recovery,previews,questions,$('connection').textContent,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
+ const signature=JSON.stringify([selected,query,conversation,runs,steering,recovery,previews,questions,$('connection').textContent,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;const expanded=new Set([...timeline.querySelectorAll('.task-card[open]')].map(card=>card.dataset.runId));timeline.replaceChildren();
   if(view){
    const taskMode=view.kind==='tasks',label=taskMode?'task':'recovery';
@@ -96,6 +106,7 @@ function render(){
   for(const question of questions)renderQuestion(timeline,question);
   for(const event of conversation){
    if(event.type==='message.user'||event.type==='run.result'){
+    if(!matches.has(event))continue;
     const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot'));const h=node('div',undefined,'message-head');h.append(node('strong',event.type==='message.user'?'You':object?.body.name??'Assistant'),node('time',time(event.created_at)));m.append(h);
     if(event.type==='run.result'){
      const outcome=['completed','failed','cancelled','waiting'].includes(event.payload.status)?statuses[event.payload.status]:'Unavailable';
@@ -182,6 +193,8 @@ function renderMemories(){
   metadata.dataset.inspection=JSON.stringify([selected,selectionVersion,m.body.text,metadata.textContent]);metadata.open=inspected.has(metadata.dataset.inspection);
  }if(!matches.length)$('memories').append(node('p',eligible.length?'No loaded memories match this search. Clear search to see this scope.':'No loaded memories in this scope. Save preferences you want your bots to remember.','muted'));
 }
+ $('conversation-search').oninput=()=>render();
+$('clear-conversation-search').onclick=()=>{$('conversation-search').value='';render();$('conversation-search').focus();};
  $('memory-search').oninput=()=>renderMemories();
  $('clear-memory-search').onclick=()=>{$('memory-search').value='';renderMemories();$('memory-search').focus();};
 function renderTaskStrip(){
