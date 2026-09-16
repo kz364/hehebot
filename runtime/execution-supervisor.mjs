@@ -163,7 +163,11 @@ export class ExecutionSupervisor {
     });
   }
 
-  complete(observation) {
+  async complete(observation) {
+    // The serialized work queue is already an async boundary, before the bridge
+    // can take custody. Capture entry values here as well as at direct bridge entry.
+    try { observation = JSON.parse(JSON.stringify(observation)); }
+    catch { fail('INVALID_NATIVE_RESULT'); }
     return this.serialized(async () => {
       this.assertLease();
       // Missing settlement proof rejects without changing the current active task.

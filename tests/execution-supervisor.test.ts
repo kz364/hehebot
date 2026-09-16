@@ -341,6 +341,26 @@ it('incomplete child proof does not publish a result', async () => {
   expect(f.store.run(id).status).toBe('running'); expect(supervisor.phase).toBe('running');
 });
 
+it.each([true, false])('queued completion preserves entry settlement=%s and result before bridge dispatch', async allowed => {
+  const id = enqueue(), row = await supervisor.start();
+  let release!: () => void;
+  supervisor.work = new Promise<void>(resolve => { release = resolve; });
+  const observation = { ...settlement(row), effectsSettled: allowed };
+  const pending = supervisor.complete(observation);
+  observation.effectsSettled = !allowed;
+  observation.result.text = 'Changed while queued';
+  release();
+  if (allowed) {
+    expect((await pending).result.text).toBe('Exactly one result');
+    expect(f.store.run(id).status).toBe('completed');
+    expect(f.store.conversationEvents(bot, f.core.now(), undefined, 100).filter(e => e.type === 'run.result').map(e => e.payload.text)).toEqual(['Exactly one result']);
+  } else {
+    await expect(pending).rejects.toMatchObject({ code: 'NATIVE_SETTLEMENT_INCOMPLETE' });
+    expect(f.store.run(id).status).toBe('running'); expect(f.db.all('SELECT * FROM outbox')).toEqual([]);
+  }
+  expect(nativeCalls).toBe(1); expect(releases).toBe(0);
+});
+
 it('maintenance synchronizes child identities before delivering targeted cancellations', async () => {
   const id = enqueue(); await supervisor.start();
   f.db.exec("UPDATE runs SET status='cancelling' WHERE id=?", id);
