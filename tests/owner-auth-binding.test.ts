@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { bindOwnerAuth, type AuthConfig } from '../src/worker/auth';
 import { PersonalControl } from '../src/worker/control-object';
+import worker from '../src/worker/index';
 import { exportControl } from '../src/core/control-export';
 import { importControlExport } from '../scripts/import-control-export.mjs';
 import { TestDatabase } from './helpers';
@@ -74,6 +75,30 @@ it('binds the exact Access owner on fresh data and reconstructs idempotently bef
   expect(ownerRows(db)).toEqual([{ value_json: expectedBinding(config) }]);
   expect(db.all('SELECT * FROM runtime_metadata ORDER BY key')).toEqual(before);
   expect(db.all('SELECT * FROM objects ORDER BY id')).toEqual(seeded);
+});
+
+it('exposes only the stable binding digest on runtime-authenticated status', async () => {
+  const db = database(), config = access(), first = construct(db, config);
+  await first.initialized;
+  const env = { ...config, RUNTIME_TOKEN: 'runtime-secret-19', CONTROL: { getByName: () => first.control } } as unknown as Env;
+  const request = (token: string) => worker.fetch(new Request('https://portal.example/internal/status', {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: '{}',
+  }), env);
+  expect((await request('wrong-token')).status).toBe(401);
+  const response = await request('runtime-secret-19');
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ phase: 'STOPPED', epoch: 0, execution_enabled: false,
+    owner_binding_sha256: 'd167d266bdd34b51eb916816899830e9810c2d32283e61ebd0a6b5dc7bfe7897' });
+  const second = construct(db, config); await second.initialized;
+  expect(await second.control.runtime({ type: 'status', payload: {} })).toEqual(await first.control.runtime({ type: 'status', payload: {} }));
+  expect(JSON.stringify((await first.control.getState(config.OWNER_SUB)))).not.toContain('owner_binding_sha256');
+});
+
+it('leaves the local runtime status shape unchanged', async () => {
+  const local = construct(database(), access({ AUTH_MODE: 'local', INSTALLATION_ID: 'local-only' }));
+  await local.initialized;
+  expect(await local.control.runtime({ type: 'status', payload: {} })).toEqual({ ok: true,
+    value: { phase: 'STOPPED', epoch: 0, execution_enabled: false } });
 });
 
 it.each([

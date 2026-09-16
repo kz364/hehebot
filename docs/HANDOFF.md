@@ -2,7 +2,21 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. Authenticated chat, a scoped routine read and persisted provisional reply are observed; it is not deployed or production operational, and full settlement remains unverified.
 
-## Active follow-up (2026-09-16)
+## Active follow-up (2026-09-17 Asia/Jakarta)
+
+Newest: Sprite transport-only preflight now requires an independently pinned
+ownerBindingSha256, captures config before awaits, and compares authenticated
+status.owner_binding_sha256 before reporting owner_binding_verified. Worker adds
+that digest only for bound Access status; public/local-alpha shapes are unchanged.
+HTTP202 is merely wake acceptance; no boot/claim/hold/model call occurs even after
+a match, and executor_ready stays false.47 SQLite/alpha +16 transport tests pass;
+full backend1,335/runtime411/build pass in `.local/owner-preflight-*`. Full native
+combined was not repeated. No active worker or live account/provider action.
+Next: distinct hosted bounded startup with persisted expected owner/origin and
+mandatory activity holds. Current local alpha remains loopback/provider-free;
+do not turn this successful preflight into inference permission or release unknown
+holds. Deployment, live provider isolation and hosted account eligibility remain
+separate authorization/evidence gates. Continuation remains enabled.
 
 Newest hosted prerequisite: Worker Access data now binds auth mode, installation,
 issuer, audience and owner subject before seed. Drift/local downgrade or adopting

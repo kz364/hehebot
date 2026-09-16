@@ -4,6 +4,23 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner-pinned transport preflight (2026-09-17 Asia/Jakarta): bound Access internal
+status now exposes owner_binding_sha256, not raw binding values. Its canonical
+digest is checked against a fixed independent vector through actual authenticated
+Worker ingress; public/local-alpha responses remain unchanged. Sprite preflight
+requires ownerBindingSha256 and captures the complete config before awaiting
+status. Match, missing/mismatch, invalid-before-secret-load, caller mutation and
+unauthorized HTTP wake cases pass; reports omit binding/hash/secret markers.
+Only status is requested; HTTP202 precedes the asynchronous check and does not
+mean executor readiness. The existing HTTPS client rejects redirects and pins
+origin.47 focused SQLite/alpha and16 preflight/client tests pass. Full backend
+passes1,335, runtime411, build dry run passes; logs `.local/owner-preflight-*`.
+The initial focused command misspelled the client test filename and ran only the
+five preflight tests; the corrected transport command and full runtime run cover
+the client. Full native combined verifier was not repeated. No live account/model/
+provider or deployment action occurred; actual hosted admission/activity integration
+remains separate and disabled. Example preflight config now requires the digest.
+
 Hosted owner binding (2026-09-16): Worker startup now pins Access auth mode,
 installation ID, issuer, audience and owner subject in `runtime_metadata` before
 seed. Same binding reconstructs without writes; changed identity/local downgrade

@@ -40,6 +40,28 @@ is not implemented. Do not delete the binding to bypass this refusal. Existing
 unbound local installations remain unchanged. Application export/import retains
 the binding but still grants no restore activation authority.
 
+The authenticated internal `status` response includes `owner_binding_sha256` for
+bound Access installations only. Local/alpha status shapes and public state are
+unchanged. The digest is SHA-256 of the UTF-8, compact `JSON.stringify` encoding of
+this object in this exact key order, using the reviewed configured strings:
+
+```js
+{ auth_mode: 'access', installation_id: INSTALLATION_ID,
+  issuer: ACCESS_ISSUER, audience: ACCESS_AUD, owner_subject: OWNER_SUB }
+```
+
+Set the transport-only Sprite preflight's required `ownerBindingSha256` to the
+independently computed lowercase64-hex digest. Do not learn/trust a new expected
+owner merely by copying the response from the server being checked. Its existing
+ControlClient pins the HTTPS origin and rejects redirects; the preflight captures
+configuration before awaiting status and compares the digest before reporting
+`owner_binding_verified:true`. Reports contain neither binding fields nor hashes.
+Missing/mismatched binding produces generic reconciliation failure. HTTP202 means
+only that the wake was accepted, not that the asynchronous check passed. Even a
+match reports `executor_ready:false`; this entrypoint cannot boot, claim, create
+activity holds or invoke a model. Actual hosted execution must separately persist
+and enforce its expected identity before admission; this check does not enable it.
+
 The smallest future hosted bounded mode should reuse the existing command,
 quota, deadline and native-custody paths, while making these changes explicit:
 

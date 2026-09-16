@@ -1,5 +1,6 @@
 {
   "portalOrigin": "https://REPLACE_WITH_PROTECTED_PORTAL_HOST",
+  "ownerBindingSha256": "REPLACE_WITH_EXPECTED_OWNER_BINDING_SHA256",
   "runtimeTokenFile": "/persist/secrets/RUNTIME_TOKEN",
   "wakeTokenFile": "/persist/secrets/SPRITE_WAKE_TOKEN",
   "accessClientIdFile": "/persist/secrets/CF_ACCESS_CLIENT_ID",

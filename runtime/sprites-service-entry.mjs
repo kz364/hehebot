@@ -14,8 +14,9 @@ function privateFile(path){
 /** Runnable transport preflight only. It cannot claim jobs or invoke a model.
  * Keep this limitation explicit until native activity/settlement gates pass. */
 export function createPreflightService(config,dependencies={}){
- const allowed=['portalOrigin','runtimeTokenFile','wakeTokenFile','accessClientIdFile','accessClientSecretFile','port'];
- if(!config||Object.keys(config).some(key=>!allowed.includes(key))||!Number.isInteger(config.port??8080)||(config.port??8080)<1024||(config.port??8080)>65535)throw new Error('Invalid service configuration');
+ config=structuredClone(config);
+ const allowed=['portalOrigin','runtimeTokenFile','wakeTokenFile','accessClientIdFile','accessClientSecretFile','port','ownerBindingSha256'];
+ if(!config||Object.keys(config).some(key=>!allowed.includes(key))||!Number.isInteger(config.port??8080)||(config.port??8080)<1024||(config.port??8080)>65535||typeof config.ownerBindingSha256!=='string'||!/^[a-f0-9]{64}$/.test(config.ownerBindingSha256))throw new Error('Invalid service configuration');
  const load=dependencies.privateFile??privateFile;
  const control=dependencies.control??new ControlClient({origin:config.portalOrigin,token:load(config.runtimeTokenFile),
   ...(config.accessClientIdFile||config.accessClientSecretFile?{accessClientId:load(config.accessClientIdFile),accessClientSecret:load(config.accessClientSecretFile)}:{})});
@@ -23,7 +24,8 @@ export function createPreflightService(config,dependencies={}){
  const handler=createSpritesWakeHandler({token:load(config.wakeTokenFile),onWake:async({epoch})=>{
   const status=await control.request('status',{});
   if(!status||!Number.isSafeInteger(status.epoch)||typeof status.execution_enabled!=='boolean')throw new Error('Invalid control status');
-  report({event:'sprite.preflight',requested_epoch:epoch,control_epoch:status.epoch,control_reachable:true,execution_enabled:status.execution_enabled,executor_ready:false,reason:'NATIVE_COMPATIBILITY_GATE_BLOCKED'});
+  if(status.owner_binding_sha256!==config.ownerBindingSha256)throw new Error('Control owner binding mismatch');
+  report({event:'sprite.preflight',requested_epoch:epoch,control_epoch:status.epoch,control_reachable:true,owner_binding_verified:true,execution_enabled:status.execution_enabled,executor_ready:false,reason:'NATIVE_COMPATIBILITY_GATE_BLOCKED'});
  },onFailure:code=>report({event:'sprite.preflight_failed',code})});
  return http.createServer({requestTimeout:15000,headersTimeout:10000,maxHeaderSize:8192},(req,res)=>{handler(req,res).catch(()=>{if(!res.headersSent)res.writeHead(500,{'Content-Type':'application/json'});res.end('{"error":"INTERNAL_ERROR"}');});});
 }

@@ -1,5 +1,5 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose';
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { ControlError } from '../core/errors';
 import type { Database } from '../core/store';
 
@@ -26,8 +26,8 @@ function accessIssuer(config: AuthConfig): URL {
 }
 
 /** Bind hosted data before seeding it. Configuration changes are not ownership migration. */
-export function bindOwnerAuth(db: Database, config: AuthConfig): void {
-  db.transaction(() => {
+export function bindOwnerAuth(db: Database, config: AuthConfig): string | undefined {
+  return db.transaction(() => {
     const key = 'installation_owner';
     const saved = db.all<{ value_json: string }>('SELECT value_json FROM runtime_metadata WHERE key=?', key)[0];
     if (!saved && config.AUTH_MODE !== 'access') return; // Preserve existing local-only installations.
@@ -36,12 +36,13 @@ export function bindOwnerAuth(db: Database, config: AuthConfig): void {
     const migrationRequired = () => new ControlError('OWNER_MIGRATION_REQUIRED', 'Installation ownership differs or is unbound. Explicit migration is required.', 503);
     if (saved) {
       if (saved.value_json !== binding) throw migrationRequired();
-      return;
+      return createHash('sha256').update(binding).digest('hex');
     }
     accessIssuer(config);
     if (!config.INSTALLATION_ID) throw configurationError();
     if (db.all('SELECT 1 FROM objects UNION ALL SELECT 1 FROM commands UNION ALL SELECT 1 FROM runtime_metadata LIMIT 1').length) throw migrationRequired();
     db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)', key, binding);
+    return createHash('sha256').update(binding).digest('hex');
   });
 }
 
