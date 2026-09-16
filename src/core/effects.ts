@@ -29,9 +29,14 @@ export class EffectLedger {
   if(input.classification==='idempotent')requireThat(input.provider_idempotency_key,'INVALID_INPUT','Idempotent effects require a provider key.',422);
   const existing=this.store.db.all<Pick<EffectIntent,'id'|'request_digest'|'run_id'|'classification'|'authorization_ref'|'provider_idempotency_key'>&{status:string}>('SELECT * FROM effects WHERE action_key=?',input.action_key)[0];
   if(existing){requireThat(existing.request_digest===input.request_digest&&existing.run_id===input.run_id&&existing.classification===input.classification&&existing.authorization_ref===input.authorization_ref&&existing.provider_idempotency_key===input.provider_idempotency_key,'IDEMPOTENCY_CONFLICT','Effect key conflicts with an existing action.');return {id:existing.id,status:existing.status};}
+  this.requireDeadline(run.id,input.attempt);
   this.store.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,provider_idempotency_key,updated_at) VALUES(?,?,?,?,'intent',?,?,?,?)",input.id,input.run_id,input.action_key,input.classification,input.authorization_ref,input.request_digest,input.provider_idempotency_key,this.now());
   return {id:input.id,status:'intent'};
  });}
+ private requireDeadline(runId:string,attempt:number):void {
+  const row=this.store.db.all<{deadline_at:string}>('SELECT deadline_at FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
+  requireThat(row&&row.deadline_at>this.now(),'DEADLINE_EXCEEDED','The effect attempt deadline has expired.');
+ }
  transition(id:string,runId:string,status:'dispatched'|'confirmed'|'failed'|'outcome_unknown',receipt:Record<string,unknown>|null):void{
   this.store.db.transaction(()=>{
    const existing=this.store.db.all<{status:string;run_id:string}>('SELECT status,run_id FROM effects WHERE id=?',id)[0];
@@ -39,6 +44,8 @@ export class EffectLedger {
    const allowed:Record<string,string[]>={intent:['dispatched','failed','outcome_unknown'],dispatched:['confirmed','failed','outcome_unknown'],outcome_unknown:['confirmed','failed'],confirmed:[],failed:[]};
    if(existing.status===status)return;
    requireThat(allowed[existing.status]?.includes(status),'REVISION_CONFLICT','Effect cannot make that transition.');
+   // Deadline expiry blocks a new dispatch, not late outcome/receipt recording.
+   if(status==='dispatched')this.requireDeadline(runId,this.store.run(runId).current_attempt);
    requireThat(!['confirmed','failed'].includes(status)||receipt&&Object.keys(receipt).length>0,'INVALID_INPUT','A destination receipt or reconciliation record is required.',422);
    this.store.db.exec('UPDATE effects SET status=?,receipt_json=?,updated_at=? WHERE id=?',status,receipt?JSON.stringify(receipt):null,this.now(),id);
   });

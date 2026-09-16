@@ -4,6 +4,18 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Effect-deadline checkpoint (2026-09-16): new intents and first dispatch transitions
+now require an unexpired attempt deadline, closing the pre-watchdog running-state
+window. Existing immutable receipt lookups and duplicate dispatch acknowledgements
+remain no-ops; late confirmed/failed/unknown outcomes can still be recorded. This
+does not authorize another external send or cancel an action already sent. Both
+new regression cases failed before the fix; 35 focused effect-workflow/root-child/
+recovery tests passed, including −1ms/exact/+1ms, reconstruction, unchanged rows
+on rejection and late receipt retention (`.local/effect-deadline-focused.log`,
+red evidence `.local/effect-deadline-red.log`). Combined verification passed 924
+control / 251 runtime tests, native/service fixtures and typecheck/build dry run
+(`.local/effect-deadline-combined.log`). No production gates or provider state changed.
+
 Late-start checkpoint (2026-09-16): `submitted` now retains a late native receipt
 and marks the run cancelling/DEADLINE_EXCEEDED when its admitted deadline has passed,
 including equality. Previously a registered child could acknowledge start after

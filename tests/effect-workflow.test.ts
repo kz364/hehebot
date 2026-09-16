@@ -38,6 +38,29 @@ function intent(run_id: string): EffectIntent {
     authorization_ref: policy, request_digest: 'sha256:mail-17-INBOX', provider_idempotency_key: 'destination-mail-17' };
 }
 
+it.each(['intent', 'dispatch'] as const)('fences new effect %s at the hard deadline but preserves late receipts', phase => {
+  const run = activeRoutine(), input = intent(run);
+  f.db.exec("UPDATE attempts SET deadline_at='2026-09-10T00:00:10.000Z' WHERE run_id=?", run);
+  f.setNow('2026-09-10T00:00:09.999Z');
+  effects.intent(input);
+  effects.transition(input.id, run, 'dispatched', null);
+  const pending = { ...input, id: randomUUID(), action_key: 'synthetic:mail-93:restore' };
+  if (phase === 'dispatch') effects.intent(pending);
+  for (const now of ['2026-09-10T00:00:10.000Z', '2026-09-10T00:00:10.001Z']) {
+    f.setNow(now); reconstruct();
+    const before = f.db.all('SELECT * FROM effects');
+    expect(() => phase === 'intent' ? effects.intent(pending) : effects.transition(pending.id, run, 'dispatched', null))
+      .toThrowError(expect.objectContaining({ code: 'DEADLINE_EXCEEDED' }));
+    expect(f.db.all('SELECT * FROM effects')).toEqual(before);
+    expect(effects.intent(input)).toEqual({ id: input.id, status: 'dispatched' });
+    effects.transition(input.id, run, 'dispatched', null); // Lost-ACK lookup is not another dispatch.
+  }
+  effects.transition(input.id, run, 'confirmed', { destination_id: 'late-receipt-17' });
+  expect(effects.intent(input)).toEqual({ id: input.id, status: 'confirmed' });
+  if (phase === 'dispatch') effects.transition(pending.id, run, 'failed', { reason: 'not-dispatched' });
+  expect(f.db.all("SELECT id FROM effects WHERE status IN ('intent','dispatched','outcome_unknown')")).toEqual([]);
+});
+
 it.each([
   { request_digest: 'sha256:different-mail' },
   { classification: 'read_only' as const },

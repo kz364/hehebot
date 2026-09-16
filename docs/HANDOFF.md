@@ -2,6 +2,18 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Effect-deadline checkpoint (2026-09-16)
+
+New effect intents/first dispatches reject at the attempt deadline even before
+watchdog reconciliation. Existing receipt lookups and late outcome recording keep
+their previous semantics; none authorizes external replay. Both new cases failed
+before the fix, then 35 focused effect/root-child/recovery tests passed
+(`.local/effect-deadline-focused.log`). Combined verification passed 924 control /
+251 runtime tests, native/service fixtures and typecheck/build dry run
+(`.local/effect-deadline-combined.log`). Complete E01 coverage/native termination and
+other credential-free work remain open. No provider or production-gate changes;
+schedule unchanged.
+
 ## Late-start checkpoint (2026-09-16)
 
 First native start acknowledgement at/after hard deadline now retains the native
