@@ -76,6 +76,14 @@ policy and initial STOPPED epoch zero before the provider-free boot. It does not
 instantiate Sprite activity management. Runtime state/journal/workspace must be
 fresh; do not reset an uncertain session by deleting its records.
 
+For routine listing, both the local Worker's `TOOL_POLICY_IDS` registry and the
+selected persona's adopted `tool_policy_ids` must include the existing
+`ROUTINE_MANAGE_POLICY` value `f0ff3ead-1e31-4f83-bbc2-aa25f069a962` before task
+admission. A random UUID does not grant routine reads. Alpha still denies agent
+mutations despite this policy's broader name. Verification should use bounded,
+infrequent state reads alongside browser updates; rapid polling can exhaust the
+owner-read rate limit. A 429 is not permission to resubmit an admitted task.
+
 An optional absolute `nativeHome` reuses the same owner's authorized `CODEX_HOME`
 **in place**. The service does not copy credentials or rewrite that home's
 `config.toml`: it supplies the named permission profile/default with supported CLI

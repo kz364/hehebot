@@ -1,8 +1,25 @@
 # Hehebot agent handoff
 
-Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
+Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. One authenticated provisional-reply trial is observed; it is not deployed or production operational, and full settlement remains unverified.
 
 ## Active follow-up (2026-09-16)
+
+The owner authorized and completed supported device login after the initial
+`Not logged in` result. One authorized 120-second root trial ran using the visible
+ChatGPT model `gpt-5.6-luna`; the native root completed in about 16 seconds.
+The one-task grant is consumed. Do not relaunch its executor or infer another grant.
+Private custody lives in `.local/owner-alpha-live-session`; retain it and the native
+home in place. Browser submission and final version-3 provisional reply survived
+Worker reconstruction and browser reload, with one run/attempt and no run.result.
+Both routine reads failed 403 because the host's ad hoc setup adopted a random ID
+instead of ROUTINE_MANAGE_POLICY. The model correctly disclosed unavailability.
+Fast host verification polling hit 429 and stopped the runner early, so deadline
+cancellation is not verified by this live run. Native shutdown is recorded; unknown
+operations remain and the UI shows Needs recovery. Both local services are stopped.
+Next authorized trial must adopt the fixed policy before admission and avoid rapid
+polling; no runtime code change or weakening of fences is needed for these errors.
+The screenshot `.amp/in/artifacts/owner-alpha-live-reply.png` was inspected at DPR2.
+No paid API fallback, connector write, Sprite call, deployment or gate change.
 
 The explicit local owner-alpha wave is integrated and credential-free verified.
 Baseline was unpublished local main 54ec05f0, not origin/main. Both workers are done:

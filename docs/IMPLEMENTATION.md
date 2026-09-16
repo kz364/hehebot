@@ -1,8 +1,33 @@
 # Implementation status
 
-Hehebot is a locally tested foundation, not an operational assistant. Direct Codex app-server **0.154.0** is the only supported harness. No cloud deployment or authenticated inference has been completed; production execution and native-verification flags remain false.
+Hehebot is a locally tested foundation with one observed authenticated provisional-reply trial, not a production operational assistant. Direct Codex app-server **0.154.0** is the only supported harness. No cloud deployment has occurred; production execution and native-verification flags remain false.
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
+
+Authorized live trial (2026-09-16): after an initial login prerequisite stop, the
+owner separately authorized and completed supported device login. Supported
+account/read confirmed ChatGPT and model/list exposed `gpt-5.6-luna`, selected for
+the single 120-second task. Actual browser submission produced run
+`04829967-3eee-4304-8f3a-5fd9e8d724ba`, attempt 1, native thread
+`01a0aa94-064d-7bd1-a0a1-764c55304600`, turn
+`01a0aa94-0755-7a43-9cf4-aeaabe0a75af`. The native root completed in about 16 seconds.
+Its final version-3 provisional reply disclosed that routine listing failed and
+restated the supplied alpha limits; it did not invent an empty routine list.
+
+This trial was partial: the host setup used a random policy ID instead of the
+fixed ROUTINE_MANAGE_POLICY, so both read calls correctly failed 403. Rapid host
+state polling then received 429 and stopped the runner before its deadline check.
+These are operator/verification errors, not evidence that permission or rate-limit
+checks should be relaxed. No second root was launched. Reopened retained Worker
+data and browser reload verified the exact final reply, one run/attempt, and no
+run.result or completed-result card. The inspected DPR2 screenshot shows Needs
+recovery, the provisional disclaimer and final text. Native stop is journaled;
+unknown operations remain. Both local services are stopped, custody retained in
+`.local/owner-alpha-live-session`, and the one-task grant is consumed. No paid API
+fallback, connector write, Sprite call, deployment or production gate change.
+Native usage reports 35,563 input tokens (17,664 cached), 478 output tokens;
+these counters are not a billing receipt. Full timeout/settlement and successful
+live routine reads remain unverified. P0.2's real provisional-reply path is observed.
 
 Explicit local owner alpha (2026-09-16): an immutable selected-persona policy now
 admits one to three direct owner roots with per-task/session deadlines, separate
