@@ -12,6 +12,20 @@ SHA256-pinned tarballs, then deletes the installation. No lifecycle scripts run;
 in particular neither upstream `patch-package` nor browser-download scripts run.
 The `.npmrc` is additional protection, not permission to run other scripts.
 
+The verifier also runs the actual locked MCP SDK 1.30.0 and the upstream JSON
+result helper against a synthetic in-memory server. **Recent-message reads are
+incompatible on this path:** the plugin returns an array in `structuredContent`,
+but the SDK requires an object. Object-shaped scoped search passes. The verifier
+reports `syntheticCompatibility:false`; a passing negative contract is not plugin
+readiness. Do not bypass result validation, silently substitute search for recent
+history, or add a dependency patch under the existing narrow patch exception.
+An upstream-compatible fix/version needs review and the compatibility rerun.
+
+Abort, SDK timeout and connection close all reject the client call while a handler
+that ignores cancellation can remain pending. The journal retains unknown intent
+and rejects replay even after the handler later returns. This is actual SDK
+in-memory evidence, not stdio, Chromium descendant termination or safe sleep.
+
 Pins: wappmcp 0.4.0, source revision
 `9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8`; whatsapp-web.js exactly 1.34.7.
 The only approved patch is that revision's
@@ -38,7 +52,7 @@ locked sources before distribution. The verifier intentionally reports
 `licenseAuditComplete:false`. Version/patch changes require compatibility and
 authorization reruns; changed patches require renewed owner approval.
 
-Trusted task/chat-scope issuance and Worker lease/revocation wiring, guided
-installation, browser setup, pairing/reconnect/history coverage and sleep/cost
+Worker task/chat grants and lease/revocation checks exist. Trusted MCP transport
+wiring, guided installation, browser setup, pairing/reconnect/history coverage and sleep/cost
 evidence remain open. Notification allowlists do not authorize tools. All mutation
 tools stay unavailable by default; imported routines stay no-send.

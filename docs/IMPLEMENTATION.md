@@ -45,6 +45,43 @@ Combined rerun passed: `.local/routine-delete-combined.log`, 1,154 control / 262
 runtime tests plus compatibility, auditor/Mac source checks, HTTP/native/service
 fixtures and typecheck/build dry run. Final production admission remains false.
 
+Actual locked SDK composition (2026-09-16): `scripts/test-wappmcp-sdk.mjs`, invoked
+by the disposable `verify-wappmcp.mjs` installation, runs SDK 1.30.0 Client/McpServer
+over its public InMemoryTransport. It imports the actual pinned upstream JSON
+helper after matching its installed bytes to the SHA256-verified plugin artifact.
+Synthetic handlers and messages are used; neither the real plugin server/session
+nor Chrome is started. No extra dependency or patch is installed in the app.
+
+This exposes a previously untested compatibility failure. Upstream
+[`getChatMessages`](https://github.com/vaibhavpandeyvpz/wappmcp/blob/9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8/src/lib/whatsapp/session.ts)
+returns `Message[]`, and
+[`createJsonResult`](https://github.com/vaibhavpandeyvpz/wappmcp/blob/9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8/src/lib/mcp/helpers.ts)
+casts that value without wrapping it. SDK CallToolResultSchema requires an object
+for `structuredContent`. The direct schema check rejects at that field, and an
+actual SDK tool request reaches the synthetic handler once but cannot release the
+recent-message batch through the host boundary. Object-shaped scoped search passes
+with exact chat/query/page/limit checks. Earlier array-valued callback fixtures
+proved only host validation, not supported SDK compatibility. Recent history must
+remain blocked until a supported fix/version is reviewed; search is not equivalent.
+No validation bypass or additional dependency patch is authorized.
+Read-only upstream inspection on 2026-09-16 found `main` and latest tag `v0.4.0`
+still at the pinned revision, with no later fix, published release or related
+issue located. There is no identified newer compatible version to adopt now.
+
+Abort, SDK timeout and connection close each reach server cancellation while the
+deliberately non-cooperating handler is still pending. Client close returns before
+handler completion. Releasing the handler later leaves the journal intent unknown;
+a fresh-signal retry of the same operation cannot call the transport again.
+These are three distinct negative contracts, not stdio/browser/process termination
+evidence. The verifier reports `syntheticCompatibility:false` while the five-mode
+positive/negative fixture passes. Focused log: `.local/wapp-sdk-focused.log`.
+An initial fixture replay assertion incorrectly reused an already-aborted signal;
+it was corrected to a fresh signal and a transport-dispatch counter so rejection
+must come from retained custody, not incidental cancellation or a closed client.
+Combined rerun passed in `.local/wapp-sdk-combined.log`: 1,154 control / 270 runtime
+tests, all SDK positive/negative, compatibility/native/service and build checks.
+Production admission remains false; the negative compatibility result is preserved.
+
 WhatsApp invocation-journal follow-through (2026-09-16):
 `readJournaledWappMcp` is a trusted, unregistered assembly around the scoped read
 boundary. It requires host attempt/operation IDs, a deadline and an authorization

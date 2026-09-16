@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import { readWappMcp } from '../runtime/wappmcp-reads.mjs';
+import { verifyWappMcpSdk } from './test-wappmcp-sdk.mjs';
 
 const revision = '9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8';
 const pins = {
@@ -127,7 +128,9 @@ try {
   }
   await assert.rejects(readWappMcp(grant, 'whatsapp_get_chat_messages', { chatId: 'stranger@g.us' }, () => assert.fail('Foreign chat reached upstream')), { code: 'WHATSAPP_READ_DENIED' });
   execFileSync(process.execPath, ['--test', 'tests/runtime-wappmcp-reads.mjs'], { stdio: 'inherit' });
-  console.log(JSON.stringify({ status: 'passed', revision, hashes: Object.fromEntries(Object.entries(pins).map(([name, [, digest]]) => [name, digest])), lockedPackages: Object.keys(lock.packages).length - 1, disposableInstall: true, lifecycleScripts: false, licenseAuditComplete: false, cleanPatch: true, syntheticCompatibility: true, livePairing: false, installed: false, productionAdmission: false }));
+  assert.deepEqual(await readFile(join(installedPlugin, 'dist/lib/mcp/helpers.js')), await readFile(join(plugin, 'dist/lib/mcp/helpers.js')));
+  const sdk = await verifyWappMcpSdk(installation);
+  console.log(JSON.stringify({ status: 'passed', scope: 'patch, read boundary and SDK positive/negative contracts', revision, hashes: Object.fromEntries(Object.entries(pins).map(([name, [, digest]]) => [name, digest])), lockedPackages: Object.keys(lock.packages).length - 1, disposableInstall: true, lifecycleScripts: false, licenseAuditComplete: false, cleanPatch: true, syntheticCompatibility: false, sdk, livePairing: false, installed: false, productionAdmission: false }));
 } finally {
   await rm(root, { recursive: true, force: true });
 }

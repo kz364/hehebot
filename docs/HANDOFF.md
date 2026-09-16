@@ -4,6 +4,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+Actual SDK follow-through found a new E09 blocker: recent messages are an array
+in the pinned plugin's `structuredContent`, rejected by SDK 1.30.0's object schema.
+Do not confuse earlier direct-callback read tests with MCP compatibility. The
+new fixture imports the actual pinned JSON helper and uses real SDK Client/McpServer
+with synthetic handlers over InMemoryTransport; scoped search succeeds, recent
+reads fail closed. Abort, SDK timeout and close retain unknown intent while server
+work remains pending; late handler return cannot enable replay. All five modes
+pass as positive/negative contracts in `.local/wapp-sdk-focused.log`, with explicit
+`syntheticCompatibility:false`. Combined rerun passed in `.local/wapp-sdk-combined.log`
+(1,154 control / 270 runtime tests and all fixture/build checks; admission false).
+No connector/browser launch, validation bypass, new patch or pairing. Upstream
+inspection found main/v0.4.0 still at the pinned revision, with no newer fix located.
+Continue independent transport/lifecycle work; additional patches need separate
+approval and search is not recent-history parity.
+
 WhatsApp invocation accounting now has an unregistered journaled read assembly in
 `runtime/wappmcp-operations.mjs`. It fsyncs payload-free intent before dispatch,
 requires host IDs/deadline/authorization, rejects retained IDs and preserves unknown
