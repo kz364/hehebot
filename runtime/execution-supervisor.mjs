@@ -187,11 +187,15 @@ export class ExecutionSupervisor {
       if (row?.phase !== 'complete') fail('SLEEP_DENIED');
       if (this.maintenance) await this.maintenance;
       this.assertLease();
+      if (this.native.sleepReadiness().allowed !== true) fail('SLEEP_DENIED');
       this.phase = 'draining';
       clearTimeout(this.timer);
       this.timer = null;
       const assertDraining = () => {
         if (this.phase !== 'draining' || this.now() >= this.leaseUntil) fail('EXECUTOR_FENCED');
+        // Opening readiness is not settlement proof across awaited control,
+        // journal or provider work. A later observation can revoke it.
+        if (this.native.sleepReadiness().allowed !== true) fail('SLEEP_DENIED');
       };
       try {
         const stop = await this.control.request('prepare-sleep', { identity: this.identity });

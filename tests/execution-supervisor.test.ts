@@ -417,6 +417,53 @@ it('drain can finish one millisecond before the original lease expiry', async ()
   expect(supervisor.phase).toBe('sleeping'); expect(releases).toBe(1);
 });
 
+it.each(['journal-read', 'maintenance', 'prepare', 'intent', 'commit', 'journal', 'release'])(
+  'drain rechecks native settlement after %s rather than reusing opening readiness', async boundary => {
+    await supervisor.start(); f.setNow('2026-09-10T00:01:00.000Z');
+    let allowed = true;
+    supervisor.native.sleepReadiness = () => ({ allowed });
+    const key = `drain-${supervisor.bridge.cursor}`;
+    const get = supervisor.journal.get.bind(supervisor.journal);
+    supervisor.journal.get = async (id: string) => {
+      const row = await get(id);
+      if (id === supervisor.bridge.cursor && boundary === 'journal-read') allowed = false;
+      if (id === supervisor.bridge.cursor && boundary === 'maintenance') {
+        // Invalidate only when maintenance is awaited, not during the read's
+        // microtasks: a check placed before the maintenance await must fail.
+        supervisor.maintenance = { then(resolve: () => void) { allowed = false; resolve(); } };
+      }
+      return row;
+    };
+    const request = supervisor.control.request;
+    supervisor.control.request = async (type: string, payload: any) => {
+      const reply = await request(type, payload);
+      if (type === (boundary === 'prepare' ? 'prepare-sleep' : boundary === 'commit' ? 'commit-sleep' : 'none')) allowed = false;
+      return reply;
+    };
+    for (const [method, stage] of [['putIfAbsent', 'intent'], ['update', 'journal']]) {
+      const original = supervisor.journal[method].bind(supervisor.journal);
+      supervisor.journal[method] = async (id: string, value: any) => {
+        const result = await original(id, value);
+        if (id === key && boundary === stage) allowed = false;
+        return result;
+      };
+    }
+    supervisor.activity.releaseAfterDrain = async () => { releases++; if (boundary === 'release') allowed = false; };
+    await expect(supervisor.drain({ snapshot: 'settlement-race' })).rejects.toMatchObject({ code: 'SLEEP_DENIED' });
+    expect(releases).toBe(boundary === 'release' ? 1 : 0);
+    const beforePrepare = ['journal-read', 'maintenance'].includes(boundary);
+    expect(supervisor.phase).toBe(beforePrepare ? 'running' : 'recovery');
+    if (beforePrepare) expect(calls).not.toContain('prepare-sleep');
+    if (['journal-read', 'maintenance', 'prepare', 'intent'].includes(boundary)) expect(calls).not.toContain('commit-sleep');
+    const record = await get(key);
+    if (beforePrepare || boundary === 'prepare') expect(record).toBeNull();
+    else expect(record.phase).toBe(['intent', 'commit'].includes(boundary) ? 'commit_unknown' : 'committed');
+    const before = [...calls];
+    await expect(supervisor.drain({ snapshot: 'retry' })).rejects.toMatchObject({ code: beforePrepare ? 'SLEEP_DENIED' : 'EXECUTOR_FENCED' });
+    expect(calls).toEqual(before); expect(releases).toBe(boundary === 'release' ? 1 : 0);
+  },
+);
+
 it('production compatibility gate runs before heartbeat and claim', async () => {
   supervisor.native.admissionReadiness = () => ({ allowed: false });
   await expect(supervisor.start()).rejects.toMatchObject({ code: 'COMPATIBILITY_GATE_BLOCKED' });
