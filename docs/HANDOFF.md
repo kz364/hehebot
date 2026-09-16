@@ -4,7 +4,31 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
-Current parallel wave received `.local/memory-shutdown.bundle` from unpublished
+Current wave received `.local/forget-drain.bundle`, unpublished local main e666b73,
+not origin/main. `T-01a0a901-126f-722c-888e-671c15e2b52f` owns guarded Forget UI
+and its browser fixture; `T-01a0a901-2475-709f-b6de-378be6605141` owns new backend
+memory purge custody tests/evidence. Both delivered and are reviewed/integrated;
+no worker is pending. Main passed 42 backend tests and Forget/edit/routine-delete/
+recovery browser fixtures, and inspected three DPR2 Forget captures. Past-conversation
+and terminal-task copy retention is now disclosed in the UI. Host owns status.
+Seven injected drain readiness races reproduced false sleeping success; host
+added readiness rechecks between awaited stages. 121 supervisor/lifecycle tests
+pass; first combined verifier passed 1,213 control/287 runtime in
+`.local/drain-readiness-combined.log`, desktop 16. Final integrated batch passed
+1,217 control/287 runtime, all included fixtures and typecheck/build dry run in
+`.local/forget-drain-integration-combined.log`; desktop passed 16 again. Pinned
+Codex still always denies sleep; this is not production settlement evidence.
+
+The shutdown fixture now uses public ESM root exports (19 cases/13 children pass)
+instead of internal paths. Public `WhatsAppSession` and `WhatsAppMcpServer` exports
+offer a host-owned embedding candidate, not a documented complete embedded lifecycle.
+Next useful bounded evidence: actual public server factory over synthetic session
+and in-memory SDK, with all mutations denied at host boundary, then verified
+installation-wide process/descendant ownership. Do not invoke CLI/accounts or
+assume destroy/SDK close proves settlement. Root exports source is pinned in
+docs/WAPPMCP_SHUTDOWN.md; recent-message array remains incompatible with SDK.
+
+Prior parallel wave received `.local/memory-shutdown.bundle` from unpublished
 host local main 4992486, not origin/main. Memory editor worker
 `T-01a0a8eb-6453-7613-a106-ee1aae24f4bf` owns public/app.js and its focused browser
 fixture; shutdown worker `T-01a0a8eb-73bc-732e-9d2b-fc0c92f74ad3` owns a new pinned

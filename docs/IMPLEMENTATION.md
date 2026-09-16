@@ -4,6 +4,46 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Memory forgetting integration (2026-09-16): exact-memory consent now precedes
+`memory.delete`, preserving revision/scope/identity/navigation fences and stable
+explicit retry keys. `purge_transcripts` remains false. Main added disclosure of
+retained past conversations/completed-task copies, consistent with backend evidence.
+Four new custody cases plus related suites pass (42 tests), including both cleanup
+flags, scrubbed-put/delete receipt replay without SQLite writes, asymmetric sibling
+isolation and exact cancellation grace across repeated different purges. Effects,
+locks and terminal copies remain; no deletion-everywhere claim is made. See
+[purge custody and retained boundaries](MEMORY_PURGE_CUSTODY.md).
+Main reran the eight-request Forget fixture, twelve-request edit fixture and
+routine-delete/recovery regressions in `.local/forget-integrated-browser.log`;
+three DPR2 desktop/narrow captures inspected. Narrow DOM checks independently
+scrolling fields and fully visible error/actions. Final combined batch passed
+1,217 control / 287 runtime tests and all included artifact/native/service fixtures
+and build dry run in `.local/forget-drain-integration-combined.log`; desktop passed
+16 again in `.local/forget-drain-integration-desktop.log`. No native/live E06/E10 completion.
+
+Drain readiness revalidation (2026-09-16): seven supervisor regression cases
+initially resolved as sleeping after synthetic native readiness became false
+during journal read, maintenance, prepare, intent write, commit, journal update
+or provider release. The supervisor now rechecks readiness alongside the lease
+between awaited stages. Before prepare it denies without poisoning the running
+supervisor; after prepare it enters recovery and preserves recorded uncertainty.
+A change observed after release cannot undo that one release, but prevents a false
+sleeping claim and replay. 121 supervisor/lifecycle tests pass in
+`.local/drain-readiness-focused.log`; red evidence is `.local/drain-readiness-red.log`.
+Combined verification passed 1,213 control / 287 runtime tests and all included
+fixtures/build checks in `.local/drain-readiness-combined.log`; desktop passed 16.
+This is an injected readiness contract, not a production native bug reproduction:
+the pinned Codex adapter still denies sleep unconditionally. No atomic provider
+release/observation guarantee or descendant settlement is newly proved.
+
+Public shutdown API (2026-09-16): the synthetic shutdown fixture now imports the
+pinned package's public ESM root rather than internal subpaths. CommonJS resolution
+is not exported; ESM passed all 19 cases/13 children in `.local/wapp-public-root-esm.log`.
+The package exports a host-owned session candidate without a CLI patch; its README
+does not document an embedded lifecycle. This does not construct/start a session,
+prove transport/browser settlement or bypass the recent-array SDK blocker.
+See [public API evidence](WAPPMCP_SHUTDOWN.md).
+
 Portal memory editing (2026-09-16): text-only edits previously reset sensitivity
 to ordinary and expiry to null. The reviewed fix preserves metadata/provenance,
 binds original persona/revision/scope, and fences observed stale/deleted/offline
