@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {EventEmitter} from 'node:events';
+import {EventEmitter,once} from 'node:events';
+import http from 'node:http';
 import {SpritesActivityGuard} from '../runtime/sprites-activity-guard.mjs';
 import {createSpritesTaskTransport} from '../runtime/sprites-task-transport.mjs';
 function fixture(){let now=0,holds=0,releases=0,unsafe=0;const tasks={hold:async x=>(holds++,{name:x.id,expiresAt:x.expiresAt}),release:async()=>{releases++;}};const guard=new SpritesActivityGuard({tasks,id:'epoch-1',now:()=>now,onUnsafe:()=>unsafe++});return {guard,tasks,time:x=>now=x,counts:()=>({holds,releases,unsafe})};}
@@ -41,4 +42,62 @@ test('native plain-text absence and mutation responses preserve status without e
  status=200;await assert.rejects(transport(input),/outcome unknown/);
  assert.deepEqual(await transport({...input,method:'PUT',body:{expire:30}}),{status:200,body:undefined});
  status=204;assert.deepEqual(await transport({...input,method:'DELETE'}),{status:204,body:undefined});
+});
+test('native Tasks absolute deadline bounds pre-response stalls and trickling bodies', async t => {
+ t.mock.timers.enable({apis:['setTimeout']});
+ for(const mode of ['no-response','trickle'])for(const method of ['GET','PUT','DELETE']){
+  let req,res,destroyed=0,state='pending';
+  const request=(_options,callback)=>{
+   req=new EventEmitter();req.setTimeout=()=>{};req.destroy=()=>{destroyed++;};
+   req.end=()=>{if(mode==='trickle'){res=new EventEmitter();res.statusCode=200;res.destroy=()=>{};callback(res);}};return req;
+  };
+  const transport=createSpritesTaskTransport({request,timeoutMs:50});
+  const observed=transport({socketPath:'/.sprite/api.sock',host:'sprite',method,path:'/v1/tasks/test',body:{expire:30}})
+   .then(()=>{state='resolved';},error=>{state=error.message;});
+  try{
+   t.mock.timers.tick(25);res?.emit('data',Buffer.from(' '));
+   t.mock.timers.tick(24);res?.emit('data',Buffer.from(' '));await Promise.resolve();
+   assert.equal(state,'pending');assert.equal(destroyed,0);
+   t.mock.timers.tick(1);await Promise.resolve();
+   assert.equal(state,'Native Tasks request failed; outcome unknown',`${mode} ${method}`);
+   assert.equal(destroyed,1);
+   res?.emit('data',Buffer.from('{"name":"late"}'));res?.emit('end');await Promise.resolve();
+   assert.equal(state,'Native Tasks request failed; outcome unknown');
+  }finally{req.emit('error',new Error('synthetic cleanup'));await observed;}
+ }
+});
+test('completed or failed native Tasks requests clear their absolute timer', async t => {
+ t.mock.timers.enable({apis:['setTimeout']});
+ for(const mode of ['success','error','aborted','invalid-json']){
+  let destroyed=0;
+  const request=(_options,callback)=>{
+   const req=new EventEmitter();req.destroy=()=>{destroyed++;};req.setTimeout=()=>{};
+   req.end=()=>{
+    if(mode==='error'){req.emit('error',new Error('private transport details'));return;}
+    const res=new EventEmitter();res.statusCode=200;callback(res);
+    if(mode==='aborted'){res.emit('aborted');return;}
+    res.emit('data',Buffer.from(mode==='success'?'{"name":"test"}':'private invalid JSON'));res.emit('end');
+   };return req;
+  };
+  const result=createSpritesTaskTransport({request,timeoutMs:50})({socketPath:'/.sprite/api.sock',host:'sprite',method:'GET',path:'/v1/tasks/test'});
+  if(mode==='success')assert.deepEqual(await result,{status:200,body:{name:'test'}});
+  else await assert.rejects(result,{message:'Native Tasks request failed; outcome unknown'});
+  t.mock.timers.tick(100);assert.equal(destroyed,0,mode);
+ }
+});
+test('real HTTP trickle cannot extend the native Tasks elapsed deadline', async () => {
+ let chunks=0;
+ const server=http.createServer((_req,res)=>{
+  res.writeHead(200,{'Content-Type':'application/json'});res.write(' ');chunks++;
+  const timer=setInterval(()=>{res.write(' ');chunks++;},10);
+  const end=setTimeout(()=>res.end('{"name":"test"}'),1000);
+  res.on('close',()=>{clearInterval(timer);clearTimeout(end);});
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ try{
+  // Redirect only this injected test transport; production retains its fixed socket.
+  const request=({socketPath,host,...options},callback)=>http.request({...options,host:'127.0.0.1',port:server.address().port},callback);
+  await assert.rejects(createSpritesTaskTransport({request,timeoutMs:100})({socketPath:'/.sprite/api.sock',host:'sprite',method:'GET',path:'/v1/tasks/test'}),{message:'Native Tasks request failed; outcome unknown'});
+  assert.ok(chunks>1,'response streamed rather than remaining idle');
+ }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
 });
