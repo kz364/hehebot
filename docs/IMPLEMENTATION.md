@@ -30,10 +30,18 @@ also passes. Logs: `.local/owner-background-foreign-close-final.log` and
 `.local/owner-background-default-after-probe.log`. The wrong-argument initial run
 is retained and not counted as containment. No full combined rerun was needed
 for this optional fixture-only diagnostic; live background stays blocked.
-V2 target paths check the tree registry, but native positive/foreign-target and
-capacity behavior is under investigation, not adopted. No live session used
+V2 target paths check the tree registry. The delivered native fixture is now
+host-reviewed/integrated and independently passes23 loopback requests: actual
+foreign S UUID denied for message/followup/interrupt, positive same-tree controls,
+independent S completion, zero active turns and all3 held responses closed.
+Config bytes remain unchanged; `.local/owner-background-v2-host.json` retains
+host evidence. [V2 decision](OWNER_BACKGROUND_V2_NATIVE.md) records why child-role
+overrides cannot supply the missing model-independent depth boundary and why
+residency is not a logical-child quota. It is not adopted. No live session used
 background mode, no provider/account/production action occurred, and default
-root-only alpha is unchanged.
+root-only alpha is unchanged. Next independent P0.4 work is recovering exact-turn
+provisional output missed before journal persistence, without replay or automatic
+restart; existing reconciliation handles statuses, not agent messages.
 
 Background scope and native prerequisite (2026-09-16): task summaries previously
 selected every same-persona background title, including private titles for a room

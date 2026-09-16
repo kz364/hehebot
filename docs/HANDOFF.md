@@ -24,14 +24,17 @@ failed for missing target; not containment evidence. At max_depth1 direct child
 has no collaboration tools; caller is A. No automatic reactivation/ID discovery/
 integrated exploit claim. V2 worker received these findings; assignment unchanged.
 
-Active [V2 native worker](https://ampcode.com/threads/T-01a0ab2c-d340-7198-8811-fbb800f5ed2c)
-owns only new scripts/test-codex-owner-background-v2.mjs and
-docs/OWNER_BACKGROUND_V2_NATIVE.md. It uses the existing79d93fd bundle plus host
-native fixture reference. It must prove actual foreign-UUID denials, positive
-same-tree calls, one active child/capacity/depth and cleanup. Source says V2
-ensure_agent_known guards message/followup/interrupt; V2 has no close_agent.
-Capacity includes root and residency differs; do not simply flip the feature.
-Worker will upload patch/report. No other worker is active; no live session runs.
+The [V2 native worker](https://ampcode.com/threads/T-01a0ab2c-d340-7198-8811-fbb800f5ed2c)
+is finished/integrated. Patch SHA256
+0be28cb58e0698bf9f7d39b37976335fb082bdb7893d40d8e6616d2cf62df563 verified.
+Host syntax/native run passes23 loopback requests; actual S foreign-target denials,
+same-tree positive calls, independent S response and zero-active-turn cleanup.
+All3 held responses close, native stops, config unchanged. Evidence:
+`.local/owner-background-v2-host.json`; details OWNER_BACKGROUND_V2_NATIVE.md.
+Do not adopt V2 yet: child model metadata can enable recursive tools, roles cannot
+disable multi_agent_v2/agents.enabled, and residency eviction allows more logical
+children. No supported config supplies current model-independent direct-child
+policy. Live authority gate remains. No worker is active and no live session runs.
 
 Current wave: fixed cross-scope background-summary leakage in ControlCore.context.
 Exact captured scope filters before LIMIT30; unknown legacy scope is omitted.
@@ -76,11 +79,14 @@ Absence preserves exact old behavior/serialization. Both integration workers are
 `.local/owner-background-base.bundle` is the pre-scope-fix base intentionally;
 neither worker owns ControlCore.context or shared docs.
 
-Next: review V2 worker evidence and choose a supported authority boundary before
-changing the service or permitting live background entry. Current integration
-is local preparation only. Default alpha stays root-only; unknown outcomes,
-task-level MCP provenance and sleep denial remain. Preserve all old sessions.
-No live background session has run and no production gate changed.
+Next: exact-turn provisional-output recovery is an independent P0.4 local gap.
+CodexAdapter.#reconcileHistory currently recovers statuses but ignores persisted
+agentMessage output after a missed notification. Recover only exact acknowledged
+turns, preserve versions/digests and reject ambiguous history atomically; never
+replay inference, infer settlement or automatically restart the live runtime.
+Root-only alpha remains usable; V2 requires a supported boundary or separately
+reviewed tree-policy/lifecycle design. Preserve all old sessions. No live
+background session has run and no production gate changed.
 
 Continuation: the owner-access session expired with zero admitted tasks/runs/previews
 (`.local/owner-alpha-access-session/expiry-readback.json`), nativeStopped:true.
