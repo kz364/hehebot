@@ -89,6 +89,71 @@ it('real SQLite claim → native adapter/journal → completion publishes exactl
   expect(f.store.conversationEvents(bot, f.core.now(), undefined, 100).filter(e => e.type === 'run.result').map(e => e.payload.text)).toEqual(['Durably returned to the portal']);
 });
 
+it.each(['journal-read', 'result-write', 'control-await'])('completion detaches caller custody before %s mutation', async boundary => {
+  const id = enqueue(), executor = bridge(), row = await executor.claimNext();
+  const observation = { ...settled(row), result: { status: 'waiting', text: 'Original question 43',
+    checkpoint: { cursor: 17, steps: ['review-29'] } } };
+  const expected = { status: 'waiting', text: 'Original question 43', checkpoint: { cursor: 17, steps: ['review-29'] } };
+  const mutate = () => {
+    observation.result.text = 'Changed question 97';
+    observation.result.checkpoint.cursor = 83;
+    observation.result.checkpoint.steps.push('unreviewed-103');
+    observation.nativeRunId = 'foreign-native'; observation.childrenSettled = false;
+  };
+  const get = executor.journal.get.bind(executor.journal);
+  executor.journal.get = async (key: string) => {
+    const value = await get(key);
+    if (boundary === 'journal-read') mutate();
+    return value;
+  };
+  const update = executor.journal.update.bind(executor.journal);
+  executor.journal.update = async (key: string, patch: any) => {
+    const value = await update(key, patch);
+    if (boundary === 'result-write' && patch.phase === 'complete_pending') mutate();
+    return value;
+  };
+  const request = executor.control.request;
+  executor.control.request = async (type: string, payload: any) => {
+    if (type === 'complete') {
+      if (boundary === 'control-await') { await Promise.resolve(); mutate(); }
+      expect(payload.result).toEqual(expected);
+    }
+    return request(type, payload);
+  };
+  const completed = await executor.complete(observation);
+  expect(completed.phase).toBe('complete'); expect(completed.result).toEqual(expected);
+  expect((await get(executor.cursor)).result).toEqual(expected);
+  expect(JSON.parse(f.store.run(id).checkpoint_json!)).toEqual(expected.checkpoint);
+  expect(f.store.conversationEvents(bot, f.core.now(), undefined, 100).filter(e => e.type === 'run.result').map(e => e.payload.text)).toEqual([expected.text]);
+  const before = f.db.all<{ n: number }>('SELECT total_changes() AS n')[0].n;
+  await bridge().complete({ ...settled(row), result: expected });
+  expect(f.db.all<{ n: number }>('SELECT total_changes() AS n')[0].n).toBe(before);
+  expect(nativeCalls).toBe(1);
+});
+
+it('a caller cannot upgrade incomplete settlement while completion awaits the journal', async () => {
+  const id = enqueue(), executor = bridge(), row = await executor.claimNext();
+  const observation = { ...settled(row), effectsSettled: false };
+  const get = executor.journal.get.bind(executor.journal);
+  executor.journal.get = async (key: string) => { const value = await get(key); observation.effectsSettled = true; return value; };
+  await expect(executor.complete(observation)).rejects.toMatchObject({ code: 'NATIVE_SETTLEMENT_INCOMPLETE' });
+  expect(await get(executor.cursor)).toEqual(row);
+  expect(f.store.run(id).status).toBe('running'); expect(f.db.all('SELECT * FROM outbox')).toEqual([]);
+});
+
+it.each(['cycle', 'bigint'])('non-JSON %s completion rejects before journal/control work and releases the busy guard', async kind => {
+  enqueue(); const executor = bridge(), row = await executor.claimNext();
+  const checkpoint: any = kind === 'bigint' ? { cursor: 1n } : {};
+  if (kind === 'cycle') checkpoint.self = checkpoint;
+  const get = executor.journal.get.bind(executor.journal), request = executor.control.request;
+  let reads = 0, requests = 0;
+  executor.journal.get = async (key: string) => { reads++; return get(key); };
+  executor.control.request = async (type: string, payload: any) => { requests++; return request(type, payload); };
+  await expect(executor.complete({ ...settled(row), result: { status: 'waiting', text: 'Invalid checkpoint', checkpoint } })).rejects.toMatchObject({ code: 'INVALID_NATIVE_RESULT' });
+  expect(reads).toBe(0); expect(requests).toBe(0); expect(await get(executor.cursor)).toEqual(row);
+  expect((await executor.complete(settled(row))).phase).toBe('complete');
+});
+
 it('clears the prior native attempt before publishing custody of another claimed run', async () => {
   const journal = new FileJournal(join(directory, 'bridge'));
   enqueue(); const executor = bridge(true, journal), first = await executor.claimNext();

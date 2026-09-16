@@ -85,6 +85,10 @@ export class ExecutionBridge {
     if (this.#busy) fail('DISPATCH_BUSY');
     this.#busy = true;
     try {
+      // Capture the wire value before the first await. Caller mutations must not
+      // change identity, settlement proof or the result after journal custody.
+      try { observation = JSON.parse(JSON.stringify(observation)); }
+      catch { fail('INVALID_NATIVE_RESULT'); }
       const row = await this.journal.get(this.cursor);
       if (!row?.claim || !['running', 'complete_pending', 'complete'].includes(row.phase)) fail('RECOVERY_REQUIRED');
       if (observation?.nativeRunId !== row.nativeRunId || observation.attemptId !== row.attemptId) fail('SETTLEMENT_IDENTITY_MISMATCH');
