@@ -4,6 +4,24 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+Two independent workers imported `.local/parallel-readiness-security.bundle`,
+source unpublished local main 8915a47 (not origin/main): readiness classification
+in thread `T-01a0a8bd-a526-7157-b07e-6e4b075e72ea`, and endpoint custody/privacy
+tests in `T-01a0a8be-2ecc-7050-a072-3a6a18874ca6`. Both delivered; main reviewed and
+integrated their disjoint files. No worker remains pending. Main reran 25 readiness/read
+and 123 custody/auth/question/control tests successfully; see
+`.local/readiness-integration-focused.log` and `.local/custody-integration-focused.log`.
+Readiness remains diagnostic, not authority or installation; the 43-test custody
+matrix is bounded, not a full security audit. Main reproduced/fixed activity renewal readback
+crossing the previous hold expiry: a later receipt no longer silently reclaims
+continuity; blocked recovery retains the Task. 19 activity/service tests pass,
+with exact before/at/after-expiry cases. Combined renewal verification passed
+1,154 control / 271 runtime tests in `.local/activity-renewal-combined.log`.
+Post-integration verifier passed (exit 0): 1,197 control / 278 runtime tests,
+all artifact/native/service fixtures and typecheck/build dry run in
+`.local/readiness-custody-combined.log`. Desktop reinstall/tests passed 16 tests.
+No live provider operations; production gates stay false.
+
 The pinned verifier now also exercises actual SDK stdio with a bounded synthetic
 server/descendant (`scripts/test-wappmcp-stdio.mjs`). SDK close stops the direct
 process, independently checked by Linux PID/start-time, but the same descendant

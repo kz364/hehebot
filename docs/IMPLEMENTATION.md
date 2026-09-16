@@ -4,6 +4,41 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Activity-renewal continuity fix (2026-09-16): `SpritesActivityGuard.ensure` now
+captures the previous receipt's expiry and checks it again after the renewal await.
+Previously a renewal begun at 90000ms could return at/after the old 120000ms expiry
+with a new 210000ms receipt and be accepted. That receipt proves a current hold,
+not uninterrupted continuity. The guard now notifies recovery and blocks later
+admission/release; it retains the confirmed renewed receipt and does not delete
+the native Task. The 119999ms success and 120000/120001ms rejection cases distinguish
+the boundary. Regression failed before the fix (missing expected rejection);
+19 activity/service tests pass afterward. Logs: `.local/activity-renewal-red.log`
+and `.local/activity-renewal-focused.log`. No live hold, sleep or recovery claim.
+Full verifier passed 1,154 control / 271 runtime tests and all fixtures/build checks
+in `.local/activity-renewal-combined.log`, production admission false.
+
+Readiness/custody integration (2026-09-16): two independent deliveries based on
+unpublished local main were reviewed and integrated. The diagnostic
+[connector catalog/classifier](CONNECTOR_READINESS.md) separates installation,
+artifact, per-operation protocol and historical authorization evidence; no result
+grants dispatch authority. It names the recent-array SDK incompatibility even for
+synthetic scoped search. Main reran 25 readiness/read tests successfully.
+The [endpoint custody matrix](ENDPOINT_CUSTODY_MATRIX.md) adds 43 actual Worker/auth/
+RPC/core SQLite tests using locally signed JWTs; valid foreign-owner and
+runtime-versus-owner requests deny before durable access. All-table snapshots,
+total_changes, RPC, alarm and fetch assertions detect unauthorized work. Main reran
+123 integrated custody/auth/question/read/control tests successfully. No production
+defect was reproduced in that bounded matrix; triggers, other runtime endpoints,
+live Access and exhaustive policy permutations remain outside its evidence.
+Logs: `.local/readiness-integration-focused.log`, `.local/custody-integration-focused.log`.
+Combined integration verification passed (exit 0) in `.local/readiness-custody-combined.log`:
+1,197 control / 278 runtime tests, eight auditor and five Mac checks, all pinned
+artifact/SDK/native/service fixtures and typecheck/build dry run; production admission
+false. Desktop reinstall/tests also passed 16 tests; existing dependency warnings
+remain, and no dependency upgrade or native Mac rendering is claimed.
+E09/E15 remain partial; no installed connector, live callability or security-audit
+completion is inferred.
+
 Native client/child-stream integration (2026-09-16; verified locally):
 the reviewed `macos/` delivery is independent SwiftUI/WKWebView source targeting
 macOS 14+, not a built Mac release. Five Node checks (one executable script test,
