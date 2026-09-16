@@ -4,6 +4,23 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Process-crash custody (2026-09-16): `tests/runtime-process-crash.mjs` forks real
+Node workers using FileJournal/ExecutionBridge, kills at deterministic durable
+claim_unknown, lost claim response, lost native submission response and lost
+Worker registration ACK boundaries, then reopens in a different process. The
+parent owns HTTP side-effect counters across death. Exact call counts and original
+epoch/boot/attempt/native IDs distinguish safe refusal from repeated admission;
+submitted_unknown permits only identical registration ACK retry. A successful
+control prevents an all-refusal implementation from passing. Host review added
+explicit pre-crash counts and unconditional child cleanup on failures.
+`node --test tests/runtime-process-crash.mjs tests/runtime-file-journal.mjs`
+passes17; `npm run test:runtime` passes406. Logs `.local/process-crash-{focused,runtime}.log`.
+No runtime behavior changed; this is simulated-transport application-journal
+evidence, not native recovery, power loss, multi-writer fencing or100 randomized
+receipt-loss injections. The combined verifier was not repeated for tests/docs only.
+`AUTH_SETUP.md` now records hosted-trial configuration/authorization requirements
+and explicitly rejects promoting local alpha by flipping production flags.
+
 Live bounded V2 demonstration (2026-09-16,19:20Z): same-owner ChatGPT-backed
 gpt-5.6-luna, Chief of Staff, three independent admitted roots and one native child.
 A returned after delegation; S's accurate status and B's packing list persisted

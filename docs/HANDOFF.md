@@ -4,6 +4,18 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+Newest continuation: real subprocess crash tests now cover four claim/submission
+boundaries and fresh-process journal recovery, plus a successful control. External
+call counters survive worker death; unknown work never replays, and a known native
+ID retries only identical Worker registration.17 focused and406 runtime tests pass
+in `.local/process-crash-{focused,runtime}.log`. Host reviewed the delegated files
+and added exact call-count expectations and child cleanup. No worker remains active.
+No native/account/provider action occurred; retained live session remains stopped.
+Hosted checklist in AUTH_SETUP clarifies local alpha cannot be transplanted into
+Access auth. Next: review the separate hosted bounded-admission design before any
+implementation that changes this boundary. Provider containment and deployment
+permissions remain unresolved; never enable production or copy auth caches.
+
 Latest: bounded live V2 responsiveness/cancellation passed with same-owner
 ChatGPT gpt-5.6-luna and **Chief of Staff** (not Travel). Three roots/one child;
 status and independent packing reply arrived while child active. Exact A cancel
