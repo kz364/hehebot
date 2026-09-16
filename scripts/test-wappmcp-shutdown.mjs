@@ -60,6 +60,9 @@ export async function verifyWappMcpShutdown(installation) {
     const bytes = await readFile(join(installation, 'node_modules/wappmcp/dist', path));
     assert.equal(createHash('sha256').update(bytes).digest('hex'), digest, `Unreviewed upstream file: ${path}`);
   }
+  // Resolve the import-only public export in the disposable graph, not this
+  // repository's dependency tree or Node's CommonJS require condition.
+  await writeFile(join(installation, 'shutdown-public-api.mjs'), 'export { WhatsAppSession, register } from "wappmcp";\n');
   const results = [];
   for (const signal of ['SIGINT', 'SIGTERM']) {
     for (const mode of ['fulfilled', 'rejected', 'cross-signal', 'repeat-signal', 'hung', 'unregistered']) {
@@ -83,8 +86,9 @@ export async function verifyWappMcpShutdown(installation) {
 }
 
 async function destroyContracts(installation) {
-  const { WhatsAppSession } = await import(pathToFileURL(join(installation, 'node_modules/wappmcp/dist/lib/whatsapp/session.js')).href);
-  const { Client, LocalAuth } = createRequire(join(installation, 'package.json'))('whatsapp-web.js');
+  const require = createRequire(join(installation, 'package.json'));
+  const { WhatsAppSession } = await import(pathToFileURL(join(installation, 'shutdown-public-api.mjs')).href);
+  const { Client, LocalAuth } = require('whatsapp-web.js');
   const profile = await mkdtemp(join(process.env.HOME, 'synthetic-profile-'));
   const cases = [];
   try {
@@ -170,7 +174,7 @@ async function syntheticChild(installation, mode, signal) {
   if (mode === 'destroy') {
     await destroyContracts(installation); clearTimeout(watchdog); process.disconnect(); return;
   }
-  const { register } = await import(pathToFileURL(join(installation, 'node_modules/wappmcp/dist/lib/signal-handler.js')).href);
+  const { register } = await import(pathToFileURL(join(installation, 'shutdown-public-api.mjs')).href);
   let calls = 0;
   const unregister = register(async received => {
     calls++; assert.equal(calls, 1); assert.equal(received, signal);

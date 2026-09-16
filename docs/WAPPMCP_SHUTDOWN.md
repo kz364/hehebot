@@ -43,9 +43,29 @@ same graph after its separately approved patch verification.
 Wappmcp is MIT, copyright 2026 Vaibhav Pandey; whatsapp-web.js is Apache-2.0.
 Their license files remain in the disposable installed packages. No upstream
 implementation is copied into tracked files and no dependency is modified here.
-These direct file imports are verification-only inspection of public distributed
-source, not a production adapter or a claim that these subpaths are package exports.
+The fixture now imports `WhatsAppSession` and `register` through the public ESM
+package root, using a temporary re-export module in the disposable graph.
+The hash-checked implementation files above are inspected, not imported through
+unsupported package subpaths. This remains verification, not a production adapter.
 This is not a transitive license audit or approval to redistribute the graph.
+
+## Public API candidate, not embedded lifecycle acceptance
+
+The pinned [package export map](https://github.com/vaibhavpandeyvpz/wappmcp/blob/9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8/package.json)
+and [root barrel](https://github.com/vaibhavpandeyvpz/wappmcp/blob/9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8/src/index.ts)
+expose `WhatsAppSession`, `WhatsAppMcpServer` and signal helpers through the import
+condition. CommonJS resolution is not exported. Main's first `require.resolve`
+attempt failed with `ERR_PACKAGE_PATH_NOT_EXPORTED`; normal ESM import passed
+all 19 shutdown cases across 13 children in `.local/wapp-public-root-esm.log`.
+No session was constructed or started; prototype methods retain synthetic handles.
+
+A host-owned session using the package root is therefore a supported-export
+candidate that need not depend on the CLI's removed signal handlers. The README
+documents CLI use, not a complete embedded-host lifecycle. Public `destroy()` is
+separate from `logOut()`; it still does not prove descendant settlement. Transport
+closure, singleton/profile ownership, startup/teardown concurrency, real browser
+termination and reconnect must be established before admission. No dependency
+patch, browser launch, pairing or production lifecycle was introduced here.
 
 ## Executable observations
 
