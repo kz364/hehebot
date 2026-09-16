@@ -4,6 +4,18 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest: private hosted composition is implemented and independently rerun in
+scripts/test-codex-hosted-owner.mjs: signed Access, actual Worker/SQLite, native
+Codex, exact routine MCP receipt and persisted provisional readback; two loopback
+model requests and synthetic Sprite PUT/GET. Four fixture HTTP tests pass,
+including correctly signed wrong-owner denial. Full verification exits0 with
+1,359 backend/434 runtime plus native/browser/service/build checks in
+.local/hosted-composition-combined.log; desktop16 pass. No active workers.
+Next prepare exact hosted target/release and authorization request; no publication/account/provider
+action is authorized by this fixture. Real-account entrypoint, real Access edge,
+Sprite containment and subscription eligibility are not proven. Retained live
+sessions must not be reset or replayed.
+
 Newest: runtime/hosted-owner-launcher.mjs supplies explicit manual --run of private
 config, native-home-first/session-second flock, digest-bound child re-read and
 signal forwarding without retry. Internal --run-hosted-locked is only its handoff.
@@ -25,8 +37,8 @@ throw on all other outbound fetch. dispatchFetch drives unmodified Worker auth
 with Cf-Access-Jwt-Assertion (not the generic bearer example from upstream).
 Use actual env ACCESS_ISSUER/ACCESS_AUD/OWNER_SUB and synthetic signed JWTs.
 Source recipe: https://github.com/cloudflare/workers-sdk/blob/main/packages/miniflare/README.md
-This has been researched, not executed in this repo; match installed version,
-bundle SQL text/external cloudflare:workers correctly, and dispose the instance.
+Implemented in tests/fixtures/hosted-control.mjs using installed Miniflare5's
+exported convertV4MiniflareOptions; SQL bundling and disposal are exercised.
 
 Newest: default-absent HEHEBOT_HOSTED_OWNER_ALPHA now supports the strict pin/policy
 envelope under Access with false production flags and empty provider config. Wrong

@@ -4,6 +4,26 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Private hosted composition (2026-09-17 Asia/Jakarta):
+`scripts/test-codex-hosted-owner.mjs` composes signed synthetic Access JWTs,
+the actual Worker and persistent SQLite Durable Object, hosted Sprite service,
+pristine pinned Codex and read-only task MCP. It verifies an exact routine receipt
+and attributed provisional reply with two loopback model requests, then stops
+native and reopens Worker persistence to verify readback without inference.
+Synthetic Sprite requests are exactly PUT/GET on the expected management socket;
+sleep and production remain denied. `tests/runtime-hosted-control.mjs` passes
+four tests, including a correctly signed wrong-subject denial, missing/tampered
+tokens, dual service-header/runtime-bearer requirements and reboot refusal.
+Miniflare 5 uses its exported v4-option converter. Only the exact synthetic issuer
+JWKS GET is intercepted; other Worker outbound requests fail. The private HTTPS
+proxy simulates the edge service gate; this does not prove Cloudflare edge behavior.
+Fixture prepareNative replaces real-account setup, so the launcher/account check,
+live Sprite, hosted account eligibility and containment remain separate gates.
+Combined verification exits0 with1,359 backend/434 runtime tests plus native,
+browser, service and build checks in `.local/hosted-composition-combined.log`.
+Desktop16 pass in `.local/hosted-composition-desktop.log`. No account, provider,
+deployment or production action occurred; this checkpoint remains local.
+
 Hosted manual launcher (2026-09-17 Asia/Jakarta): runtime/hosted-owner-launcher.mjs
 uses the existing flock wrapper twice, native home then session state. Both must
 be existing distinct owner-only directories. Parent config bytes are SHA-256-bound

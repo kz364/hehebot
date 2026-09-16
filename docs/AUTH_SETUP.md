@@ -108,6 +108,13 @@ The local entrypoint rejects the hosted field. No deployed binding or default
 configuration selects this mode. Local alpha stays loopback-only/provider-free.
 This is local fixture evidence, not permission to launch a hosted trial.
 
+The private integration command `node scripts/test-codex-hosted-owner.mjs` now
+exercises signed synthetic Access against actual Worker/SQLite, hosted service
+admission, native read-only MCP, Sprite hold stubs and persisted reply readback.
+Run `bash scripts/build-codex-service.sh` first; the combined verifier includes
+both. This does not invoke the account-checking launcher or prove real edge
+policies, provider isolation, account eligibility or permission to deploy.
+
 **Lock limitation:** Node's default child spawn drops extra descriptors. A bounded
 pristine0.154.0 experiment observed explicitly inherited lock custody in the npm
 wrapper, but not in its native ELF child. The launcher therefore proves exclusion
@@ -152,7 +159,7 @@ Before requesting a concrete hosted deployment, prepare these inputs locally:
 | Exact release and target | Record the reviewed local revision, Worker name, account, hostname and existing Sprite reference. Local commits are not necessarily on origin/main. Do not upload retained alpha databases, native journals or credentials as deployment assets. |
 | Owner ingress | Use `AUTH_MODE=access`, exact issuer/audience/owner subject and HTTPS origin. Keep `workers_dev:false`; no unprotected alternate route. Wrong owner, issuer, audience, expiry and forged forwarded headers must reject. Never proxy the local bypass directly: URL host checks are not a network ACL. |
 | Runtime ingress | Separate runtime bearer, wake token and Access service credentials from browser identity. Review internal-route policy and logs independently; a working owner login is not runtime authorization. |
-| Execution mode | Initially preserve `EXECUTION_ENABLED:false`, `NATIVE_VERIFIED:false` and `lifecycleVerified:false`. The current local alpha cannot serve as a hosted execution mode. A hosted bounded mode needs a separately reviewed authenticated admission boundary, not a configuration workaround. |
+| Execution mode | Preserve `EXECUTION_ENABLED:false`, `NATIVE_VERIFIED:false` and `lifecycleVerified:false`. Use the explicit hosted pin/policy boundary described above, never the local-alpha bypass. Its private composition is verified; deployment, real ingress and account/provider acceptance remain separate. |
 | Model account | The customer signs in through the supported flow on the selected persistent runtime. Do not copy the orb's OAuth cache or run concurrent refresh owners. Verify subscription eligibility and hosted-use terms; no paid API fallback. |
 | Provider lifecycle | Resolve the [protected containment question](PROVIDERS.md) and verify holds, generation fencing, cold/warm behavior and exact stop evidence before autonomous sleep/replacement. Existing read-only Sprite inspection did not grant mutation/deployment. |
 | State and rollback | Identify private persistent paths, backup/key custody and the single executor. Rollback stops admission and preserves unknown work; it must not delete/reset custody or automatically replay a retained alpha session. Application-only backups do not restore native authority. |
