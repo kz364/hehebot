@@ -5,6 +5,7 @@ import type { Database } from './store';
 const schemaPins:Record<number,string>={
  9:'15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c',
  10:'682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4',
+ 11:'8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a',
 };
 const maxBytes=4*1024*1024,maxRows=10000;
 const quote=(name:string)=>`"${name.replaceAll('"','""')}"`;

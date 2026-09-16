@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { importControlExport, MAX_EXPORT_BYTES } from '../scripts/import-control-export.mjs';
 import { verifyControl } from '../scripts/backup-control.mjs';
+import { exportControl } from '../src/core/control-export';
+import type { SqlValue } from '../src/core/store';
 
 type Cell = { type: string; value: string | null };
 type Table = { name: string; columns: string[]; rows: Cell[][] };
@@ -66,7 +68,7 @@ beforeEach(async () => {
     INSERT INTO flight_restore_deadlines VALUES('leg-83',2,'2026-09-20T21:00:00.000Z','Asia/Jakarta','2026-09-19T21:00:00.000Z','routine-29','source-43','outcome_unknown','child-83','{"observation":"${canary}"}');
   `);
   wire = { format: 'hehebot-control-export', version: 1, createdAt: originalTime,
-    schemaSha256: '682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4', schemaVersions: [10], tables: tables(db) };
+    schemaSha256: '8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a', schemaVersions: [11], tables: tables(db) };
   await save();
 });
 afterEach(async () => { db.close(); await rm(directory, { recursive: true, force: true }); });
@@ -94,9 +96,45 @@ it('reconstructs exact typed data, int64 edges, deleted event high-water and ori
   expect((await readdir(destination)).sort()).toEqual(['control.sqlite', 'manifest.json']); await clean();
 });
 
-it.each([9, 10])('preserves schema%s migration history and flight deadlines without inventing release or upgrading legacy snapshots', async version => {
+it.each(['same', 'parent', 'attempt', 'persona'])('roundtrips shared thread turns only with %s custody', async mode => {
+  db.exec(`INSERT INTO objects VALUES('persona-97','persona',1,'{}',NULL,'t1','t1');
+    INSERT INTO runs(id,persona_id,context_json,role,parent_run_id,status,current_attempt,created_at,updated_at)
+      VALUES('followup-41','persona-73','{}','background','root-29','cancelling',1,'t5','t8');
+    INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,native_run_ref,status,deadline_at)
+      VALUES('followup-41',1,'followup-submit',13,'boot-47','turn-907','claimed','t9');
+    INSERT INTO native_task_links VALUES('followup-41','root-29',2,'turn-907','child-session');`);
+  if (mode === 'parent') db.exec("UPDATE native_task_links SET parent_run_id='child-83' WHERE run_id='followup-41'; UPDATE runs SET parent_run_id='child-83' WHERE id='followup-41'");
+  if (mode === 'attempt') db.exec("UPDATE native_task_links SET parent_attempt=1 WHERE run_id='followup-41'");
+  if (mode === 'persona') db.exec("UPDATE runs SET persona_id='persona-97' WHERE id='followup-41'");
+  const exported = exportControl({
+    all: <T>(sql: string, ...values: SqlValue[]) => db.prepare(sql).all(...values) as T[],
+    exec: () => { throw Error('Read only'); },
+    transaction: <T>(fn: () => T) => { db.exec('BEGIN'); try { return fn(); } finally { db.exec('ROLLBACK'); } },
+  }, originalTime);
+  await writeFile(input, exported);
+  if (mode !== 'same') { await rejected(); return; }
+  await importControlExport(input, destination);
+  const copy = new DatabaseSync(join(destination, 'control.sqlite'), { readOnly: true });
+  try {
+    for (const name of ['runs', 'attempts', 'native_task_links', 'flight_restore_deadlines']) {
+      expect(copy.prepare(`SELECT * FROM ${name} ORDER BY rowid`).all()).toEqual(db.prepare(`SELECT * FROM ${name} ORDER BY rowid`).all());
+    }
+    expect(copy.prepare('SELECT native_run_ref,native_session_key FROM native_task_links ORDER BY native_run_ref').all()).toEqual([
+      {native_run_ref:'child-native',native_session_key:'child-session'}, {native_run_ref:'turn-907',native_session_key:'child-session'},
+    ]);
+  } finally { copy.close(); }
+});
+
+it.each([9, 10, 11])('preserves schema%s migration history and flight deadlines without inventing release or upgrading legacy snapshots', async version => {
+  if (version < 11) {
+    const links = db.prepare('SELECT * FROM native_task_links').all();
+    db.exec('DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');
+    for (const link of links) db.prepare('INSERT INTO native_task_links VALUES(?,?,?,?,?)').run(...Object.values(link));
+    db.prepare('UPDATE schema_versions SET version=? WHERE version=11').run(version);
+    wire.schemaSha256 = '682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4';
+  }
   if (version === 9) {
-    db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json; UPDATE schema_versions SET version=9 WHERE version=10');
+    db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json');
     wire.schemaSha256 = '15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c';
   }
   db.prepare('INSERT INTO schema_versions VALUES(?,?)').run(8, '2026-08-17T01:23:45.678Z');
@@ -107,20 +145,20 @@ it.each([9, 10])('preserves schema%s migration history and flight deadlines with
   try {
     expect(copy.prepare('SELECT * FROM schema_versions ORDER BY version').all()).toEqual(db.prepare('SELECT * FROM schema_versions ORDER BY version').all());
     expect(copy.prepare('SELECT * FROM attempts ORDER BY run_id').all()).toEqual(db.prepare('SELECT * FROM attempts ORDER BY run_id').all());
-    expect(copy.prepare('PRAGMA table_info(attempts)').all().some(row => row.name === 'coordinator_release_json')).toBe(version === 10);
+    expect(copy.prepare('PRAGMA table_info(attempts)').all().some(row => row.name === 'coordinator_release_json')).toBe(version >= 10);
     expect(copy.prepare('SELECT * FROM flight_restore_deadlines ORDER BY leg_id,revision').all()).toEqual(db.prepare('SELECT * FROM flight_restore_deadlines ORDER BY leg_id,revision').all());
     expect(copy.prepare('SELECT status FROM flight_restore_deadlines WHERE revision=2').get()!.status).toBe('outcome_unknown');
   } finally { copy.close(); }
 });
 
-it.each([[], [8], [10, 8], [8, 8, 10], [0, 10], [1.5, 10], [11], [8, 10], [9]].map(versions => ({ versions })))('rejects invalid or row-mismatched header history $versions', async ({ versions }) => {
+it.each([[], [8], [11, 8], [8, 8, 11], [0, 11], [1.5, 11], [12], [8, 11], [9], [10]].map(versions => ({ versions })))('rejects invalid or row-mismatched header history $versions', async ({ versions }) => {
   wire.schemaVersions = versions; await save(); await rejected();
 });
 
 it('rejects omitted history rows in the header and missing flight data tables', async () => {
   db.prepare('INSERT INTO schema_versions VALUES(?,?)').run(8, '2026-08-17T01:23:45.678Z');
-  wire.tables = tables(db); await save(); await rejected(); // Header [10] omits real row8.
-  wire.schemaVersions = [8, 10]; wire.tables = wire.tables.filter(t => t.name !== 'flight_restore_deadlines');
+  wire.tables = tables(db); await save(); await rejected(); // Header [11] omits real row8.
+  wire.schemaVersions = [8, 11]; wire.tables = wire.tables.filter(t => t.name !== 'flight_restore_deadlines');
   await save(); await rejected();
 });
 

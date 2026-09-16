@@ -259,12 +259,22 @@ try {
         return;
       }
       if (childMode) {
-        const isChild = body.input.some(item => item.role === 'user' && JSON.stringify(item.content).includes('SERVICE_CHILD_PROOF'));
+        const isChild = body.input.some(item => (item.role === 'user' || ownerAlphaBackgroundMode &&
+          item.type === 'agent_message' && item.author === '/root' && item.recipient === '/root/child_a') &&
+          JSON.stringify(item.content).includes('SERVICE_CHILD_PROOF'));
         if (!isChild) {
           assert.match(JSON.stringify(body.input), /SERVICE_ASSEMBLY_19_43/);
           const output = body.input.find(item => item.type === 'function_call_output');
           if (output) {
-            childThreadId = JSON.parse(String(output.output)).agent_id;
+            const spawned = JSON.parse(String(output.output));
+            if (ownerAlphaBackgroundMode) {
+              assert.equal(spawned.task_name, '/root/child_a');
+              await wait(async () => {
+                const receivers = Object.values((await service.observe())?.spawns ?? {}).flatMap(spawn => spawn.receiverThreadIds);
+                if (receivers.length !== 1) return false;
+                childThreadId = receivers[0]; return true;
+              }, 'V2 observed spawn identity');
+            } else childThreadId = spawned.agent_id;
             assert.equal(typeof childThreadId, 'string');
             await send(res, [{ id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
               content: [{ type: 'output_text', text: 'SERVICE_PARENT_DONE', annotations: [] }] }]);
@@ -273,7 +283,8 @@ try {
             assert.ok(tool, 'native spawn tool advertised');
             await send(res, [{ id: `fc_${randomUUID()}`, type: 'function_call', status: 'completed', call_id: `call_${randomUUID()}`,
               ...(tool.type === 'namespace' ? { namespace: tool.name } : {}), name: 'spawn_agent',
-              arguments: JSON.stringify({ message: 'SERVICE_CHILD_PROOF', agent_type: 'default' }) }]);
+              arguments: JSON.stringify({ message: 'SERVICE_CHILD_PROOF', agent_type: 'default',
+                ...(ownerAlphaBackgroundMode ? { task_name: 'child_a', fork_turns: 'none' } : {}) }) }]);
           }
           return;
         }
@@ -676,7 +687,16 @@ try {
       const operations = await service.supervisor.operations();
       for (const family of allFamilies) {
         const owned = operations.filter(op => op.run_id === family.claim.run.id);
-        assert.equal(owned.filter(op => op.status === 'unknown').length, 1, 'Each family retains unknown coverage');
+        let unknown = 1; // Universal coverage uncertainty, even for terminal roots.
+        if (ownerAlphaBackgroundMode && family.attemptId === p.attemptId) {
+          const activities = Object.values((await service.observe(p.attemptId)).v2Activities);
+          assert.equal(activities.filter(item => item.kind === 'started').length, 1);
+          assert.ok(activities.every(item => ['started', 'completed'].includes(item.kind) && item.targetThreadId === aThread));
+          // V2 activity completion does not settle either the spawn invocation
+          // or its activity record. A later child-completed activity also stays unknown.
+          unknown += 1 + activities.length;
+        }
+        assert.equal(owned.filter(op => op.status === 'unknown').length, unknown, 'Each family retains all unknown obligations');
         assert.ok(owned.every(op => op.deadline_at <= family.claim.deadline_at));
       }
       assert.equal(new Set(operations.map(op => op.id)).size, operations.length);
@@ -728,8 +748,10 @@ try {
       assert.equal(final.runs.length, 4);
       assert.deepEqual([p, s, b].map(row => row.claim.owner_alpha_background), [true, undefined, undefined]);
       assert.equal(nativeStarts.length, 3);
-      assert.deepEqual(nativeStarts[0].config.agents, { enabled: true, max_concurrent_threads_per_session: 1, max_depth: 1 });
-      assert.deepEqual(nativeStarts[0].config.features, { multi_agent: true, multi_agent_v2: false });
+      assert.deepEqual(nativeStarts[0].config.agents, { enabled: true });
+      assert.deepEqual(nativeStarts[0].config.features, { multi_agent: false, multi_agent_v2: {
+        enabled: true, max_concurrent_threads_per_session: 2, wait_agent_enabled: false,
+      } });
       for (const started of nativeStarts.slice(1)) {
         assert.equal(started.config.agents, undefined);
         assert.equal(started.config.features, undefined);

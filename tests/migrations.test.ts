@@ -27,7 +27,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual([{id:'run-1',status:'waiting',context_json:'{"synthetic":"preserve context"}',command_id:'command-1',role:'coordinator',parent_run_id:null,title:null}]);
    expect(db.all("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('native_task_links','resource_locks','task_followups','skill_proposals','skill_enablements')")).toHaveLength(5);
    expect(db.all('SELECT * FROM room_publications')).toEqual([]);
-   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(10);
+   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(11);
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=2')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=3')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=4')[0].applied_at).toBe('2026-09-10T00:00:00Z');
@@ -55,7 +55,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual(before);
    sqlite.exec('DROP INDEX room_publications_cause');
    migrateApplication(db,'2026-09-12T00:00:00Z');
-   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:10}]);
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:11}]);
   }finally{sqlite.close();}
  });
  it('preserves v7 followups and foreign keys, and rolls back a failed table replacement',()=>{
@@ -79,7 +79,7 @@ describe('application v1 migration',()=>{
  it('adopts existing v8 flight deadlines without rewriting pending or uncertain work',()=>{
   const {db,sqlite}=legacy();try{
    migrateApplication(db,'2026-09-10T00:00:00Z');
-   sqlite.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json; DELETE FROM schema_versions WHERE version=10');
+   sqlite.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json; DELETE FROM schema_versions WHERE version>=10');
    sqlite.exec("DELETE FROM schema_versions WHERE version=9; INSERT INTO flight_restore_deadlines VALUES('leg-a',3,'2026-10-01T12:00:00Z','Asia/Jakarta','2026-10-01T00:00:00Z','routine-a','source-a','outcome_unknown','run-1',NULL),('leg-b',7,'2026-10-03T12:00:00Z','UTC','2026-10-03T00:00:00Z','routine-b','source-b','pending',NULL,NULL)");
    const before=db.all('SELECT * FROM flight_restore_deadlines ORDER BY leg_id');
    migrateApplication(db,'2026-09-12T00:00:00Z');migrateApplication(db,'2026-09-13T00:00:00Z');
@@ -94,7 +94,7 @@ describe('application v1 migration',()=>{
  it('migrates v9 attempts without manufacturing release and rolls back a failed version write',()=>{
   const {db,sqlite}=legacy();try{
    migrateApplication(db,'2026-09-10T00:00:00Z');
-   sqlite.exec("ALTER TABLE attempts DROP COLUMN coordinator_release_json; DELETE FROM schema_versions WHERE version=10; INSERT INTO attempts VALUES('run-1',3,'running',NULL,NULL),('run-1',2,'completed','earlier','{\"text\":\"preserve\"}'); CREATE TRIGGER reject_v10 BEFORE INSERT ON schema_versions WHEN NEW.version=10 BEGIN SELECT RAISE(ABORT,'synthetic failure'); END");
+   sqlite.exec("ALTER TABLE attempts DROP COLUMN coordinator_release_json; DELETE FROM schema_versions WHERE version>=10; INSERT INTO attempts VALUES('run-1',3,'running',NULL,NULL),('run-1',2,'completed','earlier','{\"text\":\"preserve\"}'); CREATE TRIGGER reject_v10 BEFORE INSERT ON schema_versions WHEN NEW.version=10 BEGIN SELECT RAISE(ABORT,'synthetic failure'); END");
    const before=db.all('SELECT * FROM attempts');
    expect(()=>migrateApplication(db,'2026-09-11T00:00:00Z')).toThrow('synthetic failure');
    expect(db.all('SELECT * FROM attempts')).toEqual(before);
@@ -106,6 +106,27 @@ describe('application v1 migration',()=>{
    const released=db.all('SELECT * FROM attempts');migrateApplication(db,'2026-09-13T00:00:00Z');
    expect(db.all('SELECT * FROM attempts')).toEqual(released);
    expect(db.all('SELECT * FROM schema_versions WHERE version=10')).toEqual([{version:10,applied_at:'2026-09-12T00:00:00Z'}]);
+  }finally{sqlite.close();}
+ });
+ it('rolls back v11 replacement on version failure, then preserves old links and permits only distinct turns',()=>{
+  const {db,sqlite}=legacy();try{
+   migrateApplication(db,'2026-09-10T00:00:00Z');
+   sqlite.exec("DELETE FROM schema_versions WHERE version=11; DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE); INSERT INTO runs(id) VALUES('child-17'),('child-83'),('child-97'); INSERT INTO native_task_links VALUES('child-17','run-1',3,'turn-401','thread-29'); CREATE TRIGGER reject_v11 BEFORE INSERT ON schema_versions WHEN NEW.version=11 BEGIN SELECT RAISE(ABORT,'synthetic v11 failure'); END");
+   const before=db.all('SELECT * FROM native_task_links'),schema=db.all('SELECT * FROM sqlite_schema ORDER BY name');
+   expect(()=>migrateApplication(db,'2026-09-11T00:00:00Z')).toThrow('synthetic v11 failure');
+   expect(db.all('SELECT * FROM sqlite_schema ORDER BY name')).toEqual(schema);
+   expect(db.all('SELECT * FROM native_task_links')).toEqual(before);
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:10}]);
+   expect(()=>db.exec("INSERT INTO native_task_links VALUES('child-83','run-1',3,'turn-907','thread-29')")).toThrow();
+   sqlite.exec('DROP TRIGGER reject_v11');migrateApplication(db,'2026-09-12T00:00:00Z');
+   expect(db.all('SELECT * FROM native_task_links')).toEqual(before);
+   db.exec("INSERT INTO native_task_links VALUES('child-83','run-1',3,'turn-907','thread-29')");
+   expect(()=>db.exec("INSERT INTO native_task_links VALUES('child-97','run-1',3,'turn-907','thread-59')")).toThrow();
+   const after=db.all('SELECT * FROM native_task_links'),changes=db.all('SELECT total_changes() AS n');
+   migrateApplication(db,'2026-09-13T00:00:00Z');
+   expect(db.all('SELECT total_changes() AS n')).toEqual(changes);
+   expect(db.all('SELECT * FROM native_task_links')).toEqual(after);
+   expect(db.all('PRAGMA foreign_key_check')).toEqual([]);
   }finally{sqlite.close();}
  });
  it('rejects unknown future schema without changing application data',()=>{

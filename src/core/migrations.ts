@@ -69,5 +69,15 @@ export function migrateApplication(db:Database,now:string):void {
   db.exec('ALTER TABLE attempts ADD COLUMN coordinator_release_json TEXT CHECK(coordinator_release_json IS NULL OR json_valid(coordinator_release_json))');
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(10,?)',now);
  });
- requireThat([9,10].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===9)version=10;
+ if(version===10)db.transaction(()=>{
+  // A thread retains its original custody across distinct turn receipts.
+  db.exec('CREATE TABLE native_task_links_v11 (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL)');
+  db.exec('INSERT INTO native_task_links_v11 SELECT run_id,parent_run_id,parent_attempt,native_run_ref,native_session_key FROM native_task_links');
+  db.exec('DROP TABLE native_task_links');
+  db.exec('ALTER TABLE native_task_links_v11 RENAME TO native_task_links');
+  db.exec('CREATE INDEX native_task_links_session ON native_task_links(native_session_key)');
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(11,?)',now);
+ });
+ requireThat([10,11].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

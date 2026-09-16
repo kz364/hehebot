@@ -9,10 +9,11 @@ import { snapshotControl, verifyControl } from './backup-control.mjs';
 
 export const MAX_EXPORT_BYTES = 4 * 1024 * 1024;
 export const MAX_EXPORT_ROWS = 10000;
-const sqlHash = '8c04fcebe0320505838768fa29450fbdc8a26ad745a8bad4f4b9c98cb203236a';
+const sqlHash = '97d6308087c7c7cfe39efd4cb51b23ab829d57acbbba2af925706b5ecb697bb8';
 const schemaPins = {
   9: '15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c',
   10: '682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4',
+  11: '8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a',
 };
 const hash = value => createHash('sha256').update(value).digest('hex');
 /** @returns {never} */
@@ -108,7 +109,7 @@ export async function importControlExport(exportFile, snapshotDirectory) {
     const input = parseExport(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, size)));
     keys(input, ['format', 'version', 'createdAt', 'schemaSha256', 'schemaVersions', 'tables']);
     const latest = Array.isArray(input.schemaVersions) ? input.schemaVersions.at(-1) : null;
-    if (input.format !== 'hehebot-control-export' || input.version !== 1 || ![9, 10].includes(latest) || input.schemaSha256 !== schemaPins[latest] ||
+    if (input.format !== 'hehebot-control-export' || input.version !== 1 || ![9, 10, 11].includes(latest) || input.schemaSha256 !== schemaPins[latest] ||
         input.schemaVersions.length < 1 || input.schemaVersions.length > latest || !input.schemaVersions.every((version, i) =>
           Number.isInteger(version) && version >= 1 && version <= latest && (!i || version > input.schemaVersions[i - 1])) ||
         typeof input.createdAt !== 'string' ||
@@ -124,6 +125,7 @@ export async function importControlExport(exportFile, snapshotDirectory) {
       db.exec(sql.toString('utf8'));
       // Reconstruct legacy snapshots without inventing receipts or upgrading
       // their history. Only this disposable, empty local staging DB is changed.
+      if (latest < 11) db.exec('DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');
       if (latest === 9) db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json');
       const schema = db.prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name").all();
       if (hash(JSON.stringify(schema)) !== schemaPins[latest]) fail();
@@ -150,6 +152,10 @@ export async function importControlExport(exportFile, snapshotDirectory) {
         for (const row of table.rows) statement.run(...row.map(cell));
       }
       exactRows(db, input.tables); // Reject affinity conversion, REAL results, or lost int64 precision.
+      // Multiple turns may share a thread, never its original authority.
+      if (db.prepare(`SELECT n.native_session_key FROM native_task_links n JOIN runs r ON r.id=n.run_id
+        GROUP BY n.native_session_key HAVING count(DISTINCT n.parent_run_id)>1 OR
+        count(DISTINCT n.parent_attempt)>1 OR count(DISTINCT r.persona_id)>1 LIMIT 1`).get()) fail();
       const history = db.prepare('SELECT version FROM schema_versions ORDER BY version'); history.setReadBigInts(true);
       if (JSON.stringify(history.all().map(row => String(row.version))) !== JSON.stringify(input.schemaVersions.map(String))) fail();
       db.exec('COMMIT; PRAGMA foreign_keys=ON');

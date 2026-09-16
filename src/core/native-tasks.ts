@@ -40,6 +40,9 @@ export class NativeTaskLedger {
    requireThat(parent.current_attempt===input.parent_attempt,'STALE_EPOCH','Native parent attempt is no longer current.');
    requireThat(input.persona_id===parent.persona_id||parent.role==='coordinator'&&this.core.options.delegations?.[parent.persona_id]?.includes(input.persona_id),'FORBIDDEN','Native delegation target is not authorized.',403);
    requireThat(input.native_run_ref.length>0&&input.native_run_ref.length<=256&&input.native_session_key.length>0&&input.native_session_key.length<=512&&input.title.length>0&&input.title.length<=200,'INVALID_INPUT','Invalid native child receipt.',422);
+   const conflictingThread=this.store.db.all(`SELECT n.run_id FROM native_task_links n JOIN runs r ON r.id=n.run_id
+    WHERE n.native_session_key=? AND (n.parent_run_id!=? OR n.parent_attempt!=? OR r.persona_id!=?) LIMIT 1`,input.native_session_key,parent.id,input.parent_attempt,input.persona_id);
+   requireThat(!conflictingThread.length,'IDEMPOTENCY_CONFLICT','Native child thread custody was reused.');
    const existing=this.store.db.all<{run_id:string;parent_run_id:string;parent_attempt:number;native_session_key:string}>('SELECT * FROM native_task_links WHERE native_run_ref=?',input.native_run_ref)[0];
    if(existing){requireThat(existing.parent_run_id===parent.id&&existing.parent_attempt===input.parent_attempt&&existing.native_session_key===input.native_session_key&&this.store.run(existing.run_id).persona_id===input.persona_id,'IDEMPOTENCY_CONFLICT','Native child identity was reused.');this.core.ownerAlpha.authorize(existing.run_id,1);const run=this.store.run(existing.run_id);return started?this.acknowledgeStart(identity,input,run):run;}
    const oldContext=JSON.parse(parent.context_json) as ContextSnapshot;

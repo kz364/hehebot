@@ -134,6 +134,76 @@ it('reconciles lost registration acknowledgements with identical receipts and pr
   await expect(mapper({ runId: randomUUID(), personaId: bot, attempt: 1 }).sync()).rejects.toMatchObject({ code: 'TASK_GRANT_CONFLICT' });
 });
 
+it('maps sequential flat V2 child turns to distinct replay-stable receipts and exact provisional outputs', async () => {
+  life.submitted(identity, parentId, 1, 'turn');
+  const activity = (id: string, method: 'item/started' | 'item/completed', kind: 'started' | 'interacted', target: string) =>
+    adapter.observe('native', { method, params: { threadId: 'root', turnId: 'turn', item: {
+      id, type: 'subAgentActivity', kind, agentThreadId: target, agentPath: '/private/model/path',
+    } } });
+  const turn = (threadId: string, turnId: string, status: 'inProgress' | 'completed') => adapter.observe('native', {
+    method: status === 'inProgress' ? 'turn/started' : 'turn/completed',
+    params: { threadId, turn: { id: turnId, status } },
+  });
+  const output = (threadId: string, turnId: string, id: string, text: string) => adapter.observe('native', {
+    method: 'item/completed', params: { threadId, turnId,
+      item: { id, type: 'agentMessage', text, phase: 'final_answer' } },
+  });
+
+  await activity('spawn-a', 'item/started', 'started', 'child-a');
+  await activity('spawn-a', 'item/completed', 'started', 'child-a');
+  await turn('child-a', 'turn-a-1', 'inProgress');
+  await output('child-a', 'turn-a-1', 'answer-a-1', 'A first provisional');
+  await turn('child-a', 'turn-a-1', 'completed');
+  await activity('interact-a', 'item/started', 'interacted', 'child-a');
+  await activity('interact-a', 'item/completed', 'interacted', 'child-a');
+  await turn('child-a', 'turn-a-2', 'inProgress');
+  await output('child-a', 'turn-a-2', 'answer-a-2', 'A second provisional');
+  await turn('child-a', 'turn-a-2', 'completed');
+  await activity('spawn-b', 'item/started', 'started', 'child-b');
+  await activity('spawn-b', 'item/completed', 'started', 'child-b');
+  await turn('child-b', 'turn-b-1', 'inProgress');
+  await output('child-b', 'turn-b-1', 'answer-b-1', 'B provisional');
+
+  lostAck = true;
+  await expect(mapper().sync()).rejects.toThrow('lost acknowledgement');
+  const acknowledged = f.db.all('SELECT * FROM native_task_links');
+  expect(acknowledged).toHaveLength(1);
+
+  journal = new FileJournal(directory);
+  adapter = new CodexAdapter({ journal, cwd: directory,
+    rpc: async (method: string, params: any) => { interrupts.push({ method, params }); return {}; } });
+  const reopened = mapper(), mapped = await reopened.sync();
+  const keys = ['["child-a","turn-a-1"]', '["child-a","turn-a-2"]', '["child-b","turn-b-1"]'];
+  expect(Object.keys(mapped).sort()).toEqual([...keys].sort());
+  expect(new Set(keys.map(key => mapped[key].runId)).size).toBe(3);
+  expect(keys.map(key => mapped[key].receipt.native_session_key)).toEqual(['child-a', 'child-a', 'child-b']);
+  expect(new Set(keys.map(key => mapped[key].receipt.native_run_ref)).size).toBe(3);
+  expect(keys.map(key => mapped[key].receipt)).toEqual(registrations.slice(-3));
+
+  const links = f.db.all<any>('SELECT * FROM native_task_links ORDER BY native_run_ref');
+  expect(links).toHaveLength(3);
+  expect(links).toEqual(expect.arrayContaining(acknowledged));
+  expect(links.every(row => row.parent_run_id === parentId && row.parent_attempt === 1)).toBe(true);
+  expect(links.filter(row => row.native_session_key === 'child-a')).toHaveLength(2);
+  const beforeReplay = { links: structuredClone(links), children: structuredClone(mapped) };
+  await mapper().sync();
+  expect(f.db.all('SELECT * FROM native_task_links ORDER BY native_run_ref')).toEqual(beforeReplay.links);
+  expect((await journal.get(reopened.key)).children).toEqual(beforeReplay.children);
+
+  await reopened.publishOutputs();
+  const previews = new OutputPreviews(f.store, () => f.core.now());
+  expect(keys.map(key => [mapped[key].runId, previews.read(mapped[key].runId, 1)?.text])).toEqual([
+    [mapped[keys[0]].runId, 'A first provisional'],
+    [mapped[keys[1]].runId, 'A second provisional'],
+    [mapped[keys[2]].runId, 'B provisional'],
+  ]);
+  expect(keys.map(key => f.store.run(mapped[key].runId).status)).toEqual(['running', 'running', 'running']);
+  expect(f.store.run(parentId).status).toBe('running');
+  expect(f.db.all("SELECT status FROM attempts WHERE run_id IN (?,?,?) ORDER BY run_id",
+    ...keys.map(key => mapped[key].runId))).toEqual([{ status: 'running' }, { status: 'running' }, { status: 'running' }]);
+  expect(adapter.sleepReadiness().allowed).toBe(false);
+});
+
 it('lease loss after durable mapping intent prevents control dispatch and cancellation', async () => {
   await spawn('root', 'child-a');
   const tasks = mapper(), update = tasks.journal.update.bind(tasks.journal);

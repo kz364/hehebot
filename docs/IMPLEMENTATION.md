@@ -4,6 +4,31 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+V2 service/custody integration (2026-09-16): selected alpha roots use nested V2
+cap2 with V1/wait disabled; selected fingerprints include `v2-cap2`, rejecting old
+V1 custody before RPC. Default submission fingerprints/config are unchanged.
+Application schema v11 removes thread-only uniqueness but preserves per-turn
+uniqueness and transactional original-parent/attempt/persona checks. Migration
+rollback, exact legacy v9/v10 import/export and v8–v11 backup inspection pass.
+Host248 focused tests pass; an actual adapter/journal/mapper→SQLite regression
+retains A1/A2/B1 receipts and exact provisional outputs across ACK loss/reopen.
+Native service/browser fixture passes7 loopback requests, inherited child routine
+read, independent status and B, zero-inference reload, exact root-family cancel,
+26 operations and denied sleep. Initial fixture assumptions about V1 message
+format and one unknown record per family failed and were corrected for V2's
+agent_message and retained activity/spawn uncertainty. No settlement was added.
+Logs `.local/v2-{control-host.log,selected-green.log,service-host-final.log}`.
+Final `.local/v2-integrated-combined-final.log` passes1,318 control/395 runtime,
+native/browser/service checks and build. Earlier failures were a stale HTTP export
+pin and editing a running shell script; both logs remain. Desktop16/16 pass.
+Terminal-root native mode passes33 requests, no new root inference/turn in its
+one-second window, exact followup denial and31 retained operations/no sleep.
+The appended completion activity is metadata, not a second turn or settlement.
+Source follow-through found sleep_tool default-on independently of token_budget;
+explicit disabling/readback remains the next live-alpha prerequisite.
+Live background gate and production flags remain closed; these are local proofs,
+not account-backed inference, restart admission or general settlement.
+
 V2 native event integration (2026-09-16): host independently passed the31-request
 V2-capable catalog fixture. Advertised grandchild spawn hits capacity; completed
 child A is evicted for B while A's history remains readable. Foreign S controls

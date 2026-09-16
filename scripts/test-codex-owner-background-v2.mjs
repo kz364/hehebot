@@ -14,8 +14,10 @@ import { CodexEventRouter } from '../runtime/codex-events.mjs';
 import { CodexOperations } from '../runtime/codex-operations.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 
-assert.ok(process.argv.slice(2).every(arg => arg === '--v2-model-catalog'), 'UNKNOWN_FIXTURE_ARGUMENT');
+assert.ok(process.argv.slice(2).every(arg => ['--v2-model-catalog', '--terminal-root-mailbox'].includes(arg)), 'UNKNOWN_FIXTURE_ARGUMENT');
 const v2ModelCatalog = process.argv.includes('--v2-model-catalog');
+const terminalRootMailbox = process.argv.includes('--terminal-root-mailbox');
+assert.ok(!terminalRootMailbox || v2ModelCatalog, 'TERMINAL_ROOT_MAILBOX_REQUIRES_V2_MODEL_CATALOG');
 const binary = resolve(import.meta.dirname, '../.local/codex-runtime/node_modules/.bin/codex');
 const directory = await mkdtemp(join(tmpdir(), 'hehe-owner-background-v2-'));
 const home = join(directory, 'home');
@@ -31,7 +33,7 @@ const report = { status: 'failed', codex: null, pinnedSourceCommit: '6b9826e3aa8
   externalModelCalls: 0, realAuth: false, providerIntegration: false, productionReady: false,
   appServerGlobalChildCapProved: false, toolEffectSettlementProved: false,
   modelIndependentDepthBoundProved: false, logicalChildCountBoundProved: false,
-  mode: v2ModelCatalog ? 'v2-model-catalog' : 'default',
+  mode: terminalRootMailbox ? 'terminal-root-mailbox' : v2ModelCatalog ? 'v2-model-catalog' : 'default',
   scope: v2ModelCatalog ? 'Synthetic V2-capable model: advertised child spawn capacity and sequential idle eviction; no live authorization.' :
     'Default synthetic model: child collaboration tools absent; no model-independent depth claim.' };
 let server, transport, router, configPath, originalConfig, modelRequests = 0;
@@ -100,8 +102,8 @@ function call(body, label, name, args, allowMissing = false) {
     ...(typeof allowMissing === 'string' ? { namespace: allowMissing } : tool?.type === 'namespace' ? { namespace: tool.name } : {}), name,
     arguments: JSON.stringify(args) }];
 }
-function hold(label, res) {
-  assert.equal(held.has(label), false); const row = { res, closed: false }; held.set(label, row);
+function hold(label, res, body = null) {
+  assert.equal(held.has(label), false); const row = { res, body, closed: false }; held.set(label, row);
   res.once('close', () => { row.closed = true; });
 }
 async function interrupt(threadId, turnId) {
@@ -126,6 +128,7 @@ try {
       assert.ok(modelRequests <= 40); assert.equal(body.model, 'fixture-model'); assert.equal(body.stream, true);
       const catalog = names(body);
       assert.ok(!catalog.some(name => /web_search|image_generation|mcp|tool_suggest/.test(name)), 'DISABLED_PROVIDER_SURFACE');
+      assert.ok(!catalog.some(name => /(^|\.)sleep$/.test(name)), 'SLEEP_TOOL_ADVERTISED');
       const text = JSON.stringify(body.input.filter(item => item.role === 'user' || item.type === 'agent_message'));
       const label = ['CHILD_B', 'CHILD_A', 'ROOT_A', 'ROOT_S'].find(value => text.includes(marker(value)));
       assert.ok(label, 'UNKNOWN_SCRIPTED_REQUEST');
@@ -144,10 +147,18 @@ try {
         assert.equal(v2ModelCatalog, true);
         if (counts.get(label) === 1) {
           send(res, call(body, 'secondGrandchild', 'spawn_agent', { task_name: 'grandchild_b', message: 'FORBIDDEN_GRANDCHILD_B', fork_turns: 'none' }));
-        } else {
+        } else if (!terminalRootMailbox || counts.get(label) === 2) {
           assert.equal(counts.get(label), 2);
           report.results.secondGrandchild = body.input.filter(item => item.type === 'function_call_output').at(-1)?.output;
-          hold('CHILD_B', res);
+          hold('CHILD_B', res, body);
+        } else if (counts.get(label) === 3) {
+          report.results.terminalRootMessage = body.input.filter(item => item.type === 'function_call_output').at(-1)?.output;
+          send(res, call(body, 'terminalRootFollowup', 'followup_task', { target: report.identities.rootA.threadId,
+            message: 'MUST_NOT_RESTART_TERMINAL_ROOT' }));
+        } else {
+          assert.equal(counts.get(label), 4);
+          report.results.terminalRootFollowup = body.input.filter(item => item.type === 'function_call_output').at(-1)?.output;
+          send(res, message('CHILD_B_NATURAL_DONE'));
         }
         return;
       }
@@ -403,23 +414,69 @@ try {
   const row = await wait(() => pending.get('ROOT_A'), 'A_FINISH');
   pending.delete('ROOT_A'); send(row.res, message('ROOT_A_AUTHORITY_CHECKED'));
   await wait(() => completed.get(rootA.threadId)?.get(rootA.turnId) === 'completed', 'A_COMPLETE');
+  if (terminalRootMailbox) {
+    const rootTurnsBeforeMailbox = structuredClone((await read(rootA.threadId)).turns);
+    const foreignTurnsBeforeMailbox = structuredClone((await read(rootS.threadId)).turns);
+    const rootRequestsBeforeMailbox = counts.get('ROOT_A');
+    const requestsBeforeMailbox = modelRequests;
+    const childB = held.get('CHILD_B');
+    assert.ok(childB?.body, 'HELD_CHILD_B_BODY_MISSING');
+    send(childB.res, call(childB.body, 'terminalRootMessage', 'send_message', { target: rootA.threadId,
+      message: 'QUEUE_ONLY_AFTER_ROOT_COMPLETION' }));
+    await wait(() => completed.get(secondChildThread)?.get(report.identities.childB.turnId) === 'completed', 'CHILD_B_NATURAL_COMPLETE');
+    await wait(() => childB.closed, 'CHILD_B_NATURAL_HTTP_CLOSED');
+    assert.equal(report.results.terminalRootMessage, '');
+    assert.equal(report.results.terminalRootFollowup, "Follow-up tasks can't target the root agent");
+    const rootAfterNotification = await read(rootA.threadId);
+    await sleep(1000);
+    const rootAfterBoundedWindow = await read(rootA.threadId);
+    const originalItems = rootTurnsBeforeMailbox[0].items;
+    const observedItems = rootAfterBoundedWindow.turns[0].items;
+    const appendedItems = observedItems.slice(originalItems.length);
+    report.terminalRootMailbox = { messageResult: report.results.terminalRootMessage,
+      followupResult: report.results.terminalRootFollowup, exactNativeDenial: "Follow-up tasks can't target the root agent",
+      rootTurnsBefore: rootTurnsBeforeMailbox.length, rootTurnsAfter: rootAfterBoundedWindow.turns.length,
+      rootModelRequestsAdded: counts.get('ROOT_A') - rootRequestsBeforeMailbox,
+      childModelRequestsAdded: modelRequests - requestsBeforeMailbox,
+      observationWindowMs: 1000, appendedItems,
+      boundedClaim: 'No new root inference or turn was observed during the finite 1-second window after notification/readback; this is not an eternal guarantee.',
+      childCompletedNaturally: true };
+    // Child completion appends metadata to the existing root turn, not inference.
+    assert.deepEqual(appendedItems, [{ type: 'subAgentActivity',
+      id: `subagent-completed-${report.identities.childB.turnId}`, kind: 'completed',
+      agentThreadId: secondChildThread, agentPath: '/root/child_b' }]);
+    assert.deepEqual(observedItems.slice(0, originalItems.length), originalItems);
+    for (const snapshot of [rootAfterNotification, rootAfterBoundedWindow]) {
+      assert.equal(snapshot.turns.length, 1);
+      const { items, ...metadata } = snapshot.turns[0];
+      const { items: previousItems, ...previousMetadata } = rootTurnsBeforeMailbox[0];
+      assert.deepEqual(metadata, previousMetadata);
+    }
+    assert.equal(counts.get('ROOT_A'), rootRequestsBeforeMailbox);
+    assert.equal(modelRequests, requestsBeforeMailbox + 2);
+    assert.equal(active.has(rootA.threadId), false);
+    assert.deepEqual((await read(rootS.threadId)).turns, foreignTurnsBeforeMailbox);
+  }
   report.persistedReadback = { rootA: (await read(rootA.threadId)).turns, rootS: (await read(rootS.threadId)).turns };
   assert.deepEqual(report.persistedReadback.rootA[0].items.filter(item => item.type === 'agentMessage').map(item => item.text), ['ROOT_A_AUTHORITY_CHECKED']);
   assert.deepEqual(report.persistedReadback.rootA[0].items.filter(item => item.type === 'subAgentActivity').map(item => [item.kind, item.agentThreadId]),
     [['started', childThread], ['interacted', childThread], ['interrupted', childThread], ['interacted', childThread],
-      ...(v2ModelCatalog ? [['completed', childThread], ['started', secondChildThread]] : [])]);
+      ...(v2ModelCatalog ? [['completed', childThread], ['started', secondChildThread]] : []),
+      ...(terminalRootMailbox ? [['completed', secondChildThread]] : [])]);
   const cleanupChild = v2ModelCatalog ? secondChildThread : childThread;
-  await interrupt(cleanupChild, active.get(cleanupChild));
-  await wait(() => held.get(v2ModelCatalog ? 'CHILD_B' : 'CHILD_FOLLOWUP').closed, 'FOLLOWUP_HTTP_CLOSED');
+  if (!terminalRootMailbox) {
+    await interrupt(cleanupChild, active.get(cleanupChild));
+    await wait(() => held.get(v2ModelCatalog ? 'CHILD_B' : 'CHILD_FOLLOWUP').closed, 'FOLLOWUP_HTTP_CLOSED');
+  }
   assert.equal(active.size, 0); assert.deepEqual(raw.failures, []);
   assert.equal(counts.get('ROOT_S'), 1); assert.equal(counts.get('CHILD_A'), 4);
-  assert.equal(modelRequests, v2ModelCatalog ? 31 : 23);
+  assert.equal(modelRequests, v2ModelCatalog ? terminalRootMailbox ? 33 : 31 : 23);
   report.persistedReadback.childA = (await read(childThread)).turns;
   assert.deepEqual(report.persistedReadback.childA.map(turn => turn.status), ['interrupted', v2ModelCatalog ? 'completed' : 'interrupted']);
   if (v2ModelCatalog) {
-    assert.equal(counts.get('CHILD_B'), 2);
+    assert.equal(counts.get('CHILD_B'), terminalRootMailbox ? 4 : 2);
     report.persistedReadback.childB = (await read(secondChildThread)).turns;
-    assert.deepEqual(report.persistedReadback.childB.map(turn => turn.status), ['interrupted']);
+    assert.deepEqual(report.persistedReadback.childB.map(turn => turn.status), [terminalRootMailbox ? 'completed' : 'interrupted']);
     assert.equal(sha256(await readFile(catalogPath)), report.modelCatalogSha256);
     report.modelCatalogUnchanged = true;
   }
@@ -449,7 +506,7 @@ try {
     activityInvocationsSettled: false, sleepAllowed: false, operationCount: operations.length };
   report.liveCollaborationEvents = raw.notifications.filter(event =>
     ['subAgentActivity', 'collabAgentToolCall'].includes(event.params?.item?.type));
-  assert.equal(report.liveCollaborationEvents.length, v2ModelCatalog ? 12 : 8);
+  assert.equal(report.liveCollaborationEvents.length, terminalRootMailbox ? 16 : v2ModelCatalog ? 12 : 8);
   assert.ok(report.liveCollaborationEvents.every(event => event.params.item.type === 'subAgentActivity'));
   for (const [label, kind, id, path] of [
     ['spawn', 'started', childThread, '/root/child_a'],

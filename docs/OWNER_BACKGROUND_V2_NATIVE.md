@@ -9,6 +9,7 @@ bash scripts/setup-codex.sh  # only if the pinned runtime is absent
 node --check scripts/test-codex-owner-background-v2.mjs
 node scripts/test-codex-owner-background-v2.mjs
 node scripts/test-codex-owner-background-v2.mjs --v2-model-catalog
+node scripts/test-codex-owner-background-v2.mjs --v2-model-catalog --terminal-root-mailbox
 ```
 
 The script exits nonzero on any failed native assertion and prints a redacted JSON report. Broader unproved gates remain explicitly false even on a scoped pass. It has a 90-second watchdog, bounded request/response waits, a 40-request ceiling, and exact successful request counts of 23 (default) or 31 (V2-capable catalog). It now routes actual native events through the runtime adapter and journal. No installed dependency, control-plane state, or production config is changed by running it.
@@ -137,8 +138,36 @@ The host corrected an initial synthetic test's mistaken nested wire shape agains
 actual native flat events; four tests failed before that correction. Final126
 focused/394 runtime tests and typecheck pass, including offline inspection.
 
-Control-plane regression exposes UNIQUE(native_session_key) rejecting a second
-turn of the same child thread. A separately owned v11 application migration is
-in progress; it must preserve thread parent/attempt/persona authority while
-allowing distinct turn receipts and retain strict backup/restore compatibility.
-No live gate or default alpha behavior has changed.
+The control-plane regression is fixed by application schema v11: distinct turns
+share a native thread key, but transactional checks preserve its original
+parent/attempt/persona. Migration rollback and exact legacy backup/import history
+are tested. Selected service roots use the V2 config above with a versioned
+fingerprint that rejects old V1 journal reuse. Scripted service/browser integration
+passes inherited read, independent status/B, exact old-family cancellation,
+26 retained operations and sleep denial. Live entry remains gated; default alpha
+is unchanged.
+
+## Terminal-root mailbox is not new inference
+
+The optional `--terminal-root-mailbox` mode uses the V2-capable catalog and33
+loopback requests. After root A completes, its active child B sends a message to
+A's actual UUID, attempts followup_task against the same UUID, then completes
+naturally. send_message returns empty success; followup_task returns exactly
+`Follow-up tasks can't target the root agent`. During a one-second observation
+window after notification/readback, A retains one completed turn with unchanged
+output/metadata and zero new model requests. Independent S stays unchanged.
+This finite test is not a guarantee about all future scheduling conditions.
+
+Native completion appends a `completed` subAgentActivity to the original root
+turn. The first probe incorrectly required frozen turn history; host corrected
+that assertion to require the exact appended child activity, unchanged preceding
+items/turn identity and no inference. Existing runtime routing handles the event:
+zero recovery/unbound events, two retained children/three turns,31 operations,
+no sleep and4/4 held responses closed. No runtime fix was necessary.
+
+This agrees with pinned source: [send_message uses QueueOnly](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/tools/handlers/multi_agents_v2/send_message.rs#L33-L49),
+[followup_task rejects root targets](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control/delivery.rs#L85-L107),
+and [completion notifications use trigger_turn=false](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/agent/control.rs#L629-L710).
+[Mailbox delivery only attempts a new turn for trigger_turn or durable sleep](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/session/handlers.rs#L76-L92).
+The fixture disables token_budget/wait_agent and asserts no sleep tool in each
+actual catalog. Durable-sleep wake behavior is not covered or authorized here.

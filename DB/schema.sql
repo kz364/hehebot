@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (10, '2026-09-16T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (11, '2026-09-16T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -132,7 +132,8 @@ CREATE TABLE retry_queue (
 );
 CREATE INDEX retry_due ON retry_queue(due_at);
 
-CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE);
+CREATE TABLE "native_task_links" (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL);
+CREATE INDEX native_task_links_session ON native_task_links(native_session_key);
 CREATE TABLE resource_locks (resource_id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES runs(id),attempt INTEGER NOT NULL,acquired_at TEXT NOT NULL);
 CREATE TABLE task_followups (id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES runs(id),text TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','coordinator_queued','expired')),command_id TEXT NOT NULL REFERENCES commands(id),created_at TEXT NOT NULL,coordinator_run_id TEXT REFERENCES runs(id));
 CREATE INDEX task_followups_expiry ON task_followups(created_at,id) WHERE text!='';

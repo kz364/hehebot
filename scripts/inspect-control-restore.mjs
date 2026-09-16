@@ -34,6 +34,9 @@ export async function inspectControlRestore(directory) {
         (r.role='background' AND (r.parent_run_id IS NULL OR n.run_id IS NULL OR n.parent_run_id!=r.parent_run_id))`);
       count(issues, 'PARENT_ATTEMPT_MISSING', `SELECT n.run_id FROM native_task_links n WHERE NOT EXISTS
         (SELECT 1 FROM attempts a WHERE a.run_id=n.parent_run_id AND a.attempt=n.parent_attempt)`);
+      count(issues, 'NATIVE_THREAD_CUSTODY_MISMATCH', `SELECT n.native_session_key FROM native_task_links n
+        JOIN runs r ON r.id=n.run_id GROUP BY n.native_session_key HAVING
+        count(DISTINCT n.parent_run_id)>1 OR count(DISTINCT n.parent_attempt)>1 OR count(DISTINCT r.persona_id)>1`);
       count(issues, 'CHILD_NATIVE_REFERENCE_MISMATCH', `SELECT n.run_id FROM native_task_links n WHERE
         length(n.native_run_ref)=0 OR length(n.native_run_ref)>256 OR length(n.native_session_key)=0 OR length(n.native_session_key)>512 OR
         NOT EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=n.run_id AND a.native_run_ref=n.native_run_ref)`);

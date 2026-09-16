@@ -21,8 +21,8 @@ const input = { attemptId: 'attempt1', installationId: 'alpha', personaId: 'assi
 const mcp = { hehebot: { command: '/node', args: ['/agent-tools.mjs'],
   env: { HEHEBOT_AGENT_TOOLS_CONFIG: '/private/original-task-grant' },
   enabled_tools: ['hehebot_list_routines'], tools: { hehebot_list_routines: { approval_mode: 'approve' } } } };
-const grantConfig = { agents: { enabled: true, max_concurrent_threads_per_session: 1, max_depth: 1 },
-  features: { multi_agent: true, multi_agent_v2: false } };
+const grantConfig = { agents: { enabled: true },
+  features: { multi_agent: false, multi_agent_v2: { enabled: true, max_concurrent_threads_per_session: 2, wait_agent_enabled: false } } };
 const malformed = [false, null, undefined, 1, 'true', {}, [], { enabled: true }];
 async function journalFor(t) {
   const directory = await mkdtemp(join(tmpdir(), 'hehe-background-'));
@@ -65,6 +65,20 @@ test('only selected roots override nested native config; MCP and default fingerp
   const values = ['attemptId', 'installationId', 'personaId', 'scope', 'scopeId', 'message', 'model'].map(key => legacyInput[key]);
   const oldBytes = JSON.stringify([[values, [], mcp], { permissionsProfile: 'alpha-profile', ownerAlpha: policy }]);
   assert.equal((await journal.get('legacy')).fingerprint, createHash('sha256').update(oldBytes).digest('hex'));
+});
+
+test('selected V2 submission refuses a persisted V1 fingerprint before native RPC', async t => {
+  const journal = await journalFor(t), calls = [], adapter = adapterFor(journal, opted, calls);
+  const selected = { ...input, ownerAlphaBackground: true };
+  const values = ['attemptId', 'installationId', 'personaId', 'scope', 'scopeId', 'message', 'model'].map(key => selected[key]);
+  const oldBytes = JSON.stringify([[[values, [], mcp], { permissionsProfile: 'alpha-profile', ownerAlpha: opted }],
+    { ownerAlphaBackground: true }]);
+  const prior = { attemptId: input.attemptId, fingerprint: createHash('sha256').update(oldBytes).digest('hex'),
+    status: 'running', threadId: 'old-v1-root', nativeRunId: 'old-v1-turn', rootSettled: false };
+  await journal.putIfAbsent(input.attemptId, prior);
+  await assert.rejects(adapter.submit(selected), { code: 'IDEMPOTENCY_CONFLICT' });
+  assert.deepEqual(await journal.get(input.attemptId), prior);
+  assert.deepEqual(calls, []);
 });
 
 test('malformed markers and non-opted/non-alpha grants fail before journal or RPC', async t => {

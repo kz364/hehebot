@@ -42,7 +42,10 @@ it('accepts settled nested historical lineage across a newer root attempt withou
 });
 
 it('keeps exact schema8 history inspectable without flight tables', async () => {
-  db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json; DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=10');
+  const links = db.prepare('SELECT * FROM native_task_links').all();
+  db.exec('DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');
+  for (const link of links) db.prepare('INSERT INTO native_task_links VALUES(?,?,?,?,?)').run(...Object.values(link));
+  db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json; DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=11');
   const report = await inspect();
   expect(report.schema_version).toBe(8);
   expect(report.blockers).toEqual({});
@@ -55,7 +58,7 @@ it('counts pending and unknown flight restoration independently of terminal runs
     insert.run(canary, index + 1, '2026-09-20T21:00:00.000Z', 'Asia/Jakarta', '2026-09-19T21:00:00.000Z', 'routine', 'source', status, 'root-19', '{}');
   }
   const report = await inspect();
-  expect(report.schema_version).toBe(10);
+  expect(report.schema_version).toBe(11);
   expect(report.inconsistencies).toEqual({});
   expect(report.blockers).toEqual({ UNRESOLVED_FLIGHT_RESTORE: 3 });
   expect(JSON.stringify(report)).not.toContain(canary);
@@ -184,6 +187,17 @@ it.each([
   expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   const report = await inspect(); expect(report.snapshot_verified).toBe(true);
   expect(report.semantic_status).toBe('inconsistent'); expect(report.inconsistencies[code]).toBe(1);
+});
+
+it.each(['same', 'parent', 'attempt', 'persona'])('inspects shared thread receipts with %s custody', async mode => {
+  run('followup-97', mode === 'parent' ? 'child-73' : 'root-19', 1, 'completed', mode === 'persona' ? 'persona-b' : 'persona-a');
+  db.exec("UPDATE native_task_links SET native_session_key='child-73-thread' WHERE run_id='followup-97'");
+  if (mode === 'attempt') {
+    db.exec("UPDATE native_task_links SET parent_attempt=2 WHERE run_id='followup-97'; UPDATE attempts SET epoch=2,boot_id='boot-2' WHERE run_id='followup-97'");
+  }
+  const report = await inspect();
+  expect(report.inconsistencies).toEqual(mode === 'same' ? {} : { NATIVE_THREAD_CUSTODY_MISMATCH: 1 });
+  expect(report.coordinated_restore_ready).toBe(false);
 });
 
 it('detects a cyclic child/grandchild lineage even when both parent link tables agree', async () => {

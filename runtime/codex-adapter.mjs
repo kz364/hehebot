@@ -84,11 +84,14 @@ export class CodexAdapter {
       : this.dynamicTools.length ? [values, this.dynamicTools] : values;
     const fingerprintInput = this.#permissionsProfile === undefined ? legacyFingerprintInput
       : [legacyFingerprintInput, { permissionsProfile: this.#permissionsProfile, ...(this.#ownerAlpha ? { ownerAlpha: this.#ownerAlpha } : {}) }];
-    const fingerprint = hash(background ? [fingerprintInput, { ownerAlphaBackground: true }] : fingerprintInput);
+    // Selected orchestration changes cannot silently replay an old V1 grant.
+    const fingerprint = hash(background ? [fingerprintInput, { ownerAlphaBackground: true, nativeOrchestration: 'v2-cap2' }] : fingerprintInput);
     const config = {
       ...(Object.keys(this.mcpServers).length ? { mcp_servers: this.mcpServers } : {}),
-      ...(background ? { agents: { enabled: true, max_concurrent_threads_per_session: 1, max_depth: 1 },
-        features: { multi_agent: true, multi_agent_v2: false } } : {}),
+      ...(background ? { agents: { enabled: true },
+        features: { multi_agent: false, multi_agent_v2: {
+          enabled: true, max_concurrent_threads_per_session: 2, wait_agent_enabled: false,
+        } } } : {}),
     };
     const prior = await this.journal.putIfAbsent(input.attemptId, {
       attemptId: input.attemptId, fingerprint, status: 'thread_unknown', threadId: null,

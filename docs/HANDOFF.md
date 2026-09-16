@@ -14,16 +14,31 @@ threads/3 child turns,26 unknown-inclusive operations, zero pending/recovery eve
 shape; host's flat native regression failed then was fixed. See
 OWNER_BACKGROUND_V2_NATIVE.md and `.local/v2-events-*` logs.
 
-Active [schema/custody worker](https://ampcode.com/threads/T-01a0ab67-cf7f-744d-806f-9b46c412122e)
-owns v11 native_task_links migration, NativeTaskLedger and required strict
-backup/export/restore compatibility/tests. It imported exact host b6d4be7 bundle
-SHA25649b6c00cf93006f3bd83b3a7591b508ad6010d223b8a20f8288539ff847a816c.
-New `tests/owner-alpha-v2-custody.test.ts` is intentionally red locally: same
-thread/new turn hits UNIQUE(native_session_key). Do not delete/weaken this test;
-worker has identical copy and will return a patch including it. Host owns runtime,
-native fixtures and shared docs. Next host step: selected-root V2 config with a
-versioned fingerprint plus service fixture, keeping live-entry gate closed until
-full integration and custody migration pass. No live sessions or external actions.
+The [schema/custody worker](https://ampcode.com/threads/T-01a0ab67-cf7f-744d-806f-9b46c412122e)
+is finished/integrated. Verified patch SHA256
+03fdbc4f1b07ff5c514e54aa397217e7490e78986c8691656d53c796cf494dc1.
+v11 allows distinct turns on one child thread, preserving immutable original
+parent/attempt/persona and exact v9/v10 legacy import history. Host248 SQLite tests
+pass; another mapper regression retains three child-turn receipts/output previews
+through lost ACK and journal reopen. Selected roots now request V2 cap2 and a
+versioned fingerprint; old V1 selected journals cannot silently replay.
+Native service passes7 loopback requests, inherited child MCP read, independent
+status/B, exact released-root cancellation and26 retained operations/no sleep.
+Initial fixture failures were V1 user-message recognition and undercounted V2
+unknown obligations; both corrected without weakening settlement.
+Final combined `.local/v2-integrated-combined-final.log` passes1,318 backend/395
+runtime, native/browser/service fixtures and build. Earlier failures retain the
+stale HTTP export pin and a host mistake editing the running shell verifier;
+the final run used an unchanged script throughout. Desktop16/16 pass.
+Native terminal-root probe passes33 requests: message queues, followup_task rejects
+root, natural child completion appends metadata but starts no root turn/inference
+in a one-second observation window.31 unknown-inclusive operations survive;
+no router recovery/pending events. All three final native modes pass.
+No worker remains active. Next concrete fix before live-entry gate review:
+explicitly disable features.sleep_tool in restricted service, require readback,
+and test against always_on sleep configuration. Source confirmed sleep_tool is
+default-on and independent of token_budget=false; model metadata/reminder can
+expose it. Durable sleep can wake queue-only mail. No live sessions/external actions.
 
 IMPORTANT: V1 background is NOT safe for independent-task authority. After the
 integration passed, pinned source review found raw foreign thread IDs reach
