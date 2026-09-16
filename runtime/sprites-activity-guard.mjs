@@ -13,7 +13,11 @@ export class SpritesActivityGuard {
    // A suspended process may resume long after its old Task expired. Never
    // silently reclaim ownership. Revalidate the control-plane lease first.
    if(this.receipt&&this.receipt.expiresAt<=this.now())throw new Error('Activity hold expired');
+   const priorExpiresAt=this.receipt?.expiresAt;
    if(!this.receipt||this.receipt.expiresAt-this.now()<=this.renewBeforeMs)this.receipt=await this.tasks.hold({id:this.id,expiresAt:this.now()+this.ttlMs});
+   // A successful late renewal does not prove uninterrupted custody across the
+   // await. Retain any new Task, but require reconciliation before admission.
+   if(priorExpiresAt!==undefined&&priorExpiresAt<=this.now())throw new Error('Activity continuity unknown');
    if(this.receipt.name!==this.id||this.receipt.expiresAt<=this.now()+this.renewBeforeMs)throw new Error('Activity hold is not confirmed');
    return {...this.receipt};
   }catch{this.blocked=true;this.onUnsafe();throw new Error('Activity admission blocked; retain existing Task and reconcile');}
