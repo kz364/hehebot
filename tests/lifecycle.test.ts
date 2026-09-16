@@ -257,6 +257,23 @@ describe('executor leases and attempts', () => {
     expect(life.claim(identity)).toBeNull();
     expect(f.store.run(root.id).current_attempt).toBe(1);
   });
+  it.each(['claimed', 'running', 'finishing'])('expired %s tasks cannot expand resource custody but can replay and release held locks', status => {
+    const runId = claimed().run.id, resources = new ResourceLedger(f.store, () => f.core.now());
+    f.db.exec('UPDATE runs SET status=? WHERE id=?', status, runId);
+    f.db.exec("UPDATE attempts SET deadline_at='2026-09-10T00:00:10.000Z' WHERE run_id=?", runId);
+    f.setNow('2026-09-10T00:00:09.999Z'); resources.acquire(runId, 1, ['browser:a']);
+    const held = f.db.all('SELECT * FROM resource_locks');
+    for (const now of ['2026-09-10T00:00:10.000Z', '2026-09-10T00:00:10.001Z']) {
+      f.setNow(now);
+      expect(() => resources.acquire(runId, 1, ['browser:a', 'calendar:z'])).toThrowError(expect.objectContaining({ code: 'DEADLINE_EXCEEDED' }));
+      expect(f.db.all('SELECT * FROM resource_locks')).toEqual(held);
+      resources.acquire(runId, 1, ['browser:a']);
+      expect(f.db.all('SELECT * FROM resource_locks')).toEqual(held);
+    }
+    resources.release(runId, 1, ['browser:a']);
+    expect(f.db.all('SELECT * FROM resource_locks')).toEqual([]);
+    expect(() => resources.acquire(runId, 1, ['browser:a'])).toThrowError(expect.objectContaining({ code: 'DEADLINE_EXCEEDED' }));
+  });
   it('unknown effects block completion and retry after provider stop', () => {
     const claim = claimed(); unknownEffect(claim.run.id);
     expect(() => life.complete(identity, claim.run.id, 1, { status: 'completed', text: '' })).toThrowError(expect.objectContaining({ code: 'OUTCOME_UNKNOWN' }));

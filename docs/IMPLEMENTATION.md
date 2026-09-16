@@ -4,6 +4,18 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Resource-deadline checkpoint (2026-09-16): acquiring a new lock now checks the
+attempt hard deadline even before watchdog reconciliation. Exact already-held
+lock replay remains a no-op; deadline expiry does not release locks or bypass
+unknown-effect release checks. Three regression cases failed before the fix;
+91 focused lifecycle/orchestration/root-child tests passed, covering claimed,
+running and finishing states, −1ms/exact/+1ms, mixed held/new lock rejection,
+unchanged acquisition timestamps, release and denied reacquisition
+(`.local/resource-deadline-focused.log`, red `.local/resource-deadline-red.log`).
+Combined verification passed 931 control / 251 runtime tests, native/service fixtures
+and typecheck/build dry run (`.local/resource-deadline-combined.log`).
+No native termination, connector authority, provider use or production admission.
+
 Effect-cancellation checkpoint (2026-09-16): first dispatch now requires a running
 task, and the descendant boundary rechecks admissible ancestry after intent creation.
 Previously cancellation between intent and dispatch did not fence unsent effects.

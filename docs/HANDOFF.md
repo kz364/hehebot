@@ -2,6 +2,17 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Resource-deadline checkpoint (2026-09-16)
+
+Expired attempts cannot acquire new locks, including before watchdog reconciliation.
+Exact held-lock replay and authorized release remain unchanged; released locks
+cannot be reacquired after expiry. Three red/green cases and 91 focused lifecycle/
+orchestration/root-child tests passed (`.local/resource-deadline-focused.log`).
+Combined verification passed 931 control / 251 runtime tests, native/service fixtures
+and typecheck/build dry run (`.local/resource-deadline-combined.log`).
+Complete E01/native termination and other credential-free work remain open.
+Production gates false, no provider use, schedule unchanged.
+
 ## Effect-cancellation checkpoint (2026-09-16)
 
 First effect dispatch rechecks running task and admissible descendant ancestry,

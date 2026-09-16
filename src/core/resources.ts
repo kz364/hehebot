@@ -7,9 +7,11 @@ export class ResourceLedger {
   requireThat(resources.length>0&&resources.length<=8&&new Set(resources).size===resources.length&&resources.every(x=>/^[a-zA-Z0-9:._/-]{1,256}$/.test(x)),'INVALID_INPUT','Invalid resource lock set.',422);
   this.store.db.transaction(()=>{
    const run=this.store.run(runId);requireThat(run.current_attempt===attempt&&['claimed','running','finishing'].includes(run.status),'REVISION_CONFLICT','Resource request is not active.');
+   const admitted=this.store.db.all<{deadline_at:string}>('SELECT deadline_at FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
    for(const resource of [...resources].sort()){
     const owner=this.store.db.all<{run_id:string;attempt:number}>('SELECT run_id,attempt FROM resource_locks WHERE resource_id=?',resource)[0];
     requireThat(!owner||owner.run_id===runId&&owner.attempt===attempt,'RESOURCE_BUSY','This shared resource is in use.');
+    requireThat(owner||admitted&&admitted.deadline_at>this.now(),'DEADLINE_EXCEEDED','The resource attempt deadline has expired.');
     this.store.db.exec('INSERT OR IGNORE INTO resource_locks(resource_id,run_id,attempt,acquired_at) VALUES(?,?,?,?)',resource,runId,attempt,this.now());
    }
   });
