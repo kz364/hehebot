@@ -45,7 +45,11 @@ export class EffectLedger {
    if(existing.status===status)return;
    requireThat(allowed[existing.status]?.includes(status),'REVISION_CONFLICT','Effect cannot make that transition.');
    // Deadline expiry blocks a new dispatch, not late outcome/receipt recording.
-   if(status==='dispatched')this.requireDeadline(runId,this.store.run(runId).current_attempt);
+   if(status==='dispatched'){
+    const run=this.store.run(runId);
+    requireThat(run.status==='running','REVISION_CONFLICT','New effects cannot dispatch in this task state.');
+    this.requireDeadline(runId,run.current_attempt);
+   }
    requireThat(!['confirmed','failed'].includes(status)||receipt&&Object.keys(receipt).length>0,'INVALID_INPUT','A destination receipt or reconciliation record is required.',422);
    this.store.db.exec('UPDATE effects SET status=?,receipt_json=?,updated_at=? WHERE id=?',status,receipt?JSON.stringify(receipt):null,this.now(),id);
   });

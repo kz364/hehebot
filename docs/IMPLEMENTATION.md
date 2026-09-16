@@ -4,6 +4,18 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Effect-cancellation checkpoint (2026-09-16): first dispatch now requires a running
+task, and the descendant boundary rechecks admissible ancestry after intent creation.
+Previously cancellation between intent and dispatch did not fence unsent effects.
+Duplicate acknowledgements and late outcomes remain recordable without reopening
+dispatch. Four new cases failed before the fix; 39 focused effect/root-child/recovery
+tests passed (`.local/effect-cancel-focused.log`, red `.local/effect-cancel-red.log`).
+Tests cover owner cancellation, root/intermediate/selected-child cancellation,
+unchanged locks/effects/unrelated sibling, reconstruction and late receipts.
+Combined verification passed 928 control / 251 runtime tests, native/service fixtures
+and typecheck/build dry run (`.local/effect-cancel-combined.log`). No external
+action is retracted, no native termination inferred and no production gates changed.
+
 Effect-deadline checkpoint (2026-09-16): new intents and first dispatch transitions
 now require an unexpired attempt deadline, closing the pre-watchdog running-state
 window. Existing immutable receipt lookups and duplicate dispatch acknowledgements

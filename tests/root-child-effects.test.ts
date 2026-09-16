@@ -175,6 +175,17 @@ it('new and intent-replay contention rolls back every partial lock and new effec
  expect(effects()).toEqual(before); expect(locks()).toEqual(contended);
 });
 
+it.each(['root', 'parent', 'child'] as const)('cancelling %s after intent fences descendant dispatch without changing locks or unrelated work', target => {
+ const input = intent(grandchild); boundary.intent(input);
+ const held = locks(), before = effects(), other = f.store.run(sibling);
+ const id = target === 'root' ? root : target === 'parent' ? child : grandchild;
+ expect(f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: id, reason: 'Stop selected task' } }).status).toBe('applied');
+ rejects(() => boundary.transition(result(input, 'dispatched')), 'REVISION_CONFLICT');
+ expect(effects()).toEqual(before); expect(locks()).toEqual(held); expect(f.store.run(sibling)).toEqual(other);
+ boundary.transition(result(input, 'failed', { reason: 'not-dispatched' }));
+ expect(effects()).toEqual([expect.objectContaining({ status: 'failed' })]); expect(locks()).toEqual(held);
+});
+
 it('unknown and terminal replay never reacquire or release locks, even while cancellation/recovery is pending', () => {
  const input = intent(); boundary.intent(input); const held = locks();
  boundary.transition(result(input, 'dispatched'));

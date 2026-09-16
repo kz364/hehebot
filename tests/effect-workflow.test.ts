@@ -38,6 +38,21 @@ function intent(run_id: string): EffectIntent {
     authorization_ref: policy, request_digest: 'sha256:mail-17-INBOX', provider_idempotency_key: 'destination-mail-17' };
 }
 
+it('owner cancellation blocks first dispatch but not late receipts from an already dispatched action', () => {
+  const run = activeRoutine(), pending = intent(run);
+  const sent = { ...pending, id: randomUUID(), action_key: 'synthetic:already-sent' };
+  effects.intent(pending); effects.intent(sent); effects.transition(sent.id, run, 'dispatched', null);
+  expect(f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: run, reason: 'Stop' } }).status).toBe('applied');
+  reconstruct(); const before = f.db.all('SELECT * FROM effects');
+  expect(() => effects.transition(pending.id, run, 'dispatched', null)).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
+  expect(f.db.all('SELECT * FROM effects')).toEqual(before);
+  effects.transition(sent.id, run, 'dispatched', null);
+  effects.transition(sent.id, run, 'confirmed', { destination_id: 'receipt-after-cancel' });
+  effects.transition(pending.id, run, 'failed', { reason: 'cancelled-before-dispatch' });
+  expect(f.store.run(run).status).toBe('cancelling');
+  expect(f.db.all('SELECT status FROM effects ORDER BY action_key')).toEqual([{ status: 'confirmed' }, { status: 'failed' }]);
+});
+
 it.each(['intent', 'dispatch'] as const)('fences new effect %s at the hard deadline but preserves late receipts', phase => {
   const run = activeRoutine(), input = intent(run);
   f.db.exec("UPDATE attempts SET deadline_at='2026-09-10T00:00:10.000Z' WHERE run_id=?", run);

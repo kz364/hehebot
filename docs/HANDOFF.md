@@ -2,6 +2,17 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. It is not deployed or operational; credentials were locally verified, but authenticated inference and production settlement are unverified.
 
+## Effect-cancellation checkpoint (2026-09-16)
+
+First effect dispatch rechecks running task and admissible descendant ancestry,
+closing cancellation between intent and dispatch. Late outcomes/acknowledgements
+remain recordable; locks and unrelated work stay untouched. Four red/green cases
+and focused effect/root-child/recovery tests: 39 passed
+(`.local/effect-cancel-focused.log`). Combined verification passed 928 control /
+251 runtime tests, native/service fixtures and typecheck/build dry run
+(`.local/effect-cancel-combined.log`). Complete native cancellation and other
+credential-free work remain open. Production gates false; schedule unchanged.
+
 ## Effect-deadline checkpoint (2026-09-16)
 
 New effect intents/first dispatches reject at the attempt deadline even before

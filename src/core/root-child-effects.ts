@@ -85,9 +85,13 @@ export class RootChildEffects {
  transition(input: RootChildEffectResult): void {
   this.store.db.transaction(() => {
    const admitted = this.admitted(input.identity, input.root_run_id, input.root_attempt, input.run_id, input.attempt);
-   const existing = this.store.db.all<{ run_id: string; request_digest: string }>('SELECT run_id,request_digest FROM effects WHERE id=?', input.effect_id)[0];
+   const existing = this.store.db.all<{ run_id: string; request_digest: string; status: string }>('SELECT run_id,request_digest,status FROM effects WHERE id=?', input.effect_id)[0];
    requireThat(existing?.run_id === input.run_id && existing.request_digest.startsWith(admitted.custody) &&
     /^[a-f0-9]{64}$/.test(existing.request_digest.slice(admitted.custody.length)), 'FORBIDDEN', 'Effect does not belong to this exact descendant custody.', 403);
+   if (input.status === 'dispatched' && existing.status === 'intent') {
+    requireThat(admitted.lineage.every(run => ['claimed', 'running', 'finishing', 'completed'].includes(run.status)) &&
+     admitted.child.status === 'running', 'REVISION_CONFLICT', 'New descendant effects are not admitted in this task state.');
+   }
    new EffectLedger(this.store, () => this.core.now()).transition(input.effect_id, input.run_id, input.status, input.receipt);
    // No resource release, native interruption, task completion, or sleep inference.
   });
