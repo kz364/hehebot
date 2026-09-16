@@ -4,6 +4,68 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner-alpha direction (2026-09-16): useful supervised tasks with disclosed bugs and
+manual recovery need not await complete product/connector/Mac acceptance. Credential,
+authority, unknown-effect, replay and spend safeguards remain mandatory. The newly
+authorized bounded read-only Sprite inspection is complete: cgroup primitives exist,
+but the protected manager/workload boundary remains unknown, not proved impossible.
+[Direct provider evidence and cost estimate](PROVIDERS.md#selected-sprite-read-only-containment-decision-2026-09-16)
+record cold→read-only exec→cold and no mutation/model work. Full tree termination is
+needed for safe autonomous sleep/replacement, not inherently for a persisted
+provisional reply. No text-only isolation, real-model task or production gate claim.
+
+P0 portal/native preparation (2026-09-16): owner priority now supersedes peripheral
+work. `bash scripts/test-codex-service.sh --portal-readback` passed through the actual
+browser composer, HTTPS local Worker/SQLite and pinned Codex app-server with scripted
+loopback model data. Closing/reopening the browser and reloading preserves the exact
+run/attempt's provisional output without extra inference or a duplicate run. Receipt,
+conversation, admitted attempt and native thread/turn IDs are recorded in
+`.local/p0-portal-readback-final.log`; DPR2 portal capture is inspected. This is not
+a real-model task, hosted path, Worker crash/restart test or completed `run.result`.
+P0.2 remains incomplete: the fixture observes zero result events, one unknown
+coverage operation, and rejection of completion/sleep. No production flag changed.
+The mode runs separately from the combined verifier, keeping browser prerequisites
+explicit rather than silently expanding the default verifier.
+
+The concrete completion blocker is `CodexOperations.snapshot()`'s unconditional
+unknown coverage, not missing portal rendering. A read-only pinned-source review
+found no public app-server enforced deny-all tool/child-spawn field in
+[`ThreadStartParams`](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/src/protocol/v2/thread.rs)
+or [`TurnStartParams`](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/src/protocol/v2/turn.rs).
+Empty dynamic tools and restrictive sandboxing are not an empty executable tool
+inventory; internal allowed-tool filtering is not a supported host API. Do not
+remove coverage or manufacture all-settled proof for a purported text-only mode.
+The next integration decision must establish supported bounded operation/descendant
+coverage or an explicitly reviewed alternative while keeping effects uncertain.
+
+P0.1/P0.3 prerequisites (2026-09-16): reviewed/integrated both worker deliveries
+from exact bundled unpublished main. Main reran the containment contract/probe suite
+(28 tests, no kernel launch), and the actual native capacity fixture (11 assertions,
+seven loopback requests, five held connections closed). Evidence is
+`.local/p0-containment-integrated.log` and `.local/p0-responsive-integrated.log`.
+[Containment prerequisites](CONTAINMENT_PREREQUISITES.md) explicitly report positive
+kernel mode unavailable. [Native responsiveness](RESPONSIVE_CHAT_PREREQUISITE.md)
+proves a completed coordinator's distinct status turn while A remains held and exact
+independent-root B cancellation without changing A. It does not prove Worker
+admission, same-parent sibling isolation, real-model understanding or P0.3 completion.
+
+P0 integration decision after inspecting bridge/supervisor/core ownership and focused
+oracle consultation: retain one coordinator lane and multiple durable unresolved
+families. Add exact idempotent coordinator-release evidence separate from all-settled
+completion; persist/discover the family before advancing admission. Use fresh native
+threads/grants for independent attempts rather than sharing an existing task grant.
+Every family must retain its operation projection, task controller, cancellation,
+deadlines, unknown coverage and activity obligations. A separate model-backed status
+thread still needs these records and does not avoid the multi-family boundary.
+No such production change is implemented yet. The next bounded positive fixture
+must route portal P→held child A, status S and independent B through Worker/service,
+then cancel B and older A exactly after admission advances, with no final result or
+sleep claim. Implement the release receipt, durable family registry and all-family
+maintenance coherently; do not change only the Worker claim predicate.
+Final combined verification passed 1,227 control/329 runtime tests and all scripted
+contracts/typecheck/build dry run in `.local/p0-first-path-final-combined.log`;
+desktop reinstall and 16 tests passed in `.local/p0-first-path-desktop.log`.
+
 Journal input/return custody (2026-09-16): three red tests reproduced mutations
 of queued insert/update inputs and divergence between a direct write's durable
 JSON and returned caller reference. Inserts and updates capture JSON before queueing;

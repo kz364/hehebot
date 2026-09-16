@@ -73,3 +73,56 @@ On the owner's existing authorized Sprite, `node scripts/test-sprites-tasks-live
 The test exposed two mock-only assumptions: absent tasks return plain-text 404, and expiry readback has whole-second precision. The transport now parses JSON only for successful GETs and discards mutation/error bodies while retaining status. Requested TTL rounds outward to cover the required deadline; the one-hour wire cap and strict minimum-expiry readback check remain. At the one-hour boundary, insufficient readback still fails rather than weakening the deadline. Regressions cover both failures and their unsafe alternatives.
 
 Build with `bash scripts/build-codex-service.sh` before running the live script inside an explicitly authorized Sprite. It is deliberately excluded from the credential-free wrapper. The script requests at most a 60-second required hold (rounded outward by less than a second), never activates routines, and never releases other tasks. Running it can incur provider compute charges.
+
+### Selected-Sprite read-only containment decision (2026-09-16)
+
+**Result: unknown for a protected supported containment boundary; cgroup primitives
+are available.** Owner authorized inspection of the existing Sprite and up to $10
+total for bounded wake/exec, not deployment, provisioning, configuration changes,
+inference or cgroup mutations. Existing private CLI authentication was reused.
+
+Control-plane GET identified existing `hehebot` as cold and its service list as
+empty. Two synchronous `sprite exec -s hehebot --no-port-forward -- timeout -k 2s`
+probes, bounded to 20s and 10s respectively, read identity, kernel/cgroup metadata,
+permissions, namespace maps and helper availability. No helper was installed or
+invoked for isolation. First probe ran 09:10:32–09:10:33 UTC; both returned normally.
+Final control-plane read before 09:12:45 UTC reported cold again. No probe process
+was left running and no application/model/connector was started.
+
+| Direct observation | Meaning / limitation |
+| --- | --- |
+| Kernel `6.12.105-fly`; uid/gid 1001 (`sprite`); PID1 `tini` same uid | Actual selected guest, not orb evidence. |
+| cgroup2 mounted rw at `/sys/fs/cgroup`; membership `0::/`; type `domain`; no direct child groups | A namespaced domain is exposed; no installation-owned generation exists yet. |
+| `cgroup.kill`, `cgroup.procs`, `cgroup.subtree_control` present; effective access checks say writable | Promising capability, **not a tested write, kill or provider delegation guarantee**. Even read-only interface access checks can report writable under capabilities. |
+| `populated 1`, `memory.max=max`, MemTotal 16,377,120 kB | Guest contains live processes; no termination or bounded-memory guarantee follows. |
+| Effective/bounding capabilities `a82435fb`, including SYS_ADMIN, SETUID/SETGID, DAC_OVERRIDE, SYS_CHROOT | Current payload identity is privileged; shared-identity launch is not manager isolation. |
+| `/.sprite/api.sock` root-owned mode 0666 and access-check writable | Capability drop alone would not hide the management socket. Reachability/authority must be constrained separately. No socket request was made by these probes. |
+| `setpriv`, `unshare`, `chroot`, `timeout` installed; identity UID/GID maps | Supported OS building blocks exist, but no protected namespace/credential-drop boundary was exercised. |
+
+Private evidence: `.local/sprite-containment-inspection.log`,
+`.local/sprite-containment-identity.log`, `.local/sprite-containment-after.json`.
+No credentials or auth caches were printed, copied or modified.
+
+**Cost estimate, not receipt:** live [published pricing](https://sprites.dev/pricing)
+on this date was $0.07/CPU-hour, $0.04375/GB-hour memory and $0.000683/GB-hour hot
+storage. Before execution, an 8-vCPU/128-GiB/100-GB five-minute allowance was
+estimated at about $0.52. Using observed guest memory rounded up to 16 GiB, the
+same five-minute envelope is about $0.111; conservatively record **< $0.15 before
+tax** for this bounded inspection, with actual execution much shorter. This does
+not measure billed usage or imply an enforced provider cap. Existing cold storage
+is not newly provisioned cost; no additional $10 was stacked onto prior authority.
+
+**Next provider question:** is an installation-owned cgroup subtree plus a
+distinct capability-dropped workload mount/user boundary excluding the management
+socket and manager credentials supported across service restart/cold boot? If not,
+is a generation-fenced recursive-stop/empty receipt available? Public service-stop
+progress does not promise this; destructive Sprite deletion is not an alternative
+within the grant. A real namespace/cgroup isolation test requires separate mutation
+authorization, not more synthetic refusal tests.
+
+**Owner-alpha consequence:** full recursive termination is a gate for autonomous
+safe sleep/replacement, not automatically for displaying a supervised bounded
+reply. A restricted alpha may retain unknown obligations, show persisted provisional
+output and refuse automatic replay/sleep. Its actual reachable capabilities and
+credential/effect boundary still need review; it cannot claim text-only isolation.
+One specifically authorized real-model task and deployment remain separate grants.

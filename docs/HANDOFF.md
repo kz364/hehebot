@@ -4,7 +4,49 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
-Current wave uses `.local/cancel-journal.bundle`, unpublished local main f79006b,
+Newest owner direction is a restricted OWNER ALPHA, not full-product production
+acceptance. Keep credential/effect/authority/spend safeguards, but allow disclosed
+noncritical bugs, provisional replies and manual recovery. Do not require all
+connectors, Mac polish or every recovery matrix before use. Do not claim text-only
+isolation. Real-model inference and deployment still lack explicit authorization.
+
+Owner authorized READ-ONLY selected-Sprite feasibility and a $10 total ceiling for
+bounded existing-Sprite wake/exec. Completed using existing private CLI HOME at
+`.local/sprites-cli-home`, binary `.local/sprites-cli/sprite` (never print auth files).
+Selected `hehebot`: cold before, service list empty, two bounded read-only probes,
+cold after. cgroup2/kill/access privileges exist; uid1001 has powerful capabilities
+and management socket is 0666. Result UNKNOWN for protected supported containment,
+not absent primitives. No mutation experiment performed. See docs/PROVIDERS.md for
+direct observations, exact provider question and <$0.15 conservative estimated cost
+(not billing receipt). Do not repeat the inspection or request its approval again.
+No more open-ended synthetic containment work. Scope containment needs to the alpha;
+complete recursive settlement remains necessary for safe automatic sleep/replacement.
+
+Owner P0 priority section is integrated verbatim above TODO checkpoints. No new
+memory/search/roster or unrelated matrix assignments. Current wave uses
+`.local/p0-first-path.bundle`, unpublished main 979f482, not origin/main.
+Both P0 workers delivered and were reviewed/integrated: containment prerequisite
+model/probe (28 tests, no real kernel mode), and native responsive coordinator
+(11 assertions, same-thread status while A held, independent root B cancellation
+preserves A). Logs: `.local/p0-{containment,responsive}-integrated.log`.
+Main's `--portal-readback` mode passes actual browser submission, real local
+Worker/SQLite, pinned native Codex with scripted model and reconnect preview.
+Receipt/run/attempt/native IDs and false P0.2 completion are in
+`.local/p0-portal-readback-final.log`; final DPR2 screenshot inspected.
+No real-model usable assistant or P0 exit is complete. Unknown native coverage
+keeps the Worker run running; public 0.154.0 thread/turn schemas do not provide
+an enforced deny-all tool/spawn field. Never forge settlement to free admission.
+P0.1 next decision is provider-supported protected workload boundary or separately
+authorized isolation test if required for chosen alpha, not another read-only probe.
+Main next integration work is coordinator inference versus family custody under
+the supported native/Worker boundary, not more peripheral features. The inspection
+grant above does not authorize inference, deployment or isolation mutation tests.
+Schedule stays active.
+Combined verification passed 1,227 control/329 runtime tests and all scripted/build
+checks in `.local/p0-first-path-final-combined.log`; desktop reinstall/tests 16/16
+passed in `.local/p0-first-path-desktop.log`. No workers remain pending.
+
+Previous wave uses `.local/cancel-journal.bundle`, unpublished local main f79006b,
 not origin/main. Task-cancellation UI worker
 `T-01a0a94e-b230-7486-9675-69972090171c` is reviewed/integrated: 13 exact synthetic
 envelopes and four neighboring browser fixtures pass; three DPR2 captures inspected.
