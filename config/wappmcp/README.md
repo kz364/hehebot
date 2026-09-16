@@ -21,6 +21,13 @@ readiness. Do not bypass result validation, silently substitute search for recen
 history, or add a dependency patch under the existing narrow patch exception.
 An upstream-compatible fix/version needs review and the compatibility rerun.
 
+The public ESM `WhatsAppMcpServer` factory also runs over a synthetic two-method
+session and in-memory SDK: exact 22-tool catalog, eight schema rejections and
+26 host denials pass. Scoped search routes correctly; actual recent reads fail
+server-side SDK result validation. No `WhatsAppSession` is constructed, channels
+are disabled and no mutation callback runs. Public transport closure is not
+browser/session settlement. See [public-server evidence](../../docs/WAPPMCP_PUBLIC_SERVER.md).
+
 Abort, SDK timeout and connection close all reject the client call while a handler
 that ignores cancellation can remain pending. The journal retains unknown intent
 and rejects replay even after the handler later returns. This is actual SDK
