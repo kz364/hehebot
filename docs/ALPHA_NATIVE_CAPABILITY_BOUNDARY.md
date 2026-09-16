@@ -88,7 +88,7 @@ For a root-only restricted alpha, use **`[agents] enabled = false` and `features
 3. **Remaining authority restriction:** disable web search, hosted apps, plugins and image generation; leave provider history/notes unselected, supply no dynamic tools or additional MCP servers, and retain local resource rejection. Set the sole server's `enabled_tools` to `hehebot_list_routines` and `hehebot_read_skill`, matching the reported immutable alpha grant. No generic file or network escape was found in those two local methods. The other settings below are optional-surface/root-only scope choices, not additional containment fixes required by a demonstrated bypass. Do not add a direct-only-model or root-only restriction solely to compensate for an alleged filesystem escape: none was found.
 
 ```toml
-approval_policy = "untrusted"
+# Pass approvalPolicy:"untrusted" through thread/start, not this TOML file.
 web_search = "disabled"
 
 [agents]

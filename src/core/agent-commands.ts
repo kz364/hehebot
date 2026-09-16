@@ -21,9 +21,11 @@ export class AgentCommandBoundary {
  private admitted(request:AgentScope){
   this.lifecycle.authorizeAttempt(request.identity,request.run_id,request.attempt);
   const run=this.core.store.run(request.run_id);
-  requireThat(run.current_attempt===request.attempt&&['claimed','running','finishing'].includes(run.status),'REVISION_CONFLICT','The admitted attempt is no longer active.');
+  const alpha=!!this.core.ownerAlpha.policy;
+  requireThat(!alpha||!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code??''),'REVISION_CONFLICT','The owner revoked this admitted context.');
+  requireThat(run.current_attempt===request.attempt&&(alpha?['claimed','running','finishing','cancelling','recovery_required']:['claimed','running','finishing']).includes(run.status),'REVISION_CONFLICT','The admitted attempt is no longer active.');
   const attempt=this.core.store.db.all<{deadline_at:string}>('SELECT deadline_at FROM attempts WHERE run_id=? AND attempt=?',request.run_id,request.attempt)[0];
-  requireThat(Date.parse(attempt.deadline_at)>Date.parse(this.core.now()),'REVISION_CONFLICT','The admitted attempt deadline has expired.');
+  requireThat(alpha||Date.parse(attempt.deadline_at)>Date.parse(this.core.now()),'REVISION_CONFLICT','The admitted attempt deadline has expired.');
   const snapshot=JSON.parse(run.context_json) as ContextSnapshot;
   requireThat(snapshot.persona.id===run.persona_id,'FORBIDDEN','The admitted persona does not match this run.',403);
   return {run,snapshot};
@@ -42,6 +44,7 @@ export class AgentCommandBoundary {
   return {routines:rows.slice(0,20).map(row=>this.core.store.get<RoutinePut>(row.id,'routine')),next_cursor:rows.length>20?rows[19].id:null};
  }
  accept(request:AgentCommandRequest){
+  requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Owner alpha does not permit agent mutations.');
   const {run,snapshot}=this.admitted(request);
 
   // Validate before narrowing so owner-only or malformed commands cannot be smuggled

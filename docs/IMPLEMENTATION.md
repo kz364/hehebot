@@ -4,6 +4,46 @@ Hehebot is a locally tested foundation, not an operational assistant. Direct Cod
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Explicit local owner alpha (2026-09-16): an immutable selected-persona policy now
+admits one to three direct owner roots with per-task/session deadlines, separate
+from disposable test mode and both false production flags. Worker first boot uses
+no provider; durable consumed IDs and original attempt/epoch/boot prevent resetting
+quota or replaying uncertain work. Deadline expiry preserves exact callback/output
+custody, while owner cancel or memory revocation fences subsequent scoped reads.
+Complete, effects, native-child, mutating tools and sleep remain denied.
+
+The host entrypoint checks ChatGPT account and exact visible model through supported
+APIs only when explicitly launched. It preserves an optional authorized native home
+in place, supplies restricted profiles through CLI overrides, retains store selection,
+and rejects custom OpenAI providers and config drift. Root spawning/provider surfaces
+are disabled. A separate timer stops native execution at session expiry plus 30-second
+grace even during an awaited maintenance call. Existing-home auth and live model
+behavior have not been exercised; no login/token copying/provider action occurred.
+
+Host `bash scripts/test-codex-service.sh --owner-alpha` passes the actual browser →
+HTTPS Worker/SQLite → native Codex → read-only MCP path with two scripted model
+requests, both production flags false, no test-mode admission and zero Sprite hold
+calls. Provisional output survives reconnect and the 15-second task deadline, while
+the task becomes cancelling and unknown coverage remains. Rendered working and
+cancelling states were inspected; the alpha banner discloses unavailable background,
+external-action and automatic-recovery behavior. No completed result is fabricated.
+Log: `.local/owner-alpha-service-final.log`. The first fixture failures exposed
+20-minute-clock assumptions and a UI filter hiding cancelling coordinator previews;
+both were corrected without weakening non-alpha assertions.
+
+Native root-only fixture default and CLI-override modes pass three deliberately
+unsupported spawn calls, two completed root turns, three loopback requests, no
+observed child and byte-identical original config. Exact RPC approval policy works;
+top-level TOML `untrusted` does not. The integrated override mode exercises the host
+transport encoder. Combined verifier passed1274 control/350 runtime plus native,
+service and build checks (`.local/owner-alpha-combined.log`); desktop16/16 passed.
+Final scoped-read/public-summary changes pass53 targeted backend cases; final timer
+coverage is recorded separately in `.local/owner-alpha-runtime-final.log`.
+See [session setup and recovery limits](CODEX_SERVICE.md#explicit-supervised-local-session).
+The next usable milestone requires authorization for one bounded real-model task,
+not full connector/Mac/recursive-sleep acceptance. P0.2 remains incomplete until that
+actual model path is observed; no hosted deployment is implied.
+
 Restricted service preparation (2026-09-16): opt-in disposable composition selects
 a digest-bound minimal/workspace-read named profile, disabled network and only
 first-party read MCP grants. Startup checks native configuration readback before

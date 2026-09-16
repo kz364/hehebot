@@ -1,15 +1,16 @@
 # Codex/Sprite service composition
 
 `runtime/codex-service.mjs` assembles the existing runtime components behind an
-explicit **disposable-test-only** boundary. It is not production admission.
+explicit disposable-test or **bounded local owner-alpha** boundary. Neither is production admission.
 `runtime/sprites-service-entry.mjs` remains the production transport preflight:
 it cannot claim work or invoke a model. Execution/native verification flags stay
 false. No account connection, deployment or live Sprite task is part of these tests.
 
 ## Restricted owner-alpha preparation
 
-Optional `restrictedPermissions: true` still requires `disposableTest: true`;
-it does not authorize a live session. It selects a generated named profile with
+Optional `restrictedPermissions: true` is available to disposable tests and is
+mandatory in owner-alpha sessions; it does not itself authorize a live session.
+It selects a generated named profile with
 `:minimal = read`, the exact fresh workspace readable, and network disabled.
 Journal, Codex home, runtime token and configured Access credential paths are
 explicitly denied to model filesystem tools, including credentials outside the
@@ -53,7 +54,73 @@ proof. Code-mode false flags are not an absolute off switch when model metadata
 selects code mode; nested tool dispatch still retains authority. No extra shell
 allowance, root-only requirement, safe-tree-termination or text-only claim follows.
 The provider-restricted six-request rerun passed in
-`.local/restricted-background-final.log`; the service remains disposable-only.
+`.local/restricted-background-final.log`; that background mode remains disposable-only.
+
+## Explicit supervised local session
+
+`runtime/owner-alpha-entry.mjs --run /absolute/private-session.json` is the separate
+operator entrypoint. Do not launch it until the owner authorizes the specific
+account/model task. It accepts no disposable flag and never changes production
+gates. The initial slice is one selected persona's private messages, root-only,
+read-only routine/skill MCP and persisted **provisional** output. It does not offer
+background descendants, connector actions, shell execution, final settlement,
+automatic replay, sleep or unattended service recovery.
+
+The private session config uses the normal service fields below, plus `ownerAlpha`
+with the exact five-field [Worker policy](OWNER_ALPHA_CONTROL.md). Session expiry
+must be at most five minutes from startup; one to three runs and one to 300 seconds
+per task are allowed. Use one run for the first authorized trial. The Worker must
+have the identical `HEHEBOT_OWNER_ALPHA`, local auth, both production flags false,
+empty provider config, and fresh private persistence. The service checks the full
+policy and initial STOPPED epoch zero before the provider-free boot. It does not
+instantiate Sprite activity management. Runtime state/journal/workspace must be
+fresh; do not reset an uncertain session by deleting its records.
+
+An optional absolute `nativeHome` reuses the same owner's authorized `CODEX_HOME`
+**in place**. The service does not copy credentials or rewrite that home's
+`config.toml`: it supplies the named permission profile/default with supported CLI
+overrides, checks effective config, and rejects file drift before submission.
+The original credential-store selection remains unchanged. The sanitized launch
+environment may not support a particular OS keyring; that is an access blocker,
+not permission to extract its credentials or change store mode. Without
+`nativeHome`, use the session's private `codex-home`; it must not have an existing
+config. Supported login, if needed, is a separately authorized owner action.
+
+Native configuration/history/cache writes still belong to the selected home.
+Coordinate a single credential-refresh owner and do not run another consumer
+concurrently. Existing MCP servers are rejected; root spawning and provider
+search/apps/plugins/image generation are disabled. Approval callbacks remain
+denied. The entrypoint selects the built-in OpenAI provider, rejects custom
+OpenAI provider definitions, checks `account/read` for ChatGPT, and requires the
+exact visible model from bounded `model/list` pagination before task submission.
+Discovery can contact the account service and write native caches; it is not an
+offline probe. No API-key fallback or forced logout/store migration is provided.
+
+Launch under the existing executor lock, with a privately prepared config and
+the same validated CA for the host and MCP when using local HTTPS:
+
+```sh
+NODE_EXTRA_CA_CERTS=/absolute/private-ca.pem \
+  bash scripts/with-executor-lock.sh /absolute/private-state \
+  node runtime/owner-alpha-entry.mjs --run /absolute/private-session.json
+```
+
+Keep the local-auth Worker loopback-only; do not expose its bypass through an orb
+portal. This is a supervised local demonstration, not a hosted owner release.
+The entrypoint maintains heartbeat/cancellation until session expiry plus the
+existing 30-second grace, then stops app-server and retains recovery state.
+Ctrl-C also stops without asserting settlement. Time/run bounds are not a verified
+provider-enforced billing cap. After failure, retain Worker data, journal, native
+home and task IDs; inspect rather than relaunch or repeat the task. A provisional
+reply can remain readable while the task is unresolved.
+
+Credential-free checks are `node scripts/test-codex-owner-alpha.mjs` (also
+`--profile-overrides`) and `bash scripts/test-codex-service.sh --owner-alpha`.
+The latter uses actual browser/HTTPS Worker/SQLite/native service with scripted
+loopback model output, not an authenticated account or the live account-check
+wrapper. Separate entrypoint unit tests cover account/provider refusal and bounded
+shutdown. [Native evidence and limits](OWNER_ALPHA_NATIVE.md) distinguish supported
+root-only dispatch from complete operation isolation or settlement.
 
 ## Run locally
 
@@ -377,7 +444,8 @@ socket transport and activity guard with `createCodexService`. Configuration has
 - `installationId`, `personas`: host-owned persona mappings containing `agentId`,
   `model`, and an explicit `allowedTools` subset;
 - `disposableTest: true`: explicit opt-in for test composition only. Omission or
-  false rejects before disk, control, provider or native activity.
+  false rejects before disk, control, provider or native activity unless the
+  explicit local `ownerAlpha` policy above is supplied.
 
 Callers own the kernel lock for the entire process lifetime; use
 `scripts/with-executor-lock.sh`. Use canonical directory paths, never symlink

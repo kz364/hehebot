@@ -16,10 +16,11 @@ export class OutputPreviews {
   this.store.db.transaction(() => {
    lifecycle.authorizeAttempt(identity, input.run_id, input.attempt);
    const run = this.store.run(input.run_id);
-   requireThat(run.current_attempt === input.attempt && ['running', 'finishing'].includes(run.status) &&
+   const alpha=!!lifecycle.core.ownerAlpha.policy;
+   requireThat(run.current_attempt === input.attempt && (alpha?['running','finishing','cancelling','recovery_required']:['running', 'finishing']).includes(run.status) &&
     !['OWNER_CANCELLED', 'CONTEXT_INVALIDATED'].includes(run.error_code ?? ''), 'OUTPUT_FENCED', 'Task no longer accepts provisional output.');
    const attempt = this.store.db.all<{native_run_ref:string;deadline_at:string}>('SELECT native_run_ref,deadline_at FROM attempts WHERE run_id=? AND attempt=?', run.id, input.attempt)[0];
-   requireThat(attempt.native_run_ref === input.native_ref && attempt.deadline_at > this.now(), 'OUTPUT_FENCED', 'Provisional output does not match the active native attempt.');
+   requireThat(attempt.native_run_ref === input.native_ref && (alpha||attempt.deadline_at > this.now()), 'OUTPUT_FENCED', 'Provisional output does not match the active native attempt.');
    const key = prefix + run.id;
    const row = this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?', key)[0];
    const prior = row ? JSON.parse(row.value_json) as StoredPreview : null;
@@ -35,9 +36,9 @@ export class OutputPreviews {
    this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json', key, JSON.stringify({ ...input, expires_at }));
   });
  }
- read(runId: string, attempt: number): Pick<OutputPreview,'run_id'|'attempt'|'version'|'text'|'truncated'> | null {
+ read(runId: string, attempt: number, ownerAlpha=false): Pick<OutputPreview,'run_id'|'attempt'|'version'|'text'|'truncated'> | null {
   const run = this.store.run(runId);
-  if (run.current_attempt !== attempt || !['running', 'finishing', 'recovery_required'].includes(run.status) || ['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code ?? '')) return null;
+  if (run.current_attempt !== attempt || !(ownerAlpha?['running','finishing','cancelling','recovery_required']:['running', 'finishing', 'recovery_required']).includes(run.status) || ['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code ?? '')) return null;
   const row = this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?', prefix + runId)[0];
   if (!row) return null;
   const value = JSON.parse(row.value_json) as StoredPreview;

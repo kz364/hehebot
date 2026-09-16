@@ -471,3 +471,54 @@ test('restricted mode rejects mutation tools and malformed options before any st
   ]) await assert.rejects(createCodexService(config, f.dependencies).start(), { code: 'INVALID_SERVICE_CONFIGURATION' });
   assert.deepEqual(f.calls, []);
 });
+
+for (const changed of [false, true]) test(`owner alpha reuses config in place, denies drift=${changed}, and never acquires provider hold`, async t => {
+  const f = await fixture(t), rpc = f.transport.request, request = f.dependencies.control.request;
+  const nativeHome = await mkdtemp(join(tmpdir(), 'hehe-authorized-home-'));
+  t.after(() => rm(nativeHome, { recursive: true, force: true }));
+  const path = join(nativeHome, 'config.toml'), original = 'cli_auth_credentials_store = "keyring"\n';
+  await writeFile(path, original, { mode: 0o600 });
+  const ownerAlpha = { session_id: 'aaaaaaaa-1111-4111-8111-111111111111',
+    persona_id: '11111111-1111-4111-8111-111111111111', expires_at: new Date(f.dependencies.now() + 240000).toISOString(),
+    max_runs: 1, max_task_seconds: 180 };
+  const { disposableTest, ...base } = f.config;
+  let overrides;
+  f.transport.request = async (method, params) => {
+    if (method !== 'config/read') return rpc(method, params);
+    assert.equal(await readFile(path, 'utf8'), original);
+    const name = overrides.default_permissions;
+    return { config: { ...restrictedReadback, agents: { enabled: false },
+      features: { ...restrictedReadback.features, multi_agent: false, multi_agent_v2: false },
+      default_permissions: name, permissions: { [name]: overrides[`permissions.${name}`] } } };
+  };
+  const service = createCodexService({ ...base, nativeHome, ownerAlpha, portalOrigin: 'https://127.0.0.1:4319/',
+    personas: { [ownerAlpha.persona_id]: base.personas.bot } }, {
+    ...f.dependencies, tasks: undefined,
+    launch: options => { overrides = options.configOverrides; assert.equal(options.home, nativeHome); return f.dependencies.launch(options); },
+    control: { request: async (type, payload) => {
+      if (type === 'status') return { epoch: 0, phase: 'STOPPED', execution_enabled: false, owner_alpha: ownerAlpha };
+      if (type === 'claim') {
+        if (changed) await writeFile(path, 'model = "changed"\n', { mode: 0o600 });
+        return { submission_key: 'run:1', deadline_at: new Date(f.dependencies.now() + 179000).toISOString(),
+          run: { id: 'run', current_attempt: 1, persona_id: ownerAlpha.persona_id,
+            role: 'coordinator', context_json: '{"instruction":"fixture"}' } };
+      }
+      return request(type, payload);
+    } },
+  });
+  try {
+    if (changed) {
+      await assert.rejects(service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+      assert.equal(f.calls.some(call => call.method === 'thread/start'), false);
+    } else {
+      await service.start();
+      assert.equal(service.adapter.testMode, false);
+      assert.equal(service.adapter.admissionReadiness().productionVerified, false);
+      assert.equal(await readFile(path, 'utf8'), original);
+      assert.equal((await service.journal.get('service')).ownerAlpha.session_id, ownerAlpha.session_id);
+      assert.equal(f.calls.filter(call => call.method === 'turn/start').length, 1);
+      await assert.rejects(service.supervisor.drain({}), { code: 'SLEEP_DENIED' });
+    }
+    assert.equal(f.calls.includes('hold'), false);
+  } finally { await service.stop(); }
+});

@@ -19,7 +19,7 @@ function operationTime(value:string):string {
 export class LifecycleCore {
  constructor(public store:Store,public core:ControlCore,private options:{idleMode?:boolean}={}){}
  get():Lifecycle{return this.store.db.all<Lifecycle>('SELECT * FROM lifecycle WHERE singleton=1')[0];}
- initialize(ref:RuntimeRef|Record<string,never>):void{this.store.db.exec("INSERT OR IGNORE INTO lifecycle(singleton,provider_ref_json,epoch,phase,desired_state,queue_sequence,wake_after_stop) VALUES(1,?,0,'STOPPED','STOP',0,0)",JSON.stringify(ref));}
+ initialize(ref:RuntimeRef|Record<string,never>):void{this.store.db.exec("INSERT OR IGNORE INTO lifecycle(singleton,provider_ref_json,epoch,phase,desired_state,queue_sequence,wake_after_stop) VALUES(1,?,0,'STOPPED','STOP',0,0)",JSON.stringify(ref));this.core.ownerAlpha.initialize();}
  private active():boolean{
   const budget=this.core.budget.admissionPredicate();
   // Expiry and answer handoff do not settle the native request. Even stale
@@ -29,9 +29,13 @@ export class LifecycleCore {
  }
  nextClaimableRun():Run|undefined {
   return this.store.db.transaction(()=>{
+   if(this.core.ownerAlpha.policy&&!this.core.ownerAlpha.available())return undefined;
    const cutoff=new Date(this.core.options.now().getTime()-90*86400000).toISOString(),budget=this.core.budget.admissionPredicate();
    const questions=[...new Set(this.core.questions.list().map(question=>question.run_id))];
-   return this.store.db.all<Run>(`SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) AND (${nativeDescendantsSettledSql}) ${questions.length?`AND r.id NOT IN (${questions.map(()=>'?').join(',')})`:''} ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings,...questions)[0];
+   const alpha=this.core.ownerAlpha.policy;
+   return this.store.db.all<Run>(`SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) AND (${nativeDescendantsSettledSql}) ${questions.length?`AND r.id NOT IN (${questions.map(()=>'?').join(',')})`:''}
+    ${alpha?`AND r.current_attempt=0 AND r.persona_id=? AND r.routine_id IS NULL AND r.occurrence_id IS NULL AND json_extract(r.context_json,'$.room_id') IS NULL AND c.type='message.send' AND c.owner_id NOT GLOB 'runtime:*' AND c.owner_id NOT GLOB 'trigger:*' AND json_extract(c.payload_json,'$.conversation_id')=r.persona_id`:''}
+    ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings,...questions,...(alpha?[alpha.persona_id]:[]))[0];
   });
  }
  private touch():void{this.store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('last_activity',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(this.core.now()));}
@@ -43,12 +47,18 @@ export class LifecycleCore {
  }
  authorizeAttempt(identity:Identity,runId:string,attempt:number):void {
   this.identity(identity);
+  this.core.ownerAlpha.authorize(runId,attempt);
   const row=this.store.db.all<{epoch:number;boot_id:string}>('SELECT epoch,boot_id FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
   requireThat(row,'REVISION_CONFLICT','Attempt is unavailable.');
   requireThat(row.epoch===identity.epoch&&row.boot_id===identity.boot_id,'STALE_EPOCH','Attempt belongs to a different executor.');
  }
  registerBoot(bootId:string):Identity {
   return this.store.db.transaction(()=>{
+   if(this.core.ownerAlpha.policy&&this.get().phase==='STOPPED'){
+    this.core.ownerAlpha.initialize();
+    requireThat(this.get().epoch===0&&this.core.ownerAlpha.available()&&!this.store.db.all('SELECT run_id FROM attempts LIMIT 1').length,'STALE_EPOCH','Owner-alpha boot requires fresh custody and an unexpired session.');
+    this.store.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,desired_state='RUN',lease_until=? WHERE singleton=1",new Date(this.core.options.now().getTime()+90000).toISOString());
+   }
    const state=this.get();requireThat(state.phase==='BOOTING','STALE_EPOCH','No boot is expected.');
    requireThat(state.lease_until!==null&&state.lease_until>this.core.now(),'STALE_EPOCH','The expected boot window expired.');
    requireThat(!state.boot_id||state.boot_id===bootId,'STALE_EPOCH','Another boot already owns this epoch.');
@@ -67,6 +77,7 @@ export class LifecycleCore {
    for(const input of operations){
     const op={...input,started_at:operationTime(input.started_at),deadline_at:operationTime(input.deadline_at),last_progress_at:operationTime(input.last_progress_at)};
     const run=this.store.run(op.run_id);
+    this.core.ownerAlpha.authorize(run.id,op.attempt);
     requireThat(run.current_attempt===op.attempt&&['claimed','running','finishing','cancelling','recovery_required'].includes(run.status),'STALE_EPOCH','Operation does not belong to an active attempt.');
     const attempt=this.store.db.all<{epoch:number;boot_id:string;deadline_at:string}>('SELECT epoch,boot_id,deadline_at FROM attempts WHERE run_id=? AND attempt=?',run.id,op.attempt)[0];
     requireThat(attempt?.epoch===identity.epoch&&attempt.boot_id===identity.boot_id,'STALE_EPOCH','Attempt belongs to a different executor.');
@@ -87,7 +98,7 @@ export class LifecycleCore {
  claim(identity:Identity):{run:Run;submission_key:string;deadline_at:string}|null {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
-   requireThat(this.core.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
+   requireThat(this.core.options.executionEnabled||this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
    // Root inference release is not family settlement. Uncertain roots block;
    // provider-confirmed process termination retains the existing recovery path.
    if(this.store.db.all(`SELECT r.id FROM runs r WHERE r.role='coordinator' AND r.status IN ('claimed','running','finishing','cancelling','recovery_required')
@@ -109,7 +120,7 @@ export class LifecycleCore {
    const run=this.nextClaimableRun();if(!run)return null;
    const prior=JSON.parse(run.context_json) as Pick<ContextSnapshot,'instruction'|'room_id'>;
    const context=this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id);
-   const attempt=run.current_attempt+1,submissionKey=`${run.id}:${attempt}`,deadline=new Date(this.core.options.now().getTime()+20*60000).toISOString();
+   const attempt=run.current_attempt+1,submissionKey=`${run.id}:${attempt}`,deadline=this.core.ownerAlpha.policy?this.core.ownerAlpha.admit(run):new Date(this.core.options.now().getTime()+20*60000).toISOString();
    this.store.db.exec("UPDATE runs SET status='claimed',current_attempt=?,context_json=?,updated_at=? WHERE id=?",attempt,JSON.stringify(context),this.core.now(),run.id);
    this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,started_at) VALUES(?,?,?,?,?,'claimed',?,?)",run.id,attempt,submissionKey,identity.epoch,identity.boot_id,deadline,this.core.now());
    if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='claimed' WHERE id=?",run.occurrence_id);
@@ -126,6 +137,11 @@ export class LifecycleCore {
    // A registered receipt survives a lost reply and later cancellation/settlement.
    // A child may have a native ref while still claimed; that is not a start ACK.
    if(row.native_run_ref===nativeRef&&row.status!=='claimed')return;
+   if(this.core.ownerAlpha.policy&&row.status==='claimed'&&['cancelling','recovery_required'].includes(run.status)){
+    // A delayed alpha ACK is custody, not renewed permission to execute.
+    this.store.db.exec("UPDATE attempts SET native_run_ref=?,status='running' WHERE run_id=? AND attempt=?",nativeRef,runId,attempt);
+    return;
+   }
    requireThat(run.status==='claimed','REVISION_CONFLICT','Run is not awaiting submission.');
    const now=this.core.now(),expired=row.deadline_at<=now;
    // Retain late native receipts, but expose cancellation without waiting for an alarm.
@@ -153,6 +169,7 @@ export class LifecycleCore {
   });
  }
  complete(identity:Identity,runId:string,attempt:number,result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>}):void {
+  requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Owner alpha cannot assert family settlement.');
   this.store.db.transaction(()=>{
    this.authorizeAttempt(identity,runId,attempt);const run=this.store.run(runId);
    requireThat(run.current_attempt===attempt,'REVISION_CONFLICT','Attempt has changed.');
@@ -185,6 +202,7 @@ export class LifecycleCore {
   });
  }
  prepareSleep(identity:Identity):{stop_token:string;queue_sequence:number} {
+  requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Owner alpha does not permit sleep.');
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);
    requireThat(!this.active(),'SLEEP_DENIED','Work or unresolved effects prevent sleep.');
@@ -195,6 +213,7 @@ export class LifecycleCore {
   });
  }
  commitSleep(identity:Identity,token:string,queueSequence:number,checkpoint:Record<string,unknown>):void {
+  requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Owner alpha does not permit sleep.');
   this.store.db.transaction(()=>{
    const state=this.identity(identity);
    requireThat(state.phase==='DRAINING'&&state.stop_token===token&&state.queue_sequence===queueSequence&&!this.active(),'SLEEP_DENIED','New work or activity invalidated the stop.');
@@ -205,6 +224,7 @@ export class LifecycleCore {
   });
  }
  private scheduleRetry(run:Run,reason:string):void {
+  if(this.core.ownerAlpha.policy)return;
   if(run.role==='background'||run.current_attempt>=3 || !['TEMPORARY_UNAVAILABLE','DEADLINE_EXCEEDED','STALE_EPOCH','CANCEL_UNCONFIRMED'].includes(reason))return;
   if(this.core.questions.list().some(question=>question.run_id===run.id))return;
   const effects=this.store.db.all<{classification:string;status:string;receipt_json:string|null}>('SELECT classification,status,receipt_json FROM effects WHERE run_id=?',run.id);

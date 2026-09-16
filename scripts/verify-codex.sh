@@ -24,6 +24,8 @@ node scripts/test-control-crash.mjs 2
 node scripts/test-codex-native.mjs
 node scripts/test-codex-capacity.mjs
 node scripts/test-codex-permissions.mjs
+node scripts/test-codex-owner-alpha.mjs
+node scripts/test-codex-owner-alpha.mjs --profile-overrides
 node scripts/test-codex-steering.mjs
 node scripts/test-codex-questions.mjs
 node scripts/test-codex-tools.mjs

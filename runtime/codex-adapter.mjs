@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { advanceQuietPhases, readQuietPhases, QUIET_PHASE_FIELDS } from './codex-quiet-phases.mjs';
+import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 
 export const PINNED_CODEX = '0.154.0';
 export const OBSERVED_COLLAB_TOOLS = Object.freeze(['sendInput', 'resumeAgent', 'wait', 'closeAgent', 'sendMessage', 'followupTask', 'interruptAgent', 'listAgents']);
@@ -40,7 +41,9 @@ export function projectOutputMessage(item) {
 export class CodexAdapter {
   #observations = Promise.resolve();
   #permissionsProfile;
-  constructor({ rpc, journal, cwd, testMode = false, dynamicTools = [], mcpServers = {}, permissionsProfile = undefined }) {
+  #ownerAlpha;
+  #now;
+  constructor({ rpc, journal, cwd, testMode = false, dynamicTools = [], mcpServers = {}, permissionsProfile = undefined, ownerAlpha = null, now = Date.now }) {
     if (typeof rpc !== 'function' || !journal?.putIfAbsent || !cwd?.startsWith('/') || !Array.isArray(dynamicTools) || dynamicTools.length > 64 ||
         !mcpServers || typeof mcpServers !== 'object' || Array.isArray(mcpServers) || Object.keys(mcpServers).length > 64 ||
         permissionsProfile !== undefined && (typeof permissionsProfile !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(permissionsProfile))) fail('INVALID_CONFIGURATION');
@@ -48,9 +51,13 @@ export class CodexAdapter {
     this.dynamicTools = structuredClone(dynamicTools);
     this.mcpServers = structuredClone(mcpServers);
     this.#permissionsProfile = permissionsProfile;
+    this.#ownerAlpha = ownerAlpha === null ? null : ownerAlphaPolicy(ownerAlpha);
+    this.#now = now;
+    if (this.#ownerAlpha && (testMode || !permissionsProfile || dynamicTools.length ||
+        Object.keys(mcpServers).some(key => key !== 'hehebot') || typeof now !== 'function')) fail('INVALID_CONFIGURATION');
   }
   admissionReadiness() {
-    return { allowed: this.testMode === true, productionVerified: false };
+    return { allowed: this.testMode === true || this.#ownerAlpha !== null, productionVerified: false };
   }
   sleepReadiness() {
     return { allowed: false, blockers: ['CODEX_DESCENDANT_SETTLEMENT_UNVERIFIED', 'CODEX_RESTART_RECONCILIATION_UNVERIFIED'] };
@@ -63,11 +70,13 @@ export class CodexAdapter {
         !input.message.trim() || input.message.length > 100000 ||
         typeof input.model !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(input.model)) fail('INVALID_SUBMISSION');
     if (!this.admissionReadiness().allowed) fail('COMPATIBILITY_GATE_BLOCKED');
+    if (this.#ownerAlpha && (this.#now() >= Date.parse(this.#ownerAlpha.expires_at) ||
+        input.scope !== 'conversation' || input.scopeId !== this.#ownerAlpha.persona_id)) fail('OWNER_ALPHA_ADMISSION_DENIED');
     const values = keys.map(key => input[key]);
     const legacyFingerprintInput = Object.keys(this.mcpServers).length ? [values, this.dynamicTools, this.mcpServers]
       : this.dynamicTools.length ? [values, this.dynamicTools] : values;
     const fingerprint = hash(this.#permissionsProfile === undefined ? legacyFingerprintInput
-      : [legacyFingerprintInput, { permissionsProfile: this.#permissionsProfile }]);
+      : [legacyFingerprintInput, { permissionsProfile: this.#permissionsProfile, ...(this.#ownerAlpha ? { ownerAlpha: this.#ownerAlpha } : {}) }]);
     const prior = await this.journal.putIfAbsent(input.attemptId, {
       attemptId: input.attemptId, fingerprint, status: 'thread_unknown', threadId: null,
       nativeRunId: null, rootSettled: false, cancelAcknowledged: false,
@@ -77,6 +86,7 @@ export class CodexAdapter {
       return { ...prior, recoveryRequired: prior.status !== 'running' };
     }
     try {
+      if (this.#ownerAlpha && this.#now() >= Date.parse(this.#ownerAlpha.expires_at)) fail('OWNER_ALPHA_ADMISSION_DENIED');
       const started = await this.rpc('thread/start', {
         cwd: this.cwd, model: input.model, approvalPolicy: 'untrusted', ephemeral: false,
         ...(this.#permissionsProfile === undefined ? { sandbox: 'read-only' } : { permissions: this.#permissionsProfile }),
@@ -86,6 +96,7 @@ export class CodexAdapter {
       if (typeof started?.thread?.id !== 'string' || !started.thread.id) fail('CODEX_PROTOCOL_ERROR');
       // Persist the native thread before turn/start; even a successful thread start is not inference.
       await this.journal.update(input.attemptId, { threadId: started.thread.id, status: 'submission_unknown' });
+      if (this.#ownerAlpha && this.#now() >= Date.parse(this.#ownerAlpha.expires_at)) fail('OWNER_ALPHA_ADMISSION_DENIED');
       const reply = await this.rpc('turn/start', { threadId: started.thread.id,
         input: [{ type: 'text', text: input.message }], clientUserMessageId: input.attemptId });
       if (typeof reply?.turn?.id !== 'string' || !reply.turn.id) fail('CODEX_PROTOCOL_ERROR');

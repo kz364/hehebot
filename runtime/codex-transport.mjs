@@ -187,18 +187,25 @@ export class CodexTransport extends EventEmitter {
   }
 }
 
+function configValue(value, depth = 0) {
+  if (['string', 'boolean'].includes(typeof value)) return JSON.stringify(value);
+  if (depth < 4 && value && Object.getPrototypeOf(value) === Object.prototype) {
+    return `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}=${configValue(item, depth + 1)}`).join(',')}}`;
+  }
+  throw new Error('INVALID_CONFIG_OVERRIDES');
+}
+
 /** Dedicated customer-owned home; never inherit provider keys or Amp auth. */
 export function spawnCodex({ binary, home, cwd, timeoutMs, userInputTimeoutMs, onToolCall = null, onUserInput = null, configOverrides = {} }) {
   if (!binary?.startsWith('/') || !home?.startsWith('/') || !cwd?.startsWith('/')) throw new Error('ABSOLUTE_PATHS_REQUIRED');
   if (!validUserInputTimeout(userInputTimeoutMs)) throw new Error('INVALID_USER_INPUT_TIMEOUT');
   if (!configOverrides || typeof configOverrides !== 'object' || Array.isArray(configOverrides) ||
-      Object.entries(configOverrides).some(([key, value]) => !/^[a-z_]+(?:\.[a-z_]+)*$/.test(key) ||
-        !['string', 'boolean'].includes(typeof value))) throw new Error('INVALID_CONFIG_OVERRIDES');
+      Object.keys(configOverrides).some(key => !/^[a-z_][a-z0-9_-]*(?:\.[a-z_][a-z0-9_-]*)*$/.test(key))) throw new Error('INVALID_CONFIG_OVERRIDES');
+  const overrides = Object.entries(configOverrides).flatMap(([key, value]) => ['-c', `${key}=${configValue(value)}`]);
   const env = Object.fromEntries(['PATH', 'LANG']
     .filter(key => process.env[key]).map(key => [key, process.env[key]]));
   env.HOME = home;
   env.CODEX_HOME = home;
-  const overrides = Object.entries(configOverrides).flatMap(([key, value]) => ['-c', `${key}=${JSON.stringify(value)}`]);
   return new CodexTransport(spawn(binary, ['app-server', ...overrides, '--listen', 'stdio://'], {
     cwd, env, stdio: ['pipe', 'pipe', 'pipe'],
   }), { timeoutMs, userInputTimeoutMs, onToolCall, onUserInput });

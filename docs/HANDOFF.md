@@ -4,6 +4,45 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-16)
 
+The explicit local owner-alpha wave is integrated and credential-free verified.
+Baseline was unpublished local main 54ec05f0, not origin/main. Both workers are done:
+control T-01a0a9b8-ad9e-7047-a439-3f1cf25b0551 and native
+T-01a0a9b9-2823-710b-bc67-3e9aa809b6ec. Do not reapply their patches. Control patch
+5d6799ae plus follow-up bf62a636 are applied; native f48a362f plus f228252e are applied.
+Host changed the native override fixture to exercise the shared transport encoder.
+
+`runtime/owner-alpha-entry.mjs --run` is explicit, local-only, separate from test
+and production gates. One persona, max1–3 roots, session<=300 seconds, per-task<=300
+seconds, no provider holds. Immutable Worker policy/counter survives reconstruction;
+only original attempt/epoch/boot callbacks persist after expiry. Owner cancellation
+and context invalidation deny scoped reads/output. Native root spawning and provider
+surfaces are disabled; only read-only routine/skill MCP is admitted. Optional
+`nativeHome` preserves original config/store in place using CLI profile overrides.
+Account/model discovery is guarded but has not been run live. Do not force login
+method/store migration, copy credentials, or assume sanitized launch supports every
+OS keyring. Supported `thread/start.approvalPolicy:"untrusted"` works; top-level TOML
+`approval_policy="untrusted"` is unsupported and the old source example is corrected.
+
+Host `--owner-alpha` browser/native passes two scripted requests, exact scoped MCP
+receipt and provisional output through reload and real 15-second task expiry, with
+zero Sprite hold calls and both production flags false. Working/cancelling captures
+were inspected. Alpha summary/banner and preview-card inclusion correct misleading
+sign-in text and disappearing cancelling previews. Combined passed1274 control/350
+runtime and native/service/build checks; final independent deadline timer change
+passes all351 runtime tests.53 scoped-read/backend cases and desktop16/16 pass.
+Logs: `.local/owner-alpha-{combined,runtime-final,focused-final,service-final}.log`.
+No real account/model/provider, push/deploy or gate change occurred.
+
+Next: obtain explicit authorization for one root-only task, at most120 seconds,
+using already authorized same-owner login in place and supported discovery; no
+new login/pairing, connector mutation or paid API fallback. Stop if account access
+is unavailable. This is a loopback supervised demonstration, not an exposed local
+auth bypass or hosted owner trial. Retain all uncertain custody; no restart/reset
+or safe-sleep claim. Further credential-free work is not required for this narrow
+milestone; P1/P2/full acceptance remain later. See CODEX_SERVICE.md session setup.
+
+### Earlier restricted-profile checkpoint
+
 Current restricted-alpha wave starts from unpublished local main 487be774, not
 origin/main. Main added disposable-only `restrictedPermissions`, exact native
 profile readback and pre-submit file-digest checks; native background fixture

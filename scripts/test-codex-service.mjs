@@ -12,13 +12,15 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Agent } from 'undici';
 import { createSpriteCodexService } from '../runtime/sprites-codex-service.mjs';
+import { createCodexService } from '../runtime/codex-service.mjs';
 import { ControlClient } from '../runtime/control-client.mjs';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { inspectCodexRecovery } from '../runtime/codex-recovery-inspect.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const restrictedMode = process.argv.includes('--restricted-background');
-const backgroundMode = process.argv.includes('--background-responsive') || restrictedMode;
+const ownerAlphaMode = process.argv.includes('--owner-alpha');
+const restrictedMode = process.argv.includes('--restricted-background') || ownerAlphaMode;
+const backgroundMode = process.argv.includes('--background-responsive') || process.argv.includes('--restricted-background');
 const effectsMode = process.argv.includes('--child-effects');
 const historyChildMode = process.argv.includes('--history-child');
 const planChildMode = process.argv.includes('--plan-child');
@@ -31,12 +33,12 @@ const submissionAckMode = process.argv.includes('--submission-ack');
 const operationPagesMode = process.argv.includes('--operation-pages');
 const reasoningMode = process.argv.includes('--reasoning');
 const planMode = process.argv.includes('--plan') || planChildMode;
-const portalMode = process.argv.includes('--portal-readback') || backgroundMode;
+const portalMode = process.argv.includes('--portal-readback') || backgroundMode || ownerAlphaMode;
 const browserSession = `service-${randomUUID().slice(0, 8)}`;
 const browser = (...args) => promisify(execFile)('agent-browser', ['--session', browserSession, '--ignore-https-errors', ...args], { timeout: 30000 });
 const expectedToolCalls = operationPagesMode ? 101 : 1;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback', '--background-responsive', '--restricted-background'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback', '--background-responsive', '--restricted-background', '--owner-alpha'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -96,16 +98,19 @@ const interrupts = [], notifications = [];
 const errors = [], taskRequests = [];
 try {
   const workerPort = await port(), token = randomBytes(32).toString('hex');
+  const ownerAlpha = { session_id: randomUUID(), persona_id: '11111111-1111-4111-8111-111111111111',
+    expires_at: new Date(Date.now() + 300000).toISOString(), max_runs: 1, max_task_seconds: 15 };
   const routinePolicy = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
   const cert = join(directory, 'cert.pem'), key = join(directory, 'key.pem');
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', key, '-out', cert]);
   worker = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--env', 'local', '--ip', '127.0.0.1',
     '--port', String(workerPort), '--persist-to', join(directory, 'worker'), '--local-protocol', 'https', '--https-key-path', key, '--https-cert-path', cert,
-    '--var', 'EXECUTION_ENABLED:true', '--var', 'NATIVE_VERIFIED:true', '--var', `RUNTIME_TOKEN:${token}`,
+    '--var', `EXECUTION_ENABLED:${!ownerAlphaMode}`, '--var', `NATIVE_VERIFIED:${!ownerAlphaMode}`, '--var', `RUNTIME_TOKEN:${token}`,
     '--var', `TOOL_POLICY_IDS:${JSON.stringify([routinePolicy])}`,
     ...(effectsMode ? ['--var', `ACTION_POLICY_IDS:${JSON.stringify([routinePolicy])}`] : []),
-    '--var', `PROVIDER_CONFIG:${JSON.stringify({ provider: 'fake', ref: { provider: 'fake', id: 'assembly-fixture' } })}`],
+    ...(ownerAlphaMode ? ['--var', `HEHEBOT_OWNER_ALPHA:${JSON.stringify(ownerAlpha)}`, '--var', 'PROVIDER_CONFIG:{}']
+      : ['--var', `PROVIDER_CONFIG:${JSON.stringify({ provider: 'fake', ref: { provider: 'fake', id: 'assembly-fixture' } })}`])],
     { cwd: root, env: { ...process.env, WRANGLER_SEND_METRICS: 'false', WRANGLER_LOG_PATH: join(directory, 'logs') }, stdio: ['ignore', 'pipe', 'pipe'] });
   worker.stdout.on('data', chunk => { workerLogs += chunk; }); worker.stderr.on('data', chunk => { workerLogs += chunk; });
   await wait(() => workerLogs.replace(/\u001b\[[0-9;]*m/g, '').includes(`Ready on https://127.0.0.1:${workerPort}`), 'Worker readiness', 45000);
@@ -148,7 +153,10 @@ try {
     : { schema_version: 1, type: 'message.send', payload: { conversation_id: persona.id, text: 'SERVICE_ASSEMBLY_19_43' } }) })).json();
   assert.equal(queued.status, 'applied');
   const control = new ControlClient({ origin: origin + '/', token, fetchImpl: trustedFetch });
-  await wait(async () => (await control.request('status', {})).phase === 'BOOTING', 'FakeProvider boot');
+  if (ownerAlphaMode) assert.deepEqual(await control.request('status', {}), {
+    phase: 'STOPPED', epoch: 0, execution_enabled: false, owner_alpha: ownerAlpha,
+  });
+  else await wait(async () => (await control.request('status', {})).phase === 'BOOTING', 'FakeProvider boot');
   model = createServer(async (req, res) => {
     try {
       assert.equal(req.url, '/v1/responses');
@@ -184,8 +192,9 @@ try {
       if (report.modelRequests === 1) {
         assert.equal((await service.observe()).initialInference, 'inProgress');
         const initial = (await service.supervisor.operations()).filter(operation => operation.kind === 'inference' &&
-          Date.parse(operation.deadline_at) - Date.parse(operation.started_at) === 300000);
-        assert.equal(initial.length, 1); assert.equal(initial[0].status, 'active');
+          Date.parse(operation.deadline_at) === Math.min(Date.parse(dispatched.claim.deadline_at), Date.parse(operation.started_at) + 300000));
+        // A <=5-minute alpha also caps the independent root-lifetime record here.
+        assert.equal(initial.length, ownerAlphaMode ? 2 : 1); assert.ok(initial.every(op => op.status === 'active'));
         report.initialSilenceBounded = true;
       }
       if (questionsMode && report.modelRequests === 3) {
@@ -251,8 +260,8 @@ try {
             return [row, ...Object.values(row.childObligations ?? {})].some(owner => Object.values(owner.quietPhases ?? {}).some(phase => phase.status === 'inProgress'));
           }, 'post-tool quiet phase');
           const phases = (await service.supervisor.operations()).filter(operation => operation.kind === 'inference' &&
-            operation.status === 'active' && Date.parse(operation.deadline_at) - Date.parse(operation.started_at) === 300000);
-          assert.equal(phases.length, 1); report.postToolSilenceBounded = true;
+            operation.status === 'active' && Date.parse(operation.deadline_at) === Math.min(Date.parse(dispatched.claim.deadline_at), Date.parse(operation.started_at) + 300000));
+          assert.equal(phases.length, ownerAlphaMode ? 2 : 1); report.postToolSilenceBounded = true;
         }
         if (questionsMode) {
           const tool = body.tools.find(tool => tool.name === 'request_user_input' || tool.tools?.some(nested => nested.name === 'request_user_input'));
@@ -380,7 +389,7 @@ try {
     };
     return req;
   };
-  const config = { disposableTest: true, stateDirectory, binary: join(root, '.local/codex-runtime/node_modules/.bin/codex'),
+  const config = { ...(ownerAlphaMode ? { ownerAlpha } : { disposableTest: true }), stateDirectory, binary: join(root, '.local/codex-runtime/node_modules/.bin/codex'),
     ...(questionsMode ? { ownerQuestions: true } : {}),
     ...(restrictedMode ? { restrictedPermissions: true } : {}),
     portalOrigin: origin + '/', runtimeTokenFile, tlsCAFile: cert, installationId: 'service-fixture',
@@ -442,9 +451,16 @@ try {
       return transport;
     },
     prepareNative: home => writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\n${questionsMode ? 'default_mode_request_user_input = true\n' : ''}[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) };
-  service = createSpriteCodexService(config, dependencies);
+  service = ownerAlphaMode ? createCodexService(config, dependencies) : createSpriteCodexService(config, dependencies);
   const dispatched = await service.start(); bound = true;
   assert.equal(dispatched.phase, 'running'); assert.equal(dispatched.claim.run.id, queued.resource_id);
+  if (ownerAlphaMode) {
+    assert.equal(service.adapter.testMode, false);
+    assert.equal(service.adapter.admissionReadiness().productionVerified, false);
+    assert.ok(dispatched.claim.deadline_at <= ownerAlpha.expires_at);
+    assert.equal((await control.request('status', {})).execution_enabled, false);
+    report.ownerAlphaAdmission = true;
+  }
   if (restrictedMode) {
     const { permissions } = await service.journal.get('service');
     assert.match(permissions.name, /^hehebot-restricted-[a-f0-9]{64}$/);
@@ -862,7 +878,8 @@ try {
   }
   assert.equal(operations.filter(operation => operation.status === 'unknown').length, 1);
   assert.ok(operations.every(operation => operation.run_id === queued.resource_id && operation.deadline_at <= dispatched.claim.deadline_at));
-  const timedTools = operations.filter(operation => operation.kind === 'tool' && operation.deadline_at < dispatched.claim.deadline_at);
+  const timedTools = operations.filter(operation => operation.kind === 'tool' &&
+    (ownerAlphaMode ? operation.status === 'settled' : operation.deadline_at < dispatched.claim.deadline_at));
   assert.equal(timedTools.length, expectedToolCalls + Number(childMode));
   assert.ok(timedTools.every(operation => Date.parse(operation.deadline_at) <= Date.parse(operation.started_at) + 120000));
   await assert.rejects(service.supervisor.complete({ attemptId: dispatched.attemptId, nativeRunId: native.nativeRunId, rootSettled: true }), { code: 'NATIVE_SETTLEMENT_INCOMPLETE' });
@@ -927,6 +944,22 @@ try {
     assert.equal(JSON.parse((await browser('eval', 'devicePixelRatio')).stdout), 2);
     await browser('eval', 'new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
     await browser('screenshot', join(root, '.amp/in/artifacts/portal-native-readback.png'));
+    if (ownerAlphaMode) {
+      assert.equal(reread.summary.owner_alpha, true);
+      assert.match((await browser('get', 'text', '#runtime-banner')).stdout, /Supervised owner alpha.*provisional replies only/);
+      await wait(async () => {
+        const state = await (await trustedFetch(`${origin}/v1/state`)).json();
+        if (state.runs.find(run => run.id === queued.resource_id)?.status !== 'cancelling') { await sleep(250); return false; }
+        assert.deepEqual(state.output_previews, final.output_previews); return true;
+      }, 'alpha deadline retains provisional output', 30000);
+      await browser('reload');
+      await browser('wait', '--fn', `document.querySelector('${card} .output-preview')?.textContent.includes('SERVICE_ASSEMBLY_OK')`);
+      await browser('eval', `document.querySelector('${card}').open=true`);
+      assert.match((await browser('get', 'text', card)).stdout, /Cancelling/);
+      assert.equal(report.modelRequests, beforeRequests);
+      await browser('screenshot', join(root, '.amp/in/artifacts/portal-owner-alpha-expired.png'));
+      report.deadlinePreviewRetained = true;
+    }
     await browser('close');
     Object.assign(report, { portalReconnectPreview: true, completedResultObserved: false, unknownCoverage: 1,
       receiptRunId: queued.resource_id, conversationId: persona.id, attemptId: dispatched.attemptId,
@@ -938,7 +971,7 @@ try {
     Object.assign(report, { interrupts: interrupts.length, childInterrupted: true, childHttpClosed: childClosed,
       heartbeatOperations: operations.length, unknownCoverage: 1, rootWorkerStatus: 'running', childWorkerStatus: 'cancelling', sleepDenied: true });
   }
-  assert.deepEqual(taskRequests, ['PUT', 'GET']); assert.equal(report.modelRequests, childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2); assert.deepEqual(errors, []);
+  assert.deepEqual(taskRequests, ownerAlphaMode ? [] : ['PUT', 'GET']); assert.equal(report.modelRequests, childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2); assert.deepEqual(errors, []);
   if (questionsMode) assert.equal(report.nativeAnswerWrites, questionCancelMode ? 0 : 1);
   await service.stop();
   assert.equal((await service.journal.get('service')).phase, 'recovery');

@@ -32,6 +32,7 @@ export class NativeTaskLedger {
   return this.store.run(run.id);
  }
  register(identity:Identity,input:NativeChildReceipt,started=false):Run {
+  requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Owner alpha does not admit native children.');
   return this.store.db.transaction(()=>{
    this.lifecycle.authorizeAttempt(identity,input.parent_run_id,input.parent_attempt);
    const parent=this.store.run(input.parent_run_id);

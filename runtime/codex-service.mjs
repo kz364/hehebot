@@ -15,6 +15,7 @@ import { spawnCodex } from './codex-transport.mjs';
 import { CodexQuestionBinding } from './codex-questions.mjs';
 import { ExecutionSupervisor } from './execution-supervisor.mjs';
 import { SpritesActivityGuard } from './sprites-activity-guard.mjs';
+import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const privatePath = async (path, directory = false) => {
@@ -39,6 +40,7 @@ export function createCodexService(config, dependencies) {
     } } = dependencies;
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
   let ownsIntent = false, stopping, questions, questionNotification, admission;
+  let alpha = null;
   const taskControllers = new Map();
   const assertStarting = () => {
     if (phase !== 'starting') fail('SERVICE_RECOVERY_REQUIRED');
@@ -93,13 +95,23 @@ export function createCodexService(config, dependencies) {
     get journal() { return journal; },
     async start() {
       if (phase !== 'stopped') fail('SERVICE_ALREADY_STARTED');
-      // No environment variable or persisted compatibility flag enables this.
-      if (config.disposableTest !== true) fail('NATIVE_COMPATIBILITY_GATE_BLOCKED');
+      // Supervised local alpha is explicit and separate from test/production gates.
+      if (config.ownerAlpha !== undefined) {
+        alpha = ownerAlphaPolicy(config.ownerAlpha);
+        const remaining = Date.parse(alpha.expires_at) - now();
+        let origin; try { origin = new URL(config.portalOrigin); } catch { fail('INVALID_SERVICE_CONFIGURATION'); }
+        if (config.disposableTest === true || remaining <= 0 || remaining > 300000 ||
+            !['127.0.0.1', '[::1]', 'localhost'].includes(origin.hostname) ||
+            Object.keys(config.personas ?? {}).length !== 1 || !config.personas?.[alpha.persona_id] ||
+            config.ownerQuestions === true || config.restrictedPermissions === false) fail('INVALID_SERVICE_CONFIGURATION');
+        config.restrictedPermissions = true;
+      } else if (config.disposableTest !== true) fail('NATIVE_COMPATIBILITY_GATE_BLOCKED');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'nativeHome'].includes(key)) ||
+        config.nativeHome !== undefined && (!alpha || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean') fail('INVALID_SERVICE_CONFIGURATION');
-      if (!tasks?.hold || !tasks?.release || typeof operations !== 'function' ||
+      if (!alpha && (!tasks?.hold || !tasks?.release) || typeof operations !== 'function' ||
           !isAbsolute(config.binary) || !config.personas || !isAbsolute(config.stateDirectory)) fail('INVALID_SERVICE_CONFIGURATION');
       for (const persona of Object.values(config.personas)) {
         if (!Array.isArray(persona.allowedTools) || new Set(persona.allowedTools).size !== persona.allowedTools.length ||
@@ -117,25 +129,36 @@ export function createCodexService(config, dependencies) {
         journal = new FileJournal(join(config.stateDirectory, 'journal'));
         const bootId = randomUUID();
         assertStarting();
-        if (await journal.putIfAbsent('service', { phase: 'boot_unknown', bootId })) fail('SERVICE_RECOVERY_REQUIRED');
+        if (await journal.putIfAbsent('service', { phase: 'boot_unknown', bootId, ...(alpha ? { ownerAlpha: alpha } : {}) })) fail('SERVICE_RECOVERY_REQUIRED');
         ownsIntent = true;
         assertStarting();
         const status = await starting(() => control.request('status', {}));
-        if (status?.phase !== 'BOOTING' || status.execution_enabled !== true || !Number.isSafeInteger(status.epoch)) fail('CONTROL_NOT_BOOTABLE');
+        if (alpha) {
+          if (status?.phase !== 'STOPPED' || status.epoch !== 0 || status.execution_enabled !== false ||
+              JSON.stringify(ownerAlphaPolicy(status.owner_alpha)) !== JSON.stringify(alpha)) fail('CONTROL_NOT_BOOTABLE');
+        } else if (status?.phase !== 'BOOTING' || status.execution_enabled !== true || !Number.isSafeInteger(status.epoch)) fail('CONTROL_NOT_BOOTABLE');
         const identity = await starting(() => control.request('boot', { boot_id: bootId }));
-        if (identity?.epoch !== status.epoch || identity.boot_id !== bootId) fail('INVALID_BOOT_IDENTITY');
+        if (identity?.epoch !== (alpha ? 1 : status.epoch) || identity.boot_id !== bootId) fail('INVALID_BOOT_IDENTITY');
         await starting(() => journal.update('service', { phase: 'starting', identity }));
-        activity = new SpritesActivityGuard({ tasks, id: `hehe-${identity.epoch}-${bootId}`, now, onUnsafe: recover });
+        // Local supervised execution has no provider hold or automatic sleep.
+        activity = alpha ? { ensure: async () => {}, releaseAfterDrain: async () => fail('OWNER_ALPHA_SLEEP_DENIED') }
+          : new SpritesActivityGuard({ tasks, id: `hehe-${identity.epoch}-${bootId}`, now, onUnsafe: recover });
         await starting(() => activity.ensure());
         await starting(() => checkVersion(config.binary));
-        const home = join(config.stateDirectory, 'codex-home'), workspace = join(config.stateDirectory, 'workspace');
-        await starting(() => mkdir(home, { mode: 0o700 })); await starting(() => mkdir(workspace, { mode: 0o700 }));
+        const home = config.nativeHome ?? join(config.stateDirectory, 'codex-home'), workspace = join(config.stateDirectory, 'workspace');
+        if (config.nativeHome) await starting(() => privatePath(home, true));
+        else if (alpha) {
+          await starting(() => mkdir(home, { mode: 0o700, recursive: true }));
+          await starting(() => privatePath(home, true));
+        } else await starting(() => mkdir(home, { mode: 0o700 }));
+        await starting(() => mkdir(workspace, { mode: 0o700 }));
         await starting(() => prepareNative(home));
         const configOverrides = config.restrictedPermissions ? {
           web_search: 'disabled', 'features.apps': false, 'features.plugins': false,
           'features.tool_suggest': false, 'features.image_generation': false,
           'features.standalone_web_search': false, 'features.token_budget': false,
           'features.request_permissions_tool': false, 'features.exec_permission_approvals': false,
+          ...(alpha ? { 'agents.enabled': false, 'features.multi_agent': false, 'features.multi_agent_v2': false } : {}),
         } : {};
         let permissions;
         if (config.restrictedPermissions) {
@@ -154,8 +177,12 @@ export function createCodexService(config, dependencies) {
           const contents = `default_permissions = ${JSON.stringify(name)}\n${base}\n[permissions.${name}.filesystem]\n` +
             Object.entries(filesystem).map(([path, mode]) => `${JSON.stringify(path)} = ${JSON.stringify(mode)}\n`).join('') +
             `[permissions.${name}.network]\nenabled = false\n`;
-          permissions = { name, filesystem, configSha256: createHash('sha256').update(contents).digest('hex') };
-          await starting(() => writeFile(path, contents, { mode: 0o600 }));
+          permissions = { name, filesystem, configSha256: createHash('sha256').update(config.nativeHome ? base : contents).digest('hex') };
+          if (config.nativeHome) {
+            // Preserve the owner's config and credential-store selection in place.
+            configOverrides.default_permissions = name;
+            configOverrides[`permissions.${name}`] = { filesystem, network: { enabled: false } };
+          } else await starting(() => writeFile(path, contents, { mode: 0o600 }));
           // Journal only the digest/identity, never provider configuration text.
           await starting(() => journal.update('service', { permissions: { name, configSha256: permissions.configSha256 } }));
         }
@@ -199,7 +226,7 @@ export function createCodexService(config, dependencies) {
           const readback = await starting(() => transport.request('config/read', { includeLayers: false, cwd: workspace }));
           const profile = readback?.config?.permissions?.[permissions.name];
           if (Object.entries(configOverrides).some(([key, value]) =>
-            key.split('.').reduce((node, part) => node?.[part], readback?.config) !== value)) fail('RESTRICTED_PROFILE_MISMATCH');
+            !key.startsWith('permissions.') && key.split('.').reduce((node, part) => node?.[part], readback?.config) !== value)) fail('RESTRICTED_PROFILE_MISMATCH');
           if (Object.keys(readback?.config?.mcp_servers ?? {}).length) fail('RESTRICTED_PROFILE_MISMATCH');
           if (readback?.config?.default_permissions !== permissions.name || profile?.network?.enabled !== false ||
               !profile.filesystem || Object.keys(profile.filesystem).some(key =>
@@ -208,7 +235,8 @@ export function createCodexService(config, dependencies) {
               profile.extends != null || profile.workspace_roots != null) fail('RESTRICTED_PROFILE_MISMATCH');
         }
         assertStarting();
-        adapter = new CodexAdapter({ journal, cwd: workspace, rpc: (method, params) => transport.request(method, params), testMode: true });
+        adapter = new CodexAdapter({ journal, cwd: workspace, rpc: (method, params) => transport.request(method, params),
+          testMode: !alpha, ownerAlpha: alpha, now, permissionsProfile: permissions?.name });
         const native = {
           admissionReadiness: () => adapter.admissionReadiness(),
           sleepReadiness: () => adapter.sleepReadiness(),
@@ -216,7 +244,10 @@ export function createCodexService(config, dependencies) {
           submit: async input => {
             supervisor.assertLease();
             if (permissions) {
-              const contents = await readFile(join(home, 'config.toml'));
+              const contents = await readFile(join(home, 'config.toml')).catch(error => {
+                if (config.nativeHome && error.code === 'ENOENT') return '';
+                throw error;
+              });
               if (createHash('sha256').update(contents).digest('hex') !== permissions.configSha256) fail('RESTRICTED_PROFILE_CHANGED');
               supervisor.assertLease();
             }
@@ -224,6 +255,13 @@ export function createCodexService(config, dependencies) {
             if (row?.attemptId !== input.attemptId || !row.claim?.run) fail('CLAIM_IDENTITY_MISMATCH');
             const run = row.claim.run, persona = config.personas[run.persona_id];
             if (!persona) fail('NATIVE_PERSONA_UNMAPPED');
+            if (alpha) {
+              const deadline = Date.parse(row.claim.deadline_at), context = JSON.parse(run.context_json);
+              if (!Number.isFinite(deadline) || now() >= Date.parse(alpha.expires_at) || deadline <= now() ||
+                  deadline > Date.parse(alpha.expires_at) || deadline > now() + alpha.max_task_seconds * 1000 ||
+                  run.persona_id !== alpha.persona_id || run.current_attempt !== 1 || run.routine_id || context.room_id ||
+                  run.role !== 'coordinator' || (await supervisor.bridge.families()).length > alpha.max_runs) fail('OWNER_ALPHA_ADMISSION_DENIED');
+            }
             const grant = { origin: config.portalOrigin, tokenFile: config.runtimeTokenFile,
               ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}),
               identity, runId: run.id, attempt: run.current_attempt, allowedTools: persona.allowedTools };
@@ -240,7 +278,8 @@ export function createCodexService(config, dependencies) {
               ...(permissions ? { enabled_tools: persona.allowedTools } : {}),
             } };
             // Fresh service-owned native home has no inherited global MCP config.
-            return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, testMode: true, mcpServers,
+            return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, testMode: !alpha,
+              ownerAlpha: alpha ? { ...alpha, expires_at: row.claim.deadline_at } : null, now, mcpServers,
               permissionsProfile: permissions?.name }).submit(input);
           },
         };

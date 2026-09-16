@@ -22,6 +22,7 @@ import type { RuntimeCommand } from '../core/runtime-types';
 import type { RoutinePut } from '../core/types';
 import {AgentCommandBoundary} from '../core/agent-commands';
 import {parseWhatsAppReadPolicies,WhatsAppReadAccess} from '../core/whatsapp-access';
+import {parseOwnerAlpha} from '../core/owner-alpha';
 export type TriggerPolicy={routine_id:string;event_types:string[]};
 function stringList(value:string):string[]{const parsed:unknown=JSON.parse(value);if(!Array.isArray(parsed)||!parsed.every(x=>typeof x==='string'))throw new Error('Invalid policy configuration');return parsed;}
 function delegationMap(value:string):Record<string,string[]>{
@@ -44,7 +45,7 @@ export class PersonalControl extends DurableObject<Env> {
    transaction:<T>(fn:()=>T)=>this.ctx.storage.transactionSync(fn)
   };
   this.store=new Store(db);
-  this.core=new ControlCore(this.store,{executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  this.core=new ControlCore(this.store,{ownerAlpha:parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
@@ -122,8 +123,9 @@ export class PersonalControl extends DurableObject<Env> {
  async runtime(input:unknown){return rpcResult(async()=>{
   requireThat(validateRuntime(input),'INVALID_INPUT','Invalid runtime envelope.',422);
   const command=input as RuntimeCommand;
-  if(command.type==='status'){const state=this.lifecycle.get();return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled};}
-  requireThat(this.core.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified.');
+  const alpha=this.core.ownerAlpha.policy;
+  if(command.type==='status'){const state=this.lifecycle.get();return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{})};}
+  requireThat(this.core.options.executionEnabled||alpha&&['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','steer-pending','agent-routines','agent-skill'].includes(command.type),'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified for this operation.');
   if(command.type==='whatsapp-read-authorize')return new WhatsAppReadAccess(this.core,this.lifecycle).authorize(command.payload);
   let result:unknown={ok:true};
   switch(command.type){
@@ -216,7 +218,9 @@ export class PersonalControl extends DurableObject<Env> {
   if(due)times.push(Date.parse(due.next_due_at));
   const retry=this.store.db.all<{due_at:string}>('SELECT due_at FROM retry_queue ORDER BY due_at LIMIT 1')[0];if(retry&&this.core.options.executionEnabled)times.push(Date.parse(retry.due_at));
   const state=this.lifecycle.get();
-  if(this.core.options.executionEnabled&&(!['STOPPED','IDLE_PERMITTED'].includes(state.phase)||this.lifecycle.nextClaimableRun()))times.push(Date.now()+Math.max(delayMs,5000));
+  const productionWatch=this.core.options.executionEnabled&&(!['STOPPED','IDLE_PERMITTED'].includes(state.phase)||this.lifecycle.nextClaimableRun());
+  const alphaWatch=this.core.ownerAlpha.policy&&!['STOPPED','RECOVERY_REQUIRED'].includes(state.phase);
+  if(productionWatch||alphaWatch)times.push(Date.now()+Math.max(delayMs,5000));
   if(times.length)await this.ctx.storage.setAlarm(Math.max(Date.now()+Math.max(100,delayMs),Math.min(...times)));
   else await this.ctx.storage.deleteAlarm();
  }
