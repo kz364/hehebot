@@ -5,6 +5,7 @@ const historyFloors=new Map();
 let recoveryView=null;
 let taskFeed=null;
 let snapshot=null,selected=localStorage.getItem('personal.selected'),events=[],loading=false,lastSignature='',editing=null;
+let selectionVersion=0;
 const names={IDLE_PERMITTED:'Idle — hibernation permitted',STOPPED:'Sleeping',START_REQUESTED:'Waking',BOOTING:'Starting',READY:'Awake',DRAINING:'Finishing up',STOP_COMMITTED:'Stopping',STOPPING:'Stopping',RECOVERY_REQUIRED:'Recovery needed'};
 const statuses={queued:'Queued',claimed:'Starting',running:'Working',finishing:'Saving result',completed:'Completed',waiting:'Waiting',failed:'Failed',cancelling:'Cancelling',cancelled:'Cancelled',recovery_required:'Needs recovery'};
 const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
@@ -42,7 +43,7 @@ async function refresh(force=false){
  }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);if(taskFeed)taskFeed.error=true;if(recoveryView?.kind==='tasks')recoveryView.page=null;render();}
  finally{loading=false;}
 }
-function choose(id){recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
+function choose(id){selectionVersion++;recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
 function recoveryUrl(view){return '/v1/conversations/'+view.conversationId+'/'+(view.kind==='tasks'?'tasks':'recovery')+(view.cursor?'?after='+encodeURIComponent(view.cursor):'');}
 async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=null){
  const view={conversationId:selected,cursor,previous,kind,focusRun,page:null,request:1};recoveryView=view;report('');render();
@@ -492,9 +493,24 @@ function routineSchedulePicker(schedule,defaultZone){
  return {element,reviewed:()=>{const current=read();if(approved!==JSON.stringify(current))throw new Error('Preview the current schedule before saving.');return current;}};
 }
 function editMemory(object){
- const source=object?.body.source_event_id??events.findLast(x=>x.type==='message.user')?.id;
+ const owner=selected,version=selectionVersion,persona=items('persona').find(row=>row.id===owner),original=object?structuredClone(object):null;
+ const source=original?original.body.source_event_id:events.findLast(x=>x.type==='message.user'&&x.conversation_id===owner)?.id;
  if(!source){report('Send a message with the preference first, then save it as memory.');return;}
- openEditor(object?'Edit memory':'Remember a preference',[field('Preference or fact','text',object?.body.text??'','textarea'),selectField('Share with','scope',[['global','All bots'],['persona','This bot']],object?.body.scope.kind??'global')],form=>command('memory.put',{id:object?.id??crypto.randomUUID(),expected_revision:object?.revision??0,scope:{kind:form.get('scope'),id:form.get('scope')==='global'?null:selected},text:form.get('text'),source_event_id:source,expires_at:null,sensitivity:'ordinary'}));
+ const id=original?.id??crypto.randomUUID(),key=crypto.randomUUID(),text=field('Preference or fact','text',original?.body.text??'','textarea'),scope=selectField('Share with','scope',[['global','All bots'],['persona','This bot']],original?.body.scope.kind??'global');
+ text.querySelector('textarea').maxLength=16000;
+ let submitted=null;
+ openEditor(original?'Edit memory':'Remember a preference',[text,scope,node('p',original?`Preserved: ${original.body.sensitivity} sensitivity; expiry ${original.body.expires_at??'none'}; original source. Only text and sharing can change here.`:'New memories use ordinary sensitivity and no expiry. The source is a message in this conversation.','hint'),node('p','A lost reply may still mean the save succeeded. Retry sends the same save; close and refresh before making further changes.','hint')],form=>{
+  const latest=items('memory').find(row=>row.id===id),currentPersona=items('persona').find(row=>row.id===owner);
+  if($('connection').textContent!=='Connected'||!navigator.onLine||selected!==owner||selectionVersion!==version||!persona||!currentPersona||currentPersona.body.archived||currentPersona.revision!==persona.revision||original&&(latest?.revision!==original.revision||latest?.body.scope.kind!==original.body.scope.kind||latest?.body.scope.id!==original.body.scope.id))throw new Error('Memory or bot status is stale, changed, or offline. Close this editor and review the current memory before saving.');
+  if(!submitted){
+   const kind=form.get('scope');
+   if(!['global','persona'].includes(kind))throw new Error('Choose All bots or This bot.');
+   submitted={id,expected_revision:original?.revision??0,scope:{kind,id:kind==='global'?null:owner},text:form.get('text'),source_event_id:source,expires_at:original?.body.expires_at??null,sensitivity:original?.body.sensitivity??'ordinary'};
+   text.querySelector('textarea').readOnly=true;scope.querySelector('select').disabled=true;
+   $('editor-form').querySelector('button[type="submit"]').textContent='Retry same save';
+  }
+  return command('memory.put',submitted,key);
+ });
 }
 $('add-bot').onclick=()=>editBot();$('edit-bot').onclick=()=>editBot(current());$('add-routine').onclick=()=>editRoutine();$('add-memory').onclick=()=>editMemory();
 $('add-room').onclick=()=>{const bots=items('persona').filter(x=>!x.body.archived);const fields=[field('Room name','name'),selectField('Default responder','responder',bots.map(x=>[x.id,x.body.name]),bots[0]?.id)];for(const bot of bots){const l=node('label',undefined,'check');const c=node('input');c.type='checkbox';c.name='members';c.value=bot.id;c.checked=true;l.append(c,document.createTextNode(bot.body.name));fields.push(l);}openEditor('New room',fields,form=>command('room.put',{id:crypto.randomUUID(),expected_revision:0,name:form.get('name'),member_ids:form.getAll('members'),default_responder_id:form.get('responder')}));};
