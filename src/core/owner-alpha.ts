@@ -82,29 +82,76 @@ export function parseHostedOwnerAlpha(value:string|undefined,env:HostedOwnerAlph
  return {policy:parsePolicy(envelope.policy),ownerBindingSha256:envelope.owner_binding_sha256};
 }
 type Custody={policy:OwnerAlphaPolicy;admitted_run_ids:string[]};
+export type OwnerAlphaGeneration={
+ epoch:number;boot_id:string;transition_id:string;policy:OwnerAlphaPolicy&{text_only:TextOnlyProfile};
+ predecessor:{epoch:number;boot_id:string;session_id:string;phase:string;lease_until:string|null};
+ owner_binding_sha256:string;retirement_receipt_sha256:string;activation_command_id:string;activation_event_sequence:number;
+};
 /** Immutable local-session policy; each durable admitted ID consumes one run forever. */
 export class OwnerAlpha {
- constructor(private store:Store,readonly policy:OwnerAlphaPolicy|undefined,private now:()=>string){}
+ constructor(private store:Store,readonly configuredPolicy:OwnerAlphaPolicy|undefined,private now:()=>string){}
+ get policy():OwnerAlphaPolicy|undefined{return this.activeGeneration()?.policy??this.configuredPolicy;}
+ private generations():OwnerAlphaGeneration[]{
+  return this.store.db.all<{key:string;value_json:string}>("SELECT key,value_json FROM runtime_metadata WHERE key GLOB 'owner_alpha_generation:*'").map(row=>{
+   const generation=JSON.parse(row.value_json) as OwnerAlphaGeneration;
+   requireThat(row.key==='owner_alpha_generation:2'&&generation?.epoch===2&&Number.isSafeInteger(generation.activation_event_sequence)&&generation.activation_event_sequence>=0&&
+    generation.predecessor?.epoch===1&&generation.predecessor.phase==='RECOVERY_REQUIRED'&&uuid.test(generation.activation_command_id),
+    'INVALID_CONFIGURATION','Invalid owner-alpha generation record.',503);
+   const command=this.store.db.all<{payload_json:string;type:string;owner_id:string;status:string}>('SELECT payload_json,type,owner_id,status FROM commands WHERE id=?',generation.activation_command_id)[0];
+   requireThat(command?.type==='owner-alpha.activate'&&command.status==='applied'&&!/^(runtime|trigger):/.test(command.owner_id),
+    'INVALID_CONFIGURATION','Owner-alpha activation receipt is missing.',503);
+   requireThat(this.store.db.all("SELECT sequence FROM events WHERE id=? AND type='owner-alpha.activated' AND actor_id=? AND cause_id=? AND sequence=? AND json_extract(payload_json,'$.epoch')=?",
+    generation.activation_command_id,command.owner_id,generation.activation_command_id,generation.activation_event_sequence,generation.epoch).length===1,
+    'INVALID_CONFIGURATION','Owner-alpha admission cutoff differs from its activation event.',503);
+   const envelope=parseOwnerAlphaSuccessor(command.payload_json);
+   requireThat(envelope&&envelope.transition_id===generation.transition_id&&envelope.owner_binding_sha256===generation.owner_binding_sha256&&
+    envelope.retirement_receipt_sha256===generation.retirement_receipt_sha256&&envelope.predecessor.session_id===generation.predecessor.session_id&&
+    envelope.predecessor.boot_id===generation.predecessor.boot_id&&envelope.successor.boot_id===generation.boot_id&&
+    JSON.stringify(envelope.successor.policy)===JSON.stringify(generation.policy),
+    'INVALID_CONFIGURATION','Owner-alpha generation differs from its activation receipt.',503);
+   return generation;
+  });
+ }
+ private generationCustody(generation:OwnerAlphaGeneration):Custody {
+  return {policy:generation.policy,admitted_run_ids:this.store.db.all<{run_id:string}>(
+   'SELECT run_id FROM attempts WHERE epoch=? AND boot_id=? ORDER BY run_id',generation.epoch,generation.boot_id).map(row=>row.run_id)};
+ }
+ activeGeneration():OwnerAlphaGeneration|undefined {
+  const rows=this.generations();if(!rows.length)return undefined;
+  const state=this.store.db.all<{epoch:number;boot_id:string|null}>('SELECT epoch,boot_id FROM lifecycle')[0];
+  const generation=rows.at(-1)!;
+  requireThat(generation.epoch===state.epoch&&generation.boot_id===state.boot_id,'INVALID_CONFIGURATION','Active owner-alpha generation differs from lifecycle.',503);
+  return generation;
+ }
+ generationFor(epoch:number,bootId:string):OwnerAlphaGeneration|undefined{return this.generations().find(g=>g.epoch===epoch&&g.boot_id===bootId);}
  private read():Custody {
   const row=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',key)[0];
   requireThat(row,'INVALID_CONFIGURATION','Owner-alpha custody is missing.',503);
   const saved=JSON.parse(row.value_json) as Custody;
-  requireThat(JSON.stringify(saved.policy)===JSON.stringify(this.policy)&&Array.isArray(saved.admitted_run_ids)&&saved.admitted_run_ids.every(id=>typeof id==='string'&&uuid.test(id))&&new Set(saved.admitted_run_ids).size===saved.admitted_run_ids.length&&saved.admitted_run_ids.length<=this.policy!.max_runs,'INVALID_CONFIGURATION','Owner-alpha custody differs from configuration.',503);
+  requireThat(JSON.stringify(saved.policy)===JSON.stringify(this.configuredPolicy)&&Array.isArray(saved.admitted_run_ids)&&saved.admitted_run_ids.every(id=>typeof id==='string'&&uuid.test(id))&&new Set(saved.admitted_run_ids).size===saved.admitted_run_ids.length&&saved.admitted_run_ids.length<=this.configuredPolicy!.max_runs,'INVALID_CONFIGURATION','Owner-alpha custody differs from configuration.',503);
   return saved;
  }
  initialize():void {
   this.store.db.transaction(()=>{
    const saved=this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',key).length;
    if(saved){
-    const custody=this.read();
+    const custody=this.read(),generations=this.generations();
     const state=this.store.db.all<{epoch:number;phase:string;boot_id:string|null;lease_until:string|null;provider_ref_json:string;provider_operation_id:string|null}>('SELECT epoch,phase,boot_id,lease_until,provider_ref_json,provider_operation_id FROM lifecycle')[0];
     const attempts=this.store.db.all<{run_id:string;attempt:number;epoch:number;boot_id:string}>('SELECT run_id,attempt,epoch,boot_id FROM attempts');
+    const originalBoot=generations[0]?.predecessor.boot_id??(state?.epoch===1?state.boot_id:null);
     requireThat(state&&state.provider_ref_json==='{}'&&state.provider_operation_id===null&&
      (state.epoch===0&&state.phase==='STOPPED'&&state.boot_id===null&&state.lease_until===null&&attempts.length===0||
-      state.epoch===1&&['BOOTING','READY','RECOVERY_REQUIRED'].includes(state.phase)&&typeof state.boot_id==='string'&&uuid.test(state.boot_id))&&
-     custody.admitted_run_ids.every(id=>attempts.some(a=>a.run_id===id))&&attempts.every(a=>this.validAttempt(a.run_id,a.attempt,custody))&&
+      state.epoch>=1&&['BOOTING','READY','RECOVERY_REQUIRED'].includes(state.phase)&&typeof state.boot_id==='string'&&uuid.test(state.boot_id))&&
+     custody.admitted_run_ids.every(id=>attempts.some(a=>a.run_id===id&&a.epoch===1&&a.boot_id===originalBoot))&&attempts.every(a=>{
+      const generation=generations.find(g=>g.epoch===a.epoch&&g.boot_id===a.boot_id),selected=generation?this.generationCustody(generation):(a.epoch===1&&a.boot_id===originalBoot?custody:undefined);
+      return !!selected&&this.validAttempt(a.run_id,a.attempt,selected,a.epoch,a.boot_id,generation?.activation_event_sequence??0);
+     })&&
      this.store.db.all<{run_id:string}>('SELECT run_id FROM native_task_links').every(link=>attempts.some(a=>a.run_id===link.run_id)&&!custody.admitted_run_ids.includes(link.run_id)),
      'INVALID_CONFIGURATION','Owner-alpha attempt custody is inconsistent.',503);
+    requireThat(generations.length<=1&&(generations.length===0?state.epoch<=1:!!this.activeGeneration()),'INVALID_CONFIGURATION','Owner-alpha generation history is inconsistent.',503);
+    for(const generation of generations)requireThat(generation.epoch===2&&uuid.test(generation.boot_id)&&uuid.test(generation.transition_id)&&generation.policy.text_only&&generation.predecessor.epoch===1&&generation.predecessor.session_id===custody.policy.session_id&&
+     this.generationCustody(generation).admitted_run_ids.length<=generation.policy.max_runs&&attempts.filter(a=>a.epoch===generation.epoch).every(a=>this.validAttempt(a.run_id,a.attempt,this.generationCustody(generation),a.epoch,a.boot_id,generation.activation_event_sequence)),
+     'INVALID_CONFIGURATION','Owner-alpha generation custody is inconsistent.',503);
     return;
    }
    if(!this.policy)return;
@@ -116,56 +163,70 @@ export class OwnerAlpha {
    this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',key,JSON.stringify({policy:this.policy,admitted_run_ids:[]}));
   });
  }
- available():boolean {return !!this.policy&&this.now()<this.policy.expires_at&&this.read().admitted_run_ids.length<this.policy.max_runs;}
- directMessage(persona:string,commandId:string|null,routine:string|null,occurrence:string|null,room:string|null):boolean {
-  if(!this.policy||persona!==this.policy.persona_id||!commandId||routine||occurrence||room)return false;
+ available():boolean {
+  if(!this.policy||this.now()>=this.policy.expires_at)return false;
+  const generation=this.activeGeneration(),epoch=generation?.epoch??1;
+  return this.store.db.all<{count:number}>("SELECT COUNT(*) AS count FROM attempts a JOIN runs r ON r.id=a.run_id WHERE a.epoch=? AND r.role='coordinator' AND r.parent_run_id IS NULL",epoch)[0].count<this.policy.max_runs;
+ }
+ private custody():Custody{const generation=this.activeGeneration();return generation?this.generationCustody(generation):this.read();}
+ cutoff():number{return this.activeGeneration()?.activation_event_sequence??0;}
+ summary(){const policy=this.policy;if(!policy)return undefined;const custody=this.custody();return {policy,admittedRuns:custody.admitted_run_ids.length,generation:this.activeGeneration()};}
+ directMessage(persona:string,commandId:string|null,routine:string|null,occurrence:string|null,room:string|null,cutoff=this.cutoff(),expectedPersona=this.policy?.persona_id):boolean {
+  if(!expectedPersona||persona!==expectedPersona||!commandId||routine||occurrence||room)return false;
   const command=this.store.db.all<{type:string;owner_id:string;payload_json:string}>('SELECT type,owner_id,payload_json FROM commands WHERE id=?',commandId)[0];
-  return !!command&&command.type==='message.send'&&!/^(runtime|trigger):/.test(command.owner_id)&&JSON.parse(command.payload_json).conversation_id===persona;
+  const event=this.store.db.all<{sequence:number;actor_id:string}>("SELECT sequence,actor_id FROM events WHERE id=? AND type='message.user'",commandId)[0];
+  return !!command&&command.type==='message.send'&&!/^(runtime|trigger):/.test(command.owner_id)&&!!event&&event.actor_id===command.owner_id&&event.sequence>cutoff&&JSON.parse(command.payload_json).conversation_id===persona;
  }
  eligible(run:Run):boolean {
   return run.role==='coordinator'&&run.current_attempt===0&&this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null);
  }
  admit(run:Run):string {
   requireThat(this.available()&&this.eligible(run),'CAPABILITY_UNAVAILABLE','Owner-alpha admission is closed.');
-  const saved=this.read();saved.admitted_run_ids.push(run.id);
-  this.store.db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=?',JSON.stringify(saved),key);
+  if(!this.activeGeneration()){
+   const saved=this.read();saved.admitted_run_ids.push(run.id);
+   this.store.db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=?',JSON.stringify(saved),key);
+  }
   return new Date(Math.min(Date.parse(this.policy!.expires_at),Date.parse(this.now())+this.policy!.max_task_seconds*1000)).toISOString();
  }
- backgroundRoot(runId:string):boolean {return this.policy?.background_first_root===true&&this.read().admitted_run_ids[0]===runId;}
+ backgroundRoot(runId:string):boolean {return this.policy?.background_first_root===true&&this.custody().admitted_run_ids[0]===runId;}
  propagateCancellation():void {
   if(!this.policy?.background_first_root)return;
-  const custody=this.read(),rootId=custody.admitted_run_ids[0];if(!rootId)return;
+  const custody=this.custody(),rootId=custody.admitted_run_ids[0];if(!rootId)return;
   const root=this.store.run(rootId);
   if(!['cancelling','cancelled','recovery_required'].includes(root.status))return;
   for(const child of this.store.db.all<Run>('SELECT * FROM runs WHERE parent_run_id=?',rootId)){
-   requireThat(this.validAttempt(child.id,1,custody),'STALE_EPOCH','Owner-alpha child custody is inconsistent.');
+   const attempt=this.store.db.all<{epoch:number;boot_id:string}>('SELECT epoch,boot_id FROM attempts WHERE run_id=? AND attempt=1',child.id)[0];
+   requireThat(!!attempt&&this.validAttempt(child.id,1,custody,attempt.epoch,attempt.boot_id),'STALE_EPOCH','Owner-alpha child custody is inconsistent.');
    if(!['claimed','running','finishing','cancelling','recovery_required'].includes(child.status))continue;
    const revoked=['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(root.error_code??'');
    if(['cancelling','recovery_required'].includes(child.status)&&(!revoked||child.error_code===root.error_code))continue;
    this.store.db.exec('UPDATE runs SET status=?,error_code=?,updated_at=? WHERE id=?',child.status==='recovery_required'?'recovery_required':'cancelling',root.error_code??'OWNER_CANCELLED',['cancelling','recovery_required'].includes(child.status)?child.updated_at:this.now(),child.id);
   }
  }
- private validAttempt(runId:string,attempt:number,custody:Custody):boolean {
+ private validAttempt(runId:string,attempt:number,custody:Custody,epoch:number,bootId:string,cutoff=0):boolean {
   const run=this.store.db.all<Run>('SELECT * FROM runs WHERE id=?',runId)[0];
   const row=this.store.db.all<{epoch:number;boot_id:string;deadline_at:string;started_at:string;native_run_ref:string|null;submission_key:string}>('SELECT * FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
-  const state=this.store.db.all<{epoch:number;boot_id:string}>('SELECT epoch,boot_id FROM lifecycle')[0];
-  if(!run||!row||attempt!==1||run.current_attempt!==1||run.persona_id!==this.policy!.persona_id||state.epoch!==1||row.epoch!==1||row.boot_id!==state.boot_id)return false;
+  if(!run||!row||attempt!==1||run.current_attempt!==1||run.persona_id!==custody.policy.persona_id||row.epoch!==epoch||row.boot_id!==bootId)return false;
   const link=this.store.db.all<{parent_run_id:string;parent_attempt:number;native_run_ref:string;native_session_key:string}>('SELECT * FROM native_task_links WHERE run_id=?',runId)[0];
   if(custody.admitted_run_ids.includes(runId))return run.role==='coordinator'&&run.parent_run_id===null&&!link&&row.submission_key===`${runId}:1`&&
-   this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null)&&
-   Number.isFinite(Date.parse(row.started_at))&&Number.isFinite(Date.parse(row.deadline_at))&&row.deadline_at<=this.policy!.expires_at&&Date.parse(row.deadline_at)<=Date.parse(row.started_at)+this.policy!.max_task_seconds*1000;
-  if(!this.policy!.background_first_root||!link||run.role!=='background'||link.parent_run_id!==custody.admitted_run_ids[0]||run.parent_run_id!==link.parent_run_id||link.parent_attempt!==1||!link.native_session_key||!link.native_run_ref||row.native_run_ref!==link.native_run_ref||row.submission_key!==`native:${link.native_run_ref}`)return false;
-  if(!this.validAttempt(link.parent_run_id,1,custody))return false;
+   this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null,cutoff,custody.policy.persona_id)&&
+   Number.isFinite(Date.parse(row.started_at))&&Number.isFinite(Date.parse(row.deadline_at))&&row.deadline_at<=custody.policy.expires_at&&Date.parse(row.deadline_at)<=Date.parse(row.started_at)+custody.policy.max_task_seconds*1000;
+  if(!custody.policy.background_first_root||!link||run.role!=='background'||link.parent_run_id!==custody.admitted_run_ids[0]||run.parent_run_id!==link.parent_run_id||link.parent_attempt!==1||!link.native_session_key||!link.native_run_ref||row.native_run_ref!==link.native_run_ref||row.submission_key!==`native:${link.native_run_ref}`)return false;
+  if(!this.validAttempt(link.parent_run_id,1,custody,epoch,bootId))return false;
   const parent=this.store.run(link.parent_run_id);
   const parentAttempt=this.store.db.all<{deadline_at:string}>('SELECT deadline_at FROM attempts WHERE run_id=? AND attempt=1',parent.id)[0];
   return row.deadline_at===parentAttempt.deadline_at&&run.command_id===parent.command_id&&run.routine_id===parent.routine_id&&run.occurrence_id===null;
  }
  authorize(runId:string,attempt:number):void {
   if(!this.policy)return;
-  requireThat(this.validAttempt(runId,attempt,this.read()),'STALE_EPOCH','Attempt is not owned by this owner-alpha session.');
+  const row=this.store.db.all<{epoch:number;boot_id:string}>('SELECT epoch,boot_id FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
+  const generation=row&&this.generationFor(row.epoch,row.boot_id),custody=generation?this.generationCustody(generation):(row?.epoch===1?this.read():undefined);
+  requireThat(!!custody&&this.validAttempt(runId,attempt,custody,row.epoch,row.boot_id,generation?.activation_event_sequence??0),'STALE_EPOCH','Attempt is not owned by this owner-alpha session.');
  }
  textOnly(runId:string):TextOnlyProfile|undefined {
-  if(!this.policy?.text_only||!this.read().admitted_run_ids.includes(runId))return undefined;
-  return this.policy.text_only;
+  if(!this.configuredPolicy&&!this.generations().length)return undefined;
+  const row=this.store.db.all<{epoch:number;boot_id:string}>('SELECT epoch,boot_id FROM attempts WHERE run_id=? AND attempt=(SELECT current_attempt FROM runs WHERE id=?)',runId,runId)[0];
+  if(!row)return undefined;const generation=this.generationFor(row.epoch,row.boot_id),custody=generation?this.generationCustody(generation):(row.epoch===1?this.read():undefined);
+  return custody?.policy.text_only&&custody.admitted_run_ids.includes(runId)?custody.policy.text_only:undefined;
  }
 }

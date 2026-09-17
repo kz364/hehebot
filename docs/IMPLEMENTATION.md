@@ -4,6 +4,39 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Retained generation core (2026-09-17, local/unpublished): trusted internal
+`LifecycleCore.activateOwnerAlphaSuccessor` can consume a matching preexisting
+synthetic applied command and operator binding. It validates expired recovery
+custody and atomically appends one epoch2 generation/activation event while advancing
+only lifecycle ownership. This first implementation refuses further transitions.
+The original configured policy/custody remain unchanged. Active policy resolves
+through the generation, its command receipt and exact event-sequence cutoff;
+quota derives from retained attempts. Old input cannot become fresh through requeue.
+Claims exclude only the exact retired predecessor from executor capacity, and
+watchdog preserves that predecessor without weakening ordinary lifecycle handling.
+No historical task acquires the new text-only contract.
+
+Runtime `ownerAlphaGeneration` pins epoch/boot/transition before status/boot RPCs
+in a fresh journal, requires matching hosted text-only policy and owner binding,
+and uses only the preselected boot identity. Mismatch refuses before provider hold
+or native launch. Host review corrected mutable generation admission tracking,
+added activation receipt/cutoff reconstruction checks and independent status epoch
+validation, and bounded the initial transition rather than pretending a full
+multi-generation chain was verified. Focused121 backend and54 service tests pass;
+final retention/cutoff checks19 pass. A first combined run exposed `causation_id`
+instead of existing `cause_id`; corrected. Full rerun exits0:1590 backend/464 runtime
+tests,27 Worker HTTP checks plus native/browser/service/build; desktop16 pass. Evidence:
+`.local/alpha-generation-{focused,retention,combined,combined-rerun,desktop}.log`.
+
+This is not a publicly callable activation: command schema/dispatch, pinned operator
+configuration, runtime status descriptor and Worker-wide historical maintenance
+exclusion are still unwired. The internal fixture inserts a synthetic applied
+command; real activation must remain an authenticated idempotent `/v1/commands`
+transaction and derive authority from operator configuration, never browser claims.
+The current core method's applied-command requirement needs adapting to that
+transaction without permitting an unbound command. Process-retirement evidence is
+still unavailable, and none of this establishes provider retirement or live chat.
+
 Successor authority preparation (2026-09-17): `parseOwnerAlphaSuccessor` and
 `assertOwnerAlphaSuccessorBinding` validate a default-absent, one-shot operator
 envelope with exact owner binding, predecessor session/epoch/boot, retirement

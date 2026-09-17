@@ -20,6 +20,15 @@ import { codexTextOnlyProfileSha256, createCodexTextOnlyCompletionReceipt,
   createCodexTextOnlyProfile, verifyCodexTextOnlyProfile } from './codex-text-only.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ownerAlphaGeneration = value => {
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      Object.keys(value).sort().join(',') !== 'boot_id,epoch,transition_id' ||
+      !Number.isSafeInteger(value.epoch) || value.epoch < 2 ||
+      typeof value.boot_id !== 'string' || !UUID.test(value.boot_id) ||
+      typeof value.transition_id !== 'string' || !UUID.test(value.transition_id)) fail('INVALID_SERVICE_CONFIGURATION');
+  return Object.freeze({ epoch: value.epoch, boot_id: value.boot_id, transition_id: value.transition_id });
+};
 const privatePath = async (path, directory = false) => {
   if (!isAbsolute(path)) fail('PRIVATE_PATH_REQUIRED');
   const info = await lstat(path);
@@ -43,6 +52,7 @@ export function createCodexService(config, dependencies) {
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
   let ownsIntent = false, stopping, questions, questionNotification, admission;
   let alpha = null, textOnlyProfile = null, textOnlyVerification = null, textOnlyCatalogContent = null, commandedConfigContent = null;
+  let alphaGeneration = null;
   let verifyTextOnlyCurrent;
   const hosted = Object.hasOwn(config, 'hostedOwnerBindingSha256');
   const taskControllers = new Map();
@@ -153,9 +163,13 @@ export function createCodexService(config, dependencies) {
             config.ownerQuestions === true || config.restrictedPermissions === false) fail('INVALID_SERVICE_CONFIGURATION');
         config.restrictedPermissions = true;
       } else if (config.disposableTest !== true) fail('NATIVE_COMPATIBILITY_GATE_BLOCKED');
+      if (config.ownerAlphaGeneration !== undefined) {
+        alphaGeneration = ownerAlphaGeneration(config.ownerAlphaGeneration);
+        if (!hosted || !alpha?.text_only || !textOnlyProfile) fail('INVALID_SERVICE_CONFIGURATION');
+      }
       if (config.textOnlyProfile !== undefined && !alpha?.text_only) fail('INVALID_SERVICE_CONFIGURATION');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile'].includes(key)) ||
         config.nativeHome !== undefined && (!alpha || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean') fail('INVALID_SERVICE_CONFIGURATION');
@@ -183,9 +197,10 @@ export function createCodexService(config, dependencies) {
         const configuredControl = new ControlClient({ origin: config.portalOrigin, token, fetchImpl, ...access });
         control = dependencies.control ?? configuredControl;
         journal = new FileJournal(join(config.stateDirectory, 'journal'));
-        const bootId = randomUUID();
+        const bootId = alphaGeneration?.boot_id ?? randomUUID();
         assertStarting();
         if (await journal.putIfAbsent('service', { phase: 'boot_unknown', bootId, ...(alpha ? { ownerAlpha: alpha } : {}),
+          ...(alphaGeneration ? { ownerAlphaGeneration: alphaGeneration } : {}),
           ...(hosted ? { hostedOwner: { bindingSha256: config.hostedOwnerBindingSha256,
             origin: new URL(config.portalOrigin).origin } } : {}) })) fail('SERVICE_RECOVERY_REQUIRED');
         ownsIntent = true;
@@ -193,12 +208,17 @@ export function createCodexService(config, dependencies) {
         const status = await starting(() => control.request('status', {}));
         if (hosted && status?.owner_binding_sha256 !== config.hostedOwnerBindingSha256) fail('OWNER_BINDING_MISMATCH');
         if (hosted ? status?.owner_alpha_hosted !== true : Object.hasOwn(status ?? {}, 'owner_alpha_hosted')) fail('CONTROL_NOT_BOOTABLE');
-        if (alpha) {
+        if (alphaGeneration) {
+          if (status?.phase !== 'BOOTING' || status.epoch !== alphaGeneration.epoch || status.execution_enabled !== false ||
+              JSON.stringify(ownerAlphaPolicy(status.owner_alpha)) !== JSON.stringify(alpha) ||
+              JSON.stringify(ownerAlphaGeneration(status.owner_alpha_generation)) !== JSON.stringify(alphaGeneration)) fail('CONTROL_NOT_BOOTABLE');
+        } else if (Object.hasOwn(status ?? {}, 'owner_alpha_generation')) fail('CONTROL_NOT_BOOTABLE');
+        else if (alpha) {
           if (status?.phase !== 'STOPPED' || status.epoch !== 0 || status.execution_enabled !== false ||
               JSON.stringify(ownerAlphaPolicy(status.owner_alpha)) !== JSON.stringify(alpha)) fail('CONTROL_NOT_BOOTABLE');
         } else if (status?.phase !== 'BOOTING' || status.execution_enabled !== true || !Number.isSafeInteger(status.epoch)) fail('CONTROL_NOT_BOOTABLE');
         const identity = await starting(() => control.request('boot', { boot_id: bootId }));
-        if (identity?.epoch !== (alpha ? 1 : status.epoch) || identity.boot_id !== bootId) fail('INVALID_BOOT_IDENTITY');
+        if (identity?.epoch !== (alphaGeneration?.epoch ?? (alpha ? 1 : status.epoch)) || identity.boot_id !== bootId) fail('INVALID_BOOT_IDENTITY');
         await starting(() => journal.update('service', { phase: 'starting', identity }));
         // Only local supervised execution has no provider hold. Hosted alpha
         // retains the provider Task on stop/uncertainty; it cannot prove sleep.

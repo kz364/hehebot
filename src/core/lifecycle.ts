@@ -6,6 +6,7 @@ import type { ContextSnapshot, Operation, Run } from './types';
 import type { RuntimeProvider, RuntimeRef, RuntimeObservation } from '../providers';
 import {createHash} from 'node:crypto';
 import type {TextOnlyReceipt} from './runtime-types';
+import {assertOwnerAlphaSuccessorBinding,parseOwnerAlphaSuccessor,type OwnerAlphaSuccessor,type OwnerAlphaSuccessorBinding,type OwnerAlphaGeneration} from './owner-alpha';
 export type Phase='STOPPED'|'START_REQUESTED'|'BOOTING'|'READY'|'DRAINING'|'STOP_COMMITTED'|'STOPPING'|'RECOVERY_REQUIRED'|'IDLE_PERMITTED';
 export type Lifecycle={singleton:number;provider_ref_json:string;boot_id:string|null;epoch:number;phase:Phase;desired_state:'RUN'|'STOP';lease_until:string|null;last_heartbeat:string|null;queue_sequence:number;stop_token:string|null;provider_operation_id:string|null;wake_after_stop:number};
 export type Identity={epoch:number;boot_id:string};
@@ -22,6 +23,35 @@ export class LifecycleCore {
  constructor(public store:Store,public core:ControlCore,private options:{idleMode?:boolean}={}){}
  get():Lifecycle{return this.store.db.all<Lifecycle>('SELECT * FROM lifecycle WHERE singleton=1')[0];}
  initialize(ref:RuntimeRef|Record<string,never>):void{this.store.db.exec("INSERT OR IGNORE INTO lifecycle(singleton,provider_ref_json,epoch,phase,desired_state,queue_sequence,wake_after_stop) VALUES(1,?,0,'STOPPED','STOP',0,0)",JSON.stringify(ref));this.core.ownerAlpha.initialize();}
+ activateOwnerAlphaSuccessor(envelope:OwnerAlphaSuccessor,binding:OwnerAlphaSuccessorBinding,ownerId:string,ownerCommandId:string):{owner_alpha_generation:{epoch:number;boot_id:string;transition_id:string}} {
+  return this.store.db.transaction(()=>{
+   envelope=parseOwnerAlphaSuccessor(JSON.stringify(envelope))!;
+   assertOwnerAlphaSuccessorBinding(envelope,binding);
+   this.core.ownerAlpha.initialize();
+   requireThat(!this.core.options.executionEnabled&&envelope.predecessor.epoch===1&&!this.core.ownerAlpha.activeGeneration(),'CAPABILITY_UNAVAILABLE','Only the initial retained alpha generation can transition.');
+   const now=this.core.now(),state=this.get(),command=this.store.db.all<{owner_id:string;type:string;payload_json:string;status:string}>('SELECT owner_id,type,payload_json,status FROM commands WHERE id=?',ownerCommandId)[0];
+   requireThat(!!command&&command.owner_id===ownerId&&!/^(runtime|trigger):/.test(ownerId)&&command.type==='owner-alpha.activate'&&command.status==='applied'&&command.payload_json===JSON.stringify(envelope),'FORBIDDEN','Owner-alpha activation command does not match the trusted envelope.',403);
+   requireThat(state.phase==='RECOVERY_REQUIRED'&&state.epoch===envelope.predecessor.epoch&&state.boot_id===envelope.predecessor.boot_id&&state.provider_ref_json==='{}'&&state.provider_operation_id===null,
+    'STALE_EPOCH','Owner-alpha predecessor lifecycle does not match the retired generation.');
+   requireThat(this.core.ownerAlpha.policy?.session_id===envelope.predecessor.session_id&&this.core.ownerAlpha.policy.expires_at<=now&&state.lease_until!==null&&state.lease_until<=now,
+    'CAPABILITY_UNAVAILABLE','Owner-alpha predecessor policy and lease must be expired.');
+   requireThat(!this.store.db.all('SELECT id FROM controller_operations WHERE status IN (\'pending\',\'submitted\',\'unknown\') LIMIT 1').length,'RESOURCE_BUSY','A controller operation is still pending.');
+   requireThat(envelope.successor.policy.expires_at>now&&Date.parse(envelope.successor.policy.expires_at)<=Date.parse(now)+300000&&
+    !this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',`owner_alpha_generation:${state.epoch+1}`).length&&
+    !this.store.db.all("SELECT key FROM runtime_metadata WHERE key GLOB 'owner_alpha_generation:*' AND (json_extract(value_json,'$.transition_id')=? OR json_extract(value_json,'$.boot_id')=? OR json_extract(value_json,'$.policy.session_id')=?) LIMIT 1",envelope.transition_id,envelope.successor.boot_id,envelope.successor.policy.session_id).length&&
+    !this.store.db.all('SELECT run_id FROM attempts WHERE boot_id=? LIMIT 1',envelope.successor.boot_id).length&&
+    !this.store.db.all('SELECT id FROM commands WHERE id=? AND id<>?',envelope.transition_id,ownerCommandId).length,'INVALID_CONFIGURATION','Successor identities or expiry are not fresh.',503);
+   const persona=this.store.get<{archived:boolean}>(envelope.successor.policy.persona_id,'persona');requireThat(!persona.body.archived,'CAPABILITY_UNAVAILABLE','This bot is archived.');
+   const epoch=state.epoch+1,lease=new Date(Math.min(Date.parse(envelope.successor.policy.expires_at),Date.parse(now)+90000)).toISOString();
+   const cutoff=this.store.event(ownerCommandId,null,'owner-alpha.activated',ownerId,ownerCommandId,{epoch},now);
+   const generation:OwnerAlphaGeneration={epoch,boot_id:envelope.successor.boot_id,transition_id:envelope.transition_id,policy:envelope.successor.policy,
+    predecessor:{epoch:state.epoch,boot_id:state.boot_id!,session_id:envelope.predecessor.session_id,phase:state.phase,lease_until:state.lease_until},owner_binding_sha256:envelope.owner_binding_sha256,
+    retirement_receipt_sha256:envelope.retirement_receipt_sha256,activation_command_id:ownerCommandId,activation_event_sequence:cutoff};
+   this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',`owner_alpha_generation:${epoch}`,JSON.stringify(generation));
+   this.store.db.exec("UPDATE lifecycle SET epoch=?,boot_id=?,phase='BOOTING',desired_state='RUN',lease_until=?,last_heartbeat=NULL,stop_token=NULL,wake_after_stop=0 WHERE singleton=1",epoch,envelope.successor.boot_id,lease);
+   return {owner_alpha_generation:{epoch,boot_id:envelope.successor.boot_id,transition_id:envelope.transition_id}};
+  });
+ }
  private active():boolean{
   const budget=this.core.budget.admissionPredicate();
   // Expiry and answer handoff do not settle the native request. Even stale
@@ -38,8 +68,8 @@ export class LifecycleCore {
    const alpha=this.core.ownerAlpha.policy;
    return this.store.db.all<Run>(`SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) AND (${nativeDescendantsSettledSql}) ${questions.length?`AND r.id NOT IN (${questions.map(()=>'?').join(',')})`:''}
     AND (r.current_attempt>0 OR json_type(r.context_json,'$.skill_invocation') IS NULL OR r.created_at>?)
-    ${alpha?`AND r.current_attempt=0 AND r.persona_id=? AND r.routine_id IS NULL AND r.occurrence_id IS NULL AND json_extract(r.context_json,'$.room_id') IS NULL AND c.type='message.send' AND c.owner_id NOT GLOB 'runtime:*' AND c.owner_id NOT GLOB 'trigger:*' AND json_extract(c.payload_json,'$.conversation_id')=r.persona_id`:''}
-    ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings,...questions,skillCutoff,...(alpha?[alpha.persona_id]:[]))[0];
+    ${alpha?`AND r.current_attempt=0 AND r.persona_id=? AND r.routine_id IS NULL AND r.occurrence_id IS NULL AND json_extract(r.context_json,'$.room_id') IS NULL AND c.type='message.send' AND c.owner_id NOT GLOB 'runtime:*' AND c.owner_id NOT GLOB 'trigger:*' AND json_extract(c.payload_json,'$.conversation_id')=r.persona_id AND EXISTS(SELECT 1 FROM events ev WHERE ev.id=r.command_id AND ev.type='message.user' AND ev.actor_id=c.owner_id AND ev.sequence>?)`:''}
+    ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings,...questions,skillCutoff,...(alpha?[alpha.persona_id,this.core.ownerAlpha.cutoff()]:[]))[0];
   });
  }
  private touch():void{this.store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('last_activity',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(this.core.now()));}
@@ -68,7 +98,8 @@ export class LifecycleCore {
    requireThat(state.lease_until!==null&&state.lease_until>this.core.now(),'STALE_EPOCH','The expected boot window expired.');
    requireThat(!state.boot_id||state.boot_id===bootId,'STALE_EPOCH','Another boot already owns this epoch.');
    requireThat(/^[0-9a-f-]{36}$/i.test(bootId),'INVALID_INPUT','Invalid boot identity.',422);
-   this.store.db.exec('UPDATE lifecycle SET boot_id=?,lease_until=?,last_heartbeat=? WHERE singleton=1',bootId,new Date(this.core.options.now().getTime()+90000).toISOString(),this.core.now());
+   const generation=this.core.ownerAlpha.activeGeneration();
+   this.store.db.exec('UPDATE lifecycle SET boot_id=?,lease_until=?,last_heartbeat=? WHERE singleton=1',bootId,new Date(generation?Math.min(Date.parse(generation.policy.expires_at),this.core.options.now().getTime()+90000):this.core.options.now().getTime()+90000).toISOString(),this.core.now());
    return {epoch:state.epoch,boot_id:bootId};
   });
  }
@@ -104,6 +135,7 @@ export class LifecycleCore {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled||this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
+   const retired=this.core.ownerAlpha.activeGeneration()?.predecessor;
    // Root inference release is not family settlement. Uncertain roots block;
    // provider-confirmed process termination retains the existing recovery path.
    if(this.store.db.all(`SELECT r.id FROM runs r WHERE r.role='coordinator' AND r.status IN ('claimed','running','finishing','cancelling','recovery_required')
@@ -111,16 +143,16 @@ export class LifecycleCore {
     SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?
     AND json_extract(a.coordinator_release_json,'$.native_ref')=a.native_run_ref
     AND json_extract(a.coordinator_release_json,'$.outcome') IN ('completed','failed','interrupted')
-   ) LIMIT 1`,identity.epoch,identity.boot_id).length)return null;
+   ) ${retired?'AND NOT EXISTS(SELECT 1 FROM attempts retired_attempt WHERE retired_attempt.run_id=r.id AND retired_attempt.attempt=r.current_attempt AND retired_attempt.epoch=? AND retired_attempt.boot_id=?)':''} LIMIT 1`,identity.epoch,identity.boot_id,...(retired?[retired.epoch,retired.boot_id]:[])).length)return null;
    // Match the runtime's bounded family registry without evicting old custody.
-   const unresolved=this.store.db.all<{count:number}>(`SELECT COUNT(*) AS count FROM runs r WHERE r.role='coordinator' AND r.current_attempt>0 AND (
+   const unresolved=this.store.db.all<{count:number}>(`SELECT COUNT(*) AS count FROM runs r WHERE r.role='coordinator' AND r.current_attempt>0 AND ${retired?'NOT EXISTS(SELECT 1 FROM attempts retired_attempt WHERE retired_attempt.run_id=r.id AND retired_attempt.attempt=r.current_attempt AND retired_attempt.epoch=? AND retired_attempt.boot_id=?) AND ':''}(
     r.status IN ('claimed','running','finishing','cancelling','recovery_required')
     OR EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.status IN ('claimed','running'))
     OR EXISTS(SELECT 1 FROM operations o WHERE o.run_id=r.id AND o.status!='settled')
     OR EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=r.id)
     OR EXISTS(SELECT 1 FROM effects e WHERE e.run_id=r.id AND e.status IN ('intent','dispatched','outcome_unknown'))
     OR NOT (${nativeDescendantsSettledSql})
-   )`)[0].count;
+   )`,...(retired?[retired.epoch,retired.boot_id]:[]))[0].count;
    if(unresolved>=32)return null;
    const run=this.nextClaimableRun();if(!run)return null;
    const prior=JSON.parse(run.context_json) as ContextSnapshot;
@@ -286,11 +318,13 @@ export class LifecycleCore {
   this.store.db.transaction(()=>{
    const now=this.core.now(),state=this.get();
    this.core.ownerAlpha.propagateCancellation();
-   const overdue=this.store.db.all<{run_id:string}>("SELECT run_id FROM attempts WHERE status IN ('claimed','running') AND deadline_at<=?",now);
-   const ops=this.store.db.all<{run_id:string}>("SELECT DISTINCT run_id FROM operations WHERE status='active' AND deadline_at<=?",now);
+   const retired=this.core.ownerAlpha.activeGeneration()?.predecessor;
+   const generationFence=retired?' AND NOT (epoch=? AND boot_id=?)':'';
+   const overdue=this.store.db.all<{run_id:string}>(`SELECT run_id FROM attempts WHERE status IN ('claimed','running') AND deadline_at<=?${generationFence}`,now,...(retired?[retired.epoch,retired.boot_id]:[]));
+   const ops=this.store.db.all<{run_id:string}>(`SELECT DISTINCT o.run_id FROM operations o JOIN attempts a ON a.run_id=o.run_id AND a.attempt=o.attempt WHERE o.status='active' AND o.deadline_at<=?${retired?' AND NOT (a.epoch=? AND a.boot_id=?)':''}`,now,...(retired?[retired.epoch,retired.boot_id]:[]));
    for(const id of new Set([...overdue,...ops].map(x=>x.run_id)))this.store.db.exec("UPDATE runs SET status='cancelling',error_code='DEADLINE_EXCEEDED',updated_at=? WHERE id=? AND status IN ('claimed','running','finishing')",now,id);
    const cancelledBefore=new Date(this.core.options.now().getTime()-30000).toISOString();
-   const unsettled=this.store.db.all<Run>("SELECT * FROM runs WHERE status='cancelling' AND updated_at<=?",cancelledBefore);
+   const unsettled=this.store.db.all<Run>(`SELECT r.* FROM runs r WHERE r.status='cancelling' AND r.updated_at<=? ${retired?'AND NOT EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?)':''}`,cancelledBefore,...(retired?[retired.epoch,retired.boot_id]:[]));
    if(unsettled.length){
     for(const run of unsettled)this.store.db.exec("UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'CANCEL_UNCONFIRMED' END,updated_at=? WHERE id=?",now,run.id);
     // An unconfirmed task cancellation cannot terminate unrelated native work.
@@ -298,8 +332,8 @@ export class LifecycleCore {
    }
    if(state.lease_until&&state.lease_until<=now&&['READY','DRAINING','BOOTING','START_REQUESTED'].includes(state.phase)){
     this.store.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',desired_state='STOP' WHERE singleton=1");
-    this.store.db.exec("UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'STALE_EPOCH' END,updated_at=? WHERE status IN ('claimed','running','finishing','cancelling')",now);
-    this.store.db.exec("UPDATE effects SET status='outcome_unknown',updated_at=? WHERE status IN ('intent','dispatched')",now);
+    this.store.db.exec(`UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'STALE_EPOCH' END,updated_at=? WHERE status IN ('claimed','running','finishing','cancelling') ${retired?'AND NOT EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=runs.id AND a.attempt=runs.current_attempt AND a.epoch=? AND a.boot_id=?)':''}`,now,...(retired?[retired.epoch,retired.boot_id]:[]));
+    this.store.db.exec(`UPDATE effects SET status='outcome_unknown',updated_at=? WHERE status IN ('intent','dispatched') ${retired?'AND NOT EXISTS(SELECT 1 FROM runs r JOIN attempts a ON a.run_id=r.id AND a.attempt=r.current_attempt WHERE r.id=effects.run_id AND a.epoch=? AND a.boot_id=?)':''}`,now,...(retired?[retired.epoch,retired.boot_id]:[]));
    }
   });
  }

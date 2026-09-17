@@ -4,20 +4,30 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
-Newest stage: non-wired successor envelope parser/binding checks are implemented
-in src/core/owner-alpha.ts with tests/owner-alpha-successor.test.ts. Focused76
-successor/alpha/session-view tests and typecheck pass; evidence
-.local/alpha-successor-contract.log. This is after the full verification below.
-No activation/config/environment/command/DB mutation surface exists yet. Reuse its
-types for operator-pinned one-shot authority; do not add a signing-key system.
-Next stage: immutable runtime_metadata generations bound to existing attempt
-epoch/boot, original configured policy preserved, active-policy getter and exact
-preselected successor boot. Explicit owner activation consumes only matching
-operator grant and trusted retirement proof; event-sequence cutoff excludes all
-old inputs. Avoid beforeRequest reconciliation during activation and scope later
-watchdog/pruning/budget maintenance so historical custody does not change. Full
-transition remains unimplemented and live retirement evidence remains unavailable.
-No active workers or checks. Continuation is enabled; no new approval is needed.
+Newest stage implements core-only initial epoch1→2 activation and runtime launch
+pinning. Core preserves original configured policy/custody, appends immutable
+generation/event, derives quota from attempts, verifies activation receipt/cutoff,
+and scopes claim/watchdog to exclude the exact retired predecessor. Further
+transitions refuse. Runtime optional ownerAlphaGeneration is exact
+{epoch,boot_id,transition_id}, hosted text-only only, persisted before RPCs and
+matched to status.owner_alpha_generation plus independent status.epoch. Both workers
+returned; host fixed mutable-generation quota and metadata/status checks. Focused
+121 backend/54 service/typecheck pass, final retention19 pass. Combined rerun
+exits0:1590 backend/464 runtime,27 Worker HTTP checks plus native/browser/service/
+build; desktop16 pass. First run caught a SQL column typo (causation_id→cause_id),
+fixed before rerun. Logs .local/alpha-generation-{focused,retention,combined-rerun,desktop}.log.
+No active workers/checks remain.
+
+Next: wire default-absent operator grant/config, explicit authenticated idempotent
+owner command, generation status descriptor and Worker maintenance exclusion.
+Current core method takes a synthetic already-applied command with full envelope;
+real dispatch must bind only operator authority and fit accept()'s atomic
+accepted→applied transaction, not mark a command applied prematurely. Generation
+reconstruction reads that retained receipt/event, so do not prune them. Avoid
+beforeRequest reconciliation for activation and suspend/scope later historical
+pruning/budget/question/preview maintenance, not merely watchdog. No public command
+or environment is wired yet. Live retirement evidence remains unavailable. No
+live calls/deployment/spend. Continuation enabled; no new approval needed.
 
 Fresh text-only completion is now integrated locally across profile receipt,
 service, coverage, bridge and backend. Exact profile admission is persisted before

@@ -539,14 +539,10 @@ export class ControlCore {
   const steering=new TaskSteering(this.store,()=>now);
   const previews=new OutputPreviews(this.store,()=>now);
   const questions=this.questions.list();
-  const policy=this.ownerAlpha.policy;
+  const alpha=this.ownerAlpha.summary(),policy=alpha?.policy;
   let alphaSummary:{owner_alpha?:true;owner_alpha_session?:{persona_id:string;expires_at:string;max_runs:number;admitted_runs:number;max_task_seconds:number}}={};
   if(policy){
-   const row=this.store.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key='owner_alpha'")[0];
-   requireThat(row,'INVALID_CONFIGURATION','Owner-alpha custody is missing.',503);
-   const custody=JSON.parse(row.value_json);
-   requireThat(JSON.stringify(custody.policy)===JSON.stringify(policy)&&Array.isArray(custody.admitted_run_ids),'INVALID_CONFIGURATION','Owner-alpha custody differs from configuration.',503);
-   alphaSummary={owner_alpha:true,owner_alpha_session:{persona_id:policy.persona_id,expires_at:policy.expires_at,max_runs:policy.max_runs,admitted_runs:custody.admitted_run_ids.length,max_task_seconds:policy.max_task_seconds}};
+   alphaSummary={owner_alpha:true,owner_alpha_session:{persona_id:policy.persona_id,expires_at:policy.expires_at,max_runs:policy.max_runs,admitted_runs:alpha.admittedRuns,max_task_seconds:policy.max_task_seconds}};
   }
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
    settings:{timezone:'Asia/Jakarta'},

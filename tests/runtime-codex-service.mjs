@@ -446,6 +446,90 @@ async function hostedFixture(t) {
   return { ...f, config, dependencies, bindingSha256, ownerAlpha, accessClientIdFile, accessClientSecretFile };
 }
 
+async function successorFixture(t) {
+  const f = await hostedFixture(t), catalogPath = join(f.directory, 'successor-catalog.json');
+  const profileInput = { codexVersion: '0.154.0', model: 'fixture-model', catalogPath,
+    modelCatalog: { models: [{ slug: 'fixture-model', tool_mode: 'direct', experimental_supported_tools: [] }] },
+    catalogValidation: 'synthetic-fixture', syntheticFixture: true };
+  const profile = createCodexTextOnlyProfile(profileInput);
+  await writeFile(catalogPath, JSON.stringify(profile.modelCatalog), { mode: 0o600 });
+  f.ownerAlpha.text_only = { profile_version: profile.version, profile_sha256: codexTextOnlyProfileSha256(profile) };
+  f.config.personas[f.ownerAlpha.persona_id].allowedTools = [];
+  f.config.textOnlyProfile = profileInput;
+  f.config.ownerAlphaGeneration = { epoch: 2, boot_id: '22222222-2222-4222-8222-222222222219',
+    transition_id: '33333333-3333-4333-8333-333333333319' };
+  const rpc = f.transport.request;
+  f.transport.request = async (method, params) => {
+    const reply = await rpc(method, params);
+    if (method === 'config/read') Object.assign(reply.config, { model: profile.model, model_catalog_json: catalogPath,
+      mcp_servers: {}, features: Object.fromEntries(CODEX_TEXT_ONLY_FEATURES.map(key => [key, false])) });
+    return reply;
+  };
+  const request = f.dependencies.control.request;
+  f.dependencies.control.request = async (type, payload) => {
+    if (type === 'status') return { epoch: f.config.ownerAlphaGeneration.epoch, phase: 'BOOTING', execution_enabled: false,
+      owner_alpha: f.ownerAlpha, owner_alpha_generation: f.config.ownerAlphaGeneration,
+      owner_binding_sha256: f.bindingSha256, owner_alpha_hosted: true };
+    if (type === 'boot') return { epoch: f.config.ownerAlphaGeneration.epoch, boot_id: payload.boot_id };
+    if (type === 'claim') return { text_only: f.ownerAlpha.text_only,
+      submission_key: '12345678-1234-4234-8234-123456789abc:1',
+      deadline_at: new Date(f.dependencies.now() + 179000).toISOString(), run: {
+        id: '12345678-1234-4234-8234-123456789abc', current_attempt: 1, persona_id: f.ownerAlpha.persona_id,
+        role: 'coordinator', context_json: '{}', updated_at: new Date(f.dependencies.now()).toISOString() } };
+    const result = await request(type, payload);
+    return result;
+  };
+  return f;
+}
+
+test('matching hosted text-only successor pins committed generation and reaches native startup', async t => {
+  const f = await successorFixture(t), service = createCodexService(f.config, f.dependencies);
+  await service.start();
+  const intent = await service.journal.get('service');
+  assert.deepEqual(intent.ownerAlphaGeneration, f.config.ownerAlphaGeneration);
+  assert.equal(intent.bootId, f.config.ownerAlphaGeneration.boot_id);
+  assert.deepEqual(intent.identity, { epoch: 2, boot_id: f.config.ownerAlphaGeneration.boot_id });
+  assert.equal(f.calls.filter(call => call === 'hold').length, 1);
+  assert.equal(f.calls.filter(call => call === 'launch').length, 1);
+  assert.equal(f.calls.filter(call => call === 'initialize').length, 1);
+  await service.stop();
+});
+
+for (const mismatch of ['epoch', 'lifecycle-epoch', 'boot', 'transition', 'policy']) test(`hosted successor refuses mismatched ${mismatch} before hold or native launch`, async t => {
+  const f = await successorFixture(t), request = f.dependencies.control.request;
+  f.dependencies.control.request = async (type, payload) => {
+    const status = await request(type, payload);
+    if (type !== 'status') return status;
+    if (mismatch === 'policy') status.owner_alpha = { ...status.owner_alpha, max_runs: 2 };
+    else if (mismatch === 'lifecycle-epoch') status.epoch = 3;
+    else status.owner_alpha_generation = { ...status.owner_alpha_generation,
+      ...(mismatch === 'epoch' ? { epoch: 3 } : {}),
+      ...(mismatch === 'boot' ? { boot_id: '44444444-4444-4444-8444-444444444419' } : {}),
+      ...(mismatch === 'transition' ? { transition_id: '55555555-5555-4555-8555-555555555519' } : {}) };
+    return status;
+  };
+  const configured = structuredClone(f.config.ownerAlphaGeneration);
+  const service = createCodexService(f.config, f.dependencies);
+  await assert.rejects(service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  assert.equal(f.calls.includes('boot'), false);
+  assert.equal(f.calls.includes('hold'), false);
+  assert.equal(f.calls.includes('launch'), false);
+  assert.deepEqual((await service.journal.get('service')).ownerAlphaGeneration, configured);
+});
+
+test('fresh hosted alpha rejects an unexpected successor descriptor without loosening epoch zero', async t => {
+  const f = await hostedFixture(t), request = f.dependencies.control.request;
+  f.dependencies.control.request = async (type, payload) => {
+    const status = await request(type, payload);
+    if (type === 'status') status.owner_alpha_generation = { epoch: 2,
+      boot_id: '22222222-2222-4222-8222-222222222219', transition_id: '33333333-3333-4333-8333-333333333319' };
+    return status;
+  };
+  const service = createCodexService(f.config, f.dependencies);
+  await assert.rejects(service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  assert.equal(f.calls.includes('boot'), false); assert.equal(f.calls.includes('hold'), false);
+});
+
 for (const corruption of [null, 'catalog', 'output']) test(`text-only service completes with settled coverage or retains uncertainty: ${corruption}`, async t => {
   const f = await hostedFixture(t), catalogPath = join(f.directory, 'catalog.json');
   const profileInput = { codexVersion: '0.154.0', model: 'fixture-model', catalogPath,
