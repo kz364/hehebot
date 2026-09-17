@@ -12,6 +12,46 @@ SHA256-pinned tarballs, then deletes the installation. No lifecycle scripts run;
 in particular neither upstream `patch-package` nor browser-download scripts run.
 The `.npmrc` is additional protection, not permission to run other scripts.
 
+## Optional local preparation, without enabling
+
+From the repository root, explicitly choose a **new** directory under an existing
+private parent, preferably outside Git:
+
+```sh
+node scripts/verify-wappmcp.mjs --prepare /absolute/existing-parent/new-directory
+```
+
+This downloads/installs the locked graph and runs the same pinned artifact, exact
+approved patch and synthetic positive/negative checks as the disposable verifier.
+Only after all checks pass does it retain `new-directory/installation`. Existing
+directories (even empty), files and symlinks are refused; there is no in-place
+upgrade, overwrite or repair. A normal failure removes only the new staging
+directory. An interrupted process may leave staging behind; inspect it manually
+and use a different new destination rather than treating it as prepared.
+
+The destination is mode 0700; `installation/hehebot-preparation.json` is mode 0600.
+The receipt records `prepared-not-enabled`, the lock hash, observation time and
+verification results. `installed:true` means files retained at that path only.
+`processStarted:false` refers to the real connector, not synthetic test processes.
+Readiness remains blocked, pairing/tool registration/production admission remain
+false. The receipt is historical evidence, not a signature, full-tree attestation,
+fresh inventory or authorization: later changes require fresh verification.
+No account profile, credentials, browser download or real WhatsApp process is
+created. npm uses disposable HOME/cache/config and an allowlisted environment;
+Git cannot discover the surrounding repository when applying the approved patch.
+Temporary source trees, synthetic fixtures and npm cache are removed, not retained.
+
+Do not run the retained CLI or manually register it in Codex. Supported startup,
+process supervision, reviewed recent-read compatibility and separately authorized
+pairing still need implementation/verification. Do not ship this directory or an
+image containing it as an approved distribution: `licenseAuditComplete` and
+`redistributionApproved` remain false. Existing evidence includes unresolved LGPL
+WebAssembly source/notices, native prebuild provenance, Public Domain rights and
+vendored code/assets; see [license evidence](../../docs/WAPPMCP_LICENSE_EVIDENCE.md).
+No pins, dependency graph or patch exception change in prepare-only mode.
+
+## Compatibility remains blocked
+
 The verifier also runs the actual locked MCP SDK 1.30.0 and the upstream JSON
 result helper against a synthetic in-memory server. **Recent-message reads are
 incompatible on this path:** the plugin returns an array in `structuredContent`,

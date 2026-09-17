@@ -4,6 +4,24 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Prepare-only WhatsApp installation implemented in existing verifier; optional
+`--prepare /absolute/new-directory` reserves 0700 destination and retains checked
+graph plus 0600 historical receipt only after checks. No connector/browser/account
+startup or registration. Existing destination refuses; failed new staging cleans
+up. npm config/cache/HOME are disposable and inherited config/secrets excluded;
+Git discovery ceiling prevents parent-checkout patch skips. Both targeted tests
+pass, including hostile inherited config and real install inside Git. New fixture
+is wired into verify-codex.sh; combined exits 0 at `.local/wapp-prepare-combined.log`:
+1542 backend/444 runtime, both installation modes, 27 Worker HTTP checks plus
+browser/native/service/build. Desktop16 pass at `.local/wapp-prepare-desktop.log`.
+No active check remains; work is local/unpublished.
+License research completed read-only, no separate thread/active worker. Known
+redistribution/source/asset gaps remain; receipt is neither license approval nor
+fresh integrity evidence. Test-created graphs are removed. Follow README in
+config/wappmcp; do not run retained CLI implicitly. Next is fresh installed-tree
+inspection/supported startup, retaining recent-read compatibility and live gates.
+Cloudflare approval decision unchanged; continuation enabled.
+
 Host added unregistered WhatsApp task-to-transport binding in
 runtime/wappmcp-operations.mjs. Captured Worker identity/task/attempt/scopes/deadline
 are durably pinned against rebinding; actual authority payloads use generated

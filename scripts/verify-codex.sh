@@ -17,6 +17,7 @@ npm run test:runtime
 node --test tests/audit-wappmcp-licenses.mjs
 node --test macos/tests/*.test.mjs
 node scripts/verify-wappmcp.mjs
+node --test tests/wappmcp-prepare.mjs
 npm run test:e2e
 node scripts/test-portal-connector-catalog.mjs
 node scripts/test-portal-skill-draft.mjs

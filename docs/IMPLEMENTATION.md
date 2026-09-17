@@ -4,6 +4,30 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+WhatsApp prepare-only mode (2026-09-17 Asia/Jakarta): the existing pinned verifier
+now accepts `--prepare /absolute/new-directory`. It reserves a private new directory,
+performs the unchanged artifact/approved-patch/synthetic compatibility checks and
+moves only the checked installation into its final location after success. A
+0600 prepared-not-enabled receipt records observation time, lock hash and results.
+It is not a full-tree attestation or fresh inventory. Existing destinations refuse;
+normal failure removes only new staging. npm gets disposable HOME/config/cache and
+an allowlisted environment; Git cannot discover a surrounding checkout. Default
+invocation still deletes its graph. No pins, patches or startup gates changed.
+
+`node --test tests/wappmcp-prepare.mjs` passes both tests: exact retained graph/receipt,
+0700/0600 permissions, destination refusal, download-failure cleanup and hostile
+inherited npm/Git/tar config. Initial Git ceiling at the current directory failed
+the existing double-patch assertion; moving the ceiling to its parent fixed the
+inside-checkout case. Test graphs are removed afterward. The new fixture is wired
+into the combined verifier, which exits 0 at `.local/wapp-prepare-combined.log`:
+1542 backend/444 runtime, both installation modes, 27 Worker HTTP checks and
+browser/native/service/build pass. Desktop16 pass at `.local/wapp-prepare-desktop.log`.
+Read-only delegated review of existing license evidence confirmed 350 inspected
+locations/40 binary candidates, incomplete LGPL WASM/native-build/Public Domain/
+vendored-asset/notice obligations; no legal or redistribution approval. Guidance is
+in config/wappmcp/README.md. Startup, live inventory, pairing and recent-read
+compatibility remain separate gaps; no account/provider calls or deployment.
+
 WhatsApp transport binding (2026-09-17 Asia/Jakarta): `createWappMcpReader`
 captures host task/attempt/lease, scopes and deadline, persists a payload-free
 fingerprint against rebinding, validates actual authority envelopes with the

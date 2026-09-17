@@ -1,11 +1,11 @@
-// Verification only: no npm lifecycle scripts, browser, pairing or real plugin process.
+// Verification / explicit prepare-only: no npm lifecycle scripts, browser, pairing or real plugin process.
 // Pins are the sole owner-approved patch exception. Changes require review.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, rename, rmdir, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join, normalize } from 'node:path';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import { readWappMcp } from '../runtime/wappmcp-reads.mjs';
@@ -22,8 +22,26 @@ const pins = {
 };
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const verify = (bytes, expected) => assert.equal(hash(bytes), expected, 'Artifact integrity mismatch');
-const root = await mkdtemp(join(tmpdir(), 'hehebot-wappmcp-'));
+const args = process.argv.slice(2);
+if (args.length && (args.length !== 2 || args[0] !== '--prepare' || !isAbsolute(args[1]) || normalize(args[1]) !== args[1])) {
+  throw new Error('Usage: node scripts/verify-wappmcp.mjs [--prepare /absolute/new-directory]');
+}
+const destination = args[1];
+// Exclusive reservation before downloads. Never reuse, overwrite or recursively
+// remove an existing destination, including an empty directory or a symlink.
+if (destination) await mkdir(destination, { mode: 0o700 });
+let root, prepared = false;
 try {
+  root = await mkdtemp(join(destination ?? tmpdir(), 'hehebot-wappmcp-'));
+  const home = join(root, 'home');
+  await mkdir(home, { mode: 0o700 });
+  const npmrc = join(home, 'empty.npmrc');
+  await writeFile(npmrc, '', { mode: 0o600 });
+  const childEnv = { PATH: process.env.PATH, HOME: home, TMPDIR: root,
+    GIT_CEILING_DIRECTORIES: dirname(await realpath(root)), GIT_CONFIG_NOSYSTEM: '1',
+    npm_config_userconfig: npmrc, npm_config_globalconfig: join(home, 'global.npmrc'),
+    npm_config_cache: join(home, 'cache') };
+  await writeFile(childEnv.npm_config_globalconfig, '', { mode: 0o600 });
   for (const [name, [url, digest]] of Object.entries(pins)) {
     const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
     assert.equal(response.ok, true, `Cannot fetch pinned ${name}`);
@@ -37,7 +55,7 @@ try {
   const plugin = join(root, 'plugin-source'), dependency = join(root, 'node_modules/whatsapp-web.js');
   await mkdir(plugin); await mkdir(dependency, { recursive: true });
   for (const [archive, directory] of [['plugin', plugin], ['dependency', dependency]]) {
-    execFileSync('tar', ['-xzf', join(root, archive), '--strip-components=1', '-C', directory]);
+    execFileSync('tar', ['-xzf', join(root, archive), '--strip-components=1', '-C', directory], { env: childEnv });
   }
   const pkg = JSON.parse(await readFile(join(plugin, 'package.json')));
   const dep = JSON.parse(await readFile(join(dependency, 'package.json')));
@@ -64,7 +82,7 @@ try {
     if (path.endsWith('/whatsapp-web.js')) assert.equal(entry.version, '1.34.7');
   }
   const originalLock = await readFile(join(installation, 'package-lock.json'));
-  execFileSync('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: installation, stdio: 'pipe', timeout: 180000 });
+  execFileSync('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: installation, env: childEnv, stdio: 'pipe', timeout: 180000 });
   assert.deepEqual(await readFile(join(installation, 'package-lock.json')), originalLock);
   const installedPlugin = join(installation, 'node_modules/wappmcp');
   const installedDependency = join(installation, 'node_modules/whatsapp-web.js');
@@ -75,12 +93,12 @@ try {
     assert.deepEqual(await readFile(join(installedDependency, path)), await readFile(join(dependency, path)));
   }
   // Explicitly apply only the reviewed patch; no package postinstall is executed.
-  execFileSync('git', ['apply', '--check', join(root, 'patch')], { cwd: installation });
-  execFileSync('git', ['apply', join(root, 'patch')], { cwd: installation });
+  execFileSync('git', ['apply', '--check', join(root, 'patch')], { cwd: installation, env: childEnv });
+  execFileSync('git', ['apply', join(root, 'patch')], { cwd: installation, env: childEnv });
   // git apply has no fuzzy matching and --check rejects partial/double application.
-  execFileSync('git', ['apply', '--check', join(root, 'patch')], { cwd: root });
-  execFileSync('git', ['apply', join(root, 'patch')], { cwd: root });
-  assert.throws(() => execFileSync('git', ['apply', '--check', join(root, 'patch')], { cwd: root, stdio: 'pipe' }));
+  execFileSync('git', ['apply', '--check', join(root, 'patch')], { cwd: root, env: childEnv });
+  execFileSync('git', ['apply', join(root, 'patch')], { cwd: root, env: childEnv });
+  assert.throws(() => execFileSync('git', ['apply', '--check', join(root, 'patch')], { cwd: root, env: childEnv, stdio: 'pipe' }));
   for (const path of ['src/structures/Reaction.js', 'src/util/Injected/Utils.js']) {
     assert.deepEqual(await readFile(join(installedDependency, path)), await readFile(join(dependency, path)));
   }
@@ -130,13 +148,27 @@ try {
     await assert.rejects(readWappMcp(grant, name, { chatId: 'family@g.us' }, () => assert.fail('Mutation reached upstream')), { code: 'WHATSAPP_READ_DENIED' });
   }
   await assert.rejects(readWappMcp(grant, 'whatsapp_get_chat_messages', { chatId: 'stranger@g.us' }, () => assert.fail('Foreign chat reached upstream')), { code: 'WHATSAPP_READ_DENIED' });
-  execFileSync(process.execPath, ['--test', 'tests/runtime-wappmcp-reads.mjs'], { stdio: 'inherit' });
+  execFileSync(process.execPath, ['--test', 'tests/runtime-wappmcp-reads.mjs'], { env: childEnv, stdio: 'inherit' });
   assert.deepEqual(await readFile(join(installedPlugin, 'dist/lib/mcp/helpers.js')), await readFile(join(plugin, 'dist/lib/mcp/helpers.js')));
   const sdk = await verifyWappMcpSdk(installation);
   const stdio = await verifyWappMcpStdio(installation);
   const shutdown = await verifyWappMcpShutdown(installation);
   const publicServer = await verifyWappMcpPublicServer(installation);
-  console.log(JSON.stringify({ status: 'passed', scope: 'patch, read boundary and SDK/shutdown/public-server positive/negative contracts', revision, hashes: Object.fromEntries(Object.entries(pins).map(([name, [, digest]]) => [name, digest])), lockedPackages: Object.keys(lock.packages).length - 1, disposableInstall: true, lifecycleScripts: false, licenseAuditComplete: false, cleanPatch: true, syntheticCompatibility: false, sdk, stdio, shutdown, publicServer, livePairing: false, installed: false, productionAdmission: false }));
+  const report = { status: 'passed', scope: 'patch, read boundary and SDK/shutdown/public-server positive/negative contracts', revision, hashes: Object.fromEntries(Object.entries(pins).map(([name, [, digest]]) => [name, digest])), lockedPackages: Object.keys(lock.packages).length - 1, disposableInstall: !destination, lifecycleScripts: false, licenseAuditComplete: false, cleanPatch: true, syntheticCompatibility: false, sdk, stdio, shutdown, publicServer, livePairing: false, installed: Boolean(destination), productionAdmission: false };
+  if (destination) {
+    const preparation = { schemaVersion: 1, status: 'prepared-not-enabled', observedAt: new Date().toISOString(),
+      lockSha256: hash(originalLock), paired: false, toolsRegistered: false, processStarted: false,
+      redistributionApproved: false, verification: report };
+    await writeFile(join(installation, 'hehebot-preparation.json'), JSON.stringify(preparation, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+    // Same-filesystem move: only the checked graph survives; temporary sources,
+    // fixtures and private npm state remain in root and are removed below.
+    await rename(installation, join(destination, 'installation'));
+    prepared = true;
+  }
+  console.log(JSON.stringify({ ...report, ...(destination ? { preparedInstallation: join(destination, 'installation'), readiness: 'blocked', redistributionApproved: false } : {}) }));
 } finally {
-  await rm(root, { recursive: true, force: true });
+  if (root) await rm(root, { recursive: true, force: true });
+  if (destination && !prepared) await rmdir(destination).catch(error => {
+    if (error.code !== 'ENOTEMPTY' && error.code !== 'ENOENT') throw error;
+  });
 }

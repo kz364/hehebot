@@ -55,6 +55,8 @@ and all S/O/UX acceptance are later work, not prerequisites to any owner use.
 
 ## Current checkpoint
 
+- **WhatsApp prepare-only installation verified locally:** explicit `verify-wappmcp.mjs --prepare /absolute/new-directory` retains the checked pinned graph and private prepared-not-enabled receipt without starting/pairing/registering the connector. Existing destinations refuse; normal failure cleans newly created staging; npm uses disposable HOME/config/cache and Git patching cannot discover the parent checkout. Two preparation tests pass, including real install inside Git with hostile inherited config. Combined exits 0: 1542 backend/444 runtime, default disposable and retained-install checks, 27 Worker HTTP checks plus browser/native/service/build; desktop16 pass (`.local/wapp-prepare-{combined,desktop}.log`). License/source/asset review remains incomplete; retention is not redistribution approval or current inventory. No active worker/check, persistent test installation, live calls or changed gates. Local/unpublished. Next: supported startup and fresh installed-tree inspection, not automatic activation; continuation enabled.
+
 - **WhatsApp task-to-transport binding verified locally:** an unregistered host reader captures exact task/attempt/lease, scopes and deadline, pins them durably against rebinding, and connects Worker authorization to journaled MCP calls. Cancellation and tightened deadlines reach the SDK; incompatible/error/late results retain uncertainty without replay. Actual pinned SDK/public factory passes scoped search with synthetic authority; recent-read rejection remains unknown and cannot replay. Combined exits 0: 1542 backend/444 runtime, 27 Worker HTTP checks plus browser/native/service/build; desktop16 pass (`.local/wapp-binding-{combined,desktop}.log`). No active worker/check. No production registration, installed/paired runtime, live callability or settlement claim. Next: trusted supported installation/startup/inventory, retaining the recent-read compatibility blocker. Local/unpublished; gates and external Cloudflare decision unchanged; continuation enabled.
 
 - **Connectors diagnostic page verified locally:** owner can open the bundled WhatsApp baseline, distinguish incompatible recent reads from synthetic-only scoped search, and inspect prerequisites without installation/account controls. Worker finished/integrated; host Chromium verifies no catalog polling/commands, managed-page routing, literal text, malformed/offline/late/alpha fences. Five desktop/narrow/loading/error renders inspected; heading starts at top and content wraps. Combined exits 0: 1542 backend/439 runtime, 27 Worker HTTP checks plus browser/native/service/build; desktop16 pass (`.local/connector-ui-{combined,desktop}.log`). No active worker/check; local/unpublished. Actual installed/callable inventory and guided supported setup remain the next E09 gap, not proved by this baseline. No live/shared actions or changed Cloudflare decision; continuation enabled.
@@ -241,7 +243,8 @@ Do not perform these implicitly. [AUTH_SETUP.md](docs/AUTH_SETUP.md) contains de
 
 **E09 selected WhatsApp integration:** owner-selected `wappmcp` 0.4.0 at
 `9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8` is now specified in SPEC.md. A diagnostic
-catalog exists; guided setup and live inventory remain unimplemented. An unregistered scoped read boundary now has synthetic
+catalog and explicit private prepare-only installer exist; guided activation and
+live inventory remain unimplemented. An unregistered scoped read boundary now has synthetic
 contract and cancellation/timeout tests. Host-only canonical UTC `deadlineAt`
 can cap the relative timeout. Worker task-grant/lease/revocation authority is now
 implemented and HTTPS-tested; the unregistered `createWappMcpReader` now binds
@@ -264,8 +267,8 @@ approved patch applied explicitly; no browser or connector was started. The pinn
 asset and notice audit remains open, not a permissive-license approval.
 Optional host `authorize` checks before/after reads are bounded and redacted.
 New snapshots capture exact operator-selected chat/tool policies; legacy snapshots
-without scopes deny. The operator registry defaults empty. Guided installer/catalog,
-license review and trusted transport wiring remain credential-free work.
+without scopes deny. The operator registry defaults empty. Fresh installed-tree
+inspection, guided startup and license review remain credential-free work.
 Pairing, reconnect/history coverage and sleep/cost measurements require separate
 live authorization. Notification allowlists are not tool permissions; mutations
 must remain unavailable by default. Source findings are in docs/IMPLEMENTATION.md.
