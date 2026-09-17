@@ -126,7 +126,7 @@ function render(){
  const recovery=(view?(view.page?.recovery??[]):snapshot.recovery??[]).filter(x=>runs.some(run=>run.id===x.run_id));
  const previews=(view?.kind==='tasks'?view.page?.output_previews??[]:snapshot.output_previews??[]).filter(x=>runs.some(run=>run.id===x.run_id&&run.current_attempt===x.attempt&&(snapshot.summary.owner_alpha?['running','finishing','cancelling','recovery_required']:['running','finishing','recovery_required']).includes(run.status)&&!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code)));
  const questions=(snapshot.questions??[]).filter(q=>q.conversation_id===selected||q.persona_id===selected);
- const signature=JSON.stringify([selected,query,conversation,runs,steering,recovery,previews,questions,$('connection').textContent,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
+ const signature=JSON.stringify([selected,query,conversation,runs,steering,recovery,previews,questions,$('connection').textContent,navigator.onLine,alphaSeen,snapshot.summary.owner_alpha,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;const expanded=new Set([...timeline.querySelectorAll('.task-card[open]')].map(card=>card.dataset.runId));timeline.replaceChildren();
   if(view){
    const taskMode=view.kind==='tasks',label=taskMode?'task':'recovery';
@@ -210,6 +210,9 @@ function render(){
    }
    if(run.role==='background')actions.append(button('Follow up after settlement',()=>{const key=crypto.randomUUID();openEditor(`Follow up: ${title}`,[node('p','This message targets only the selected task. While it is active, the follow-up waits for native settlement.','hint'),field('Follow-up','text','','textarea')],form=>command('run.followup',{run_id:run.id,text:form.get('text')},key));},'quiet'));
    if(['queued','claimed','running','finishing','waiting'].includes(run.status))actions.append(button('Cancel this task',()=>cancelTask(run,'Owner selected this task for cancellation.'),'quiet danger'));
+   if(!(alphaSeen||snapshot.summary.owner_alpha)&&(!view||view.kind==='tasks')&&current()?.kind==='persona'&&run.persona_id===selected&&Number.isSafeInteger(run.current_attempt)&&run.current_attempt>0){
+    const draft=button('Draft skill from this task',()=>draftSkillFromTask(run),'quiet');draft.dataset.action='skill-from-task';draft.disabled=$('connection').textContent!=='Connected'||!navigator.onLine;actions.append(draft);
+   }
    card.append(actions);timeline.append(card);
   }
   if(view?.focusRun&&view.page){const card=[...timeline.querySelectorAll('.task-card')].find(card=>card.dataset.runId===view.focusRun);card?.scrollIntoView({block:'nearest'});view.focusRun=null;}
@@ -658,23 +661,35 @@ function skillReferenceEditor(body){
   return !Object.hasOwn(body,'references')&&!references.length?undefined:references;
  }};
 }
-function editSkillProposal(skill){
+function draftSkillFromTask(run){
+ const owner=selected,version=selectionVersion,view=recoveryView,persona=current();
+ const identity=Object.fromEntries(['id','persona_id','current_attempt','status','title','role','routine_id','error_code'].map(key=>[key,run[key]]));
+ const source={runId:run.id,personaId:run.persona_id,attempt:run.current_attempt,validate(){
+  const latest=(view?view.page:snapshot)?.runs?.find(row=>row.id===identity.id),currentPersona=current();
+  if(alphaSeen||snapshot?.summary.owner_alpha||$('connection').textContent!=='Connected'||!navigator.onLine||selected!==owner||selectionVersion!==version||recoveryView!==view||view&&view.kind!=='tasks'||persona?.kind!=='persona'||currentPersona?.id!==persona.id||currentPersona.deleted_at||currentPersona.body.archived||currentPersona.revision!==persona.revision||identity.persona_id!==owner||!Number.isSafeInteger(identity.current_attempt)||identity.current_attempt<1||!latest||Object.keys(identity).some(key=>latest[key]!==identity[key]))throw new Error('Source task, attempt, persona or navigation changed, is unavailable, offline or in owner-alpha. Close and reopen the exact task before drafting again.');
+ }};
+ try{source.validate();editSkillProposal(undefined,source);}catch(error){report(error.message);}
+}
+window.addEventListener('offline',()=>{lastSignature='';render();});
+function editSkillProposal(skill,source){
  const proposalId=crypto.randomUUID(),key=crypto.randomUUID();let submitted;
  const draftId=skill?.id??crypto.randomUUID(),body=skill?.body??{};const existing=items('skill');const options=[['new','Create a new stable skill'],...existing.map(x=>[x.id,`Update ${x.body.name} (revision ${x.revision})`])];
  const fields=[selectField('Draft target','target',options,skill?.id??'new'),field('Name','name',body.name??''),field('Purpose','description',body.description??'','textarea'),field('When should a bot use it?','when_to_use',body.when_to_use??'','textarea'),field('Inputs and access (one per line)','inputs_access',(body.inputs_access??[]).join('\n'),'textarea'),field('Steps (one per line)','steps',(body.steps??[]).join('\n'),'textarea'),field('Decision rules (one per line)','decision_rules',(body.decision_rules??[]).join('\n'),'textarea'),field('Validation checks (one per line)','validation',(body.validation??[]).join('\n'),'textarea'),field('Expected output','output',body.output??'','textarea'),field('Failure handling (one per line)','failure_handling',(body.failure_handling??[]).join('\n'),'textarea'),field('Approval boundaries (one per line)','approval_boundaries',(body.approval_boundaries??[]).join('\n'),'textarea')];
+ if(source)fields.unshift(node('p',`Source persona ${source.personaId} · Task ${source.runId} · Attempt ${source.attempt}`,'hint message-body'),node('p','Write a new reusable procedure yourself. No task transcript, input, output, checkpoint or memory is copied; there is no automatic learning or inference. Failed and unfinished tasks may be sources, not evidence of success or settlement. The server rechecks the current retained attempt. This only stages a proposal for separate approval, not activation or tool authority.','review-notice'));
  const references=skillReferenceEditor(body);fields.push(references.element,node('p','To change the draft target, close and reopen Propose an update on that exact skill, or Draft skill for a new skill. This prevents silently dropping its references.','hint'));
  const affirmation=node('label',undefined,'check affirmation');const check=node('input');check.type='checkbox';check.name='affirm';check.required=true;affirmation.append(check,document.createTextNode('I affirm this procedural draft contains no private facts.'));fields.push(node('p','The portal does not scan for private facts. Your affirmation is required, and submission creates a pending proposal—not an approved skill.','review-notice'),affirmation);
  $('editor').classList.add('roster-editor');
- openEditor(skill?'Propose a skill update':'Draft a skill',fields,form=>{
+ openEditor(source?'Draft skill from this task':skill?'Propose a skill update':'Draft a skill',fields,form=>{
+  source?.validate();
   const target=form.get('target'),existingSkill=existing.find(x=>x.id===target),current=items('skill').find(x=>x.id===target&&!x.deleted_at);
   if(target!==(skill?.id??'new'))throw new Error('Draft target changed. Close and reopen the exact target to retain its supporting references.');
   if($('connection').textContent!=='Connected'||target!=='new'&&(!existingSkill||!current||current.revision!==existingSkill.revision))throw new Error('This skill is stale, missing, or offline. Close this editor and refresh before drafting again.');
-  const payload={proposal_id:proposalId,skill_id:existingSkill?.id??draftId,expected_skill_revision:existingSkill?.revision??0,body:{name:form.get('name'),description:form.get('description'),when_to_use:form.get('when_to_use'),inputs_access:lines(form.get('inputs_access')),steps:lines(form.get('steps')),decision_rules:lines(form.get('decision_rules')),validation:lines(form.get('validation')),output:form.get('output'),failure_handling:lines(form.get('failure_handling')),approval_boundaries:lines(form.get('approval_boundaries')),contains_private_facts:false},provenance:{kind:'owner',source_ref:'portal:owner-draft'},executable_files_changed:false};
+  const payload={proposal_id:proposalId,skill_id:existingSkill?.id??draftId,expected_skill_revision:existingSkill?.revision??0,body:{name:form.get('name'),description:form.get('description'),when_to_use:form.get('when_to_use'),inputs_access:lines(form.get('inputs_access')),steps:lines(form.get('steps')),decision_rules:lines(form.get('decision_rules')),validation:lines(form.get('validation')),output:form.get('output'),failure_handling:lines(form.get('failure_handling')),approval_boundaries:lines(form.get('approval_boundaries')),contains_private_facts:false},...(source?{source_run_id:source.runId,expected_attempt:source.attempt}:{provenance:{kind:'owner',source_ref:'portal:owner-draft'},executable_files_changed:false})};
   const documents=references.read();if(documents!==undefined)payload.body.references=documents;
   const fingerprint=JSON.stringify(payload);
   if(submitted&&submitted!==fingerprint)throw new Error('This draft was already submitted. Retry its unchanged contents or close and refresh to inspect the proposal before making changes.');
   submitted=fingerprint;
-  return command('skill.propose',payload,key);
+  return command(source?'skill.propose_from_task':'skill.propose',payload,key);
  });
 }
 async function act(fn){try{report('');await fn();await refresh(true);}catch(e){report(e.message);}}

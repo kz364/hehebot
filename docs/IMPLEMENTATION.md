@@ -4,6 +4,25 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Task-to-skill portal (2026-09-17 Asia/Jakarta): eligible retained task cards now
+open the existing bounded editor with a blank procedure and explicit source
+persona/run/attempt disclosure. Nothing is copied from task input/output, and
+opening emits no extra read or write. Source, persona, navigation, attempt,
+offline and alpha checks precede submission; uncertain retries preserve the
+same exact body/source and key. Server retention rejection stays visible.
+Failed/unfinished sources do not imply success or settlement. Approval and
+enablement remain separate. See [UI scope](SKILL_TASK_PROPOSAL_UI.md).
+
+UI worker patch hash verified and integrated; host fixed streamed UTF-8 decoding
+in its HTTP fixture and added it to the combined verifier. Host Chromium fixture
+passes (`.local/task-skill-ui-focused.log`); desktop16 pass. Desktop/narrow,
+scrolled references and server-error screenshots inspected, with DOM checks for
+scrolling/footer separation. Full combined rerun exits 0: 1538 backend/439 runtime
+plus Worker/browser/native/service/build checks at `.local/task-skill-ui-combined.log`.
+Neighbor task-feed and cancellation fixtures also pass. These are synthetic HTTP/Chromium checks,
+not model judgment, device/touch/Safari, live authority or production acceptance.
+No backend/schema changes in this UI batch; no live/shared actions.
+
 Task-sourced owner drafts (2026-09-17 Asia/Jakarta): the new owner command
 `skill.propose_from_task` takes proposal/skill IDs, expected skill revision,
 source run ID, expected attempt and a separately supplied `SkillBody`. It denies

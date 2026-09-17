@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Task-to-skill UI worker finished; hash-verified patch integrated. Host fixed
+streamed UTF-8 fixture decoding and wired the new browser test into the verifier.
+Host focused Chromium passes, desktop16 pass; desktop/narrow/reference/error
+renders inspected. Combined verifier exits 0 at `.local/task-skill-ui-combined.log`:
+1538 backend/439 runtime plus Worker/browser/native/service/build checks.
+Neighbor task-feed/cancellation checks pass. No active worker/check remains.
+Next independent E05 work: inspect existing 20-enabled-routine cap/load coverage,
+then fill the bounded local admission/load evidence gap; do not claim synthetic
+timing or configured limits establish live model/provider dollar costs.
+Exact task/attempt and navigation checks, blank procedure,
+separate approval, alpha denial and unchanged uncertain retries remain required.
+No automatic learning/model judgment or new live authorization is implied.
+
 Task-sourced proposal API is verified locally. Combined verifier exits 0 with
 1538 backend/439 runtime plus Worker/browser/native/service/build checks;
 desktop16 pass at `.local/task-skill-{combined,desktop}.log`. No host check remains
@@ -15,15 +28,14 @@ with generated persona/run/attempt provenance and no copied task text or context
 Model/trigger/alpha denied; no automatic learning, inference, activation or task
 steering. Failed/provisional sources are allowed without claiming settlement.
 Existing free-form provenance remains unverified text. Focused89 tests/typecheck
-pass. Portal task-source editor integration is actively assigned to existing UI
-thread T-01a0acd6-f40d-770f-a3a0-e69fd7ede7bb; it will reply with an owned-only
-patch and rendered evidence. Do not duplicate this assignment. It received
+pass. Portal task-source editor integration was delivered by existing UI
+thread T-01a0acd6-f40d-770f-a3a0-e69fd7ede7bb and integrated. It received
 `.local/task-skill-ui-base.bundle` (host local HEAD 3fc353a) plus
 `.local/task-skill-ui-base.patch`, including the API and new test. Owned files:
 public/app.js, optional public/style.css, scripts/test-portal-skill-task-proposal.mjs
 and docs/SKILL_TASK_PROPOSAL_UI.md. Require exact source/attempt stale fences,
 no transcript prefill, alpha/offline/navigation denial and unchanged uncertain
-retry payloads. Host reviews/integrates and wires the verifier after delivery.
+retry payloads. Host combined verification now includes that fixture.
 No new live grant or hosted decision; do not repeat Cloudflare approval request.
 
 Skill metadata discovery is verified locally; full verifier exits 0 at
