@@ -206,14 +206,21 @@ untouched. Organization/users/subscriptions still return403. No shared writes by
 this host occurred; write permissions, Free plan and remaining billing allowance
 are not established by read success. Raw evidence is private.
 
-Only two setup values are currently missing: the team domain ending in
-`.cloudflareaccess.com` and the exact owner login email. Supply them privately in
-mode0600 `.local/secrets/cloudflare-owner.json` as `teamDomain` and `ownerEmail`,
-or identify an existing private file containing them. No JWT/API token belongs in
-the public thread. Onboarding need not be repeated. Use the existing credential
-and check app/policy writes once exact identity inputs exist; request additional
-permission only on an actual denial. Obtain owner subject through a real verified
-Access login/bootstrap; do not guess it from account identity or email.
+The mode0600 `.local/secrets/cloudflare-owner.json` is now present, owned by the
+orb user and validated privately; the configured team's public JWKS endpoint works.
+An authorized exact-host self-hosted app creation with one exact-email allow policy
+returned HTTP403/code1010 `auth.forbidden`. Subsequent app listing confirmed zero
+apps and no matching target; no successful shared mutation occurred.
+
+The exact remaining action is to grant the existing account-scoped API token
+**Access: Apps and Policies → Edit**, retaining its Worker deployment permissions.
+If a replacement token is issued, save it privately in the existing mode0600
+`.local/secrets/CLOUDFLARE_API_TOKEN` file. Do not resend owner configuration or
+repeat onboarding/consent. Retry app creation only after permission changes;
+check for an existing matching app first. Owner subject still requires verified
+Access login/bootstrap, never inference from account identity or email. Until then
+no portal/database is exposed; a future protected bootstrap page may only verify
+identity and provide private signed proof, not bypass owner pinning for portal data.
 
 Before enabling production ingress, create/read back the exact-host Access app
 and owner-only policy, obtain its audience and verified owner subject, prepare

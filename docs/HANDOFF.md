@@ -4,15 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
-Owner reported “done”; private read-only recheck confirms same account/active token,
-workers.dev initialized and Access apps200/empty. One unrelated Worker exists;
-hehebot-portal absent. Organization/users/billing still403. No shared writes.
-Two exact inputs remain missing: teamDomain and ownerEmail, privately supplied in
-0600 `.local/secrets/cloudflare-owner.json` or another identified private file.
-Coordinating thread confirms no values/path supplied yet. Do not repeat onboarding
-or consent; do not infer owner sub. Obtain it via verified owner-login bootstrap.
-Latest raw evidence `.local/cloudflare-preflight-current.json` stays private.
-Schedule remains paused until inputs arrive; no active worker/check or deployment.
+Private `.local/secrets/cloudflare-owner.json` now exists, mode0600/owner validated;
+team JWKS works. Exact-host/one-owner-email Access app creation was attempted under
+existing approval but returned403/code1010 auth.forbidden. Post-denial listing
+confirms zero apps/no target. No successful shared mutation/Worker/database/public
+URL. Exact remaining request: existing account token needs Access: Apps and Policies
+Edit, same account. Keep token private in existing file if replaced. No repeated
+onboarding/config upload/consent. Once changed, check for existing app before retry,
+then use protected verified owner-login bootstrap to obtain exact OWNER_SUB without
+exposing portal data. Never infer sub from email. Private evidence at
+`.local/cloudflare-access-{plan,created,after-denial}.json`; no contents in chat.
+Unrelated Worker untouched; billing still unverified. Schedule remains paused.
 
 PRIORITY: owner authorized bounded Cloudflare Worker/SQLite + owner-only Access
 deployment on current unpublished checkout, within existing remaining $10, no paid

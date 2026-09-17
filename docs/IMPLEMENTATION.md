@@ -4,6 +4,17 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Access write attempt (2026-09-17): private owner config now present and validated
+without disclosure; expected team JWKS responds. Authorized POST for one self-hosted
+production hostname app with one exact-email allow policy returned HTTP403,
+code1010 auth.forbidden. GET afterward confirms total apps0/target0; no blind retry.
+No Worker/database/bootstrap published or successful shared mutation. Ask only
+for account-scoped Access: Apps and Policies Edit on existing token; retain existing
+scope/approval, no renewed budget or repeated setup. Subject still needs verified
+login after protection is available. Private plan/error/readback files retained;
+no secrets printed. Documentation-only checkpoint, no tests rerun. Billing remains
+unverified, no resource creation/inference/Sprite/connector action.
+
 Owner onboarding recheck (2026-09-17): following “done”, privately verified same
 account and active token; workers.dev now exists and Access apps list200/zero.
 One unrelated Worker exists, not hehebot-portal; untouched. Organization/users/
