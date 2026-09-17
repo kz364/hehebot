@@ -29,7 +29,7 @@ const headers = (actor: 'owner' | 'foreign' | 'runtime' | 'missing') => {
   return value;
 };
 const request = (path: string, actor: 'owner' | 'foreign' | 'runtime' | 'missing' = 'owner') => worker.fetch(new Request(origin + path, { headers: headers(actor) }), env);
-const custody = () => ['objects', 'commands', 'runs', 'attempts', 'occurrences', 'operations', 'effects', 'events', 'lifecycle', 'controller_operations', 'schedule_state'].map(table => db.all(`SELECT * FROM ${table} ORDER BY 1`));
+const custody = () => ['objects', 'commands', 'runs', 'attempts', 'outbox', 'occurrences', 'operations', 'effects', 'events', 'lifecycle', 'controller_operations', 'schedule_state'].map(table => db.all(`SELECT * FROM ${table} ORDER BY 1`));
 
 beforeEach(async () => {
   vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-10T00:00:00.000Z'));
@@ -54,6 +54,19 @@ it('serves signed-owner routine history with exclusive pagination and no reconci
   const second = await request(`/v1/routines/${routineId}/runs?after=00000000-0000-4000-8000-000000000001&limit=1`);
   const value = await second.json(); expect(second.status).toBe(200); expect(value).toMatchObject({ counts: { total: 2, waiting: 1, recovery: 0 }, runs: [{ id: '00000000-0000-4000-8000-000000000002', status: 'waiting' }], next_cursor: null });
   expect(JSON.stringify(value)).not.toMatch(/HTTP_PRIVATE_CONTEXT|context_json|checkpoint_json/);
+  expect(custody()).toEqual(before); expect(setAlarm).not.toHaveBeenCalled(); expect(deleteAlarm).not.toHaveBeenCalled();
+});
+
+it('projects content-free execution and run-level delivery through authenticated HTTP without mutation', async () => {
+  const run = '00000000-0000-4000-8000-000000000001';
+  db.exec('UPDATE runs SET current_attempt=2 WHERE id=?', run);
+  db.exec(`INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,settled_at,result_json)
+    VALUES(?,2,'HTTP_SECRET_SUBMISSION',1,'HTTP_SECRET_BOOT','completed',?,?, '{"text":"HTTP_SECRET_RESULT"}')`, run, '2026-09-10T00:05:00.000Z', '2026-09-10T00:00:00.000Z');
+  db.exec("INSERT INTO outbox VALUES(?,?,'HTTP_SECRET_DESTINATION','{\"text\":\"HTTP_SECRET_PAYLOAD\"}','outcome_unknown',?,?)", randomUUID(), run, '2026-09-09T00:00:00.000Z', '2026-09-09T00:00:00.000Z');
+  const before = custody(), response = await request(`/v1/routines/${routineId}/runs?limit=1`), page = await response.json();
+  expect(response.status).toBe(200);
+  expect(page).toMatchObject({ runs: [{ execution: { attempt: 2, status: 'completed', started_at: null, settled_at: '2026-09-10T00:00:00.000Z', result_body_retained: true }, run_delivery: { counts: { pending: 0, delivered: 0, failed: 0, outcome_unknown: 1 }, portal: null } }] });
+  expect(JSON.stringify(page)).not.toMatch(/HTTP_SECRET_|HTTP_PRIVATE_CONTEXT|context_json|checkpoint_json|result_json|payload_json/);
   expect(custody()).toEqual(before); expect(setAlarm).not.toHaveBeenCalled(); expect(deleteAlarm).not.toHaveBeenCalled();
 });
 

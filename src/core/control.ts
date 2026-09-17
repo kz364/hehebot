@@ -561,7 +561,13 @@ export class ControlCore {
   return {observed_at:this.now(),counts,runs:runs.map(({context_json,checkpoint_json,...run})=>{
    if(unfinishedOnly)return run;
    const attempt_revisions=this.store.db.all<{attempt:number;captured_routine_revision:number|null}>('SELECT attempt,captured_routine_revision FROM attempts WHERE run_id=? AND attempt<=? ORDER BY attempt DESC LIMIT 3',run.id,run.current_attempt);
-   return {...run,captured_routine_revision:attempt_revisions.find(value=>value.attempt===run.current_attempt)?.captured_routine_revision??null,attempt_revisions};
+   const attempt=this.store.db.all<{attempt:number;status:string;started_at:string|null;settled_at:string|null;result_body_retained:number}>('SELECT attempt,status,started_at,settled_at,result_json IS NOT NULL AS result_body_retained FROM attempts WHERE run_id=? AND attempt=?',run.id,run.current_attempt)[0];
+   // Outbox custody is run-level: an earlier delivery cannot be bound to this
+   // attempt, even if its timestamp or payload happens to match a result.
+   const counts=this.store.db.all<{pending:number;delivered:number;failed:number;outcome_unknown:number}>("SELECT COALESCE(SUM(status='pending'),0) AS pending,COALESCE(SUM(status='delivered'),0) AS delivered,COALESCE(SUM(status='failed'),0) AS failed,COALESCE(SUM(status='outcome_unknown'),0) AS outcome_unknown FROM outbox WHERE run_id=?",run.id)[0];
+   const portal=this.store.db.all<{status:string;updated_at:string}>("SELECT status,updated_at FROM outbox WHERE run_id=? AND destination='portal'",run.id)[0]??null;
+   return {...run,captured_routine_revision:attempt_revisions.find(value=>value.attempt===run.current_attempt)?.captured_routine_revision??null,attempt_revisions,
+    execution:attempt?{...attempt,result_body_retained:!!attempt.result_body_retained}:null,run_delivery:{counts,portal}};
   }),
    output_previews:runs.flatMap(run=>{const value=previews.read(run.id,run.current_attempt,!!this.ownerAlpha.policy);return value?[value]:[];}),
    steering:runs.flatMap(run=>steering.receipts({run_id:run.id,attempt:run.current_attempt})),

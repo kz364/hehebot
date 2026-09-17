@@ -494,6 +494,17 @@ function renderRoutineHistory(card,routine){
     item.append(node('p','Latest 3 retained attempt captures (not execution proof):','hint'));
     for(const entry of run.attempt_revisions.slice(0,3))item.append(node('p',`Attempt ${entry.attempt}: ${Number.isSafeInteger(entry.captured_routine_revision)&&entry.captured_routine_revision>0?`routine revision ${entry.captured_routine_revision}`:'routine revision unavailable'}`,'hint'));
    }
+   const execution=node('section',undefined,'skill-detail execution-record');execution.setAttribute('aria-label','Current attempt record');execution.append(node('h4','Current attempt record'));
+   if(run.execution?.attempt===run.current_attempt){
+    execution.append(node('p',`Attempt ${run.execution.attempt} · Recorded status: ${run.execution.status}`),node('p',`Recorded start/claim time: ${run.execution.started_at??'not recorded'}`),node('p',`Application settlement time: ${run.execution.settled_at??'not recorded'}`),node('p',run.execution.result_body_retained?'Result body retained. Retention alone does not verify execution or delivery.':'Result body not retained. Payloads may be pruned after 90 days; absence does not mean execution is incomplete.','hint'));
+   }else execution.append(node('p',run.execution===null?'No record for the current attempt. A missing record is not evidence of failure.':'Current attempt record unavailable.','hint'));
+   execution.append(node('p','Application records only. Claim time does not prove native acknowledgement or inference. Application settlement does not verify live native-family settlement or safe sleep.','hint'));item.append(execution);
+   const delivery=node('section',undefined,'skill-detail run-delivery');delivery.setAttribute('aria-label','Run-level delivery records');delivery.append(node('h4','Run-level delivery records'));
+   if(run.run_delivery){
+    const {counts,portal}=run.run_delivery;
+    delivery.append(node('p',`Pending ${counts.pending} · Delivered ${counts.delivered} · Failed ${counts.failed} · Outcome unknown ${counts.outcome_unknown}`),node('p','Counts include portal and all other destinations, not an overall success or failure.','hint'),node('p',portal?`Portal recorded status: ${portal.status} · Updated ${portal.updated_at}`:'Portal: no delivery record. No record is not failure.'),node('p','Portal delivered means a persisted portal record, not owner receipt or notification.','hint'));
+   }else delivery.append(node('p','Run-level delivery records unavailable.','hint'));
+   delivery.append(node('p','Delivery records belong to the run, not an attempt. A delivered record may predate this retry; it does not establish delivery for the current attempt.','hint'));item.append(delivery);
    item.open=view.expanded.has(run.id);item.ontoggle=()=>{if(item.isConnected){if(item.open)view.expanded.add(run.id);else view.expanded.delete(run.id);}};
    if(run.error_code)item.append(node('p',`Recorded reason: ${run.error_code}`,'hint'));
    if(run.status==='cancelling')item.append(node('p','Cancellation requested, not confirmed. Children, tools and effects may remain unresolved.','review-notice'));

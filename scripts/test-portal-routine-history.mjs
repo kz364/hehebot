@@ -17,6 +17,15 @@ runs[0].captured_routine_revision=2;
 runs[0].attempt_revisions=[{attempt:2,captured_routine_revision:2},{attempt:1,captured_routine_revision:1}];
 runs[1].captured_routine_revision=null;
 runs[1].attempt_revisions=[{attempt:2,captured_routine_revision:null}];
+for(const run of runs){run.execution=null;run.run_delivery={counts:{pending:0,delivered:0,failed:0,outcome_unknown:0},portal:null};}
+// Portal persistence predates this running retry. Mixed destinations must not
+// collapse into success or be attributed to attempt 2.
+runs[0].execution={attempt:2,status:'running',started_at:'2026-09-17T03:04:05Z',settled_at:null,result_body_retained:false};
+runs[0].run_delivery={counts:{pending:2,delivered:1,failed:3,outcome_unknown:4},portal:{status:'delivered',updated_at:'2026-09-16T01:02:03Z'}};
+// Completed execution remains completed after 90-day result-body pruning.
+runs[1].execution={attempt:2,status:'completed',started_at:'2026-05-01T01:02:03Z',settled_at:'2026-05-01T01:08:09Z',result_body_retained:false};
+runs[1].run_delivery={counts:{pending:0,delivered:1,failed:0,outcome_unknown:0},portal:{status:'delivered',updated_at:'2026-05-01T01:09:10Z'}};
+runs[10].execution={attempt:2,status:'completed',started_at:null,settled_at:'2026-09-17T01:00:00Z',result_body_retained:true};
 const requests=[],violations=[];let fail=false,offline=false,held=null,malformed=false;
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
 const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
@@ -26,6 +35,7 @@ const named=name=>browser('find','role','button','click','--name',name,'--exact'
 const refresh=()=>browser('eval','document.querySelector("#refresh").onclick()');
 const panel='.routine-history';
 const text=async()=>await evaluate(`document.querySelector('${panel}')?.textContent??''`);
+const runText=async(n,section='')=>evaluate(`document.querySelector('${panel} [data-run-id="${id(n)}"] ${section}')?.textContent??''`);
 const ready=()=>wait(`document.querySelector('${panel} [data-run-id="${id(1)}"]')!==null`);
 const open=async()=>{await click('[data-action="routine-history"]');await ready();};
 const server=createServer(async(req,res)=>{
@@ -71,9 +81,37 @@ try{
  assert.match(await text(),/Total 13 · Waiting 2 · Recovery 1/);assert.match(await text(),/not newest first/);
  assert.doesNotMatch(await text(),/OLD ATTEMPT|TERMINAL PREVIEW/);
  assert.equal(await evaluate(`document.querySelector('${panel} script')===null`),true);
+ assert.match(await runText(1,'.execution-record'),/Attempt 2 · Recorded status: running/);
+ assert.match(await runText(1,'.execution-record'),/Recorded start\/claim time: 2026-09-17T03:04:05Z/);
+ assert.match(await runText(1,'.execution-record'),/Application settlement time: not recorded/);
+ assert.match(await runText(1,'.execution-record'),/Claim time does not prove native acknowledgement or inference/);
+ assert.match(await runText(1,'.execution-record'),/Application settlement does not verify live native-family settlement or safe sleep/);
+ assert.match(await runText(1,'.run-delivery'),/Pending 2 · Delivered 1 · Failed 3 · Outcome unknown 4/);
+ assert.match(await runText(1,'.run-delivery'),/Portal recorded status: delivered · Updated 2026-09-16T01:02:03Z/);
+ assert.match(await runText(1,'.run-delivery'),/not an overall success or failure/);
+ assert.match(await runText(1,'.run-delivery'),/persisted portal record, not owner receipt or notification/);
+ assert.match(await runText(1,'.run-delivery'),/belong to the run, not an attempt.*may predate this retry.*does not establish delivery for the current attempt/);
+ assert.doesNotMatch(await runText(1,'.run-delivery'),/Attempt 2|Current provisional finding/);
+ assert.match(await runText(1,'.output-preview'),/Current provisional finding/);
+ assert.equal(await evaluate(`document.querySelectorAll('${panel} .task-card button').length`),0);
+ assert.match(await runText(2,'.execution-record'),/Recorded status: completed/);
+ assert.match(await runText(2,'.execution-record'),/Recorded start\/claim time: 2026-05-01T01:02:03Z/);
+ assert.match(await runText(2,'.execution-record'),/Application settlement time: 2026-05-01T01:08:09Z/);
+ assert.match(await runText(2,'.execution-record'),/Result body not retained.*pruned after 90 days; absence does not mean execution is incomplete/);
+ assert.match(await runText(3,'.execution-record'),/No record for the current attempt.*not evidence of failure/);
+ assert.doesNotMatch(await runText(3,'.execution-record'),/Recorded status:|Invalid Date|undefined/);
+ assert.match(await runText(3,'.run-delivery'),/Pending 0 · Delivered 0 · Failed 0 · Outcome unknown 0/);
+ assert.match(await runText(3,'.run-delivery'),/Portal: no delivery record. No record is not failure/);
  await click(`${panel} [data-run-id="${id(1)}"] summary`);await capture('desktop');
+ await capture('execution-desktop',`${panel} [data-run-id="${id(1)}"] .execution-record`);
+ await capture('delivery-desktop',`${panel} [data-run-id="${id(1)}"] .run-delivery`);
  await click(`${panel} [data-run-id="${id(2)}"] summary`);await capture('revision-unavailable',`${panel} [data-run-id="${id(2)}"]`);
- await browser('set','viewport','390','844','2');await click('#show-details');await capture('revision-narrow',`${panel} [data-run-id="${id(1)}"]`);await click('#close-details');await browser('set','viewport','1280','900','2');
+ await capture('pruned-execution',`${panel} [data-run-id="${id(2)}"] .execution-record`);
+ await click(`${panel} [data-run-id="${id(3)}"] summary`);await capture('missing-records',`${panel} [data-run-id="${id(3)}"] .execution-record`);
+ await browser('set','viewport','390','844','2');await click('#show-details');await capture('revision-narrow',`${panel} [data-run-id="${id(1)}"]`);
+ await capture('execution-narrow',`${panel} [data-run-id="${id(1)}"] .execution-record`);await capture('delivery-narrow',`${panel} [data-run-id="${id(1)}"] .run-delivery`);
+ assert.equal(await evaluate(`document.documentElement.scrollWidth<=innerWidth&&Array.from(document.querySelectorAll('${panel} .execution-record,${panel} .run-delivery')).every(n=>n.scrollWidth<=n.clientWidth)`),true);
+ await click('#close-details');await browser('set','viewport','1280','900','2');
  assert.match(await text(),/Steering delivery: outcome_unknown/);assert.match(await text(),/does not verify delivery or safe sleep/);
  await refresh();assert.equal(requests.length,1);assert.equal(await evaluate(`document.querySelector('${panel} [data-run-id="${id(1)}"]').open`),true);
  assert.equal(await evaluate('document.querySelector("#task-strip-summary").textContent.includes("Tasks 0")'),true);
@@ -81,6 +119,8 @@ try{
  assert.equal(requests[1],`/v1/routines/${routine.id}/runs?after=${id(10)}&limit=10`);
  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('${panel} [data-run-id]'),n=>n.dataset.runId)`),[id(11),id(12),id(13)]);
  assert.match(await text(),/Review 11 · Completed/);assert.match(await text(),/Review 12 · Waiting/);assert.match(await text(),/Review 13 · Failed/);
+ assert.match(await runText(11,'.execution-record'),/Result body retained. Retention alone does not verify execution or delivery/);
+ assert.match(await runText(11,'.execution-record'),/Recorded start\/claim time: not recorded/);
  await browser('set','viewport','390','844','2');await click('#show-details');await capture('narrow');assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
  fail=true;await named('First history page');await wait(`!!document.querySelector('${panel} [role="alert"]')`);assert.doesNotMatch(await text(),/Review 11/);await capture('error');fail=false;
  await click('[data-action="routine-history"]');await open();await browser('eval','window.dispatchEvent(new Event("offline"))');assert.doesNotMatch(await text(),/Current provisional/);assert.match(await text(),/offline/);await capture('offline');await refresh();assert.doesNotMatch(await text(),/Current provisional/);
@@ -97,7 +137,9 @@ try{
  await late(async()=>{await click(`[data-persona-id="${other}"]`);});
  await click(`[data-persona-id="${bot}"]`);await refresh();
  await late(async()=>{await click('[data-action="routine-history"]');});
- await late(async()=>{offline=true;await refresh();offline=false;await refresh();});
+ // Refresh can return early while a background state poll is in flight. Keep
+ // each server state until the browser observes it before releasing history.
+ await late(async()=>{offline=true;await refresh();await wait('document.querySelector("#connection").textContent==="Offline"');offline=false;await refresh();await wait('document.querySelector("#connection").textContent==="Connected"');});
  await click('[data-action="routine-history"]');
  malformed=true;await click('[data-action="routine-history"]');await wait(`document.querySelector('${panel}')?.textContent.includes('Invalid routine history')`);assert.equal(await evaluate(`!document.querySelector('${panel} [data-run-id]')`),true);malformed=false;
  // Transition to owner-alpha also invalidates pending reads, then blocks every new one.
@@ -105,5 +147,5 @@ try{
  await late(async()=>{state.summary.owner_alpha=true;state.summary.owner_alpha_session={persona_id:bot,expires_at:'2099-01-01T00:00:00Z',max_runs:3,admitted_runs:0,max_task_seconds:60};await refresh();});
  const count=requests.length;assert.equal(await evaluate('document.querySelectorAll("[data-action=routine-history]").length'),0);await refresh();await browser('reload');await wait('document.querySelector("#connection").textContent==="Connected"');assert.equal(requests.length,count);
  assert.equal(await evaluate('document.querySelectorAll("[data-action=routine-history]").length'),0);assert.deepEqual(violations,[]);
- console.log('PASS: exact routine GET scopes; UUID-exclusive 10+3 pages (not date order); all statuses; current-attempt provisional text; delivery/settlement caveats; unfinished conversation feed unchanged; no polling/mutations; empty/error/offline/stale/deleted/hidden/persona/alpha late-response fences; owner-alpha zero new history reads; desktop and 390px Chromium layout.');
+ console.log('PASS: exact routine GET scopes; UUID-exclusive 10+3 pages; all statuses/captured revisions; running retry distinct from prior portal delivery and asymmetric pending/delivered/failed/unknown counts; claim/application-settlement timestamps; completed/pruned and absent-attempt/no-outbox records; retained-body caveat; separate current-attempt provisional text; unfinished conversation feed unchanged; no new controls/polling/mutations; existing empty/error/offline/stale/deleted/hidden/persona/alpha late-response fences; owner-alpha zero new history reads; 2x desktop and 390px Chromium layout.');
 }finally{await browser('close').catch(()=>{});server.closeAllConnections();await new Promise(ok=>server.close(ok));}

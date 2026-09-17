@@ -25,10 +25,29 @@ styles; no stylesheet change is needed.
   settlement receipts. Current-attempt provisional output remains clearly
   provisional and is never presented as a delivered result. Terminal previews,
   cancelled/invalidated output and old-attempt previews are not rendered.
+- **Current attempt record** displays only the exact current `execution.attempt`,
+  its recorded status, start/claim and application settlement timestamps, and
+  whether a result body is retained. `started_at` is written at claim, before
+  native acknowledgement/inference; it is not evidence the model ran. `settled_at`
+  is an application record, not a live native-family or safe-sleep guarantee.
+  Timestamps retain their explicit API timezone (`Z` in the fixture). Null times
+  read “not recorded”; `execution:null` is a missing record, not failure.
+  `result_body_retained:false` is not incomplete execution: result payloads may
+  have been pruned after 90 days. Retaining a body also does not prove delivery.
+- **Run-level delivery records** displays pending, delivered, failed and
+  outcome-unknown counts independently. These include portal and all other
+  destinations and never synthesize an overall success/failure. Portal status and
+  update time remain separate. Portal “delivered” means a persisted portal record,
+  not owner receipt or notification; no record does not mean failure. Outbox
+  records belong to a run, not an attempt: a delivered record may predate a retry
+  and cannot establish delivery for the current attempt. No destination names or
+  payloads are rendered. Execution, delivery and provisional output are separate
+  labelled sections; no controls, requests or polling were added.
 - Steering and executor-termination observations are read-only. There are no
   history dispatch, retry, cancellation, follow-up, recovery or mutation actions.
-  The endpoint does not supply completed result bodies or delivery receipts; this
-  panel does not invent them or claim safe sleep.
+  The endpoint supplies delivery metadata, not completed result bodies or proof
+  that the owner received output; this panel does not invent either or claim safe
+  sleep. Existing captured revision/attempt attribution is unchanged.
 - History is hidden in owner-alpha, including after an observed mode transition;
   no new routine-history requests are made there.
 
@@ -47,7 +66,9 @@ only be reflected by the next state/history read; there is no server push.
 
 ```sh
 node --check public/app.js
+node --check scripts/test-portal-routine-history.mjs
 node scripts/test-portal-routine-history.mjs
+node scripts/test-portal-routine-preflight.mjs
 node scripts/test-portal-routine-delete.mjs
 node scripts/test-portal-tasks.mjs
 node scripts/test-portal-alpha-session.mjs
@@ -64,15 +85,35 @@ make zero new history reads. It also checks disclosure persistence and 390px
 document width. Neighboring fixtures cover existing deletion, task and alpha
 behavior independently.
 
+The execution/delivery extension also checks a running attempt 2 whose delivered
+portal record predates its start/claim time, with asymmetric counts (pending 2,
+delivered 1, failed 3, unknown 4). It checks a completed/pruned attempt with retained
+settlement metadata, missing attempt/no outbox, a retained-body case and null
+timestamps. Assertions independently verify every count and date, attribution
+caveats, separate provisional output and zero new controls/requests. The existing
+preflight fixture also passes; preflight behavior is unchanged.
+The offline late-response case waits for the browser to observe Offline and then
+Connected before releasing history. Calling refresh alone is insufficient because
+it can return without fetching while a background state poll is in flight.
+
 Inspected 2× Chromium screenshots under `.amp/in/artifacts/`:
 
-- `routine-history-desktop.png`: expanded provisional output.
-- `routine-history-narrow.png`: second page with completed/waiting/failed runs.
-- `routine-history-loading.png`, `routine-history-empty.png`.
-- `routine-history-error.png`, `routine-history-offline.png`.
+- `routine-history-execution-desktop.png`, `routine-history-execution-narrow.png`:
+  running current attempt, claim/application settlement labels and limits.
+- `routine-history-delivery-desktop.png`, `routine-history-delivery-narrow.png`:
+  mixed run-level delivery counts, older portal record and separate provisional
+  output.
+- `routine-history-pruned-execution.png`: completed status survives body pruning.
+- `routine-history-missing-records.png`: missing attempt, zero counts, no portal.
+
+The fixture also regenerates the existing revision, pagination, loading, empty,
+error and offline captures. The expanded card uses the existing vertical scroll
+container; content beyond a screenshot's viewport remains scrollable.
 
 These prove local browser behavior with synthetic data, not live owner auth,
 provider execution, native settlement, delivery, or production acceptance. Narrow
 Chromium is not physical-phone/touch/Safari testing. The host owns API integration,
 combined verification, shared progress documentation and verifier wiring. No
-preflight UI, account actions, push or deployment is included.
+preflight changes, account actions, push or deployment are included. After API/UI
+integration and the observed-offline fixture correction, the host's full verifier
+passed in `.local/routine-delivery-combined-final.log`; desktop tests also passed.

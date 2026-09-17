@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, beforeEach, expect, it } from 'vitest';
+import { ResultRetention } from '../src/core/result-retention';
 import { bot, fixture, otherBot, routine } from './helpers';
 
 let f: ReturnType<typeof fixture>;
@@ -104,4 +105,51 @@ it('projects durable attempt attribution without fallback to the live routine or
  for(const attempt of [3,4,5])f.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,captured_routine_revision) VALUES(?,?,?,1,'boot','failed',?,?)",run,attempt,`${run}:${attempt}`,f.core.now(),attempt+10);
  f.db.exec('UPDATE runs SET current_attempt=5 WHERE id=?',run);
  expect(read()).toMatchObject({captured_routine_revision:15,attempt_revisions:[{attempt:5,captured_routine_revision:15},{attempt:4,captured_routine_revision:14},{attempt:3,captured_routine_revision:13}]});
+});
+
+it('separates exact current-attempt execution from mixed run-level delivery without exposing content or destinations', () => {
+ const target = routine({ id: uuid(80) }), foreign = routine({ id: uuid(81), persona_id: otherBot });
+ for (const value of [target, foreign]) f.store.put(value.id, 'routine', value, 0, 'owner', f.core.now());
+ insertRun(uuid(1), target.id, bot, 'finishing', 2); insertRun(uuid(2), foreign.id, otherBot, 'completed', 2);
+ f.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at) VALUES(?,2,'FOREIGN_SUBMISSION',1,'FOREIGN_BOOT','failed',?)", uuid(2), f.core.now());
+ for (const attempt of [1, 2, 3]) f.db.exec(`INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,native_run_ref,status,deadline_at,started_at,settled_at,result_json,coordinator_release_json)
+  VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, uuid(1), attempt, `SECRET_SUBMISSION_${attempt}`, 1, 'SECRET_BOOT', 'SECRET_NATIVE', attempt === 2 ? 'running' : 'completed', '2026-09-10T01:00:00.000Z',
+  `2026-09-10T00:00:0${attempt}.000Z`, attempt === 2 ? null : '2026-09-10T00:01:00.000Z', attempt === 2 ? null : '{"text":"SECRET_RESULT"}', attempt === 2 ? '{"outcome":"completed","native_ref":"SECRET_NATIVE"}' : null);
+ const statuses = ['delivered', 'pending', 'pending', 'failed', 'outcome_unknown'];
+ statuses.forEach((status, index) => f.db.exec('INSERT INTO outbox(id,run_id,destination,payload_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)', uuid(20 + index), uuid(1), index === 0 ? 'portal' : `SECRET_DESTINATION_${index}`, '{"text":"SECRET_PAYLOAD"}', status, '2026-09-09T00:00:00.000Z', '2026-09-09T00:01:00.000Z'));
+ f.db.exec("INSERT INTO outbox VALUES(?,?,?,'{}','delivered',?,?)", uuid(30), uuid(2), 'portal', f.core.now(), f.core.now());
+ const tables = ['runs', 'attempts', 'outbox', 'operations', 'effects', 'events', 'lifecycle'];
+ const before = tables.map(table => f.db.all(`SELECT * FROM ${table} ORDER BY 1`));
+ const page = f.core.routineTaskPage(target.id);
+ expect(page.runs).toHaveLength(1);
+ expect(page.runs[0]).toMatchObject({ execution: { attempt: 2, status: 'running', started_at: '2026-09-10T00:00:02.000Z', settled_at: null, result_body_retained: false },
+  run_delivery: { counts: { pending: 2, delivered: 1, failed: 1, outcome_unknown: 1 }, portal: { status: 'delivered', updated_at: '2026-09-09T00:01:00.000Z' } } });
+ expect(JSON.stringify(page)).not.toMatch(/SECRET_|result_json|payload_json|destination|coordinator_release|submission_key|native_run_ref|boot_id/);
+ expect(tables.map(table => f.db.all(`SELECT * FROM ${table} ORDER BY 1`))).toEqual(before);
+ const conversation = f.core.taskPage(bot).runs[0];
+ expect(conversation).not.toHaveProperty('execution'); expect(conversation).not.toHaveProperty('run_delivery');
+});
+
+it('does not substitute prior or future execution records for an absent current attempt, or fabricate delivery', () => {
+ const target = routine({ id: uuid(80) }); f.store.put(target.id, 'routine', target, 0, 'owner', f.core.now());
+ insertRun(uuid(1), target.id, bot, 'queued', 2);
+ for (const attempt of [1, 3]) f.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at) VALUES(?,?,?,1,'boot','completed',?)", uuid(1), attempt, `submission-${attempt}`, f.core.now());
+ expect(f.core.routineTaskPage(target.id).runs[0]).toMatchObject({ execution: null, run_delivery: { counts: { pending: 0, delivered: 0, failed: 0, outcome_unknown: 0 }, portal: null } });
+ f.db.exec('UPDATE runs SET current_attempt=0 WHERE id=?', uuid(1));
+ expect(f.core.routineTaskPage(target.id).runs[0]).toMatchObject({ execution: null });
+});
+
+it('preserves recorded completion and portal status after actual result-body expiry', () => {
+ const target = routine({ id: uuid(80) }); f.store.put(target.id, 'routine', target, 0, 'owner', f.core.now());
+ insertRun(uuid(1), target.id, bot, 'completed', 1);
+ f.db.exec(`INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,started_at,settled_at,result_json)
+  VALUES(?,1,'submission',1,'boot','completed',?,NULL,?,'{"text":"EXPIRED_PRIVATE_RESULT"}')`, uuid(1), f.core.now(), f.core.now());
+ f.db.exec("INSERT INTO outbox VALUES(?,?,'portal','{\"text\":\"EXPIRED_PRIVATE_RESULT\"}','delivered',?,?)", uuid(20), uuid(1), f.core.now(), f.core.now());
+ const before = f.core.routineTaskPage(target.id).runs[0];
+ expect(before).toMatchObject({ execution: { attempt: 1, status: 'completed', started_at: null, settled_at: '2026-09-10T00:00:00.000Z', result_body_retained: true } });
+ f.setNow('2026-12-09T00:00:00.000Z');
+ expect(new ResultRetention(f.store, () => f.core.now()).prune()).toBe(1);
+ const after = f.core.routineTaskPage(target.id).runs[0];
+ expect(after).toEqual({ ...before, execution: { attempt: 1, status: 'completed', started_at: null, settled_at: '2026-09-10T00:00:00.000Z', result_body_retained: false } });
+ expect(JSON.stringify([before, after])).not.toContain('EXPIRED_PRIVATE_RESULT');
 });

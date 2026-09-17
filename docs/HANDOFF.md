@@ -4,6 +4,26 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Integrated: routine-history execution/delivery disclosure. 97 backend/HTTP/
+retention/lifecycle tests and typecheck pass, `.local/routine-delivery-focused.log`.
+Exact current attempt only; content-free run-level outbox counts/portal status
+never bind to a retry, and pruned payload is not loss of recorded completion.
+Start is claim time, not proof of inference. No mutation/wake or result bodies.
+History UI worker T-01a0acd6-f40d-770f-a3a0-e69fd7ede7bb finished; verified patch
+`.local/routine-delivery-ui.patch` integrated. Host browser fixture and desktop 16
+pass; six new desktop/narrow captures inspected. Initial full run passed 1468
+backend/434 runtime then hit the offline fixture's skipped-refresh assumption.
+The fixture now waits for observed Offline/Connected before releasing history;
+two focused reruns pass. Final full verifier exits 0: 1468 backend/434 runtime
+plus real Worker, browser, native/service/build checks at
+`.local/routine-delivery-combined-final.log`. Final render reinspected; no active
+worker or verification process remains. This checkpoint is local/unpublished.
+Cloudflare approval remains pending; no live/provider/shared changes or new spend.
+Next remaining E05 work: supporting-file policy before safe-test execution. Current skill
+schema is prose only and executable changes reject; no supporting-file storage
+or safe-test runner exists. Keep this separate from history, preserve staged
+review and admitted revisions, and do not mistake imported text for capability.
+
 Integrated: manual routine occurrence identity (UX12). Atomic routine.run
 creation, stable retry identity, explicit scheduled budget/overlap predicates.
 Origin scheduled/manual defaults scheduled; manual nominal time is null.

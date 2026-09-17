@@ -4,6 +4,31 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Routine execution/delivery metadata (2026-09-17 Asia/Jakarta): routine-history
+reads now add exact current-attempt application status, recorded start/settlement
+times and a result-body-retained boolean. Start is recorded at claim, not proof
+that inference ran. Missing current attempts remain null; prior/future attempts
+are never substituted. Root release is not used as completion or delivery.
+Run-level outbox counts retain pending/delivered/failed/outcome_unknown separately,
+plus the portal record's status/update time. Outbox has no attempt key; even a
+matching timestamp cannot establish current-attempt delivery. Portal delivered
+means a persisted record, not owner read or notification. Private result bodies,
+destinations, native references and submission custody are not projected.
+Red tests failed on all three absent contracts; implementation and signed-owner
+HTTP/retention/lifecycle checks pass 97 tests plus typecheck in
+`.local/routine-delivery-focused.log`. Retention regression executes actual pruning
+and preserves completion metadata. UI worker patch is integrated; host browser
+fixture and desktop 16 pass, six desktop/narrow states inspected. Initial combined
+run passed 1468 backend/434 runtime and local Worker checks, then failed the history
+fixture's offline late-response assertion. The fixture assumed refresh always
+fetches, but the application's in-flight poll guard can return immediately. It
+now awaits observed Offline then Connected before releasing the delayed response.
+Two focused reruns pass; final combined verifier exits 0 with 1468 backend/434
+runtime tests plus real Worker, browser, native/service and build checks in
+`.local/routine-delivery-combined-final.log`. Initial failed log retained at
+`.local/routine-delivery-combined.log`. Final representative render reinspected.
+No active worker remains, and no live/native/provider/settlement claim is added.
+
 Manual occurrence identity integrated (2026-09-17 Asia/Jakarta): host implements
 atomic manual occurrence/run/receipt creation, existing exact-key deduplication,
 identity retention across retries and explicit scheduled-origin budget/overlap
