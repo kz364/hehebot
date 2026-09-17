@@ -107,6 +107,21 @@ test('missing submission remains unknown, and task/attempt identities never shar
   assert.deepEqual((await f.operations.snapshot()).map(op => op.status), ['unknown', 'cancelling']);
 });
 
+test('coverage settles only for a pre-admitted matching text-only receipt without forbidden obligations', async t => {
+  const f = await fixture(t), pin = { profile_version: 'codex-text-only-v1', profile_sha256: 'a'.repeat(64) };
+  await f.journal.write('attempt-a', { threadId: 'thread', nativeRunId: 'turn', status: 'finishing', rootSettled: true,
+    nativeOutcome: 'completed', textOnlyProfile: pin,
+    textOnlyReceipt: { ...pin, thread_id: 'thread', turn_id: 'turn', output_sha256: 'b'.repeat(64) } });
+  const snapshot = () => new CodexOperations({ ...f.config, textOnlyProfile: pin }).snapshot();
+  assert.deepEqual((await snapshot()).map(row => row.status), ['settled', 'settled']);
+  assert.equal((await f.operations.snapshot())[0].status, 'unknown');
+  await f.journal.update('attempt-a', { textOnlyProfile: null });
+  assert.equal((await snapshot())[0].status, 'unknown');
+  await f.journal.update('attempt-a', { textOnlyProfile: pin });
+  await f.journal.update('attempt-a', { commands: { forbidden: 'completed' } });
+  assert.equal((await snapshot())[0].status, 'unknown');
+});
+
 test('snapshot spans heartbeat pages but fails closed at its bounded inventory limit', async t => {
   const f = await fixture(t);
   await f.journal.putIfAbsent('attempt-a', { status: 'running', commands: Object.fromEntries(Array.from({ length: 4094 }, (_, i) => [String(i), i % 3 ? 'completed' : 'inProgress'])) });

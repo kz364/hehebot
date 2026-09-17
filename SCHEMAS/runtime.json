@@ -667,6 +667,17 @@
                 "status",
                 "text"
               ]
+            },
+            "text_only_receipt": {
+              "type":"object","additionalProperties":false,
+              "properties": {
+                "profile_version":{"const":"codex-text-only-v1"},
+                "profile_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+                "thread_id":{"type":"string","minLength":1,"maxLength":256},
+                "turn_id":{"type":"string","minLength":1,"maxLength":256},
+                "output_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"}
+              },
+              "required":["profile_version","profile_sha256","thread_id","turn_id","output_sha256"]
             }
           },
           "required": [

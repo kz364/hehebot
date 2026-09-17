@@ -145,7 +145,7 @@ export class PersonalControl extends DurableObject<Env> {
   const command=input as RuntimeCommand;
   const alpha=this.core.ownerAlpha.policy;
   if(command.type==='status'){const state=this.lifecycle.get();return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{}),...(this.hostedOwnerAlpha?{owner_alpha_hosted:true}:{}),...(this.ownerBindingSha256?{owner_binding_sha256:this.ownerBindingSha256}:{})};}
-  requireThat(this.core.options.executionEnabled||alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','steer-pending','agent-routines','agent-skill'].includes(command.type)||alpha.background_first_root&&command.type==='native-child'),'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified for this operation.');
+  requireThat(this.core.options.executionEnabled||alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','steer-pending','agent-routines','agent-skill'].includes(command.type)||alpha.text_only&&command.type==='complete'||alpha.background_first_root&&command.type==='native-child'),'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified for this operation.');
   if(command.type==='whatsapp-read-authorize')return new WhatsAppReadAccess(this.core,this.lifecycle).authorize(command.payload);
   let result:unknown={ok:true};
   switch(command.type){
@@ -202,7 +202,7 @@ export class PersonalControl extends DurableObject<Env> {
    case 'coordinator-release':{
     const p=command.payload;this.lifecycle.coordinatorRelease(p.identity,p.run_id,p.attempt,p.native_ref,p.outcome);result={};break;
    }
-   case 'complete':this.lifecycle.complete(command.payload.identity,command.payload.run_id,command.payload.attempt,command.payload.result);break;
+   case 'complete':this.lifecycle.complete(command.payload.identity,command.payload.run_id,command.payload.attempt,command.payload.result,command.payload.text_only_receipt);break;
    case 'prepare-sleep':result=this.lifecycle.prepareSleep(command.payload.identity);break;
    case 'commit-sleep':this.lifecycle.commitSleep(command.payload.identity,command.payload.stop_token,command.payload.queue_sequence,command.payload.checkpoint);break;
    case 'effect-intent':{

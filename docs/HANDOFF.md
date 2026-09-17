@@ -4,25 +4,27 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
-Local follow-through now adds runtime/codex-text-only.mjs: exact versioned
-startup CLI overrides, catalog/config digests, empty thread tools/turn environments,
-readback verification; completionEligible stays false. Native fixture consumes the
-shared values rather than duplicated TOML. Host fixed catalog-path binding and
-synthetic-attestation bypass; attestations are not model entitlement proof.
-All three native modes and28 profile/transport tests pass. Lifecycle drive now
-fences provider await results against epoch/boot/provider reference/operation;
-tests include changed ownership, matching retirement and idle wrong-Sprite race.
-Combined verifier exits0:1562 backend/449 runtime,27 Worker HTTP checks plus
-native/browser/service/build; desktop16 pass. Logs .local/text-only-profile-*.log.
-All delegated workers/checks finished. One bounded read-only Sprite exec below;
-no new model call, service change, deployment or paid resource.
+Fresh text-only completion is now integrated locally across profile receipt,
+service, coverage, bridge and backend. Exact profile admission is persisted before
+RPCs; fresh config/catalog/history plus flushed output must match; backend commits
+canonical proof with the result and rejects changed replay. Legacy alpha and sleep
+remain denied. Real pinned Codex plus disposable Worker/SQLite now produces one
+completed assistant result from one scripted provider request, with no residual
+preview (`scripts/test-codex-service.mjs --text-only`). Focused112 runtime and88
+backend/bridge checks pass; desktop16 pass. Combined verification exits0 with
+1571 backend/457 runtime,27 Worker HTTP checks and native/browser/service/build,
+including the new text-only service case. Evidence:
+`.local/text-completion-{focused,backend,combined,desktop}.log`.
+All delegated workers/checks returned. No live model/provider call, service change,
+deployment, paid resource or publication in this checkpoint.
 
-Next implementation remains actual text-only receipt/coverage/service plus backend
-admission. Read-only worker proposed additive immutable session/admission tables,
+Next implementation is a safe retained-session transition. Read-only worker proposed additive immutable session/admission tables,
 an explicit owner command under /v1/commands, and exact pre-attempt contract/profile
 digest binding; proposal not implemented or a reason to alter old owner_alpha.
 Legacy attempts must never become completion-eligible retrospectively. Preserve
-old expiry/run/journals, effects and locks; no auto retry. Before same-nativeHome
+old expiry/run/journals, effects and locks; no auto retry. A committed strict fresh
+message cutoff must exclude all old waiting messages. Do not use generic stopped
+reconciliation: it settles operations and schedules retries. Before same-nativeHome
 new generation, establish old process retirement with generation-bound evidence.
 Official Sprites lifecycle describes actual cold memory loss, but a concrete Fly
 forum clarification says API cold can retain processes and btime updates on resume:

@@ -4,6 +4,38 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Text-only completion integration (2026-09-17, local/unpublished): a fresh immutable
+alpha policy can pin `codex-text-only-v1` and its profile digest. The adapter records
+that admission before native RPCs, empty dynamic tools/environments and exact ACK
+identities. Service completion refreshes config/catalog and full native history,
+flushes routed observations, checks every output digest, rejects forbidden history,
+and projects settled coverage only for the admitted profile and completed root.
+A settled heartbeat and cancellation check precede the backend completion request.
+The backend checks the current fenced attempt, completed coordinator release,
+exact output digest and absent children/effects/locks/questions/unsettled operations;
+it commits the canonical receipt with the result and rejects changed or missing
+proof on replay. Legacy sessions remain ineligible; alpha sleep remains denied.
+
+Focused checks pass112 runtime and88 backend/bridge tests. New real pinned native
+`test-codex-service.mjs --text-only` uses a disposable HTTPS Worker/SQLite and one
+scripted provider request: completed run, one attributed persisted `run.result`,
+exact receipt and no residual preview. The normal service case also passes.
+Native owner-alpha receipt now refreshes final config/catalog/history and derives
+notification health from observed transport state. This is scripted local evidence,
+not genuine account/model catalog provenance or hosted acceptance. Host integration
+found and corrected wrong verifier input, missing pre-admission pin and insufficient
+live/readback output comparison. Service corruption fixtures retain uncertainty.
+Combined verification includes the new native service case and exits0:1571 backend/
+457 runtime tests,27 Worker HTTP checks plus native/browser/service/build; desktop16
+pass. Evidence is in `.local/text-completion-{focused,backend,combined,desktop}.log`.
+
+The next retained-session transition must append an immutable generation and
+retirement evidence, advance only executor ownership, and admit messages strictly
+after its committed cutoff. It must not call generic stopped reconciliation, which
+settles operations and can schedule retries. Preserve old policy, attempts, effects,
+locks, previews and journals; old work cannot inherit the new text-only profile.
+No transition implementation or live rollout is claimed by this checkpoint.
+
 Text-only profile integration (2026-09-17, local/unpublished): the shared
 `codex-text-only-v1` constructor supplies the actual CLI overrides, thread model/
 empty dynamic tools and turn empty environments used by the native fixture.

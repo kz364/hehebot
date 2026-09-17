@@ -4,6 +4,8 @@ import type { ControlCore } from './control';
 import { nativeDescendantsSettledSql } from './native-tasks';
 import type { ContextSnapshot, Operation, Run } from './types';
 import type { RuntimeProvider, RuntimeRef, RuntimeObservation } from '../providers';
+import {createHash} from 'node:crypto';
+import type {TextOnlyReceipt} from './runtime-types';
 export type Phase='STOPPED'|'START_REQUESTED'|'BOOTING'|'READY'|'DRAINING'|'STOP_COMMITTED'|'STOPPING'|'RECOVERY_REQUIRED'|'IDLE_PERMITTED';
 export type Lifecycle={singleton:number;provider_ref_json:string;boot_id:string|null;epoch:number;phase:Phase;desired_state:'RUN'|'STOP';lease_until:string|null;last_heartbeat:string|null;queue_sequence:number;stop_token:string|null;provider_operation_id:string|null;wake_after_stop:number};
 export type Identity={epoch:number;boot_id:string};
@@ -98,7 +100,7 @@ export class LifecycleCore {
    return {lease_until:lease,cancellations:this.store.db.all<{id:string}>("SELECT id FROM runs WHERE status IN ('cancelling','recovery_required')").map(x=>x.id)};
   });
  }
- claim(identity:Identity):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true}|null {
+ claim(identity:Identity):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled||this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
@@ -134,7 +136,8 @@ export class LifecycleCore {
    this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,started_at,captured_routine_revision) VALUES(?,?,?,?,?,'claimed',?,?,?)",run.id,attempt,submissionKey,identity.epoch,identity.boot_id,deadline,this.core.now(),context.routine?.revision??null);
    if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='claimed' WHERE id=?",run.occurrence_id);
    for(const event of context.context_events)this.store.db.exec('UPDATE consumer_cursors SET consumed_sequence=MAX(consumed_sequence,?) WHERE consumer_id=? AND conversation_id=?',event.sequence,run.persona_id,context.room_id);
-   this.touch();return {run:this.store.run(run.id),submission_key:submissionKey,deadline_at:deadline,...(this.core.ownerAlpha.backgroundRoot(run.id)?{owner_alpha_background:true as const}:{})};
+   const textOnly=this.core.ownerAlpha.textOnly(run.id);
+   this.touch();return {run:this.store.run(run.id),submission_key:submissionKey,deadline_at:deadline,...(this.core.ownerAlpha.backgroundRoot(run.id)?{owner_alpha_background:true as const}:{}),...(textOnly?{text_only:textOnly}:{})};
   });
  }
  submitted(identity:Identity,runId:string,attempt:number,nativeRef:string):void {
@@ -177,11 +180,29 @@ export class LifecycleCore {
    this.store.db.exec('UPDATE attempts SET coordinator_release_json=? WHERE run_id=? AND attempt=?',receipt,runId,attempt);
   });
  }
- complete(identity:Identity,runId:string,attempt:number,result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>}):void {
-  requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Owner alpha cannot assert family settlement.');
+ complete(identity:Identity,runId:string,attempt:number,result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>},textOnlyReceipt?:TextOnlyReceipt):void {
+  const textOnly=this.core.ownerAlpha.textOnly(runId);
+  requireThat(!this.core.ownerAlpha.policy||!!textOnly,'CAPABILITY_UNAVAILABLE','Owner alpha cannot assert family settlement.');
+  requireThat(!textOnlyReceipt||!!textOnly,'CAPABILITY_UNAVAILABLE','Text-only completion is unavailable for this attempt.');
   this.store.db.transaction(()=>{
    this.authorizeAttempt(identity,runId,attempt);const run=this.store.run(runId);
    requireThat(run.current_attempt===attempt,'REVISION_CONFLICT','Attempt has changed.');
+   const proofKey=`text_only_receipt:${runId}:${attempt}`;
+   let proof:string|undefined;
+   if(textOnly){
+    const row=this.store.db.all<{native_run_ref:string|null;coordinator_release_json:string|null}>('SELECT native_run_ref,coordinator_release_json FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
+    requireThat(!!textOnlyReceipt&&textOnlyReceipt.profile_version===textOnly.profile_version&&textOnlyReceipt.profile_sha256===textOnly.profile_sha256&&textOnlyReceipt.turn_id===row.native_run_ref&&
+     row.coordinator_release_json===JSON.stringify({native_ref:row.native_run_ref,outcome:'completed'})&&run.role==='coordinator'&&run.parent_run_id===null&&
+     result.status==='completed'&&!Object.hasOwn(result,'error_code')&&!Object.hasOwn(result,'checkpoint')&&createHash('sha256').update(result.text).digest('hex')===textOnlyReceipt.output_sha256,
+     'CAPABILITY_UNAVAILABLE','Text-only completion receipt does not prove this exact result.');
+    requireThat(!this.store.db.all('SELECT id FROM runs WHERE parent_run_id=? LIMIT 1',runId).length&&!this.store.db.all('SELECT run_id FROM native_task_links WHERE run_id=? OR parent_run_id=? LIMIT 1',runId,runId).length,
+     'CANCEL_UNCONFIRMED','Text-only completion requires no child history.');
+    requireThat(!this.store.db.all('SELECT id FROM effects WHERE run_id=? LIMIT 1',runId).length,'OUTCOME_UNKNOWN','Text-only completion requires no effect history.');
+    proof=JSON.stringify({profile_version:textOnlyReceipt!.profile_version,profile_sha256:textOnlyReceipt!.profile_sha256,
+     thread_id:textOnlyReceipt!.thread_id,turn_id:textOnlyReceipt!.turn_id,output_sha256:textOnlyReceipt!.output_sha256});
+    const prior=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',proofKey)[0];
+    requireThat(!prior||prior.value_json===proof,'RESULT_CONFLICT','Text-only receipt differs from committed evidence.');
+   }
    if(['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code??'')){
     requireThat(result.status==='cancelled','CONTEXT_INVALIDATED','Cancellation must settle before any result is published.');
     result={status:'cancelled',text:'',error_code:run.error_code!};
@@ -191,6 +212,7 @@ export class LifecycleCore {
    const receipt=this.store.db.all<{result_json:string|null}>('SELECT result_json FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
    if(receipt.result_json!==null){
     requireThat(receipt.result_json===JSON.stringify(result),'RESULT_CONFLICT','Attempt result differs from its committed receipt.');
+    requireThat(!textOnly||this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',proofKey).length===1,'RESULT_CONFLICT','Text-only completion evidence is missing.');
     return;
    }
    requireThat(['claimed','running','finishing','cancelling','recovery_required'].includes(run.status),'REVISION_CONFLICT','Run is not active.');
@@ -200,6 +222,7 @@ export class LifecycleCore {
    requireThat(!this.store.db.all("SELECT id FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown')",runId).length,'OUTCOME_UNKNOWN','An external effect needs reconciliation.');
    requireThat(result.status!=='waiting'||result.checkpoint,'INVALID_INPUT','Waiting requires a durable checkpoint.',422);
    const now=this.core.now();
+   if(proof)this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',proofKey,proof);
    this.store.db.exec('UPDATE attempts SET status=?,settled_at=?,result_json=? WHERE run_id=? AND attempt=?',result.status,now,JSON.stringify(result),runId,attempt);
    this.store.db.exec('UPDATE runs SET status=?,error_code=?,checkpoint_json=?,updated_at=? WHERE id=?',result.status,result.error_code??null,result.checkpoint?JSON.stringify(result.checkpoint):null,now,runId);
    this.store.db.exec("INSERT INTO outbox(id,run_id,destination,payload_json,status,created_at,updated_at) VALUES(?,?,'portal',?,'delivered',?,?) ON CONFLICT(run_id,destination) DO UPDATE SET payload_json=excluded.payload_json,status='delivered',updated_at=excluded.updated_at",this.core.options.uuid(),runId,JSON.stringify(result),now,now);

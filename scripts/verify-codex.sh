@@ -52,6 +52,7 @@ node scripts/test-codex-tools.mjs --supervisor
 node scripts/test-codex-tools.mjs --supervisor-child
 bash scripts/test-codex-service.sh
 node scripts/test-codex-hosted-owner.mjs
+bash scripts/test-codex-service.sh --text-only
 bash scripts/test-codex-service.sh --owner-alpha-multi
 bash scripts/test-codex-service.sh --owner-alpha-background
 bash scripts/test-codex-service.sh --submission-ack

@@ -4,9 +4,16 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function ownerAlphaPolicy(value) {
   const keys = ['session_id', 'persona_id', 'expires_at', 'max_runs', 'max_task_seconds'];
   if (value && Object.hasOwn(value, 'background_first_root')) keys.push('background_first_root');
+  if (value && Object.hasOwn(value, 'text_only')) keys.push('text_only');
+  const textOnly = value?.text_only;
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       Object.keys(value).length !== keys.length || Object.keys(value).some(key => !keys.includes(key)) ||
       keys.includes('background_first_root') && value.background_first_root !== true ||
+      keys.includes('text_only') && (!textOnly || typeof textOnly !== 'object' || Array.isArray(textOnly) ||
+        Object.keys(textOnly).sort().join(',') !== 'profile_sha256,profile_version' ||
+        textOnly.profile_version !== 'codex-text-only-v1' || typeof textOnly.profile_sha256 !== 'string' ||
+        !/^[0-9a-f]{64}$/.test(textOnly.profile_sha256)) ||
+      value.background_first_root === true && textOnly !== undefined ||
       typeof value.session_id !== 'string' || !uuid.test(value.session_id) ||
       typeof value.persona_id !== 'string' || !uuid.test(value.persona_id) ||
       typeof value.expires_at !== 'string' || !Number.isFinite(Date.parse(value.expires_at)) ||
@@ -15,5 +22,5 @@ export function ownerAlphaPolicy(value) {
       !Number.isInteger(value.max_task_seconds) || value.max_task_seconds < 1 || value.max_task_seconds > 300) {
     throw Object.assign(new Error('INVALID_OWNER_ALPHA_POLICY'), { code: 'INVALID_OWNER_ALPHA_POLICY' });
   }
-  return Object.fromEntries(keys.map(key => [key, value[key]]));
+  return Object.fromEntries(keys.map(key => [key, key === 'text_only' ? { ...textOnly } : value[key]]));
 }

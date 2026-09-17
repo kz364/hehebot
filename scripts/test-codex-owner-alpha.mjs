@@ -9,7 +9,7 @@ import { mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { CODEX_TEXT_ONLY_FEATURES, createCodexTextOnlyProfile,
-  verifyCodexTextOnlyProfile } from '../runtime/codex-text-only.mjs';
+  createCodexTextOnlyCompletionReceipt, verifyCodexTextOnlyProfile } from '../runtime/codex-text-only.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
@@ -41,6 +41,8 @@ const startedAt = Date.now();
 let directory, home, transport, server, rootId, modelRequests = 0;
 let configPath, originalConfig, catalogPath, originalCatalog;
 let textOnlyProfile, effectiveConfig, commandedConfigContent;
+let targetSubmission, targetReadback;
+const transportDisconnects = [];
 let deadline;
 async function wait(predicate) {
   const until = Date.now() + 15000;
@@ -172,6 +174,7 @@ try {
   transport.child.stdout.on('data', chunk => (raw.stdout ??= []).push(chunk.toString('utf8')));
   transport.child.stderr.on('data', chunk => raw.stderr.push(chunk.toString('utf8')));
   transport.on('notification', event => raw.events.push(event));
+  transport.on('disconnect', event => transportDisconnects.push(event));
   // Default transport denies every callback; no dynamic/MCP tools are installed.
   deadline = setTimeout(() => { raw.failures.push('ALPHA_DEADLINE_EXCEEDED'); transport.close(); server.closeAllConnections(); }, 240000);
   await transport.initialize({ experimentalApi: true });
@@ -197,22 +200,32 @@ try {
     filesystem: Object.fromEntries(Object.entries(effective.permissions['owner-alpha'].filesystem)
       .map(([path, value]) => [path.startsWith(directory) ? `<private>${path.slice(directory.length)}` : path, value])),
     network: { enabled: effective.permissions['owner-alpha'].network.enabled } };
-  const started = await rpc('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture',
+  const threadStartCommand = { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture',
     permissions: 'owner-alpha', approvalPolicy: 'untrusted', baseInstructions: 'You are Travel. Only this root is admitted.',
-    ...(textOnly ? textOnlyProfile.threadStart : {}) });
+    ...(textOnly ? textOnlyProfile.threadStart : {}) };
+  const started = await rpc('thread/start', threadStartCommand);
   assert.equal(started.approvalPolicy, 'untrusted');
   report.threadApprovalPolicy = started.approvalPolicy;
   rootId = started.thread.id;
   for (const [prompt, expected] of [['ROOT_SPAWN_DENIAL_19', 'ROOT_ONLY_DENIALS_VISIBLE_19'],
     ['ROOT_COMPLETION_43', 'ROOT_COMPLETION_OK_43']]) {
-    const { turn } = await rpc('turn/start', { threadId: rootId, input: [{ type: 'text', text: prompt }],
-      ...(textOnly ? textOnlyProfile.turnStart : {}) });
+    const turnStartCommand = { threadId: rootId, input: [{ type: 'text', text: prompt }],
+      ...(textOnly ? textOnlyProfile.turnStart : {}) };
+    const { turn } = await rpc('turn/start', turnStartCommand);
     report.rootTurns++;
     await wait(() => raw.events.some(event => event.method === 'turn/completed' && event.params?.turn.id === turn.id));
-    const { thread } = await rpc('thread/read', { threadId: rootId, includeTurns: true });
+    const readParams = { threadId: rootId, includeTurns: true };
+    const readResult = await rpc('thread/read', readParams);
+    const { thread } = readResult;
     const saved = thread.turns.find(item => item.id === turn.id);
     assert.equal(saved.status, 'completed');
     assert.deepEqual(saved.items.filter(item => item.type === 'agentMessage').map(item => item.text), [expected]);
+    if (textOnly && expected === 'ROOT_COMPLETION_OK_43') {
+      targetSubmission = { threadStart: { model: threadStartCommand.model, dynamicTools: threadStartCommand.dynamicTools },
+        threadIdAck: rootId, turnStart: { threadId: turnStartCommand.threadId, environments: turnStartCommand.environments },
+        turnIdAck: turn.id };
+      targetReadback = { method: 'thread/read', params: readParams, result: readResult };
+    }
   }
   const loaded = await rpc('thread/loaded/list', {});
   assert.deepEqual(loaded, { data: [rootId], nextCursor: null });
@@ -234,6 +247,28 @@ try {
     report.textOnlyProfile = verified.version;
     report.modelCatalogUnchanged = true;
     report.forbiddenDispatchesRejected = probes.length;
+    const { config: finalConfigReadback } = await rpc('config/read', { includeLayers: false, cwd: workspace });
+    const finalCatalogContent = await readFile(catalogPath);
+    const finalReadbackResult = await rpc(targetReadback.method, targetReadback.params);
+    targetReadback = { ...targetReadback, result: finalReadbackResult };
+    const target = targetReadback.result.thread.turns.find(turn => turn.id === targetSubmission.turnIdAck);
+    const output = target.items.filter(item => item.type === 'agentMessage');
+    assert.equal(output.length, 1);
+    const completionNotifications = raw.events.filter(event => event.method === 'turn/completed' &&
+      event.params?.threadId === rootId && event.params?.turn?.id === target.id);
+    const notificationHealth = {
+      healthy: transport.closed === false && transportDisconnects.length === 0 && raw.failures.length === 0,
+      fullyFlushed: completionNotifications.length === 1 && transport.pending.size === 0,
+      streamLossObserved: transportDisconnects.length !== 0,
+    };
+    report.transportNotificationHealth = notificationHealth;
+    report.textOnlyReceipt = createCodexTextOnlyCompletionReceipt({ profile: textOnlyProfile,
+      verification: { codexVersion: '0.154.0', model: 'fixture-model', configReadback: finalConfigReadback,
+        catalogContent: finalCatalogContent, commandedConfigContent },
+      expected: { threadId: rootId, turnId: target.id, agentItemId: output[0].id, outputText: 'ROOT_COMPLETION_OK_43' },
+      submission: targetSubmission, readback: targetReadback,
+      eventRouter: { threadId: rootId, turnId: target.id, ...notificationHealth } });
+    report.receiptConstructed = true;
   }
   assert.ok(Date.now() - startedAt < 300000);
   report.noChildObserved = true;

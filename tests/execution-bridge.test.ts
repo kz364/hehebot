@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { fixture, bot } from './helpers';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { ExecutionBridge } from '../runtime/execution-bridge.mjs';
@@ -314,4 +315,24 @@ it('production compatibility gate prevents even claiming a queued job', async ()
   await expect(bridge(false).claimNext()).rejects.toMatchObject({ code: 'COMPATIBILITY_GATE_BLOCKED' });
   expect(nativeCalls).toBe(0); expect(f.store.run(id).status).toBe('queued');
   expect(f.db.all('SELECT * FROM attempts')).toHaveLength(0);
+});
+
+it('text-only completion sends the exact wire receipt, replays it, and rejects changed proof', async () => {
+  const journal = new FileJournal(join(directory, 'text-only-bridge')), calls: any[] = [];
+  const executor = new ExecutionBridge({ control: { request: async (type: string, payload: any) => { calls.push({ type, payload }); return {}; } },
+    native: { admissionReadiness: () => ({ allowed: true }), submit: async () => ({}) }, journal, identity,
+    installationId: 'synthetic-installation', personas: { [bot]: { agentId: 'assistant', model: 'model' } } });
+  const attemptId = 'text-only-attempt', text = 'Exact verified answer', pin = {
+    profile_version: 'codex-text-only-v1', profile_sha256: 'a'.repeat(64) };
+  await journal.putIfAbsent(executor.cursor, { phase: 'running', identity, attemptId, nativeRunId: 'turn-1', nativeThreadId: 'thread-1',
+    claim: { submission_key: `${randomUUID()}:1`, text_only: pin, run: { id: randomUUID(), current_attempt: 1 } } });
+  const row: any = await journal.get(executor.cursor); row.claim.submission_key = `${row.claim.run.id}:1`; await journal.write(executor.cursor, row);
+  const receipt = { ...pin, thread_id: 'thread-1', turn_id: 'turn-1', output_sha256: createHash('sha256').update(text).digest('hex') };
+  const observation = { attemptId, nativeRunId: 'turn-1', rootSettled: true, toolsSettled: true, childrenSettled: true,
+    effectsSettled: true, outputCommitted: true, result: { status: 'completed', text }, text_only_receipt: receipt };
+  await executor.complete(observation); await executor.complete(observation);
+  expect(calls).toEqual([{ type: 'complete', payload: { identity, run_id: row.claim.run.id, attempt: 1,
+    result: observation.result, text_only_receipt: receipt } }]);
+  await expect(executor.complete({ ...observation, text_only_receipt: { ...receipt, output_sha256: 'b'.repeat(64) } }))
+    .rejects.toMatchObject({ code: 'TEXT_ONLY_RECEIPT_MISMATCH' });
 });

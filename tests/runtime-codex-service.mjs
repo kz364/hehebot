@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCodexService } from '../runtime/codex-service.mjs';
+import { CODEX_TEXT_ONLY_FEATURES, createCodexTextOnlyProfile, codexTextOnlyProfileSha256 } from '../runtime/codex-text-only.mjs';
 
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'hehe-service-unit-'));
@@ -444,6 +445,62 @@ async function hostedFixture(t) {
     } } };
   return { ...f, config, dependencies, bindingSha256, ownerAlpha, accessClientIdFile, accessClientSecretFile };
 }
+
+for (const corruption of [null, 'catalog', 'output']) test(`text-only service completes with settled coverage or retains uncertainty: ${corruption}`, async t => {
+  const f = await hostedFixture(t), catalogPath = join(f.directory, 'catalog.json');
+  const profileInput = { codexVersion: '0.154.0', model: 'fixture-model', catalogPath,
+    modelCatalog: { models: [{ slug: 'fixture-model', tool_mode: 'direct', experimental_supported_tools: [] }] },
+    catalogValidation: 'synthetic-fixture', syntheticFixture: true };
+  const profile = createCodexTextOnlyProfile(profileInput);
+  await writeFile(catalogPath, JSON.stringify(profile.modelCatalog), { mode: 0o600 });
+  f.ownerAlpha.text_only = { profile_version: profile.version, profile_sha256: codexTextOnlyProfileSha256(profile) };
+  f.config.personas[f.ownerAlpha.persona_id].allowedTools = [];
+  const originalRpc = f.transport.request, originalRequest = f.dependencies.control.request;
+  const runId = '12345678-1234-4234-8234-123456789abc', completions = [], heartbeats = [];
+  let claims = 0;
+  f.transport.request = async (method, params) => {
+    if (method === 'thread/read') return { thread: { id: 'native-thread', turns: [{ id: 'native-turn', status: 'completed',
+      items: [{ id: 'answer', type: 'agentMessage', phase: 'final_answer', text: corruption === 'output' ? 'different' : 'Full exact answer ✓' }] }] } };
+    const reply = await originalRpc(method, params);
+    if (method === 'config/read') Object.assign(reply.config, { model: profile.model, model_catalog_json: catalogPath,
+      mcp_servers: {}, features: Object.fromEntries(CODEX_TEXT_ONLY_FEATURES.map(key => [key, false])) });
+    return reply;
+  };
+  const service = createCodexService({ ...f.config, textOnlyProfile: profileInput }, { ...f.dependencies, operations: undefined,
+    control: { request: async (type, payload) => {
+      if (type === 'claim') return claims++ ? null : { text_only: f.ownerAlpha.text_only, submission_key: `${runId}:1`,
+        deadline_at: new Date(f.dependencies.now() + 179000).toISOString(), run: { id: runId, current_attempt: 1,
+          persona_id: f.ownerAlpha.persona_id, role: 'coordinator', context_json: '{}', updated_at: new Date(f.dependencies.now()).toISOString() } };
+      if (type === 'heartbeat') heartbeats.push(payload.operations);
+      if (type === 'output-preview') return { accepted: true };
+      if (type === 'coordinator-release') return {};
+      if (type === 'complete') { completions.push(payload); return {}; }
+      return originalRequest(type, payload);
+    } } });
+  t.after(() => service.stop());
+  await service.start();
+  const emit = (method, params) => f.transport.emit('notification', { method, params });
+  emit('item/started', { threadId: 'native-thread', turnId: 'native-turn', item: { id: 'answer', type: 'agentMessage' } });
+  emit('item/completed', { threadId: 'native-thread', turnId: 'native-turn', item: { id: 'answer', type: 'agentMessage', phase: 'final_answer', text: 'Full exact answer ✓' } });
+  emit('turn/completed', { threadId: 'native-thread', turn: { id: 'native-turn', status: 'completed' } });
+  if (corruption === 'catalog') await writeFile(catalogPath, '{}', { mode: 0o600 });
+  if (corruption) {
+    await assert.rejects(service.maintain());
+    assert.equal(service.phase, 'recovery'); assert.deepEqual(completions, []);
+  } else {
+    await service.maintain();
+    assert.equal(completions.length, 1);
+    assert.deepEqual(completions[0].result, { status: 'completed', text: 'Full exact answer ✓' });
+    assert.equal(completions[0].text_only_receipt.profile_sha256, f.ownerAlpha.text_only.profile_sha256);
+    assert.ok(heartbeats.at(-1).length >= 2);
+    assert.ok(heartbeats.at(-1).every(operation => operation.status === 'settled'));
+    assert.ok((await service.supervisor.bridge.families()).every(row => row.phase === 'complete'));
+  }
+  assert.equal(f.calls.find(call => call.method === 'thread/start').params.config, undefined);
+  assert.deepEqual(f.calls.find(call => call.method === 'turn/start').params.environments, []);
+  assert.equal((await readdir(join(f.directory, 'journal'))).some(name => name.startsWith('grant-')), false);
+  await service.stop();
+});
 
 test('hosted owner composition persists its pin before authenticated status and holds before version/native submission', async t => {
   const f = await hostedFixture(t), request = f.dependencies.control.request;

@@ -33,6 +33,13 @@ it('rejects simultaneous local owner-alpha configuration',()=>{
  expect(parseHostedOwnerAlpha(encoded(),{...base,HEHEBOT_OWNER_ALPHA:''})).toEqual({policy,ownerBindingSha256:digest});
 });
 
+it('accepts an exact text-only pin and rejects background coexistence or malformed hashes',()=>{
+ const text_only={profile_version:'codex-text-only-v1' as const,profile_sha256:'a'.repeat(64)};
+ expect(parseHostedOwnerAlpha(encoded({...policy,text_only}),base)?.policy.text_only).toEqual(text_only);
+ for(const changed of [{...policy,text_only,background_first_root:true},{...policy,text_only:{...text_only,profile_sha256:'A'.repeat(64)}},{...policy,text_only:{...text_only,profile_version:'other'}}])
+  expect(()=>parseHostedOwnerAlpha(encoded(changed),base)).toThrow();
+});
+
 it('preserves local parser serialization and rejection of Access auth',()=>{
  const local={AUTH_MODE:'local',EXECUTION_ENABLED:'false',NATIVE_VERIFIED:'false',PROVIDER_CONFIG:'{}'};
  expect(JSON.stringify(parseOwnerAlpha(JSON.stringify(policy),local))).toBe(JSON.stringify(policy));

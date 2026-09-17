@@ -1,4 +1,4 @@
-import {createHmac,randomUUID} from 'node:crypto';
+import {createHash,createHmac,randomUUID} from 'node:crypto';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {TestDatabase,bot,otherBot,routine} from './helpers';
 import {PersonalControl} from '../src/worker/control-object';
@@ -123,7 +123,7 @@ it('fails closed on changed/removed policy, missing custody, old epoch and unkno
  await initialize();const identity=await boot();await message();const first=await runtime('claim',{identity});
  const saved=custody();
  await expect(initialize(null)).rejects.toThrow();
- for(const changed of [{...policy,session_id:randomUUID()},{...policy,max_runs:3},{...policy,expires_at:'2026-09-10T00:02:00.000Z'}])await expect(initialize(changed)).rejects.toThrow();
+ for(const changed of [{...policy,session_id:randomUUID()},{...policy,max_runs:3},{...policy,expires_at:'2026-09-10T00:02:00.000Z'},{...policy,text_only:{profile_version:'codex-text-only-v1' as const,profile_sha256:'a'.repeat(64)}}])await expect(initialize(changed)).rejects.toThrow();
  expect(custody()).toEqual(saved);await initialize();
  expect((await request('/internal/boot',{boot_id:randomUUID()})).status).toBe(409);
  vi.setSystemTime(new Date('2026-09-10T00:01:31.000Z'));await control.alarm();
@@ -140,7 +140,7 @@ it('denies mutating tools, children, final settlement, flight and sleep even for
  const scope={identity,run_id:first.run.id,attempt:1};
  const calls:[string,unknown][]=[
   ['prepare-sleep',{identity}],['commit-sleep',{identity,stop_token:randomUUID(),queue_sequence:1,checkpoint:{ok:true}}],
-  ['complete',{...scope,result:{status:'completed',text:'not verified'}}],
+  ['complete',{...scope,result:{status:'completed',text:'not verified'},text_only_receipt:{profile_version:'codex-text-only-v1',profile_sha256:'a'.repeat(64),thread_id:'thread',turn_id:'turn',output_sha256:'b'.repeat(64)}}],
   ['native-child',{identity,child:{parent_run_id:first.run.id,parent_attempt:1,persona_id:bot,native_run_ref:'child',native_session_key:'child-session',title:'Denied child'}}],
   ['resource-acquire',{...scope,resources:['synthetic']}],['resource-release',{...scope,resources:['synthetic']}],
   ['agent-command',{...scope,idempotency_key:randomUUID(),command:{schema_version:1,type:'routine.put',payload:routine()}}],
@@ -150,6 +150,64 @@ it('denies mutating tools, children, final settlement, flight and sleep even for
  for(const [type,payload] of calls){const response=await request('/internal/'+type,payload);expect(await response.json(),type).toMatchObject({error:{code:'CAPABILITY_UNAVAILABLE'}});}
  expect(db.all('SELECT * FROM effects')).toEqual([]);expect(db.all('SELECT * FROM native_task_links')).toEqual([]);
  expect(db.all('SELECT result_json FROM attempts')).toEqual([{result_json:null}]);
+});
+
+it('completes only a freshly pinned exact text-only result and replays idempotently',async()=>{
+ const text_only={profile_version:'codex-text-only-v1' as const,profile_sha256:'a'.repeat(64)};
+ policy={...policy,text_only};await initialize();const identity=await boot();await message();const claim=await runtime('claim',{identity});
+ expect(claim.text_only).toEqual(text_only);
+ const scope={identity,run_id:claim.run.id,attempt:1},native_ref='native:text-only-turn';
+ await runtime('submitted',{...scope,native_ref});await runtime('coordinator-release',{...scope,native_ref,outcome:'completed'});
+ const result={status:'completed' as const,text:'Exact UTF-8 result ✓'};
+ const text_only_receipt={...text_only,thread_id:'native:thread',turn_id:native_ref,output_sha256:createHash('sha256').update(result.text).digest('hex')};
+ await runtime('complete',{...scope,result,text_only_receipt});
+ const before={attempt:db.all('SELECT status,result_json,settled_at FROM attempts'),run:db.all('SELECT status FROM runs'),outbox:db.all('SELECT payload_json,status FROM outbox'),events:db.all("SELECT payload_json FROM events WHERE type='run.result'")};
+ expect(before.attempt).toEqual([{status:'completed',result_json:JSON.stringify(result),settled_at:'2026-09-10T00:00:00.000Z'}]);
+ expect(before.run).toEqual([{status:'completed'}]);expect(before.outbox).toEqual([{payload_json:JSON.stringify(result),status:'delivered'}]);expect(before.events).toHaveLength(1);
+ await runtime('complete',{...scope,result,text_only_receipt});
+ expect({attempt:db.all('SELECT status,result_json,settled_at FROM attempts'),run:db.all('SELECT status FROM runs'),outbox:db.all('SELECT payload_json,status FROM outbox'),events:db.all("SELECT payload_json FROM events WHERE type='run.result'")}).toEqual(before);
+ expect(db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`text_only_receipt:${claim.run.id}:1`).map(row=>JSON.parse(row.value_json))).toEqual([text_only_receipt]);
+ expect((await request('/internal/complete',{...scope,result,text_only_receipt:{...text_only_receipt,thread_id:'different-thread'}})).status).toBe(409);
+ expect(db.all("SELECT id FROM events WHERE type='run.result'")).toHaveLength(1);
+});
+
+it.each([
+ ['profile',(r:any)=>({...r,profile_sha256:'b'.repeat(64)})],
+ ['turn',(r:any)=>({...r,turn_id:'other-turn'})],
+ ['digest',(r:any)=>({...r,output_sha256:'b'.repeat(64)})],
+ ['result',(r:any)=>r],
+] as const)('rejects changed text-only %s proof without persistence',async(kind,change)=>{
+ const text_only={profile_version:'codex-text-only-v1' as const,profile_sha256:'a'.repeat(64)};policy={...policy,text_only};await initialize();
+ const identity=await boot();await message();const claim=await runtime('claim',{identity}),scope={identity,run_id:claim.run.id,attempt:1},native_ref='native:turn';
+ await runtime('submitted',{...scope,native_ref});await runtime('coordinator-release',{...scope,native_ref,outcome:'completed'});
+ const result={status:'completed' as const,text:kind==='result'?'changed':'exact'};
+ const receipt={...text_only,thread_id:'thread',turn_id:native_ref,output_sha256:createHash('sha256').update('exact').digest('hex')};
+ const response=await request('/internal/complete',{...scope,result,text_only_receipt:change(receipt)});expect(response.status).toBe(409);
+ expect(db.all('SELECT result_json FROM attempts')).toEqual([{result_json:null}]);expect(db.all('SELECT * FROM outbox')).toEqual([]);
+ expect(db.all("SELECT key FROM runtime_metadata WHERE key LIKE 'text_only_receipt:%'")).toEqual([]);
+});
+
+it('rejects a text-only receipt for the wrong attempt',async()=>{
+ const text_only={profile_version:'codex-text-only-v1' as const,profile_sha256:'a'.repeat(64)};policy={...policy,text_only};await initialize();
+ const identity=await boot();await message();const claim=await runtime('claim',{identity}),native_ref='native:turn';
+ await runtime('submitted',{identity,run_id:claim.run.id,attempt:1,native_ref});await runtime('coordinator-release',{identity,run_id:claim.run.id,attempt:1,native_ref,outcome:'completed'});
+ const result={status:'completed',text:'exact'},text_only_receipt={...text_only,thread_id:'thread',turn_id:native_ref,output_sha256:createHash('sha256').update(result.text).digest('hex')};
+ expect((await request('/internal/complete',{identity,run_id:claim.run.id,attempt:2,result,text_only_receipt})).status).toBe(409);
+ expect(db.all('SELECT result_json FROM attempts')).toEqual([{result_json:null}]);
+});
+
+it('rejects text-only completion with historical children, effects, live operations or locks',async()=>{
+ const text_only={profile_version:'codex-text-only-v1' as const,profile_sha256:'a'.repeat(64)};
+ for(const obstruction of ['child','effect','operation','lock']){
+  db.close();db=new TestDatabase();policy={...policy,session_id:randomUUID(),text_only};await initialize();const identity=await boot();await message();const claim=await runtime('claim',{identity});
+  const scope={identity,run_id:claim.run.id,attempt:1},native_ref='native:'+obstruction;await runtime('submitted',{...scope,native_ref});await runtime('coordinator-release',{...scope,native_ref,outcome:'completed'});
+  if(obstruction==='child')db.exec("INSERT INTO runs(id,persona_id,role,parent_run_id,status,title,context_json,current_attempt,created_at,updated_at) VALUES(?,?,'background',?,'completed','old child','{}',0,?,?)",randomUUID(),bot,claim.run.id,new Date().toISOString(),new Date().toISOString());
+  if(obstruction==='effect')db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'read_only','confirmed','auth','digest',?)",randomUUID(),claim.run.id,randomUUID(),new Date().toISOString());
+  if(obstruction==='operation')db.exec("INSERT INTO operations(id,run_id,attempt,kind,status,started_at,deadline_at,last_progress_at) VALUES(?,?,1,'tool','active',?,?,?)",randomUUID(),claim.run.id,new Date().toISOString(),claim.deadline_at,new Date().toISOString());
+  if(obstruction==='lock')db.exec('INSERT INTO resource_locks(resource_id,run_id,attempt,acquired_at) VALUES(?,?,1,?)','old-lock',claim.run.id,new Date().toISOString());
+  const result={status:'completed',text:'exact'},text_only_receipt={...text_only,thread_id:'thread',turn_id:native_ref,output_sha256:createHash('sha256').update(result.text).digest('hex')};
+  expect((await request('/internal/complete',{...scope,result,text_only_receipt})).status).toBe(409);expect(db.all('SELECT result_json FROM attempts')).toEqual([{result_json:null}]);
+ }
 });
 
 it('rejects nonfresh epoch-zero custody and expired first boot without manufacturing an epoch',async()=>{

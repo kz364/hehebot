@@ -78,6 +78,8 @@ export class ExecutionBridge {
           Object.hasOwn(claim, 'owner_alpha_background') && claim.owner_alpha_background !== true) fail('INVALID_CLAIM');
       claim = structuredClone(claim);
       const background = Object.hasOwn(claim, 'owner_alpha_background');
+      if (claim.text_only !== undefined && (!claim.text_only || claim.owner_alpha_background ||
+          claim.text_only.profile_version !== 'codex-text-only-v1' || !/^[0-9a-f]{64}$/.test(claim.text_only.profile_sha256 ?? ''))) fail('INVALID_CLAIM');
       await this.journal.update(this.cursor, { phase: 'claimed', claim });
       const persona = this.personas[claim.run.persona_id];
       if (!persona?.agentId || !persona.model) fail('NATIVE_PERSONA_UNMAPPED');
@@ -100,7 +102,8 @@ export class ExecutionBridge {
       try { submitted = await this.native.submit(input); }
       catch { return this.journal.get(this.cursor); }
       if (!submitted?.nativeRunId || submitted.recoveryRequired || submitted.status !== 'running') return this.journal.get(this.cursor);
-      await this.journal.update(this.cursor, { phase: 'submitted_unknown', nativeRunId: submitted.nativeRunId });
+      await this.journal.update(this.cursor, { phase: 'submitted_unknown', nativeRunId: submitted.nativeRunId,
+        ...(claim.text_only ? { nativeThreadId: submitted.threadId } : {}) });
       try {
         await this.control.request('submitted', { identity: this.identity, run_id: claim.run.id,
           attempt: claim.run.current_attempt, native_ref: submitted.nativeRunId });
@@ -143,9 +146,16 @@ export class ExecutionBridge {
       if (observation?.nativeRunId !== row.nativeRunId || observation.attemptId !== row.attemptId) fail('SETTLEMENT_IDENTITY_MISMATCH');
       if (!['rootSettled', 'toolsSettled', 'childrenSettled', 'effectsSettled', 'outputCommitted'].every(key => observation[key] === true)) fail('NATIVE_SETTLEMENT_INCOMPLETE');
       const result = observation.result;
+      const receipt = observation.text_only_receipt;
+      if (Boolean(row.claim.text_only) !== Boolean(receipt)) fail('TEXT_ONLY_RECEIPT_MISMATCH');
+      if (receipt && (Object.keys(receipt).sort().join(',') !== 'output_sha256,profile_sha256,profile_version,thread_id,turn_id' ||
+          receipt.profile_version !== row.claim.text_only.profile_version || receipt.profile_sha256 !== row.claim.text_only.profile_sha256 ||
+          receipt.thread_id !== row.nativeThreadId || receipt.turn_id !== row.nativeRunId ||
+          receipt.output_sha256 !== createHash('sha256').update(result?.text ?? '').digest('hex'))) fail('TEXT_ONLY_RECEIPT_MISMATCH');
       if (!result || !['completed', 'failed', 'cancelled', 'waiting'].includes(result.status) || typeof result.text !== 'string' ||
           result.status === 'waiting' && !result.checkpoint) fail('INVALID_NATIVE_RESULT');
       if (row.result && hash(row.result) !== hash(result)) fail('RESULT_CONFLICT');
+      if (row.textOnlyReceipt && hash(row.textOnlyReceipt) !== hash(receipt)) fail('RESULT_CONFLICT');
       if (row.phase === 'complete') return row;
       const update = async patch => {
         if (!archived) return this.journal.update(this.cursor, patch);
@@ -153,12 +163,12 @@ export class ExecutionBridge {
         await this.journal.update(this.cursor, { families: cursor.families.map(family => family.attemptId === row.attemptId ? next : family) });
         return next;
       };
-      await update({ phase: 'complete_pending', result });
+      await update({ phase: 'complete_pending', result, ...(receipt ? { textOnlyReceipt: receipt } : {}) });
       // Control completion is idempotent for the same fenced attempt. Explicit replay
       // sends the persisted identical result; it never resubmits native inference.
       await this.control.request('complete', { identity: this.identity, run_id: row.claim.run.id,
-        attempt: row.claim.run.current_attempt, result });
-      return update({ phase: 'complete', result });
+        attempt: row.claim.run.current_attempt, result, ...(receipt ? { text_only_receipt: receipt } : {}) });
+      return update({ phase: 'complete', result, ...(receipt ? { textOnlyReceipt: receipt } : {}) });
     } finally { this.#busy = false; }
   }
 }

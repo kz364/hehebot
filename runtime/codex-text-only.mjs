@@ -25,6 +25,12 @@ const deepFreeze = value => {
   return value;
 };
 
+export function codexTextOnlyProfileSha256(profile) {
+  if (profile?.version !== CODEX_TEXT_ONLY_PROFILE_VERSION || !profile.binding ||
+      typeof profile.binding !== 'object' || Array.isArray(profile.binding)) fail('TEXT_ONLY_PROFILE_MISMATCH');
+  return digest(Buffer.from(JSON.stringify(profile.binding), 'utf8'));
+}
+
 /** Builds immutable startup commands and their content binding. It does not
  * establish model entitlement, execute Codex, or settle a task. */
 export function createCodexTextOnlyProfile({ codexVersion, model, modelCatalog, catalogPath,
@@ -89,4 +95,54 @@ export function verifyCodexTextOnlyProfile(profile, { codexVersion, model, confi
   return Object.freeze({ valid: true, version: profile.version, model,
     catalogSha256: profile.binding.catalogSha256, commandedConfigSha256: profile.binding.commandedConfigSha256,
     completionEligible: false, extensionToolSettingsReadback: 'omitted-bind-commanded-settings' });
+}
+
+/** Constructs host evidence for one separately admitted, text-only native turn.
+ * The caller must pass the exact commanded RPC fields/returned IDs, fresh immutable
+ * bytes and config/read result, an includeTurns thread/read response, and an event
+ * router status captured only after that exact stream has fully flushed. */
+export function createCodexTextOnlyCompletionReceipt({ profile, verification, expected,
+  submission, readback, eventRouter }) {
+  exactKeys(arguments[0], ['profile', 'verification', 'expected', 'submission', 'readback', 'eventRouter'],
+    'TEXT_ONLY_RECEIPT_INVALID');
+  exactKeys(expected, ['threadId', 'turnId', 'agentItemId', 'outputText'], 'TEXT_ONLY_RECEIPT_INVALID');
+  for (const value of Object.values(expected)) if (typeof value !== 'string' || !value) fail('TEXT_ONLY_RECEIPT_INVALID');
+  exactKeys(submission, ['threadStart', 'threadIdAck', 'turnStart', 'turnIdAck'], 'TEXT_ONLY_SUBMISSION_MISMATCH');
+  exactKeys(submission.threadStart, ['model', 'dynamicTools'], 'TEXT_ONLY_SUBMISSION_MISMATCH');
+  exactKeys(submission.turnStart, ['threadId', 'environments'], 'TEXT_ONLY_SUBMISSION_MISMATCH');
+  if (submission.threadStart.model !== profile?.model || !Array.isArray(submission.threadStart.dynamicTools) ||
+      submission.threadStart.dynamicTools.length || submission.threadIdAck !== expected.threadId ||
+      submission.turnStart.threadId !== expected.threadId || !Array.isArray(submission.turnStart.environments) ||
+      submission.turnStart.environments.length || submission.turnIdAck !== expected.turnId) fail('TEXT_ONLY_SUBMISSION_MISMATCH');
+
+  verifyCodexTextOnlyProfile(profile, verification);
+  exactKeys(readback, ['method', 'params', 'result'], 'TEXT_ONLY_READBACK_INVALID');
+  if (readback.method !== 'thread/read' || readback.params?.threadId !== expected.threadId ||
+      readback.params?.includeTurns !== true || readback.result?.thread?.id !== expected.threadId ||
+      !Array.isArray(readback.result.thread.turns)) fail('TEXT_ONLY_READBACK_INVALID');
+  exactKeys(eventRouter, ['threadId', 'turnId', 'healthy', 'fullyFlushed', 'streamLossObserved'], 'TEXT_ONLY_STREAM_UNVERIFIED');
+  if (eventRouter.threadId !== expected.threadId || eventRouter.turnId !== expected.turnId ||
+      eventRouter.healthy !== true || eventRouter.fullyFlushed !== true || eventRouter.streamLossObserved !== false)
+    fail('TEXT_ONLY_STREAM_UNVERIFIED');
+
+  const turns = readback.result.thread.turns;
+  const target = turns.filter(turn => turn?.id === expected.turnId);
+  if (target.length !== 1) fail('TEXT_ONLY_TURN_IDENTITY_MISMATCH');
+  if (turns.some(turn => turn?.status === 'inProgress')) fail('TEXT_ONLY_COMPETING_TURN');
+  if (target[0].status !== 'completed') fail('TEXT_ONLY_TURN_NOT_COMPLETED');
+  const allowed = new Set(['userMessage', 'agentMessage', 'reasoning']);
+  for (const turn of turns) {
+    if (!turn || typeof turn.id !== 'string' || !Array.isArray(turn.items) ||
+        turn.items.some(item => !item || !allowed.has(item.type))) fail('TEXT_ONLY_UNSUPPORTED_ITEM');
+  }
+  const outputs = target[0].items.filter(item => item.type === 'agentMessage' &&
+    (item.phase === undefined || item.phase === null || item.phase === 'final_answer'));
+  if (outputs.length !== 1 || outputs[0].id !== expected.agentItemId ||
+      typeof outputs[0].text !== 'string' || outputs[0].text.length === 0 ||
+      outputs[0].text !== expected.outputText) fail('TEXT_ONLY_OUTPUT_AMBIGUOUS');
+  const text = outputs[0].text;
+  return deepFreeze({ profile_version: CODEX_TEXT_ONLY_PROFILE_VERSION,
+    profile_sha256: codexTextOnlyProfileSha256(profile), thread_id: expected.threadId,
+    turn_id: expected.turnId, output_sha256: digest(Buffer.from(text, 'utf8')),
+    result: { status: 'completed', text } });
 }

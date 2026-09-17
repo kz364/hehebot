@@ -16,11 +16,13 @@ import { createCodexService } from '../runtime/codex-service.mjs';
 import { ControlClient } from '../runtime/control-client.mjs';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { inspectCodexRecovery } from '../runtime/codex-recovery-inspect.mjs';
+import { codexTextOnlyProfileSha256, createCodexTextOnlyProfile } from '../runtime/codex-text-only.mjs';
 
 const root = resolve(import.meta.dirname, '..');
+const textOnlyMode = process.argv.includes('--text-only');
 const ownerAlphaBackgroundMode = process.argv.includes('--owner-alpha-background');
 const ownerAlphaMultiMode = process.argv.includes('--owner-alpha-multi');
-const ownerAlphaMode = process.argv.includes('--owner-alpha') || ownerAlphaMultiMode || ownerAlphaBackgroundMode;
+const ownerAlphaMode = process.argv.includes('--owner-alpha') || ownerAlphaMultiMode || ownerAlphaBackgroundMode || textOnlyMode;
 const restrictedMode = process.argv.includes('--restricted-background') || ownerAlphaMode;
 const backgroundMode = process.argv.includes('--background-responsive') || process.argv.includes('--restricted-background') || ownerAlphaBackgroundMode;
 const effectsMode = process.argv.includes('--child-effects');
@@ -35,12 +37,12 @@ const submissionAckMode = process.argv.includes('--submission-ack');
 const operationPagesMode = process.argv.includes('--operation-pages');
 const reasoningMode = process.argv.includes('--reasoning');
 const planMode = process.argv.includes('--plan') || planChildMode;
-const portalMode = process.argv.includes('--portal-readback') || backgroundMode || ownerAlphaMode;
+const portalMode = process.argv.includes('--portal-readback') || backgroundMode || (ownerAlphaMode && !textOnlyMode);
 const browserSession = `service-${randomUUID().slice(0, 8)}`;
 const browser = (...args) => promisify(execFile)('agent-browser', ['--session', browserSession, '--ignore-https-errors', ...args], { timeout: 30000 });
 const expectedToolCalls = operationPagesMode ? 101 : 1;
 const questionAnswers = { route43: { answers: ['West43'] }, timing19: { answers: [] } };
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback', '--background-responsive', '--restricted-background', '--owner-alpha', '--owner-alpha-multi', '--owner-alpha-background'].includes(arg)), 'Unknown fixture option');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--child', '--crash', '--child-effects', '--questions', '--questions-cancel', '--history', '--history-child', '--submission-ack', '--operation-pages', '--reasoning', '--plan', '--plan-child', '--portal-readback', '--background-responsive', '--restricted-background', '--owner-alpha', '--owner-alpha-multi', '--owner-alpha-background', '--text-only'].includes(arg)), 'Unknown fixture option');
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 async function wait(fn, label, ms = 20000) {
   const end = Date.now() + ms;
@@ -103,9 +105,24 @@ const nativeStarts = [];
 const errors = [], taskRequests = [];
 try {
   const workerPort = await port(), token = randomBytes(32).toString('hex');
+  const catalogPath = join(directory, 'text-only-models.json');
+  const textOnlyProfileInput = textOnlyMode ? { codexVersion: '0.154.0', model: 'fixture-model', catalogPath,
+    modelCatalog: { models: [{ slug: 'fixture-model', display_name: 'Synthetic text-only service fixture', description: null,
+      supported_reasoning_levels: [], shell_type: 'unified_exec', visibility: 'list', supported_in_api: true,
+      priority: 1, upgrade: null, model_messages: { instructions_template: 'Synthetic credential-free native fixture.', instructions_variables: null },
+      default_reasoning_summary: 'auto', support_verbosity: false, tool_mode: 'direct', default_verbosity: null,
+      apply_patch_tool_type: null, truncation_policy: { mode: 'bytes', limit: 10000 }, supports_image_detail_original: false,
+      context_window: 272000, auto_compact_token_limit: null, effective_context_window_percent: 95,
+      experimental_supported_tools: [] }] },
+    catalogValidation: 'synthetic-fixture', syntheticFixture: true } : undefined;
+  const textOnlyProfile = textOnlyMode ? createCodexTextOnlyProfile(textOnlyProfileInput) : undefined;
+  if (textOnlyProfile) await writeFile(catalogPath, JSON.stringify(textOnlyProfile.modelCatalog), { mode: 0o600 });
   const ownerAlpha = { session_id: randomUUID(), persona_id: '11111111-1111-4111-8111-111111111111',
     expires_at: new Date(Date.now() + 300000).toISOString(), max_runs: ownerAlphaBackgroundMode ? 3 : ownerAlphaMultiMode ? 2 : 1,
-    max_task_seconds: ownerAlphaBackgroundMode ? 120 : 15, ...(ownerAlphaBackgroundMode ? { background_first_root: true } : {}) };
+    max_task_seconds: ownerAlphaBackgroundMode ? 120 : textOnlyMode ? 120 : 15,
+    ...(ownerAlphaBackgroundMode ? { background_first_root: true } : {}),
+    ...(textOnlyProfile ? { text_only: { profile_version: textOnlyProfile.version,
+      profile_sha256: codexTextOnlyProfileSha256(textOnlyProfile) } } : {}) };
   const routinePolicy = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
   const cert = join(directory, 'cert.pem'), key = join(directory, 'key.pem');
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
@@ -178,6 +195,13 @@ try {
         assert.ok(!tools.some(name => /(^|\.)sleep$/.test(name)), 'Restricted root/child cannot request durable sleep');
       }
       await wait(() => bound, 'service acknowledged root');
+      if (textOnlyMode) {
+        assert.deepEqual(body.tools, [], 'Text-only provider request must have no tools');
+        assert.match(JSON.stringify(body.input), /SERVICE_ASSEMBLY_19_43/);
+        await send(res, [{ id: 'text_only_answer_43', type: 'message', status: 'completed', role: 'assistant',
+          content: [{ type: 'output_text', text: 'SERVICE_TEXT_ONLY_COMPLETE_43', annotations: [] }] }]);
+        return;
+      }
       const actualContexts = body.input.filter(item => item.role === 'user').flatMap(item => {
         const content = typeof item.content === 'string' ? [item.content] : (item.content ?? []).map(part => part.text);
         return content.flatMap(text => { try { return [JSON.parse(text)]; } catch { return []; } });
@@ -462,7 +486,9 @@ try {
     ...(questionsMode ? { ownerQuestions: true } : {}),
     ...(restrictedMode ? { restrictedPermissions: true } : {}),
     portalOrigin: origin + '/', runtimeTokenFile, tlsCAFile: cert, installationId: 'service-fixture',
-    personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model', allowedTools: ['hehebot_list_routines'] } } };
+    ...(textOnlyProfileInput ? { textOnlyProfile: textOnlyProfileInput } : {}),
+    personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model',
+      allowedTools: textOnlyMode ? [] : ['hehebot_list_routines'] } } };
   const submissionRequests = [], heartbeatPages = [], coordinatorReleases = [];
   const dependencies = { spriteRequest, fetchImpl: async (url, init) => {
     const response = await trustedFetch(url, init);
@@ -532,6 +558,25 @@ try {
     report.ownerAlphaAdmission = true;
     assert.equal(dispatched.claim.owner_alpha_background, ownerAlphaBackgroundMode ? true : undefined);
   }
+  if (textOnlyMode) {
+    await wait(async () => {
+      await service.maintain();
+      const state = await (await trustedFetch(`${origin}/v1/state`)).json();
+      return state.runs.find(run => run.id === queued.resource_id)?.status === 'completed' && state;
+    }, 'persisted text-only Worker completion', 30000);
+    const final = await (await trustedFetch(`${origin}/v1/state`)).json();
+    const history = await (await trustedFetch(`${origin}/v1/conversations/${persona.id}/events`)).json();
+    const result = history.events.filter(event => event.type === 'run.result' && event.payload.run_id === queued.resource_id);
+    assert.equal(report.modelRequests, 1);
+    assert.deepEqual(final.output_previews, []);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].payload.text, 'SERVICE_TEXT_ONLY_COMPLETE_43');
+    assert.equal((await service.supervisor.bridge.families()).every(row => row.phase === 'complete'), true);
+    const native = await service.observe(dispatched.attemptId);
+    assert.equal(native.textOnlyReceipt.profile_sha256, ownerAlpha.text_only.profile_sha256);
+    Object.assign(report, { nativeReceipt: true, persistedAssistantCompletion: true,
+      receiptRunId: queued.resource_id, nativeThreadId: native.threadId, nativeTurnId: native.nativeRunId });
+  } else {
   if (restrictedMode) {
     const { permissions } = await service.journal.get('service');
     assert.match(permissions.name, /^hehebot-restricted-[a-f0-9]{64}$/);
@@ -1202,6 +1247,7 @@ try {
     assert.deepEqual(await service.journal.get(dispatched.attemptId), before);
     assert.deepEqual(taskRequests, ['PUT', 'GET']);
     Object.assign(report, { restartRefused: true, nativeLaunches, rootWorkerStatus: 'running' });
+  }
   }
   }
   report.status = 'passed';

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CODEX_TEXT_ONLY_FEATURES, createCodexTextOnlyProfile, verifyCodexTextOnlyProfile } from '../runtime/codex-text-only.mjs';
+import { CODEX_TEXT_ONLY_FEATURES, codexTextOnlyProfileSha256, createCodexTextOnlyCompletionReceipt,
+  createCodexTextOnlyProfile, verifyCodexTextOnlyProfile } from '../runtime/codex-text-only.mjs';
 
 const modelEntry = { slug: 'gpt-owner', tool_mode: 'direct', experimental_supported_tools: [], display_name: 'Owner model' };
 const make = (extra = {}) => createCodexTextOnlyProfile({ codexVersion: '0.154.0', model: 'gpt-owner',
@@ -56,4 +57,48 @@ test('binds immutable catalog and commanded omitted settings and rejects profile
   assert.throws(() => verify(profile, { model: 'other' }), { code: 'TEXT_ONLY_PROFILE_MISMATCH' });
   assert.throws(() => verify(profile, { catalogContent: `${JSON.stringify(profile.modelCatalog)}\n` }), { code: 'TEXT_ONLY_PROFILE_CHANGED' });
   assert.throws(() => verify(profile, { commandedConfigContent: JSON.stringify({ ...profile.startupConfig, tools: {} }) }), { code: 'TEXT_ONLY_PROFILE_CHANGED' });
+});
+
+const receiptInput = profile => ({ profile, verification: { codexVersion: '0.154.0', model: profile.model,
+  configReadback: readback(profile), catalogContent: JSON.stringify(profile.modelCatalog),
+  commandedConfigContent: JSON.stringify(profile.startupConfig) },
+expected: { threadId: 'thread-19', turnId: 'turn-43', agentItemId: 'answer-71', outputText: 'Exact answer ✓' },
+submission: { threadStart: { model: profile.model, dynamicTools: [] }, threadIdAck: 'thread-19',
+  turnStart: { threadId: 'thread-19', environments: [] }, turnIdAck: 'turn-43' },
+readback: { method: 'thread/read', params: { threadId: 'thread-19', includeTurns: true }, result: { thread: {
+  id: 'thread-19', turns: [{ id: 'turn-43', status: 'completed', items: [
+    { id: 'question', type: 'userMessage', text: 'question' }, { id: 'thought', type: 'reasoning' },
+    { id: 'answer-71', type: 'agentMessage', phase: 'final_answer', text: 'Exact answer ✓' }] }] } } },
+eventRouter: { threadId: 'thread-19', turnId: 'turn-43', healthy: true, fullyFlushed: true, streamLossObserved: false } });
+
+test('constructs exact local text-only receipt from commanded IDs and supported readback', () => {
+  const profile = make(), receipt = createCodexTextOnlyCompletionReceipt(receiptInput(profile));
+  assert.equal(receipt.profile_sha256, codexTextOnlyProfileSha256(profile));
+  assert.deepEqual(receipt.result, { status: 'completed', text: 'Exact answer ✓' });
+  assert.match(receipt.output_sha256, /^[0-9a-f]{64}$/);
+  assert.equal(receipt.thread_id, 'thread-19'); assert.equal(receipt.turn_id, 'turn-43');
+});
+
+test('receipt rejects identity, profile, output and stream corruption', () => {
+  const profile = make();
+  const mutate = fn => { const value = structuredClone(receiptInput(profile)); value.profile = profile; fn(value); return value; };
+  assert.throws(() => createCodexTextOnlyCompletionReceipt(mutate(v => { v.submission.turnIdAck = 'wrong'; })), { code: 'TEXT_ONLY_SUBMISSION_MISMATCH' });
+  assert.throws(() => createCodexTextOnlyCompletionReceipt(mutate(v => { v.verification.model = 'wrong'; })), { code: 'TEXT_ONLY_PROFILE_MISMATCH' });
+  assert.throws(() => createCodexTextOnlyCompletionReceipt(mutate(v => { v.readback.result.thread.turns[0].items[2].id = 'wrong'; })), { code: 'TEXT_ONLY_OUTPUT_AMBIGUOUS' });
+  assert.throws(() => createCodexTextOnlyCompletionReceipt(mutate(v => { v.eventRouter.streamLossObserved = true; })), { code: 'TEXT_ONLY_STREAM_UNVERIFIED' });
+});
+
+test('receipt rejects incomplete turns, competitors, tools, unknowns and ambiguous finals', () => {
+  const profile = make();
+  for (const [change, code] of [
+    [v => { v.readback.result.thread.turns[0].status = 'failed'; }, 'TEXT_ONLY_TURN_NOT_COMPLETED'],
+    [v => { v.readback.result.thread.turns.push({ id: 'other', status: 'inProgress', items: [] }); }, 'TEXT_ONLY_COMPETING_TURN'],
+    [v => { v.readback.result.thread.turns[0].items.push({ id: 'tool', type: 'commandExecution' }); }, 'TEXT_ONLY_UNSUPPORTED_ITEM'],
+    [v => { v.readback.result.thread.turns[0].items.push({ id: 'mystery', type: 'futureItem' }); }, 'TEXT_ONLY_UNSUPPORTED_ITEM'],
+    [v => { v.readback.result.thread.turns[0].items.push({ id: 'answer-2', type: 'agentMessage', phase: 'final_answer', text: 'second' }); }, 'TEXT_ONLY_OUTPUT_AMBIGUOUS'],
+    [v => { v.readback.result.thread.turns[0].items[2].text = ''; }, 'TEXT_ONLY_OUTPUT_AMBIGUOUS'],
+  ]) {
+    const value = structuredClone(receiptInput(profile)); value.profile = profile; change(value);
+    assert.throws(() => createCodexTextOnlyCompletionReceipt(value), { code });
+  }
 });

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
+import { codexTextOnlyProfileSha256, createCodexTextOnlyProfile } from '../runtime/codex-text-only.mjs';
 
 const input = { attemptId: 'attempt1', installationId: 'installation1', personaId: 'assistant',
   scope: 'conversation', scopeId: 'room1', message: 'Read the task context', model: 'gpt-5.4' };
@@ -30,6 +31,27 @@ test('production cannot be enabled by successful mock submission', async t => {
   adapter.testMode = false;
   await assert.rejects(adapter.submit(input), { code: 'COMPATIBILITY_GATE_BLOCKED' });
   assert.equal(adapter.sleepReadiness().allowed, false);
+});
+
+test('text-only binding is fingerprinted before RPC and commands explicit empty tool environments', async t => {
+  const f = await fixture(t), profile = createCodexTextOnlyProfile({ codexVersion: '0.154.0', model: input.model,
+    modelCatalog: { models: [{ slug: input.model, tool_mode: 'direct', experimental_supported_tools: [] }] },
+    catalogPath: join(f.cwd, 'catalog.json'), catalogValidation: 'synthetic-fixture', syntheticFixture: true });
+  const ownerAlpha = { session_id: '11111111-1111-4111-8111-111111111111', persona_id: '22222222-2222-4222-8222-222222222222',
+    expires_at: '2099-01-01T00:00:00.000Z', max_runs: 1, max_task_seconds: 60,
+    text_only: { profile_version: profile.version, profile_sha256: codexTextOnlyProfileSha256(profile) } };
+  const adapter = new CodexAdapter({ cwd: f.cwd, journal: f.journal, rpc: f.adapter.rpc,
+    permissionsProfile: 'restricted', ownerAlpha, textOnlyProfile: profile });
+  const receipt = await adapter.submit({ ...input, personaId: ownerAlpha.persona_id, scopeId: ownerAlpha.persona_id });
+  assert.deepEqual(f.calls[0].params.dynamicTools, []); assert.deepEqual(f.calls[1].params.environments, []);
+  assert.deepEqual(receipt.textOnlySubmission, { threadStart: { model: input.model, dynamicTools: [] }, threadIdAck: 'thread-a',
+    turnStart: { threadId: 'thread-a', environments: [] }, turnIdAck: 'turn-b' });
+  const reopened = new CodexAdapter({ cwd: f.cwd, journal: new FileJournal(f.cwd), rpc: () => assert.fail('no replay'),
+    permissionsProfile: 'restricted', ownerAlpha, textOnlyProfile: profile });
+  assert.equal((await reopened.submit({ ...input, personaId: ownerAlpha.persona_id, scopeId: ownerAlpha.persona_id })).nativeRunId, 'turn-b');
+  assert.throws(() => new CodexAdapter({ cwd: f.cwd, journal: f.journal, rpc: f.adapter.rpc, permissionsProfile: 'restricted',
+    ownerAlpha: { ...ownerAlpha, text_only: { ...ownerAlpha.text_only, profile_sha256: 'a'.repeat(64) } }, textOnlyProfile: profile }),
+  { code: 'INVALID_CONFIGURATION' });
 });
 
 test('persists thread before inference; duplicate submission and changed input are distinct', async t => {

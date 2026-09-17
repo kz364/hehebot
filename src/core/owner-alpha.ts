@@ -2,19 +2,23 @@ import { requireThat } from './errors';
 import type { Store } from './store';
 import type { Run } from './types';
 
-export type OwnerAlphaPolicy = { session_id:string; persona_id:string; expires_at:string; max_runs:number; max_task_seconds:number; background_first_root?:true };
+export type TextOnlyProfile={profile_version:'codex-text-only-v1';profile_sha256:string};
+export type OwnerAlphaPolicy = { session_id:string; persona_id:string; expires_at:string; max_runs:number; max_task_seconds:number; background_first_root?:true;text_only?:TextOnlyProfile };
 const key='owner_alpha';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type OwnerAlphaEnv={AUTH_MODE?:string;EXECUTION_ENABLED?:string;NATIVE_VERIFIED?:string;PROVIDER_CONFIG?:string};
 type HostedOwnerAlphaEnv=OwnerAlphaEnv&{HEHEBOT_OWNER_ALPHA?:string};
 function parsePolicy(value:unknown):OwnerAlphaPolicy {
  const p=value as Record<string,unknown>|undefined;
- requireThat(p&&typeof p==='object'&&!Array.isArray(p)&&Object.keys(p).sort().join(',')===(Object.hasOwn(p,'background_first_root')?'background_first_root,expires_at,max_runs,max_task_seconds,persona_id,session_id':'expires_at,max_runs,max_task_seconds,persona_id,session_id')&&(!Object.hasOwn(p,'background_first_root')||p.background_first_root===true)&&
+ const keys=['expires_at','max_runs','max_task_seconds','persona_id','session_id',...(Object.hasOwn(p??{},'background_first_root')?['background_first_root']:[]),...(Object.hasOwn(p??{},'text_only')?['text_only']:[])].sort().join(',');
+ const text=p?.text_only as Record<string,unknown>|undefined;
+ requireThat(p&&typeof p==='object'&&!Array.isArray(p)&&Object.keys(p).sort().join(',')===keys&&(!Object.hasOwn(p,'background_first_root')||p.background_first_root===true)&&
+  (!Object.hasOwn(p,'text_only')||text&&typeof text==='object'&&!Array.isArray(text)&&Object.keys(text).sort().join(',')==='profile_sha256,profile_version'&&text.profile_version==='codex-text-only-v1'&&typeof text.profile_sha256==='string'&&/^[0-9a-f]{64}$/.test(text.profile_sha256))&&!(p.background_first_root&&p.text_only)&&
   typeof p.session_id==='string'&&uuid.test(p.session_id)&&typeof p.persona_id==='string'&&uuid.test(p.persona_id)&&
   typeof p.expires_at==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(p.expires_at)&&Number.isFinite(Date.parse(p.expires_at))&&new Date(p.expires_at).toISOString()===p.expires_at&&
   Number.isInteger(p.max_runs)&&Number(p.max_runs)>=1&&Number(p.max_runs)<=3&&Number.isInteger(p.max_task_seconds)&&Number(p.max_task_seconds)>=1&&Number(p.max_task_seconds)<=300,
   'INVALID_CONFIGURATION','Invalid owner-alpha policy.',503);
- return {session_id:p.session_id as string,persona_id:p.persona_id as string,expires_at:p.expires_at as string,max_runs:p.max_runs as number,max_task_seconds:p.max_task_seconds as number,...(p.background_first_root===true?{background_first_root:true as const}:{})};
+ return {session_id:p.session_id as string,persona_id:p.persona_id as string,expires_at:p.expires_at as string,max_runs:p.max_runs as number,max_task_seconds:p.max_task_seconds as number,...(p.background_first_root===true?{background_first_root:true as const}:{}),...(text?{text_only:{profile_version:'codex-text-only-v1' as const,profile_sha256:text.profile_sha256 as string}}:{})};
 }
 function emptyProvider(provider:unknown):boolean {
  return !!provider&&typeof provider==='object'&&!Array.isArray(provider)&&Object.keys(provider).length===0;
@@ -118,5 +122,9 @@ export class OwnerAlpha {
  authorize(runId:string,attempt:number):void {
   if(!this.policy)return;
   requireThat(this.validAttempt(runId,attempt,this.read()),'STALE_EPOCH','Attempt is not owned by this owner-alpha session.');
+ }
+ textOnly(runId:string):TextOnlyProfile|undefined {
+  if(!this.policy?.text_only||!this.read().admitted_run_ids.includes(runId))return undefined;
+  return this.policy.text_only;
  }
 }

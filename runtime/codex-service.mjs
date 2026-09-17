@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { AGENT_TOOL_NAMES, readAccessCredentials } from './agent-tools.mjs';
 import { ControlClient } from './control-client.mjs';
 import { FileJournal } from './file-journal.mjs';
-import { CodexAdapter, PINNED_CODEX, RESTRICTED_CODEX_FEATURES } from './codex-adapter.mjs';
+import { CodexAdapter, PINNED_CODEX, RESTRICTED_CODEX_FEATURES, projectOutputMessage } from './codex-adapter.mjs';
 import { CodexEventRouter } from './codex-events.mjs';
 import { CodexTaskControl } from './codex-tasks.mjs';
 import { CodexOperations } from './codex-operations.mjs';
@@ -16,6 +16,8 @@ import { CodexQuestionBinding } from './codex-questions.mjs';
 import { ExecutionSupervisor } from './execution-supervisor.mjs';
 import { SpritesActivityGuard } from './sprites-activity-guard.mjs';
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
+import { codexTextOnlyProfileSha256, createCodexTextOnlyCompletionReceipt,
+  createCodexTextOnlyProfile, verifyCodexTextOnlyProfile } from './codex-text-only.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const privatePath = async (path, directory = false) => {
@@ -40,7 +42,8 @@ export function createCodexService(config, dependencies) {
     } } = dependencies;
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
   let ownsIntent = false, stopping, questions, questionNotification, admission;
-  let alpha = null;
+  let alpha = null, textOnlyProfile = null, textOnlyVerification = null, textOnlyCatalogContent = null, commandedConfigContent = null;
+  let verifyTextOnlyCurrent;
   const hosted = Object.hasOwn(config, 'hostedOwnerBindingSha256');
   const taskControllers = new Map();
   const assertStarting = () => {
@@ -61,7 +64,7 @@ export function createCodexService(config, dependencies) {
       if (!row.nativeRunId || row.phase === 'complete') continue;
       snapshots.push(...await new CodexOperations({ journal, attemptId: row.attemptId, runId: row.claim.run.id,
         attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at,
-        deadlineAt: row.claim.deadline_at }).snapshot());
+        deadlineAt: row.claim.deadline_at, textOnlyProfile: row.claim.text_only ?? null }).snapshot());
     }
     return snapshots;
   });
@@ -82,6 +85,37 @@ export function createCodexService(config, dependencies) {
           if (native.rootSettled) {
             await supervisor.bridge.releaseCoordinator({ ...native, attemptId: row.attemptId });
             supervisor.assertLease();
+            if (textOnlyProfile && native.nativeOutcome === 'completed' && !native.textOnlyReceipt) {
+              const readback = await transport.request('thread/read', { threadId: native.threadId, includeTurns: true });
+              const turn = readback?.thread?.turns?.filter(value => value?.id === native.nativeRunId);
+              const outputs = turn?.[0]?.items?.filter(item => item?.type === 'agentMessage' &&
+                (item.phase === undefined || item.phase === null || item.phase === 'final_answer')) ?? [];
+              if (turn?.length !== 1 || outputs.length !== 1) fail('TEXT_ONLY_OUTPUT_AMBIGUOUS');
+              const verification = await verifyTextOnlyCurrent();
+              await router.flush();
+              supervisor.assertLease();
+              const observed = await adapter.requireRun(row.attemptId);
+              const messages = turn[0].items.filter(item => item.type === 'agentMessage');
+              if (messages.length !== Object.keys(observed.outputItems ?? {}).length || messages.some(item =>
+                  observed.outputItems?.[item.id] !== projectOutputMessage(item).outputDigest)) fail('TEXT_ONLY_OUTPUT_AMBIGUOUS');
+              const full = createCodexTextOnlyCompletionReceipt({ profile: textOnlyProfile, verification,
+                expected: { threadId: native.threadId, turnId: native.nativeRunId, agentItemId: outputs[0].id, outputText: outputs[0].text },
+                submission: native.textOnlySubmission, readback: { method: 'thread/read',
+                  params: { threadId: native.threadId, includeTurns: true }, result: readback },
+                eventRouter: { threadId: native.threadId, turnId: native.nativeRunId,
+                  healthy: phase === 'running' && router.closed === false,
+                  fullyFlushed: router.pending.length === 0, streamLossObserved: phase !== 'running' || router.closed === true } });
+              const { result, ...receipt } = full;
+              await journal.update(row.attemptId, { textOnlyReceipt: receipt });
+              const snapshot = await operations();
+              if (snapshot.some(operation => operation.run_id === row.claim.run.id && operation.status !== 'settled')) fail('NATIVE_SETTLEMENT_INCOMPLETE');
+              const cancellations = await supervisor.heartbeat();
+              if (cancellations.includes(row.claim.run.id)) fail('OWNER_ALPHA_ADMISSION_DENIED');
+              supervisor.assertLease();
+              await supervisor.bridge.complete({ attemptId: row.attemptId, nativeRunId: native.nativeRunId,
+                rootSettled: true, toolsSettled: true, childrenSettled: true, effectsSettled: true,
+                outputCommitted: true, result, text_only_receipt: receipt });
+            }
           }
         }
       });
@@ -105,6 +139,12 @@ export function createCodexService(config, dependencies) {
       // Supervised alpha is explicit and separate from test/production gates.
       if (config.ownerAlpha !== undefined) {
         alpha = ownerAlphaPolicy(config.ownerAlpha);
+        if (config.textOnlyProfile !== undefined) {
+          if (!alpha.text_only) fail('INVALID_SERVICE_CONFIGURATION');
+          textOnlyProfile = createCodexTextOnlyProfile(config.textOnlyProfile);
+          if (codexTextOnlyProfileSha256(textOnlyProfile) !== alpha.text_only.profile_sha256) fail('TEXT_ONLY_PROFILE_MISMATCH');
+          if (Object.values(config.personas ?? {}).some(persona => persona.model !== textOnlyProfile.model || persona.allowedTools?.length)) fail('INVALID_SERVICE_CONFIGURATION');
+        } else if (alpha.text_only) fail('INVALID_SERVICE_CONFIGURATION');
         const remaining = Date.parse(alpha.expires_at) - now();
         let origin; try { origin = new URL(config.portalOrigin); } catch { fail('INVALID_SERVICE_CONFIGURATION'); }
         if (config.disposableTest === true || remaining <= 0 || remaining > 300000 ||
@@ -113,8 +153,9 @@ export function createCodexService(config, dependencies) {
             config.ownerQuestions === true || config.restrictedPermissions === false) fail('INVALID_SERVICE_CONFIGURATION');
         config.restrictedPermissions = true;
       } else if (config.disposableTest !== true) fail('NATIVE_COMPATIBILITY_GATE_BLOCKED');
+      if (config.textOnlyProfile !== undefined && !alpha?.text_only) fail('INVALID_SERVICE_CONFIGURATION');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'nativeHome', 'hostedOwnerBindingSha256'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile'].includes(key)) ||
         config.nativeHome !== undefined && (!alpha || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean') fail('INVALID_SERVICE_CONFIGURATION');
@@ -129,6 +170,12 @@ export function createCodexService(config, dependencies) {
       }
       phase = 'starting';
       try {
+        if (textOnlyProfile) {
+          await privatePath(textOnlyProfile.startupConfig.model_catalog_json);
+          textOnlyCatalogContent = await readFile(textOnlyProfile.startupConfig.model_catalog_json);
+          commandedConfigContent = Buffer.from(JSON.stringify(textOnlyProfile.startupConfig));
+          if (!textOnlyCatalogContent.equals(Buffer.from(JSON.stringify(textOnlyProfile.modelCatalog)))) fail('TEXT_ONLY_PROFILE_CHANGED');
+        }
         await starting(() => privatePath(config.stateDirectory, true));
         await starting(() => privatePath(config.runtimeTokenFile));
         const token = (await starting(() => readFile(config.runtimeTokenFile, 'utf8'))).trim();
@@ -168,11 +215,11 @@ export function createCodexService(config, dependencies) {
         await starting(() => mkdir(workspace, { mode: 0o700 }));
         if (hosted) await starting(() => activity.ensure());
         await starting(() => prepareNative(home));
-        const configOverrides = config.restrictedPermissions ? {
+        const configOverrides = { ...(config.restrictedPermissions ? {
           web_search: 'disabled',
           ...Object.fromEntries(Object.entries(RESTRICTED_CODEX_FEATURES).map(([key, value]) => [`features.${key}`, value])),
           ...(alpha ? { 'agents.enabled': false, 'features.multi_agent': false, 'features.multi_agent_v2': false } : {}),
-        } : {};
+        } : {}), ...(textOnlyProfile?.startupConfig ?? {}) };
         let permissions;
         if (config.restrictedPermissions) {
           const path = join(home, 'config.toml');
@@ -241,6 +288,7 @@ export function createCodexService(config, dependencies) {
           const profile = readback?.config?.permissions?.[permissions.name];
           if (Object.entries(configOverrides).some(([key, value]) => {
             if (key.startsWith('permissions.')) return false;
+            if (key === 'mcp_servers' || ['tools.experimental_request_user_input.enabled', 'tools.update_plan.enabled'].includes(key)) return false;
             const actual = key.split('.').reduce((node, part) => node?.[part], readback?.config);
             // Native merging preserves a configured sleep mode when disabling it.
             return key === 'features.sleep_tool' ? actual !== false && actual?.enabled !== false : actual !== value;
@@ -251,10 +299,27 @@ export function createCodexService(config, dependencies) {
                 !Object.hasOwn(permissions.filesystem, key) && !(key === 'glob_scan_max_depth' && profile.filesystem[key] === null)) ||
               Object.entries(permissions.filesystem).some(([path, mode]) => profile.filesystem[path] !== mode) ||
               profile.extends != null || profile.workspace_roots != null) fail('RESTRICTED_PROFILE_MISMATCH');
+          if (textOnlyProfile) {
+            textOnlyVerification = { codexVersion: PINNED_CODEX, model: textOnlyProfile.model, configReadback: readback.config };
+            verifyCodexTextOnlyProfile(textOnlyProfile, { ...textOnlyVerification,
+              catalogContent: textOnlyCatalogContent, commandedConfigContent });
+            verifyTextOnlyCurrent = async () => {
+              const contents = await readFile(join(home, 'config.toml')).catch(error => {
+                if (config.nativeHome && error.code === 'ENOENT') return '';
+                throw error;
+              });
+              if (createHash('sha256').update(contents).digest('hex') !== permissions.configSha256) fail('RESTRICTED_PROFILE_CHANGED');
+              const current = await transport.request('config/read', { includeLayers: false, cwd: workspace });
+              const verification = { codexVersion: PINNED_CODEX, model: textOnlyProfile.model, configReadback: current.config,
+                catalogContent: await readFile(textOnlyProfile.startupConfig.model_catalog_json), commandedConfigContent };
+              verifyCodexTextOnlyProfile(textOnlyProfile, verification);
+              return verification;
+            };
+          }
         }
         assertStarting();
         adapter = new CodexAdapter({ journal, cwd: workspace, rpc: (method, params) => transport.request(method, params),
-          testMode: !alpha, ownerAlpha: alpha, now, permissionsProfile: permissions?.name });
+          testMode: !alpha, ownerAlpha: alpha, now, permissionsProfile: permissions?.name, textOnlyProfile });
         const native = {
           admissionReadiness: () => adapter.admissionReadiness(),
           sleepReadiness: () => adapter.sleepReadiness(),
@@ -284,6 +349,13 @@ export function createCodexService(config, dependencies) {
                   deadline > Date.parse(alpha.expires_at) || deadline > now() + alpha.max_task_seconds * 1000 ||
                   run.persona_id !== alpha.persona_id || run.current_attempt !== 1 || run.routine_id || context.room_id ||
                   run.role !== 'coordinator' || (await supervisor.bridge.families()).length > alpha.max_runs) fail('OWNER_ALPHA_ADMISSION_DENIED');
+            }
+            if (textOnlyProfile) {
+              if (JSON.stringify(row.claim.text_only) !== JSON.stringify(alpha.text_only)) fail('TEXT_ONLY_PROFILE_MISMATCH');
+              await verifyTextOnlyCurrent();
+              supervisor.assertLease();
+              return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, ownerAlpha: { ...alpha, expires_at: row.claim.deadline_at },
+                now, permissionsProfile: permissions?.name, textOnlyProfile }).submit(input);
             }
             const grant = { origin: config.portalOrigin, tokenFile: config.runtimeTokenFile,
               ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}),

@@ -48,7 +48,7 @@ export class CodexAdapter {
   #permissionsProfile;
   #ownerAlpha;
   #now;
-  constructor({ rpc, journal, cwd, testMode = false, dynamicTools = [], mcpServers = {}, permissionsProfile = undefined, ownerAlpha = null, now = Date.now }) {
+  constructor({ rpc, journal, cwd, testMode = false, dynamicTools = [], mcpServers = {}, permissionsProfile = undefined, ownerAlpha = null, textOnlyProfile = null, now = Date.now }) {
     if (typeof rpc !== 'function' || !journal?.putIfAbsent || !cwd?.startsWith('/') || !Array.isArray(dynamicTools) || dynamicTools.length > 64 ||
         !mcpServers || typeof mcpServers !== 'object' || Array.isArray(mcpServers) || Object.keys(mcpServers).length > 64 ||
         permissionsProfile !== undefined && (typeof permissionsProfile !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(permissionsProfile))) fail('INVALID_CONFIGURATION');
@@ -57,9 +57,14 @@ export class CodexAdapter {
     this.mcpServers = structuredClone(mcpServers);
     this.#permissionsProfile = permissionsProfile;
     this.#ownerAlpha = ownerAlpha === null ? null : ownerAlphaPolicy(ownerAlpha);
+    this.textOnlyProfile = textOnlyProfile === null ? null : structuredClone(textOnlyProfile);
     this.#now = now;
     if (this.#ownerAlpha && (testMode || !permissionsProfile || dynamicTools.length ||
         Object.keys(mcpServers).some(key => key !== 'hehebot') || typeof now !== 'function')) fail('INVALID_CONFIGURATION');
+    if (this.textOnlyProfile && (!this.#ownerAlpha?.text_only || this.#ownerAlpha.background_first_root ||
+        dynamicTools.length || Object.keys(mcpServers).length || this.textOnlyProfile.version !== 'codex-text-only-v1' ||
+        hash(this.textOnlyProfile.binding) !== this.#ownerAlpha.text_only.profile_sha256)) fail('INVALID_CONFIGURATION');
+    if (this.#ownerAlpha?.text_only && !this.textOnlyProfile) fail('INVALID_CONFIGURATION');
   }
   admissionReadiness() {
     return { allowed: this.testMode === true || this.#ownerAlpha !== null, productionVerified: false };
@@ -77,6 +82,7 @@ export class CodexAdapter {
         typeof input.model !== 'string' || !/^[a-zA-Z0-9._-]{1,128}$/.test(input.model)) fail('INVALID_SUBMISSION');
     // Capture before journal/RPC awaits; the fingerprint and native grant must agree.
     input = { ...input };
+    if (this.textOnlyProfile && input.model !== this.textOnlyProfile.model) fail('TEXT_ONLY_PROFILE_MISMATCH');
     const background = Object.hasOwn(input, 'ownerAlphaBackground');
     if (background && this.#ownerAlpha?.background_first_root !== true) fail('OWNER_ALPHA_ADMISSION_DENIED');
     if (!this.admissionReadiness().allowed) fail('COMPATIBILITY_GATE_BLOCKED');
@@ -87,8 +93,9 @@ export class CodexAdapter {
       : this.dynamicTools.length ? [values, this.dynamicTools] : values;
     const fingerprintInput = this.#permissionsProfile === undefined ? legacyFingerprintInput
       : [legacyFingerprintInput, { permissionsProfile: this.#permissionsProfile, ...(this.#ownerAlpha ? { ownerAlpha: this.#ownerAlpha } : {}) }];
+    const boundFingerprintInput = this.textOnlyProfile ? [fingerprintInput, { textOnlyProfile: this.textOnlyProfile.binding }] : fingerprintInput;
     // Selected orchestration changes cannot silently replay an old V1 grant.
-    const fingerprint = hash(background ? [fingerprintInput, { ownerAlphaBackground: true, nativeOrchestration: 'v2-cap2-restricted' }] : fingerprintInput);
+    const fingerprint = hash(background ? [boundFingerprintInput, { ownerAlphaBackground: true, nativeOrchestration: 'v2-cap2-restricted' }] : boundFingerprintInput);
     const config = {
       ...(Object.keys(this.mcpServers).length ? { mcp_servers: this.mcpServers } : {}),
       ...(background ? { agents: { enabled: true },
@@ -101,6 +108,7 @@ export class CodexAdapter {
     const prior = await this.journal.putIfAbsent(input.attemptId, {
       attemptId: input.attemptId, fingerprint, status: 'thread_unknown', threadId: null,
       nativeRunId: null, rootSettled: false, cancelAcknowledged: false,
+      ...(this.textOnlyProfile ? { textOnlyProfile: this.#ownerAlpha.text_only } : {}),
     });
     if (prior) {
       if (prior.fingerprint !== fingerprint) fail('IDEMPOTENCY_CONFLICT');
@@ -111,18 +119,22 @@ export class CodexAdapter {
       const started = await this.rpc('thread/start', {
         cwd: this.cwd, model: input.model, approvalPolicy: 'untrusted', ephemeral: false,
         ...(this.#permissionsProfile === undefined ? { sandbox: 'read-only' } : { permissions: this.#permissionsProfile }),
-        ...(this.dynamicTools.length ? { dynamicTools: this.dynamicTools } : {}),
+        ...(this.textOnlyProfile ? { dynamicTools: [] } : this.dynamicTools.length ? { dynamicTools: this.dynamicTools } : {}),
         ...(Object.keys(config).length ? { config } : {}),
       });
       if (typeof started?.thread?.id !== 'string' || !started.thread.id) fail('CODEX_PROTOCOL_ERROR');
       // Persist the native thread before turn/start; even a successful thread start is not inference.
-      await this.journal.update(input.attemptId, { threadId: started.thread.id, status: 'submission_unknown' });
+      await this.journal.update(input.attemptId, { threadId: started.thread.id, status: 'submission_unknown',
+        ...(this.textOnlyProfile ? { textOnlySubmission: { threadStart: { model: input.model, dynamicTools: [] }, threadIdAck: started.thread.id } } : {}) });
       if (this.#ownerAlpha && this.#now() >= Date.parse(this.#ownerAlpha.expires_at)) fail('OWNER_ALPHA_ADMISSION_DENIED');
       const reply = await this.rpc('turn/start', { threadId: started.thread.id,
-        input: [{ type: 'text', text: input.message }], clientUserMessageId: input.attemptId });
+        input: [{ type: 'text', text: input.message }], clientUserMessageId: input.attemptId,
+        ...(this.textOnlyProfile ? { environments: [] } : {}) });
       if (typeof reply?.turn?.id !== 'string' || !reply.turn.id) fail('CODEX_PROTOCOL_ERROR');
       return await this.journal.update(input.attemptId, {
         nativeRunId: reply.turn.id, status: 'running', initialInference: 'inProgress',
+        ...(this.textOnlyProfile ? { textOnlySubmission: { threadStart: { model: input.model, dynamicTools: [] },
+          threadIdAck: started.thread.id, turnStart: { threadId: started.thread.id, environments: [] }, turnIdAck: reply.turn.id } } : {}),
       });
     } catch {
       return this.journal.update(input.attemptId, { status: 'recovery_required', recoveryRequired: true,
