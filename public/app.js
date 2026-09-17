@@ -6,6 +6,7 @@ const skillHistories=new Map();
 let recoveryView=null;
 let taskFeed=null;
 let routineHistory=null;
+let routinePreflight=null;
 let snapshot=null,selected=localStorage.getItem('personal.selected'),events=[],loading=false,lastSignature='',editing=null;
 let selectionVersion=0;
 let memorySearchSelection='';
@@ -79,7 +80,7 @@ async function refresh(force=false){
  }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);if(taskFeed)taskFeed.error=true;if(recoveryView?.kind==='tasks')recoveryView.page=null;render();}
  finally{loading=false;}
 }
-function choose(id){selectionVersion++;skillHistories.clear();routineHistory=null;recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
+function choose(id){selectionVersion++;skillHistories.clear();routineHistory=null;routinePreflight=null;recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
 function recoveryUrl(view){return '/v1/conversations/'+view.conversationId+'/'+(view.kind==='tasks'?'tasks':'recovery')+(view.cursor?'?after='+encodeURIComponent(view.cursor):'');}
 async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=null){
  if(!alphaConversationAvailable(selected)){report('History and task pages are unavailable for this conversation in the owner-alpha session.');return;}
@@ -90,6 +91,8 @@ async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=nul
 }
 function render(){
  if(!snapshot)return;
+ if(routinePreflight&&!routinePreflightCurrent(routinePreflight))routinePreflight=null;
+ if(routinePreflight&&($('connection').textContent!=='Connected'||!navigator.onLine))invalidateRoutinePreflight();
  if(routineHistory&&!routineHistoryCurrent(routineHistory))routineHistory=null;
  if(routineHistory&&($('connection').textContent!=='Connected'||!navigator.onLine)){routineHistory.page=null;routineHistory.loading=false;routineHistory.error='History unavailable offline. Reopen history after reconnecting.';routineHistory.invalid=true;}
  const searchSelection=JSON.stringify([selected,selectionVersion,recoveryView?.kind]);
@@ -211,7 +214,7 @@ function render(){
   const card=node('div',undefined,'card');card.append(node('h4',r.body.name),node('span',r.body.enabled?'Scheduled':'Paused','status'),node('p',r.body.schedule?`${r.body.schedule.cron} · ${r.body.schedule.timezone}`:'Event-triggered'),node('p',r.body.instructions));const actions=node('div',undefined,'actions');actions.append(button('Edit',()=>editRoutine(r)),button(r.body.enabled?'Pause':'Enable',()=>act(()=>command('routine.put',{...r.body,expected_revision:r.revision,enabled:!r.body.enabled}))));
   const remove=button('Delete',()=>deleteRoutine(r),'danger');remove.disabled=$('connection').textContent!=='Connected';remove.dataset.action='delete-routine';
   actions.append(button('Run now',()=>act(()=>command('routine.run',{id:r.id,expected_revision:r.revision}))),remove);
-  card.append(actions);renderRoutineHistory(card,r);$('routines').append(card);
+  card.append(actions);renderRoutinePreflight(card,r);renderRoutineHistory(card,r);$('routines').append(card);
  }if(!$('routines').children.length)$('routines').append(node('p','No routines for this bot yet.','muted'));
  $('add-routine').disabled=object?.kind!=='persona';
  renderMemories();
@@ -407,6 +410,52 @@ function renderSkillComparison(target,proposal,skill){
 function renderSkillBody(target,body){
  target.append(detail('Purpose',body.description),detail('When to use',body.when_to_use),detail('Inputs and access',body.inputs_access),detail('Procedure',body.steps),detail('Decision rules',body.decision_rules),detail('Validation',body.validation),detail('Output',body.output),detail('Failure handling',body.failure_handling),detail('Approval boundaries',body.approval_boundaries));
 }
+function routinePreflightCurrent(view){
+ return !(alphaSeen||snapshot?.summary.owner_alpha)&&selected===view.owner&&selectionVersion===view.version&&items('persona').some(p=>p.id===view.owner&&!p.deleted_at&&p.revision===view.personaRevision)&&items('routine').some(r=>r.id===view.id&&!r.deleted_at&&r.revision===view.revision&&r.body.persona_id===view.owner);
+}
+function invalidateRoutinePreflight(){
+ routinePreflight.invalid=true;routinePreflight.page=null;routinePreflight.loading=false;routinePreflight.error='Preflight unavailable offline. Reopen preflight after reconnecting.';
+}
+async function loadRoutinePreflight(routine){
+ const view={id:routine.id,revision:routine.revision,owner:selected,personaRevision:current()?.revision,version:selectionVersion,page:null,loading:true,error:''};
+ if(!routinePreflightCurrent(view))return;
+ routinePreflight=view;render();
+ try{
+  if($('connection').textContent!=='Connected'||!navigator.onLine)throw Error('Preflight unavailable offline. Reopen preflight after reconnecting.');
+  const page=await api(`/v1/routines/${encodeURIComponent(view.id)}/preflight`);
+  if(routinePreflight!==view||!routinePreflightCurrent(view)||view.invalid)return;
+  if($('connection').textContent!=='Connected'||!navigator.onLine)throw Error('Preflight unavailable offline. Reopen preflight after reconnecting.');
+  if(page.routine_id!==view.id||page.routine_revision!==view.revision||page.persona_id!==view.owner||!Number.isFinite(Date.parse(page.observed_at))||typeof page.enabled!=='boolean'||typeof page.manual_run?.command_allowed!=='boolean'||typeof page.manual_run?.execution_enabled!=='boolean'||!Array.isArray(page.manual_run.blockers)||!page.manual_run.blockers.every(b=>typeof b.code==='string'&&typeof b.message==='string')||page.manual_run.command_allowed!==(page.manual_run.blockers.length===0)||!Array.isArray(page.next_times)||!page.next_times.every(at=>typeof at==='string'&&Number.isFinite(Date.parse(at)))||!Array.isArray(page.limitations)||!page.limitations.every(s=>typeof s==='string')||!page.policy||typeof page.policy.misfire!=='string'||typeof page.policy.overlap!=='string'||!Number.isSafeInteger(page.policy.max_replay)||!Number.isSafeInteger(page.policy.max_lateness_seconds)||(page.schedule!==null&&(typeof page.schedule?.cron!=='string'||typeof page.schedule?.timezone!=='string')))throw Error('Invalid or mismatched routine preflight. Reopen preflight to read again.');
+  // Validate the explicit display zone before retaining the observation.
+  if(page.schedule)new Intl.DateTimeFormat('en-GB',{timeZone:page.schedule.timezone}).format();
+  view.page=page;
+ }catch(error){if(routinePreflight===view&&routinePreflightCurrent(view))view.error=error.message;}
+ finally{if(routinePreflight===view){view.loading=false;render();}}
+}
+function renderRoutinePreflight(card,routine){
+ if(alphaSeen||snapshot?.summary.owner_alpha||routine.deleted_at)return;
+ const view=routinePreflight?.id===routine.id?routinePreflight:null;
+ const toggle=button(view?'Hide preflight':'Preflight',()=>{if(view){routinePreflight=null;render();}else loadRoutinePreflight(routine);},'quiet');toggle.dataset.action='routine-preflight';toggle.setAttribute('aria-expanded',String(Boolean(view)));card.querySelector('.actions').append(toggle);
+ if(!view)return;
+ const panel=node('section',undefined,'skill-bots routine-preflight');panel.setAttribute('aria-label',`${routine.body.name} preflight`);
+ panel.append(node('h4','Routine preflight'),node('p','Read-only observation, not a test run. No automatic refresh. Run now remains a separate command and rechecks current revision and grants.','hint'));
+ if(view.loading){const notice=node('p','Loading preflight…','hint');notice.setAttribute('role','status');panel.append(notice);}
+ if(view.error){const notice=node('p',view.error,'review-notice');notice.setAttribute('role','alert');panel.append(notice);}
+ const page=view.page;
+ if(page){
+  panel.append(node('p',`Revision ${page.routine_revision} · Observed ${page.observed_at} (UTC)`,'hint'),node('p',page.manual_run.command_allowed?'Command checks passed at observation: known grant, busy and persona checks only.':'Command blocked at observation:','review-notice'));
+  for(const blocker of page.manual_run.blockers)panel.append(node('p',`${blocker.code}: ${blocker.message}`));
+  panel.append(node('p',`Execution ${page.manual_run.execution_enabled?'enabled':'disabled'} — independent of command checks.`),node('p','Neither status proves connector credentials, model access, input readiness, effect approvals, execution success or delivery.','hint'),node('p',page.enabled?'Routine enabled. Scheduled admission is separate from this observation.':'Routine paused. Run now may run once without resuming the schedule.'));
+  if(page.schedule){
+   panel.append(node('p',`Schedule: ${page.schedule.cron} · Timezone: ${page.schedule.timezone}`),node('p','Hypothetical next schedule times, even while paused — not admission or delivery promises:','hint'));
+   for(const at of page.next_times)panel.append(node('p',`${new Date(at).toLocaleString('en-GB',{timeZone:page.schedule.timezone})} ${page.schedule.timezone} · ${at} (UTC)`));
+  }else panel.append(node('p','Event-triggered: no calendar schedule, schedule timezone or next schedule times.'));
+  panel.append(node('p',`Policy: misfire ${page.policy.misfire} · overlap ${page.policy.overlap} · max replay ${page.policy.max_replay} · max lateness ${page.policy.max_lateness_seconds}s`));
+  for(const limitation of page.limitations)panel.append(node('p',limitation,'hint'));
+ }
+ card.append(panel);
+}
+window.addEventListener('offline',()=>{if(routinePreflight){invalidateRoutinePreflight();render();}});
 function routineHistoryCurrent(view){
  return !(alphaSeen||snapshot?.summary.owner_alpha)&&selected===view.owner&&selectionVersion===view.version&&items('routine').some(r=>r.id===view.id&&!r.deleted_at&&r.revision===view.revision&&r.body.persona_id===view.owner);
 }

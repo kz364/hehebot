@@ -4,6 +4,18 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Routine preflight portal (2026-09-17 Asia/Jakarta): integrated the worker's
+on-demand GET-only disclosure. It shows blockers, observation revision/time,
+execution-enabled independently of command checks, explicit schedule timezone
+with local/UTC hypothetical times and policy. Run now remains unchanged;
+history is independent. Offline/stale/deletion/ownership/navigation/late-response
+fences reject old observations; alpha makes zero preflight requests. Host
+preflight/history/delete Chromium fixtures pass, eight DPR2 states inspected,
+desktop16 pass. Combined verifier includes preflight and passed1426 backend/
+434 runtime plus browser/native/service/build in
+`.local/routine-preflight-ui-combined.log` (exit0). No worker remains active. These are
+synthetic browser observations, not auth/provider/native/delivery proof.
+
 Routine preflight API (2026-09-17 Asia/Jakarta): owner-only
 `GET /v1/routines/:id/preflight` returns current revision/persona, enabled state,
 schedule preview, overlap/misfire policy and manual-run blockers. The command

@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest: preflight UI worker finished, reviewed and integrated. Explicit GET-only
+panel keeps Run now unchanged and history independent; shows observation time/
+revision, blockers, execution flag and hypothetical timezone/local/UTC schedule.
+Late/stale/offline/ownership/deletion and alpha guards pass host browser fixture;
+history/delete neighbors and desktop16 pass, eight DPR2 states inspected.
+Combined verifier includes fixture and passed1426 backend/434 runtime plus
+browser/native/service/build, exit0 at .local/routine-preflight-ui-combined.log.
+No active worker or live actions.
+Next E05 gap: history needs executed routine revision attribution, not the current
+routine revision; inspect captured context before projecting bounded metadata.
+Preflight remains limited known command checks, not credentials/input validation.
+Cloudflare approval remains pending; no repeated request or alpha route expansion.
+
 Newest: owner GET /v1/routines/:id/preflight implemented with shared manual-run
 grant/busy/persona checks. Response distinguishes command_allowed from
 execution_enabled; schedule preview is not admission/delivery/credential proof.
