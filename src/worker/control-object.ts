@@ -25,7 +25,7 @@ import type { RuntimeCommand } from '../core/runtime-types';
 import type { RoutinePut } from '../core/types';
 import {AgentCommandBoundary} from '../core/agent-commands';
 import {parseWhatsAppReadPolicies,WhatsAppReadAccess} from '../core/whatsapp-access';
-import {parseHostedOwnerAlpha,parseOwnerAlpha} from '../core/owner-alpha';
+import {parseHostedOwnerAlpha,parseOwnerAlpha,parseOwnerAlphaSuccessor} from '../core/owner-alpha';
 export type TriggerPolicy={routine_id:string;event_types:string[]};
 function stringList(value:string):string[]{const parsed:unknown=JSON.parse(value);if(!Array.isArray(parsed)||!parsed.every(x=>typeof x==='string'))throw new Error('Invalid policy configuration');return parsed;}
 function delegationMap(value:string):Record<string,string[]>{
@@ -51,8 +51,10 @@ export class PersonalControl extends DurableObject<Env> {
   };
   this.store=new Store(db);
   const hosted=parseHostedOwnerAlpha(env.HEHEBOT_HOSTED_OWNER_ALPHA,env);
+  const successor=parseOwnerAlphaSuccessor(env.HEHEBOT_OWNER_ALPHA_SUCCESSOR);
+  requireThat(!successor||!!hosted,'INVALID_CONFIGURATION','Owner-alpha successor requires the original hosted owner-alpha configuration.',503);
   this.hostedOwnerAlpha=!!hosted;
-  this.core=new ControlCore(this.store,{ownerAlpha:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  this.core=new ControlCore(this.store,{ownerAlpha:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
@@ -65,8 +67,10 @@ export class PersonalControl extends DurableObject<Env> {
    this.ownerBindingSha256=db.transaction(()=>{
     const digest=bindOwnerAuth(db,env);
     requireThat(!hosted||hosted.ownerBindingSha256===digest,'OWNER_BINDING_MISMATCH','Hosted owner binding differs from configuration.',503);
+    requireThat(!successor||successor.owner_binding_sha256===digest,'OWNER_BINDING_MISMATCH','Successor owner binding differs from authenticated custody.',503);
     return digest;
    });
+   this.core.options.ownerBindingSha256=this.ownerBindingSha256;
    this.flights.initialize();
    const config=JSON.parse(env.PROVIDER_CONFIG) as {ref?:RuntimeRef};
    this.lifecycle.initialize(config.ref??{});
@@ -105,7 +109,15 @@ export class PersonalControl extends DurableObject<Env> {
   this.core.questions.prune();
   new OutputPreviews(this.store,()=>this.core.now()).prune();
  }
- async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{await this.beforeRequest(owner+':write',60);const result=this.core.accept(owner,key,hash,input);await this.arm();return result;});}
+ async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{
+  // Even rejected activation must leave retained predecessor history untouched.
+  // Core.accept still validates the complete envelope and idempotency receipt.
+  const activation=!!input&&typeof input==='object'&&'type' in input&&input.type==='owner-alpha.activate';
+  if(activation)this.rate(owner+':write',60);else await this.beforeRequest(owner+':write',60);
+  const result=this.core.accept(owner,key,hash,input);
+  if(!activation||result.status==='applied')await this.arm();
+  return result;
+ });}
  getConnectorCatalog(owner:string){return rpcResult(()=>{
   this.rate(owner+':read',120);
   requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Connector setup diagnostics are unavailable in owner-alpha sessions.');

@@ -16,7 +16,7 @@ const OWNER = 'fixture-owner';
 const INSTALLATION = 'hosted-fixture';
 const ROUTINE_MANAGE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 
-export async function startHostedControlFixture({ directory, ownerAlpha, runtimeToken, accessClientId, accessClientSecret }) {
+export async function startHostedControlFixture({ directory, ownerAlpha, ownerAlphaSuccessor, runtimeToken, accessClientId, accessClientSecret }) {
   if (![directory, runtimeToken, accessClientId, accessClientSecret].every(value => typeof value === 'string' && value)) {
     throw new TypeError('Hosted fixture requires a private directory and non-empty synthetic credentials.');
   }
@@ -40,6 +40,9 @@ export async function startHostedControlFixture({ directory, ownerAlpha, runtime
     const binding = JSON.stringify({ auth_mode: 'access', installation_id: INSTALLATION, issuer: ISSUER,
       audience: AUDIENCE, owner_subject: OWNER });
     const ownerBindingSha256 = createHash('sha256').update(binding).digest('hex');
+    const successor = typeof ownerAlphaSuccessor === 'function'
+      ? ownerAlphaSuccessor(ownerBindingSha256, ownerAlpha)
+      : ownerAlphaSuccessor;
     const outboundRequests = [];
     mf = new Miniflare(convertV4MiniflareOptions({ rootPath: root, modules: true, scriptPath: 'worker.mjs', compatibilityDate: '2026-09-10',
       compatibilityFlags: ['nodejs_compat'], resourcePersistencePath: join(root, 'miniflare'),
@@ -49,7 +52,8 @@ export async function startHostedControlFixture({ directory, ownerAlpha, runtime
         ACTION_POLICY_IDS: '[]', TOOL_POLICY_IDS: JSON.stringify([ROUTINE_MANAGE_POLICY]),
         HEHEBOT_WHATSAPP_READ_POLICIES: '{}', TRIGGER_CONFIG: '{}', NATIVE_DELEGATIONS: '{}',
         FLIGHT_RESTORE_VERIFIED: 'false', FLIGHT_RESTORE_POLICY_ID: '', RUNTIME_TOKEN: runtimeToken,
-        HEHEBOT_HOSTED_OWNER_ALPHA: JSON.stringify({ owner_binding_sha256: ownerBindingSha256, policy: ownerAlpha }) },
+        HEHEBOT_HOSTED_OWNER_ALPHA: JSON.stringify({ owner_binding_sha256: ownerBindingSha256, policy: ownerAlpha }),
+        ...(successor === undefined ? {} : { HEHEBOT_OWNER_ALPHA_SUCCESSOR: JSON.stringify(successor) }) },
       outboundService: async request => {
         outboundRequests.push({ method: request.method, url: request.url });
         if (request.method === 'GET' && request.url === `${ISSUER}/cdn-cgi/access/certs`) {

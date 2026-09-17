@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -12,16 +12,31 @@ const clientId = 'synthetic-service-id', clientSecret = 'synthetic-service-secre
 const policy = () => ({ session_id: randomUUID(), persona_id: persona,
   expires_at: new Date(Date.now() + 30 * 60_000).toISOString(), max_runs: 1, max_task_seconds: 45 });
 
-async function withFixture(fn) {
+async function withFixture(fn, options = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'hehe-hosted-control-'));
   const ownerAlpha = policy();
   let fixture;
   try { fixture = await startHostedControlFixture({ directory, ownerAlpha, runtimeToken,
-    accessClientId: clientId, accessClientSecret: clientSecret }); await fn(fixture, directory, ownerAlpha); }
+    accessClientId: clientId, accessClientSecret: clientSecret, ...options }); await fn(fixture, directory, ownerAlpha); }
   finally { await fixture?.close(); await rm(directory, { recursive: true, force: true }); }
 }
 const service = { 'Cf-Access-Client-Id': clientId, 'Cf-Access-Client-Secret': clientSecret };
 const json = response => response.json();
+const successor = (ownerBindingSha256, ownerAlpha, binding = ownerBindingSha256) => ({
+  schema_version: 1, transition_id: randomUUID(), owner_binding_sha256: binding,
+  predecessor: { session_id: ownerAlpha.session_id, epoch: 1, boot_id: randomUUID() },
+  retirement_receipt_sha256: 'a'.repeat(64),
+  successor: { boot_id: randomUUID(), policy: { ...policy(), text_only: {
+    profile_version: 'codex-text-only-v1', profile_sha256: 'b'.repeat(64) } } },
+});
+const activation = grant => ({ schema_version: 1, type: 'owner-alpha.activate', payload: {
+  transition_id: grant.transition_id,
+  envelope_sha256: createHash('sha256').update(JSON.stringify({ ...grant,
+    successor: { policy: grant.successor.policy, boot_id: grant.successor.boot_id } })).digest('hex'),
+} });
+const postCommand = (fixture, command, headers = {}) => fixture.fetchImpl('/v1/commands', { method: 'POST', headers: {
+  Origin: fixture.origin, 'Cf-Access-Jwt-Assertion': fixture.ownerJwt, 'Content-Type': 'application/json',
+  'Idempotency-Key': randomUUID(), ...headers }, body: JSON.stringify(command) });
 
 test('actual signed Access owner state and command use the hosted SQLite Worker', () => withFixture(async fixture => {
   const owner = { 'Cf-Access-Jwt-Assertion': fixture.ownerJwt };
@@ -73,3 +88,32 @@ test('exact hosted false-production status persists and reopening does not grant
     assert.deepEqual(reopened.outboundRequests, []);
   } finally { await reopened.close(); }
 }));
+
+test('hosted successor grant is owner-authenticated and cannot activate without its retired predecessor', () => {
+  let grant;
+  return withFixture(async fixture => {
+    const response = await postCommand(fixture, activation(grant));
+    assert.equal(response.status, 202);
+    const rejected = await json(response);
+    assert.equal(rejected.status, 'rejected');
+    assert.equal(rejected.error.code, 'STALE_EPOCH');
+
+    assert.equal((await postCommand(fixture, activation(grant), { 'Cf-Access-Jwt-Assertion': '' })).status, 401);
+    assert.equal((await postCommand(fixture, activation(grant), { 'Cf-Access-Jwt-Assertion': fixture.otherOwnerJwt })).status, 401);
+    assert.equal((await postCommand(fixture, activation(grant), { Origin: 'https://wrong.example' })).status, 403);
+    assert.equal((await fixture.fetchImpl('/internal/owner-alpha.activate', { method: 'POST', headers: { ...service,
+      Authorization: `Bearer ${runtimeToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(activation(grant)) })).status, 422);
+  }, { ownerAlphaSuccessor: (ownerBindingSha256, ownerAlpha) => (grant = successor(ownerBindingSha256, ownerAlpha)) });
+});
+
+test('missing hosted successor grant refuses activation', () => withFixture(async (fixture, _directory, ownerAlpha) => {
+  const response = await postCommand(fixture, activation(successor(fixture.ownerBindingSha256, ownerAlpha)));
+  assert.equal(response.status, 202);
+  const receipt = await json(response);
+  assert.equal(receipt.status, 'rejected');
+  assert.equal(receipt.error.code, 'CAPABILITY_UNAVAILABLE');
+}));
+
+test('hosted successor binding mismatch fails closed', () => withFixture(async fixture => {
+  assert.equal((await fixture.fetchImpl('/v1/state', { headers: { 'Cf-Access-Jwt-Assertion': fixture.ownerJwt } })).status, 500);
+}, { ownerAlphaSuccessor: (ownerBindingSha256, ownerAlpha) => successor(ownerBindingSha256, ownerAlpha, '0'.repeat(64)) }));

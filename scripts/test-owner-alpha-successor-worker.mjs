@@ -16,8 +16,15 @@ async function start(){
 }
 async function request(base,path,body){const response=await fetch(base+path,{method:body===undefined?'GET':'POST',headers:{'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});const text=await response.text();assert.equal(response.status,200,text);return JSON.parse(text);}
 try{
- const base=await start(),prepared=await request(base,'/prepare',{}),query=`?run=${prepared.runId}&queued=${prepared.queuedId}`,before=prepared.retained;
+ const base=await start(),prepared=await request(base,'/prepare',{}),query=`?run=${prepared.runId}&queued=${prepared.queuedId}`,before=prepared.before;
  assert.equal(before.run[0].status,'recovery_required');assert.equal(before.effect[0].status,'outcome_unknown');assert.equal(before.retry.length,1);assert.equal(before.queued[0].status,'waiting');
+ assert.equal(prepared.rejected.ok,true);assert.equal(prepared.rejected.value.status,'rejected');assert.equal(prepared.rejected.value.error.code,'FORBIDDEN');
+ assert.deepEqual(prepared.afterRejected,{...prepared.beforeRejected,retained:before});
+ assert.equal(prepared.activation.ok,true);assert.equal(prepared.activation.value.status,'applied');assert.equal(prepared.activation.value.resource_id,prepared.generation.transition_id);assert.deepEqual(prepared.retained,before);
+ const p=prepared.command.payload,reordered=` { "payload" : { "envelope_sha256" : "${p.envelope_sha256}", "transition_id" : "${p.transition_id}" }, "type" : "owner-alpha.activate", "schema_version" : 1 } `;
+ const retryResponse=await fetch(base+'/retry-activation'+query,{method:'POST',headers:{'content-type':'application/json','idempotency-key':prepared.key},body:reordered,signal:AbortSignal.timeout(15000)});
+ const retryText=await retryResponse.text();assert.equal(retryResponse.status,200,retryText);const retry=JSON.parse(retryText);
+ assert.deepEqual(retry.result,prepared.activation);assert.deepEqual(retry.retained,before);
  const read=await request(base,'/read'+query);assert.deepEqual(read.retained,before);assert.equal(read.result.ok,true);assert.ok(read.alarm>Date.now());assert.ok(read.alarm<=Date.now()+7000);
  const fresh={schema_version:1,type:'message.send',payload:{conversation_id:prepared.persona,text:'fresh successor input'}};
  const accepted=await request(base,'/accept'+query,fresh);assert.equal(accepted.result.ok,true);assert.equal(accepted.result.value.status,'applied');assert.deepEqual(accepted.retained,before);
@@ -30,8 +37,8 @@ try{
  assert.deepEqual(afterRestart.retained,before);assert.equal(afterRestart.alarm,null);assert.deepEqual(afterRestart.lifecycle,second.lifecycle);
  assert.deepEqual((await request(reopened,'/status')).value.owner_alpha_generation,prepared.generation);
  assert.ok(!logs.includes('control.alarm_failed'));
- console.log('PASS real workerd SQLite: actual PersonalControl read/accept/alarm preserve predecessor run, attempt, unknown effect, overdue retry, queued context, command and alpha bytes.');
+ console.log('PASS real workerd SQLite: actual PersonalControl.accept owner-alpha activation and canonical same-key retry preserve predecessor run, attempt, unknown effect, overdue retry, queued context, command and alpha bytes.');
  console.log('PASS generation watchdog: epoch 2 lease expiry transitions to RECOVERY_REQUIRED, deletes alarm, and retired due timestamps do not spin; status exposes exact three-field descriptor.');
  console.log('PASS persisted Worker reopen: exact predecessor custody, successor lifecycle/descriptor and absent alarm retained without replay.');
- console.log('LIMIT synthetic applied activation and retirement-receipt digest are fixture preparation, not real retirement proof; no public activation/config, inference, provider, auth account, or credential call.');
+ console.log('LIMIT successor grant and retirement-receipt digest are synthetic loopback fixture inputs, not real retirement evidence; no public activation/config, inference, provider, auth account, or credential call.');
 }catch(error){console.error(logs.slice(-6000));throw error;}finally{await stop();await rm(directory,{recursive:true,force:true});}

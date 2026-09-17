@@ -1,7 +1,7 @@
 import type { BudgetPolicy } from './budget';
 import type { RosterLayout } from './roster';
 import type { NativeQuestionAnswerCommand, NativeQuestionCloseCommand } from './native-questions';
-import type { OwnerAlphaPolicy } from './owner-alpha';
+import type { OwnerAlphaPolicy, OwnerAlphaSuccessor } from './owner-alpha';
 import type { WhatsAppReadPolicies } from './whatsapp-access';
 export type Scope = { kind: 'global' | 'persona' | 'routine' | 'skill'; id: string | null };
 export type BasePut = { id: string; expected_revision: number };
@@ -19,6 +19,7 @@ export type SkillProvenance = { kind:'owner'|'task'|'notes'|'file'|'url'|'import
 export type SkillProposal = { proposal_id:string; skill_id:string; expected_skill_revision:number; body:SkillBody; provenance:SkillProvenance; executable_files_changed:boolean };
 export type RoomPublish = { room_id: string; kind: 'context_update' | 'action_request' | 'message'; recipient_ids: string[]; text: string; references: { kind: string; id: string; revision: number }[]; cause_id: string };
 export type PayloadMap = {
+ 'owner-alpha.activate':{transition_id:string;envelope_sha256:string};
  'run.recover':{run_id:string;expected_attempt:number;release_resources:true};
  'effect.reconcile':{run_id:string;expected_attempt:number;effect_id:string;expected_request_digest:string;outcome:'confirmed'|'failed';evidence_ref:string};
  'question.answer':NativeQuestionAnswerCommand;
@@ -53,4 +54,4 @@ export type Run = { role:'coordinator'|'background';parent_run_id:string|null;ti
 export type Operation = { id: string; kind: 'inference' | 'tool' | 'child' | 'transfer' | 'node' | 'flush' | 'delivery'; status: 'active' | 'cancelling' | 'settled' | 'unknown'; started_at: string; deadline_at: string; last_progress_at: string };
 export type ContextSnapshot = {conversation_history?:{purpose:string;truncated:boolean;messages:Array<{command_id:string;text:string;truncated:boolean;provisional_reply?:{run_id:string;attempt:number;version:number;text:string;truncated:boolean}}>};whatsapp_read_policies?:WhatsAppReadPolicies;context_history_gap?:{requested_after:number;expired_through:number};task_summaries?:Array<{id:string;title:string|null;status:string;updated_at:string}>;skill_invocation?:{skill_id:string;skill_revision:number}; schema_version: 1; persona: StoredObject<PersonaPut>; routine: StoredObject<RoutinePut> | null; memories: StoredObject<MemoryPut>[]; skills:StoredObject<SkillBody>[]; scope_key: string; instruction: string; room_id: string | null; context_events: TimelineEvent[]; authorization_policy_ids: string[] };
 export type TimelineEvent = { sequence: number; id: string; conversation_id: string | null; type: string; actor_id: string; cause_id: string | null; payload: Record<string, unknown>; created_at: string };
-export type Options = { ownerAlpha?:OwnerAlphaPolicy;whatsappReadPolicies?:WhatsAppReadPolicies;delegations?:Record<string,string[]>;executionEnabled: boolean; actionPolicyIds: string[]; toolPolicyIds: string[]; now: () => Date; uuid: () => string };
+export type Options = { ownerAlpha?:OwnerAlphaPolicy;ownerAlphaSuccessor?:OwnerAlphaSuccessor;ownerBindingSha256?:string;whatsappReadPolicies?:WhatsAppReadPolicies;delegations?:Record<string,string[]>;executionEnabled: boolean; actionPolicyIds: string[]; toolPolicyIds: string[]; now: () => Date; uuid: () => string };

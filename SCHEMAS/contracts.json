@@ -95,6 +95,13 @@
     {
       "type":"object","additionalProperties":false,
       "properties": {
+        "schema_version":{"const":1},"type":{"const":"owner-alpha.activate"},
+        "payload":{"type":"object","additionalProperties":false,"properties":{"transition_id":{"$ref":"#/$defs/uuid"},"envelope_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"}},"required":["transition_id","envelope_sha256"]}
+      },"required":["schema_version","type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
         "schema_version":{"const":1},"type":{"const":"question.close"},
         "payload": {
           "type":"object","additionalProperties":false,

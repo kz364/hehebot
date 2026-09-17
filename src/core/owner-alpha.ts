@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import { requireThat } from './errors';
 import type { Store } from './store';
 import type { Run } from './types';
@@ -55,6 +56,11 @@ export function parseOwnerAlphaSuccessor(value:string|undefined):OwnerAlphaSucce
   predecessor:{session_id:predecessor.session_id as string,epoch:predecessor.epoch as number,boot_id:predecessor.boot_id as string},retirement_receipt_sha256:e.retirement_receipt_sha256 as string,
   successor:{policy:policy as OwnerAlphaPolicy&{text_only:TextOnlyProfile},boot_id:successor.boot_id as string}};
 }
+export function ownerAlphaSuccessorSha256(envelope:OwnerAlphaSuccessor):string {
+ const parsed=parseOwnerAlphaSuccessor(JSON.stringify(envelope));
+ requireThat(!!parsed,'INVALID_CONFIGURATION','Owner-alpha successor configuration is missing.',503);
+ return createHash('sha256').update(JSON.stringify(parsed)).digest('hex');
+}
 export function assertOwnerAlphaSuccessorBinding(envelope:OwnerAlphaSuccessor,binding:OwnerAlphaSuccessorBinding):void {
  requireThat(sha256.test(binding.ownerBindingSha256)&&Number.isSafeInteger(binding.epoch)&&binding.epoch>=1&&uuid.test(binding.bootId)&&sha256.test(binding.retirementReceiptSha256)&&
   envelope.owner_binding_sha256===binding.ownerBindingSha256&&envelope.predecessor.session_id===binding.predecessorPolicy.session_id&&envelope.predecessor.epoch===binding.epoch&&
@@ -85,7 +91,7 @@ type Custody={policy:OwnerAlphaPolicy;admitted_run_ids:string[]};
 export type OwnerAlphaGeneration={
  epoch:number;boot_id:string;transition_id:string;policy:OwnerAlphaPolicy&{text_only:TextOnlyProfile};
  predecessor:{epoch:number;boot_id:string;session_id:string;phase:string;lease_until:string|null};
- owner_binding_sha256:string;retirement_receipt_sha256:string;activation_command_id:string;activation_event_sequence:number;
+ authority:OwnerAlphaSuccessor;activation_command_id:string;activation_command_sha256:string;activation_event_sequence:number;
 };
 /** Immutable local-session policy; each durable admitted ID consumes one run forever. */
 export class OwnerAlpha {
@@ -97,17 +103,18 @@ export class OwnerAlpha {
    requireThat(row.key==='owner_alpha_generation:2'&&generation?.epoch===2&&Number.isSafeInteger(generation.activation_event_sequence)&&generation.activation_event_sequence>=0&&
     generation.predecessor?.epoch===1&&generation.predecessor.phase==='RECOVERY_REQUIRED'&&uuid.test(generation.activation_command_id),
     'INVALID_CONFIGURATION','Invalid owner-alpha generation record.',503);
-   const command=this.store.db.all<{payload_json:string;type:string;owner_id:string;status:string}>('SELECT payload_json,type,owner_id,status FROM commands WHERE id=?',generation.activation_command_id)[0];
+   const command=this.store.db.all<{payload_json:string;body_hash:string;type:string;owner_id:string;status:string}>('SELECT payload_json,body_hash,type,owner_id,status FROM commands WHERE id=?',generation.activation_command_id)[0];
    requireThat(command?.type==='owner-alpha.activate'&&command.status==='applied'&&!/^(runtime|trigger):/.test(command.owner_id),
     'INVALID_CONFIGURATION','Owner-alpha activation receipt is missing.',503);
    requireThat(this.store.db.all("SELECT sequence FROM events WHERE id=? AND type='owner-alpha.activated' AND actor_id=? AND cause_id=? AND sequence=? AND json_extract(payload_json,'$.epoch')=?",
     generation.activation_command_id,command.owner_id,generation.activation_command_id,generation.activation_event_sequence,generation.epoch).length===1,
     'INVALID_CONFIGURATION','Owner-alpha admission cutoff differs from its activation event.',503);
-   const envelope=parseOwnerAlphaSuccessor(command.payload_json);
-   requireThat(envelope&&envelope.transition_id===generation.transition_id&&envelope.owner_binding_sha256===generation.owner_binding_sha256&&
-    envelope.retirement_receipt_sha256===generation.retirement_receipt_sha256&&envelope.predecessor.session_id===generation.predecessor.session_id&&
-    envelope.predecessor.boot_id===generation.predecessor.boot_id&&envelope.successor.boot_id===generation.boot_id&&
-    JSON.stringify(envelope.successor.policy)===JSON.stringify(generation.policy),
+   const envelope=parseOwnerAlphaSuccessor(JSON.stringify(generation.authority));
+   const payload={transition_id:generation.transition_id,envelope_sha256:ownerAlphaSuccessorSha256(envelope!)};
+   const commandPayload=JSON.parse(command.payload_json) as Record<string,unknown>;
+   requireThat(envelope&&Object.keys(commandPayload).sort().join(',')==='envelope_sha256,transition_id'&&commandPayload.transition_id===payload.transition_id&&commandPayload.envelope_sha256===payload.envelope_sha256&&command.body_hash===generation.activation_command_sha256&&
+    envelope.transition_id===generation.transition_id&&envelope.predecessor.session_id===generation.predecessor.session_id&&envelope.predecessor.boot_id===generation.predecessor.boot_id&&
+    envelope.successor.boot_id===generation.boot_id&&JSON.stringify(envelope.successor.policy)===JSON.stringify(generation.policy),
     'INVALID_CONFIGURATION','Owner-alpha generation differs from its activation receipt.',503);
    return generation;
   });

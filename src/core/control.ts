@@ -15,7 +15,7 @@ import {EffectLedger} from './effects';
 import {ResourceLedger} from './resources';
 import {OutputPreviews} from './output-preview';
 import {captureWhatsAppReadPolicies} from './whatsapp-access';
-import {OwnerAlpha} from './owner-alpha';
+import {OwnerAlpha,ownerAlphaSuccessorSha256} from './owner-alpha';
 import {timelineExpirySql} from './timeline-retention';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
@@ -39,6 +39,7 @@ export class ControlCore {
  readonly ownerAlpha:OwnerAlpha;
  constructor(public store:Store,public options:Options){
   requireThat(!options.ownerAlpha||!options.executionEnabled,'INVALID_CONFIGURATION','Owner alpha cannot enable production execution.',503);
+  requireThat(!options.ownerAlphaSuccessor||!options.executionEnabled,'INVALID_CONFIGURATION','Owner alpha successor cannot enable production execution.',503);
   this.ownerAlpha=new OwnerAlpha(store,options.ownerAlpha,()=>this.now());
   this.budget=new BudgetLedger(store,()=>this.now(),options.uuid);
   this.questions=new NativeQuestionLedger(store,new LifecycleCore(store,this),()=>this.now());
@@ -97,6 +98,12 @@ export class ControlCore {
   const now=this.now();
   const skills=new SkillCatalog(this.store,()=>this.now(),this.options.uuid);
   switch(command.type){
+   case 'owner-alpha.activate':{
+    const grant=this.options.ownerAlphaSuccessor;
+    requireThat(!!grant&&!!this.options.ownerBindingSha256,'CAPABILITY_UNAVAILABLE','Owner-alpha successor activation is not configured.');
+    requireThat(command.payload.transition_id===grant.transition_id&&command.payload.envelope_sha256===ownerAlphaSuccessorSha256(grant),'FORBIDDEN','Owner-alpha activation does not match the configured grant.',403);
+    return new LifecycleCore(this.store,this).activateOwnerAlphaSuccessor(command,owner,commandId).owner_alpha_generation.transition_id;
+   }
    case 'run.recover':{
     const p=command.payload,run=this.store.run(p.run_id);
     requireThat(run.current_attempt===p.expected_attempt&&run.status==='recovery_required','REVISION_CONFLICT','Select the current recovery-required attempt.');

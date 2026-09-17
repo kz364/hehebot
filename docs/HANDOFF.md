@@ -4,6 +4,31 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Current stage supersedes the older unwired notes below: public authenticated
+`owner-alpha.activate` and private `HEHEBOT_OWNER_ALPHA_SUCCESSOR` are wired locally.
+The command contains only transition_id/envelope_sha256; actual Access owner binding
+and original hosted policy are required for configured authority. Full consumed
+authority and ingress digest persist in the immutable generation, allowing restart
+without pending config. Activation skips pre-request reconciliation; no historical
+maintenance on rejected commands. Actual workerd/SQLite activation, canonical
+same-key retry, reads/alarms/reopen pass; signed-Access fixture7 and typecheck pass.
+Full verifier passes1590 backend/467 runtime plus Worker/native/browser/build in
+.local/alpha-activation-combined.log; desktop16 pass in .local/alpha-activation-desktop.log.
+Final wrong-digest rejection preserves lifecycle/alarm/history in
+.local/alpha-activation-worker.log. No active workers/checks.
+Generated runtime validator drift is only AJV symbol numbering after command-schema
+addition (same generator compiles both schemas); do not hand-edit it.
+
+One bounded read-only same-Sprite check at18:28UTC compared the retained kernel-ID
+baseline: unchanged. .local/sprite-retirement-kernel-followup.log records the result.
+No retirement proof, no successor live grant/activation/deployment/model call.
+Probe billing increment remains unverified, no new resource or paid upgrade.
+Do not repeat cold/btime/kernel polling expecting proof; need a supported retirement
+mechanism or independently established later memory discard. The existing task's
+unknown outcomes remain unchanged. Next is supported retirement and bounded hosted
+successor completion; local activation preparation is finished, not deployed.
+Continuation enabled; no renewed spending approval needed.
+
 Newest follow-through: Worker generation-mode reconciliation/alarms now preserve
 all historical custody and only run the fenced watchdog. Internal status exposes
 the exact generation descriptor. Real workerd/SQLite read/accept/alarm and persisted

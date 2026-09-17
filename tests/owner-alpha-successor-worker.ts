@@ -1,9 +1,10 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {PersonalControl} from '../src/worker/control-object';
+import {digest} from '../src/worker/http';
 import type {ControlCore} from '../src/core/control';
 import type {LifecycleCore} from '../src/core/lifecycle';
 import type {Store} from '../src/core/store';
-import type {OwnerAlphaPolicy} from '../src/core/owner-alpha';
+import {ownerAlphaSuccessorSha256} from '../src/core/owner-alpha';
 
 type FixtureEnv=Env&{FIXTURE_NOW:string;DB:DurableObjectNamespace};
 type Internals={core:ControlCore;lifecycle:LifecycleCore;store:Store};
@@ -44,13 +45,23 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
    store.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',desired_state='STOP',lease_until=? WHERE singleton=1",policy.expires_at);
    const successor={schema_version:1 as const,transition_id:randomUUID(),owner_binding_sha256:'a'.repeat(64),predecessor:{session_id:policy.session_id,epoch:1,boot_id:oldBoot},retirement_receipt_sha256:'b'.repeat(64),
     successor:{policy:{session_id:randomUUID(),persona_id:persona,expires_at:'2026-09-17T00:06:00.000Z',max_runs:1,max_task_seconds:30,text_only:{profile_version:'codex-text-only-v1' as const,profile_sha256:'c'.repeat(64)}},boot_id:randomUUID()}};
-   const commandId=randomUUID(),owner='operator:synthetic';
-   store.db.exec("INSERT INTO commands(id,owner_id,idempotency_key,body_hash,type,payload_json,status,accepted_at) VALUES(?,?,?,?,?,?,'applied',?)",commandId,owner,randomUUID(),createHash('sha256').update(JSON.stringify(successor)).digest('hex'),'owner-alpha.activate',JSON.stringify(successor),core.now());
-   const binding={ownerBindingSha256:successor.owner_binding_sha256,predecessorPolicy:policy as OwnerAlphaPolicy,epoch:1,bootId:oldBoot,retirementReceiptSha256:successor.retirement_receipt_sha256};
-   lifecycle.activateOwnerAlphaSuccessor(successor,binding,owner,commandId);
-   return Response.json({runId:claim.run.id,queuedId:queued.resource_id,persona,generation:{epoch:2,boot_id:successor.successor.boot_id,transition_id:successor.transition_id},retained:this.retained(claim.run.id,queued.resource_id!)});
+   // Loopback-only synthetic grant: these values exercise admission, not real retirement evidence.
+   core.options.ownerAlphaSuccessor=successor;core.options.ownerBindingSha256=successor.owner_binding_sha256;
+   const command={schema_version:1 as const,type:'owner-alpha.activate' as const,payload:{transition_id:successor.transition_id,envelope_sha256:ownerAlphaSuccessorSha256(successor)}};
+   const key=randomUUID(),before=this.retained(claim.run.id,queued.resource_id!);
+   const beforeRejected={lifecycle:lifecycle.get(),alarm:await this.ctx.storage.getAlarm()};
+   const changed={...command,payload:{...command.payload,envelope_sha256:'d'.repeat(64)}};
+   const rejected=await this.accept('fixture-owner',randomUUID(),await digest(changed),changed);
+   const afterRejected={lifecycle:lifecycle.get(),alarm:await this.ctx.storage.getAlarm(),retained:this.retained(claim.run.id,queued.resource_id!)};
+   const activation=await this.accept('fixture-owner',key,await digest(command),command);
+   return Response.json({runId:claim.run.id,queuedId:queued.resource_id,persona,key,command,activation,rejected,beforeRejected,afterRejected,generation:{epoch:2,boot_id:successor.successor.boot_id,transition_id:successor.transition_id},before,retained:this.retained(claim.run.id,queued.resource_id!)});
   }
   const ids={runId:url.searchParams.get('run')!,queuedId:url.searchParams.get('queued')!};
+  if(url.pathname==='/retry-activation'&&request.method==='POST'){
+   const text=await request.text(),input=JSON.parse(text);
+   const result=await this.accept('fixture-owner',request.headers.get('idempotency-key')!,await digest(input),input);
+   return Response.json({result,retained:this.retained(ids.runId,ids.queuedId),alarm:await this.ctx.storage.getAlarm()});
+  }
   if(url.pathname==='/accept'&&request.method==='POST'){
    const text=await request.text();const result=await this.accept('fixture-owner',randomUUID(),createHash('sha256').update(text).digest('hex'),JSON.parse(text));
    return Response.json({result,retained:this.retained(ids.runId,ids.queuedId),alarm:await this.ctx.storage.getAlarm()});

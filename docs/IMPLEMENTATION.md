@@ -4,6 +4,38 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Successor command integration (2026-09-17, local/unpublished): authenticated
+same-origin `/v1/commands` accepts `owner-alpha.activate` with only
+`{transition_id,envelope_sha256}`. The digest identifies the parsed/canonical
+operator envelope from default-absent private `HEHEBOT_OWNER_ALPHA_SUCCESSOR`.
+Worker configuration requires original hosted alpha (Access, both production
+flags false, empty provider); successor binding must equal the actual durable
+owner-auth digest. Browser/runtime inputs cannot supply replacement authority.
+Activation uses the normal accepted→applied command transaction, persisting full
+consumed authority and command digest in immutable generation metadata. The ingress
+uses canonical JSON hashing: lifecycle must retain this supplied digest rather than
+recompute it with property-order-sensitive JSON.stringify. Reconstruction does not
+need pending operator config and validates command fields independent of key order.
+Activation bypasses historical reconciliation even when rejected; applied activation
+arms only generation supervision. Ordinary ingress behavior remains unchanged.
+
+Real workerd/SQLite fixture now calls actual PersonalControl.accept, snapshots old
+custody before activation, retries equivalent reordered JSON through canonical
+HTTP hashing, and verifies reads/alarms/persistent reopen. Signed-Access fixture7
+also verifies valid configured startup, missing grant, wrong JWT/Origin, no internal
+runtime activation and owner-binding mismatch refusal. Combined verification exits0:
+1590 backend/467 runtime plus Worker/native/browser/build in
+`.local/alpha-activation-combined.log`; desktop16 pass in
+`.local/alpha-activation-desktop.log`. Final targeted Worker fixture additionally
+rejects a changed digest without mutating old lifecycle, alarm or history
+(`.local/alpha-activation-worker.log`). No UI appearance changed in this stage.
+
+One bounded same-Sprite kernel observation at18:28UTC matches the retained baseline
+exactly (`.local/sprite-retirement-kernel-followup.log`). It supplies no retirement
+evidence. No live activation/deployment/model call or new resource; probe billing
+increment remains unverified. Existing $10 total authority, gates false and all
+historical uncertainty remain intact. Older stage descriptions below are historical.
+
 Worker successor follow-through (2026-09-17): once an active generation exists,
 `PersonalControl.reconcile` runs only the generation-fenced watchdog. Retention,
 routine/retry/budget/question/preview/steering and other maintenance remain suspended

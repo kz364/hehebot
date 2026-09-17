@@ -1,6 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {expect,it} from 'vitest';
-import {assertOwnerAlphaSuccessorBinding,parseOwnerAlphaSuccessor,type OwnerAlphaPolicy} from '../src/core/owner-alpha';
+import {assertOwnerAlphaSuccessorBinding,ownerAlphaSuccessorSha256,parseOwnerAlphaSuccessor,type OwnerAlphaPolicy} from '../src/core/owner-alpha';
 import {fixture,bot} from './helpers';
 import {ControlCore} from '../src/core/control';
 import {LifecycleCore} from '../src/core/lifecycle';
@@ -63,12 +63,18 @@ it('activates one exact successor while retaining predecessor custody and enforc
   f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',desired_state='STOP',lease_until=? WHERE singleton=1",original.expires_at);
   const next={schema_version:1 as const,transition_id:randomUUID(),owner_binding_sha256:'a'.repeat(64),predecessor:{session_id:original.session_id,epoch:1,boot_id:oldBoot},retirement_receipt_sha256:'b'.repeat(64),
    successor:{policy:{session_id:randomUUID(),persona_id:bot,expires_at:'2026-09-10T00:06:00.000Z',max_runs:1,max_task_seconds:30,text_only:{profile_version:'codex-text-only-v1' as const,profile_sha256:'c'.repeat(64)}},boot_id:randomUUID()}};
-  const commandId=randomUUID(),owner='operator:trusted';
-  f.db.exec("INSERT INTO commands(id,owner_id,idempotency_key,body_hash,type,payload_json,status,accepted_at) VALUES(?,?,?,?,?,?,'applied',?)",commandId,owner,randomUUID(),createHash('sha256').update(JSON.stringify(next)).digest('hex'),'owner-alpha.activate',JSON.stringify(next),core.now());
-  const binding={ownerBindingSha256:next.owner_binding_sha256,predecessorPolicy:original,epoch:1,bootId:oldBoot,retirementReceiptSha256:next.retirement_receipt_sha256};
-  expect(lifecycle.activateOwnerAlphaSuccessor(next,binding,owner,commandId)).toEqual({owner_alpha_generation:{epoch:2,boot_id:next.successor.boot_id,transition_id:next.transition_id}});
+  const owner='operator:trusted',rawCommand=`{\n  "payload": { "envelope_sha256": "${ownerAlphaSuccessorSha256(next)}", "transition_id": "${next.transition_id}" },\n  "type": "owner-alpha.activate", "schema_version": 1\n}`;
+  const command=JSON.parse(rawCommand) as {schema_version:1;type:'owner-alpha.activate';payload:{envelope_sha256:string;transition_id:string}};
+  core=new ControlCore(f.store,{...f.core.options,ownerAlpha:original,ownerAlphaSuccessor:next,ownerBindingSha256:next.owner_binding_sha256});
+  const key=randomUUID(),hash=createHash('sha256').update(rawCommand).digest('hex');
+  expect(hash).not.toBe(createHash('sha256').update(JSON.stringify(command)).digest('hex'));
+  const activated=core.accept(owner,key,hash,command);
+  expect(activated).toMatchObject({status:'applied',resource_id:next.transition_id});
+  expect(core.accept(owner,key,hash,command)).toEqual(activated);
+  expect(f.db.all<{epoch:number}>('SELECT epoch FROM lifecycle')[0].epoch).toBe(2);
   const generationBytes=()=>f.db.all("SELECT value_json FROM runtime_metadata WHERE key='owner_alpha_generation:2'");
   const immutableGeneration=generationBytes();
+  expect(JSON.parse((immutableGeneration[0] as {value_json:string}).value_json).activation_command_sha256).toBe(hash);
   expect(retained()).toBe(before);
   expect(f.db.all('SELECT run_id,epoch,boot_id,status FROM attempts')).toEqual([{run_id:oldClaim.run.id,epoch:1,boot_id:oldBoot,status:'claimed'}]);
   expect(lifecycle.nextClaimableRun()).toBeUndefined();
@@ -90,17 +96,21 @@ it('activates one exact successor while retaining predecessor custody and enforc
  }finally{f.close();}
 });
 
-it('rejects stale lifecycle, changed owner identity, changed binding, and reused activation',()=>{
+it('rejects missing or changed grants and different-key repeated activation without mutation',()=>{
  const f=fixture();try{
   const original:OwnerAlphaPolicy={session_id:randomUUID(),persona_id:bot,expires_at:'2026-09-10T00:00:00.000Z',max_runs:1,max_task_seconds:10};
-  const core=new ControlCore(f.store,{...f.core.options,ownerAlpha:original});core.ownerAlpha.initialize();
-  const lifecycle=new LifecycleCore(f.store,core),boot=randomUUID();f.db.exec("UPDATE lifecycle SET epoch=1,boot_id=?,phase='RECOVERY_REQUIRED',lease_until=? WHERE singleton=1",boot,original.expires_at);
+  let core=new ControlCore(f.store,{...f.core.options,ownerAlpha:original});core.ownerAlpha.initialize();
+  const boot=randomUUID();f.db.exec("UPDATE lifecycle SET epoch=1,boot_id=?,phase='RECOVERY_REQUIRED',lease_until=? WHERE singleton=1",boot,original.expires_at);
   const next=parseOwnerAlphaSuccessor(JSON.stringify({...envelope,predecessor:{session_id:original.session_id,epoch:1,boot_id:boot},successor:{...envelope.successor,policy:{...envelope.successor.policy,persona_id:bot,expires_at:'2026-09-10T00:04:00.000Z'}}}))!;
-  const id=randomUUID();f.db.exec("INSERT INTO commands(id,owner_id,idempotency_key,body_hash,type,payload_json,status,accepted_at) VALUES(?,?,?,?,?,?,'applied',?)",id,'owner',randomUUID(),'hash','owner-alpha.activate',JSON.stringify(next),core.now());
-  const trusted={ownerBindingSha256:next.owner_binding_sha256,predecessorPolicy:original,epoch:1,bootId:boot,retirementReceiptSha256:next.retirement_receipt_sha256};
-  expect(()=>lifecycle.activateOwnerAlphaSuccessor(next,trusted,'changed-owner',id)).toThrow();
-  expect(()=>lifecycle.activateOwnerAlphaSuccessor(next,{...trusted,retirementReceiptSha256:'f'.repeat(64)},'owner',id)).toThrow();
-  expect(lifecycle.activateOwnerAlphaSuccessor(next,trusted,'owner',id).owner_alpha_generation.epoch).toBe(2);
-  expect(()=>lifecycle.activateOwnerAlphaSuccessor(next,trusted,'owner',id)).toThrow();
+  const command={schema_version:1 as const,type:'owner-alpha.activate' as const,payload:{transition_id:next.transition_id,envelope_sha256:ownerAlphaSuccessorSha256(next)}};
+  const submit=(c:ControlCore,key=randomUUID())=>c.accept('owner',key,createHash('sha256').update(JSON.stringify(command)).digest('hex'),command);
+  expect(submit(core).error?.code).toBe('CAPABILITY_UNAVAILABLE');
+  core=new ControlCore(f.store,{...f.core.options,ownerAlpha:original,ownerAlphaSuccessor:next,ownerBindingSha256:'f'.repeat(64)});
+  expect(submit(core).error?.code).toBe('FORBIDDEN');
+  core=new ControlCore(f.store,{...f.core.options,ownerAlpha:original,ownerAlphaSuccessor:next,ownerBindingSha256:next.owner_binding_sha256});
+  expect(submit(core).status).toBe('applied');
+  const before=JSON.stringify({lifecycle:f.db.all('SELECT * FROM lifecycle'),generation:f.db.all("SELECT * FROM runtime_metadata WHERE key='owner_alpha_generation:2'")});
+  expect(submit(core).status).toBe('rejected');
+  expect(JSON.stringify({lifecycle:f.db.all('SELECT * FROM lifecycle'),generation:f.db.all("SELECT * FROM runtime_metadata WHERE key='owner_alpha_generation:2'")})).toBe(before);
  }finally{f.close();}
 });

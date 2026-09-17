@@ -6,7 +6,8 @@ import type { ContextSnapshot, Operation, Run } from './types';
 import type { RuntimeProvider, RuntimeRef, RuntimeObservation } from '../providers';
 import {createHash} from 'node:crypto';
 import type {TextOnlyReceipt} from './runtime-types';
-import {assertOwnerAlphaSuccessorBinding,parseOwnerAlphaSuccessor,type OwnerAlphaSuccessor,type OwnerAlphaSuccessorBinding,type OwnerAlphaGeneration} from './owner-alpha';
+import {ownerAlphaSuccessorSha256,parseOwnerAlphaSuccessor,type OwnerAlphaGeneration} from './owner-alpha';
+import type {Command} from './types';
 export type Phase='STOPPED'|'START_REQUESTED'|'BOOTING'|'READY'|'DRAINING'|'STOP_COMMITTED'|'STOPPING'|'RECOVERY_REQUIRED'|'IDLE_PERMITTED';
 export type Lifecycle={singleton:number;provider_ref_json:string;boot_id:string|null;epoch:number;phase:Phase;desired_state:'RUN'|'STOP';lease_until:string|null;last_heartbeat:string|null;queue_sequence:number;stop_token:string|null;provider_operation_id:string|null;wake_after_stop:number};
 export type Identity={epoch:number;boot_id:string};
@@ -23,14 +24,18 @@ export class LifecycleCore {
  constructor(public store:Store,public core:ControlCore,private options:{idleMode?:boolean}={}){}
  get():Lifecycle{return this.store.db.all<Lifecycle>('SELECT * FROM lifecycle WHERE singleton=1')[0];}
  initialize(ref:RuntimeRef|Record<string,never>):void{this.store.db.exec("INSERT OR IGNORE INTO lifecycle(singleton,provider_ref_json,epoch,phase,desired_state,queue_sequence,wake_after_stop) VALUES(1,?,0,'STOPPED','STOP',0,0)",JSON.stringify(ref));this.core.ownerAlpha.initialize();}
- activateOwnerAlphaSuccessor(envelope:OwnerAlphaSuccessor,binding:OwnerAlphaSuccessorBinding,ownerId:string,ownerCommandId:string):{owner_alpha_generation:{epoch:number;boot_id:string;transition_id:string}} {
+ activateOwnerAlphaSuccessor(command:Extract<Command,{type:'owner-alpha.activate'}>,ownerId:string,ownerCommandId:string):{owner_alpha_generation:{epoch:number;boot_id:string;transition_id:string}} {
   return this.store.db.transaction(()=>{
-   envelope=parseOwnerAlphaSuccessor(JSON.stringify(envelope))!;
-   assertOwnerAlphaSuccessorBinding(envelope,binding);
+   const envelope=parseOwnerAlphaSuccessor(JSON.stringify(this.core.options.ownerAlphaSuccessor))!;
+   requireThat(!!envelope&&command.payload.transition_id===envelope.transition_id&&command.payload.envelope_sha256===ownerAlphaSuccessorSha256(envelope)&&this.core.options.ownerBindingSha256===envelope.owner_binding_sha256,
+    'FORBIDDEN','Owner-alpha activation does not match the configured grant and owner binding.',403);
    this.core.ownerAlpha.initialize();
    requireThat(!this.core.options.executionEnabled&&envelope.predecessor.epoch===1&&!this.core.ownerAlpha.activeGeneration(),'CAPABILITY_UNAVAILABLE','Only the initial retained alpha generation can transition.');
-   const now=this.core.now(),state=this.get(),command=this.store.db.all<{owner_id:string;type:string;payload_json:string;status:string}>('SELECT owner_id,type,payload_json,status FROM commands WHERE id=?',ownerCommandId)[0];
-   requireThat(!!command&&command.owner_id===ownerId&&!/^(runtime|trigger):/.test(ownerId)&&command.type==='owner-alpha.activate'&&command.status==='applied'&&command.payload_json===JSON.stringify(envelope),'FORBIDDEN','Owner-alpha activation command does not match the trusted envelope.',403);
+   const now=this.core.now(),state=this.get(),stored=this.store.db.all<{owner_id:string;type:string;payload_json:string;body_hash:string;status:string}>('SELECT owner_id,type,payload_json,body_hash,status FROM commands WHERE id=?',ownerCommandId)[0];
+   const storedPayload=stored&&JSON.parse(stored.payload_json) as Record<string,unknown>;
+   requireThat(!!stored&&stored.owner_id===ownerId&&!/^(runtime|trigger):/.test(ownerId)&&stored.type==='owner-alpha.activate'&&stored.status==='accepted'&&
+    Object.keys(storedPayload).sort().join(',')==='envelope_sha256,transition_id'&&storedPayload.transition_id===command.payload.transition_id&&storedPayload.envelope_sha256===command.payload.envelope_sha256,
+    'FORBIDDEN','Owner-alpha activation command does not match the trusted envelope.',403);
    requireThat(state.phase==='RECOVERY_REQUIRED'&&state.epoch===envelope.predecessor.epoch&&state.boot_id===envelope.predecessor.boot_id&&state.provider_ref_json==='{}'&&state.provider_operation_id===null,
     'STALE_EPOCH','Owner-alpha predecessor lifecycle does not match the retired generation.');
    requireThat(this.core.ownerAlpha.policy?.session_id===envelope.predecessor.session_id&&this.core.ownerAlpha.policy.expires_at<=now&&state.lease_until!==null&&state.lease_until<=now,
@@ -45,8 +50,8 @@ export class LifecycleCore {
    const epoch=state.epoch+1,lease=new Date(Math.min(Date.parse(envelope.successor.policy.expires_at),Date.parse(now)+90000)).toISOString();
    const cutoff=this.store.event(ownerCommandId,null,'owner-alpha.activated',ownerId,ownerCommandId,{epoch},now);
    const generation:OwnerAlphaGeneration={epoch,boot_id:envelope.successor.boot_id,transition_id:envelope.transition_id,policy:envelope.successor.policy,
-    predecessor:{epoch:state.epoch,boot_id:state.boot_id!,session_id:envelope.predecessor.session_id,phase:state.phase,lease_until:state.lease_until},owner_binding_sha256:envelope.owner_binding_sha256,
-    retirement_receipt_sha256:envelope.retirement_receipt_sha256,activation_command_id:ownerCommandId,activation_event_sequence:cutoff};
+    predecessor:{epoch:state.epoch,boot_id:state.boot_id!,session_id:envelope.predecessor.session_id,phase:state.phase,lease_until:state.lease_until},authority:envelope,
+    activation_command_id:ownerCommandId,activation_command_sha256:stored.body_hash,activation_event_sequence:cutoff};
    this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',`owner_alpha_generation:${epoch}`,JSON.stringify(generation));
    this.store.db.exec("UPDATE lifecycle SET epoch=?,boot_id=?,phase='BOOTING',desired_state='RUN',lease_until=?,last_heartbeat=NULL,stop_token=NULL,wake_after_stop=0 WHERE singleton=1",epoch,envelope.successor.boot_id,lease);
    return {owner_alpha_generation:{epoch,boot_id:envelope.successor.boot_id,transition_id:envelope.transition_id}};
