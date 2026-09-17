@@ -4,6 +4,16 @@ This bounded E09 slice adds a harness-neutral, side-effect-free classifier and
 the pinned WhatsApp catalog. It does not install, pair, register or call anything,
 and is not wired into production admission or a model prompt. Full E09 remains open.
 
+Owner API: `GET /v1/connectors/catalog` exposes this same bundled JSON baseline
+after owner authentication, using the 120/minute owner read limit. The envelope
+states `scope:bundled-diagnostic-baseline`, `runtime_inventory:unobserved` and
+`authority:not-granted`. Catalog evidence (including installed:false) describes
+the bundled baseline, not a fresh runtime inventory or account probe. No
+reconciliation, alarm arming, tool registration or provider call runs on this
+read; owner-alpha rejects it. The response is no-store and supplies a detached
+copy. There is no write/install/pair/enable endpoint in this slice. Other
+connectors absent from this catalog must not be labeled unsupported or ready.
+
 `classifyConnectorReadiness(evidence)` in `runtime/connector-readiness.mjs` takes
 exactly five required fields for **one operation**:
 

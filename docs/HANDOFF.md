@@ -4,6 +4,23 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Owner connector-catalog API integrated. 46 focused HTTP/auth tests and typecheck
+pass (`.local/connector-catalog-focused-final.log`); initial test-only JSON unknown
+typing failure corrected. Combined verifier exits 0 (1542 backend/439 runtime,
+27 Worker HTTP checks plus browser/native/service/build) at
+`.local/connector-catalog-combined.log`; desktop16 pass at
+`.local/connector-catalog-desktop.log`. No host check remains running.
+GET /v1/connectors/catalog wraps config/connector-catalog.json as bundled baseline,
+runtime inventory unobserved, authority not-granted; rate only, no reconciliation.
+Owner-alpha denies. No new schemas/migration/runtime behavior or current live claim.
+UI worker T-01a0acd6-f40d-770f-a3a0-e69fd7ede7bb has exact local HEAD76e7929 bundle
+plus API patch (`.local/connector-ui-base.{bundle,patch}`), and owns public/app.js,
+public/index.html, optional style.css, scripts/test-portal-connector-catalog.mjs,
+docs/CONNECTOR_CATALOG_UI.md. It will reply with patch/evidence. Do not duplicate.
+Requested on-demand read-only nav page beside Skills, per-operation distinctions,
+no polling/writes/install/pairing/probes, stale/offline/alpha fences. Host owns
+integration/shared docs/verifier. API verification complete; next is UI integration.
+
 Routine capacity prerequisite added to tests/schedule.test.ts: installation-wide
 20/21 boundary, slot reuse/edits/disabled drafts and full 20-routine delayed batch.
 13 queue-one/7 skip with four budget-unknown routines gives exact independent

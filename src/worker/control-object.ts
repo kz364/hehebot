@@ -1,4 +1,5 @@
 import {FlightRestoreIntegration} from '../core/flight-integration';
+import connectorCatalog from '../../config/connector-catalog.json';
 import { DurableObject } from 'cloudflare:workers';
 import {bindOwnerAuth} from './auth';
 import {migrateApplication} from '../core/migrations';
@@ -101,6 +102,11 @@ export class PersonalControl extends DurableObject<Env> {
   new OutputPreviews(this.store,()=>this.core.now()).prune();
  }
  async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{await this.beforeRequest(owner+':write',60);const result=this.core.accept(owner,key,hash,input);await this.arm();return result;});}
+ getConnectorCatalog(owner:string){return rpcResult(()=>{
+  this.rate(owner+':read',120);
+  requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Connector setup diagnostics are unavailable in owner-alpha sessions.');
+  return {scope:'bundled-diagnostic-baseline',runtime_inventory:'unobserved',authority:'not-granted',catalog:structuredClone(connectorCatalog)};
+ });}
  getReceipt(owner:string,id:string){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receipt(id);});}
  getSchedulePreview(owner:string,cron:string,timezone:string){return rpcResult(()=>{this.rate(owner+':schedule-preview',30);return this.core.schedulePreview(cron,timezone);});}
  getRoutinePreflight(owner:string,id:string){return rpcResult(()=>{this.rate(owner+':schedule-preview',30);return this.core.routinePreflight(id);});}

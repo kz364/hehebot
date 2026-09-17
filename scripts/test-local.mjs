@@ -23,6 +23,8 @@ try{
  async function send(type,payload,key=crypto.randomUUID(),origin=base){const r=await fetch(base+'/v1/commands',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key,'Origin':origin},body:JSON.stringify({schema_version:1,type,payload})});return {status:r.status,value:await r.json()};}
  const html=await fetch(base);assert.equal(html.status,200);assert.match(await html.text(),/Hehebot — your assistants/);assert.match(html.headers.get('Content-Security-Policy'),/frame-ancestors 'none'/);checks++;
  const initial=await get('/v1/state');assert.equal(initial.objects.filter(x=>x.kind==='persona').length,3);assert.equal(initial.summary.execution_enabled,false);
+ const connectors=await get('/v1/connectors/catalog');assert.equal(connectors.scope,'bundled-diagnostic-baseline');assert.equal(connectors.runtime_inventory,'unobserved');assert.equal(connectors.authority,'not-granted');
+ assert.equal(connectors.catalog.whatsapp.protocol.whatsapp_get_chat_messages,'incompatible');assert.equal(connectors.catalog.whatsapp.protocol.whatsapp_search_messages,'synthetic-verified');assert.equal(connectors.catalog.whatsapp.evidence.installed,false);
  const bot=initial.objects.find(x=>x.kind==='persona').id;
  const recovery=await get(`/v1/conversations/${bot}/recovery`);assert.deepEqual(recovery,{runs:[],recovery:[],next_cursor:null});
  for(const query of ['after=invalid','limit=101','limit=0']){const response=await fetch(base+`/v1/conversations/${bot}/recovery?${query}`);assert.equal(response.status,422);assert.equal((await response.json()).error.code,'INVALID_INPUT');checks++;}

@@ -27,6 +27,7 @@ export default {
    }
    // Auth is applied before assets as well as API. Local dev is loopback-only.
    const owner=await authenticateOwner(request,env);
+   if(path==='/v1/connectors/catalog'&&request.method==='GET')return json(unwrap(await control.getConnectorCatalog(owner)));
    if(path==='/v1/schedules/preview'&&request.method==='GET')return json(unwrap(await control.getSchedulePreview(owner,url.searchParams.get('cron')??'',url.searchParams.get('timezone')??'')));
    const skillHistory=path.match(/^\/v1\/skills\/([0-9a-f-]{36})\/revisions$/i);
    if(skillHistory&&request.method==='GET'){

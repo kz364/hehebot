@@ -42,6 +42,28 @@ async function initialize(executionEnabled=false) {
 }
 afterEach(() => { db.close(); vi.useRealTimers(); });
 
+it('serves only the bundled connector baseline without reconciling overdue work or issuing authority',async()=>{
+ await overdue();
+ const env={AUTH_MODE:'local',INSTALLATION_ID:'local-only',CONTROL:{getByName:()=>control}} as unknown as Env;
+ const request=(origin='http://127.0.0.1',method='GET')=>worker.fetch(new Request(origin+'/v1/connectors/catalog',{method}),env);
+ const tables=['objects','commands','runs','occurrences','schedule_state','lifecycle','events','controller_operations','effects','attempts'],before=tables.map(table=>db.all(`SELECT * FROM ${table}`));
+ deleteAlarm.mockClear();
+ expect((await request('https://control.invalid')).status).toBe(401);
+ expect((await request('http://127.0.0.1','POST')).status).toBe(404);
+ const response=await request();expect(response.status).toBe(200);expect(response.headers.get('Cache-Control')).toContain('no-store');
+ const result=await response.json() as Extract<Awaited<ReturnType<PersonalControl['getConnectorCatalog']>>,{ok:true}>['value'];expect(result).toMatchObject({scope:'bundled-diagnostic-baseline',runtime_inventory:'unobserved',authority:'not-granted',catalog:{schemaVersion:1,whatsapp:{version:'0.4.0',revision:'9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8',evidence:{installed:false,artifact:'verified',authorization:'not-checked'},protocol:{whatsapp_get_chat_messages:'incompatible',whatsapp_search_messages:'synthetic-verified'},mutationsAvailable:false,coverage:'unknown'}}});
+ expect(result.catalog.whatsapp.protocol.recentReadBlocker).toContain('structuredContent is an array');
+ expect(result.catalog.whatsapp.evidenceScope).toContain('no installed, paired or callable runtime');
+ const direct=await control.getConnectorCatalog('owner');if(!direct.ok)throw Error('Expected catalog');direct.value.catalog.whatsapp.prerequisites.length=0;
+ expect((await request()).status).toBe(200);expect((await control.getConnectorCatalog('owner')).ok).toBe(true);
+ expect((await (await request()).json() as typeof result).catalog.whatsapp.prerequisites.length).toBeGreaterThan(0);
+ for(let i=0;i<117;i++)expect((await request()).status).toBe(200);expect((await request()).status).toBe(429);
+ expect(tables.map(table=>db.all(`SELECT * FROM ${table}`))).toEqual(before);expect(setAlarm).not.toHaveBeenCalled();expect(deleteAlarm).not.toHaveBeenCalled();
+ const internals=control as unknown as {core:{ownerAlpha:{policy:unknown}}};
+ Object.defineProperty(internals.core.ownerAlpha,'policy',{value:{session_id:randomUUID()}});
+ expect(await control.getConnectorCatalog('fresh-alpha-owner')).toMatchObject({ok:false,error:{code:'CAPABILITY_UNAVAILABLE'}});
+});
+
 it('serves rate-limited owner schedule previews without reconciliation or wake',async()=>{
  const env={AUTH_MODE:'local',INSTALLATION_ID:'local-only',CONTROL:{getByName:()=>control}} as unknown as Env;
  const request=(cron:string,timezone:string,origin='http://127.0.0.1')=>worker.fetch(new Request(`${origin}/v1/schedules/preview?${new URLSearchParams({cron,timezone})}`),env);

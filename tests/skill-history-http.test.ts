@@ -49,6 +49,16 @@ beforeEach(async () => {
 });
 afterEach(() => { db.close(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
+it('keeps connector diagnostics behind signed owner authentication, not runtime or foreign credentials',async()=>{
+ const before=custody(),catalog=vi.spyOn(control,'getConnectorCatalog');
+ for(const actor of ['foreign','runtime','missing'] as const)expect((await request('/v1/connectors/catalog',actor)).status).toBe(401);
+ expect(catalog).not.toHaveBeenCalled();
+ const response=await request('/v1/connectors/catalog','owner');expect(response.status).toBe(200);
+ expect(await response.json()).toMatchObject({scope:'bundled-diagnostic-baseline',runtime_inventory:'unobserved',authority:'not-granted'});
+ expect(catalog).toHaveBeenCalledExactlyOnceWith('owner');expect(custody()).toEqual(before);
+ expect(setAlarm).not.toHaveBeenCalled();expect(deleteAlarm).not.toHaveBeenCalled();
+});
+
 it('admits explicit skill input only through owner command ingress, preserving receipt identity and the execution gate',async()=>{
  const command={schema_version:1,type:'skill.run',payload:{skill_id:skill,expected_skill_revision:4,persona_id:bot,expected_persona_revision:1,text:'Compare 17 and 43.'}},key=randomUUID();
  const post=(actor:'owner'|'foreign'|'runtime'|'missing')=>{

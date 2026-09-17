@@ -4,6 +4,24 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner connector catalog (2026-09-17 Asia/Jakarta): GET /v1/connectors/catalog
+returns the existing pinned WhatsApp catalog through authenticated owner ingress.
+The envelope labels it bundled-diagnostic-baseline, runtime inventory unobserved,
+authority not-granted. No installation/probe/grant occurs; false installed evidence
+belongs to the historical bundled baseline, not current inventory. Per-operation
+incompatible recent-read vs synthetic-only search remains explicit. Alpha denies;
+120/minute owner read limit and no-store apply. Readback copies JSON and performs
+no overdue scheduling, alarm arming, inference or provider access.
+46 focused HTTP/auth tests and typecheck pass after correcting test-only JSON
+typing (`.local/connector-catalog-focused-final.log`). Tests cover signed owner,
+foreign/runtime/missing credentials, nonlocal bypass, denied POST, exact rate
+boundary, overdue custody, detached response and alpha. Real Worker HTTP fixture
+now checks the endpoint. Combined exits 0: 1542 backend/439 runtime plus 27 Worker
+HTTP checks and browser/native/service/build; desktop16 pass at
+`.local/connector-catalog-{combined,desktop}.log`. Existing UI worker is implementing
+an on-demand diagnostic page on the exact unpublished base; not yet integrated.
+No catalog status edits, new schema/migration, live/shared actions or gate changes.
+
 Real Worker capacity follow-through (2026-09-17 Asia/Jakarta): hash-verified
 two-file fixture integrated and imported by test-local.mjs. A test-only
 PersonalControl subclass injects a fixed future clock and readback, leaving real
