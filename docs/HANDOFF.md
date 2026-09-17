@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Owner reported permission “updated”; host re-read token and checked existing apps
+before one create attempt. Still403/1010 auth.forbidden; readback apps0. Active
+token identity unchanged, private file mtime unchanged; dashboard policy edits
+could still have occurred. Token permission GET403/9109 prevents scope inspection.
+Official app-create API names Access: Apps and Policies Write. Exact remaining
+check is Account-level Edit + correct selected-account resource on the actual
+stored token (or private replacement). No retries absent new permission evidence.
+
 Private `.local/secrets/cloudflare-owner.json` now exists, mode0600/owner validated;
 team JWKS works. Exact-host/one-owner-email Access app creation was attempted under
 existing approval but returned403/code1010 auth.forbidden. Post-denial listing

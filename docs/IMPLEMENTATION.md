@@ -8,6 +8,12 @@ Access write attempt (2026-09-17): private owner config now present and validate
 without disclosure; expected team JWKS responds. Authorized POST for one self-hosted
 production hostname app with one exact-email allow policy returned HTTP403,
 code1010 auth.forbidden. GET afterward confirms total apps0/target0; no blind retry.
+After the owner's permission-update report, token re-read and app-list-before-create
+preceded one new attempt: same403/1010, app-list-after again0. Token active/same ID,
+file unchanged since original provisioning, which does not disprove dashboard scope
+edits. Token permission introspection denied403/9109. Official create docs confirm
+Access: Apps and Policies Write; owner must check Account scope/selected resource
+on this token or privately replace it. No further retry without changed input.
 No Worker/database/bootstrap published or successful shared mutation. Ask only
 for account-scoped Access: Apps and Policies Edit on existing token; retain existing
 scope/approval, no renewed budget or repeated setup. Subject still needs verified

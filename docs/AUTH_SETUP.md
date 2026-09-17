@@ -214,6 +214,11 @@ apps and no matching target; no successful shared mutation occurred.
 
 The exact remaining action is to grant the existing account-scoped API token
 **Access: Apps and Policies → Edit**, retaining its Worker deployment permissions.
+The retry after “updated” still returned403/1010. Check that this is an **Account**
+permission for the selected account resource on the token actually stored here,
+not a Zone permission or a different token. The official create API calls the
+permission `Access: Apps and Policies Write`. Permission introspection itself is
+denied403/9109, so the host cannot confirm the dashboard selection.
 If a replacement token is issued, save it privately in the existing mode0600
 `.local/secrets/CLOUDFLARE_API_TOKEN` file. Do not resend owner configuration or
 repeat onboarding/consent. Retry app creation only after permission changes;
