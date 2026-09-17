@@ -11,9 +11,18 @@ replacement/parking, no duplicate after ControlCore reconstruction. 33 focused
 schedule/lifecycle/budget tests and typecheck pass at
 `.local/routine-capacity-focused.log`. Tests/docs only; no cap or application
 change. No native/browser rerun for this checkpoint; prior combined evidence
-below remains for unchanged implementation. Next: real Worker full-batch alarm
-and persistent reopen evidence before any capacity increase. No throughput or
-live cost claim, no active worker/check or new authorization.
+below remains for unchanged implementation. Real Worker full-batch alarm and
+persistent reopen fixture is now owned by existing worker thread
+T-01a0ad1a-f103-75e9-a19f-fe26a6eacbe3. Exact unpublished host base c6b284c was
+transferred as `.local/routine-worker-base.bundle` (SHA256
+6cdbd1c1429dd49e8c4e9161998c469791bcab4c7372ae952960300c3e051075).
+Do not duplicate it. Owned files: scripts/test-routine-capacity-worker.mjs and
+tests/routine-capacity-worker.ts only. It must invoke real PersonalControl methods
+on disposable workerd SQLite, retain both execution flags false, distinguish
+explicit alarm-handler invocation from timed/hosted delivery, and stop/reopen
+the same disposable persistence with exact row comparisons. Host owns integration,
+verifier wiring and shared progress. Worker will reply with patch/hash/evidence.
+No throughput/live cost claim or new authorization.
 
 Task-to-skill UI worker finished; hash-verified patch integrated. Host fixed
 streamed UTF-8 fixture decoding and wired the new browser test into the verifier.
