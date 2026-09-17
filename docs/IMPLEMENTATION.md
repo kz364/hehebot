@@ -4,6 +4,20 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Connectors portal (2026-09-17 Asia/Jakarta): hash-verified UI patch integrated.
+On-demand page beside Skills displays only bundled WhatsApp diagnostic metadata,
+unobserved runtime inventory/no authority, per-read-tool protocol differences,
+recent-read blocker and prerequisites. Catalog reads occur on open/restored
+selection or explicit Refresh catalog, not ordinary state refresh. No connector
+commands, install/pair/enable/probe controls or inferred status for absent providers.
+Managed pages are not conversations; navigation/offline/late/alpha checks remove
+stale content. All text is literal; source is inert. Host Chromium fixture passes
+at `.local/connector-catalog-ui-host.log`; five desktop/narrow/loading/error captures
+inspected. Existing internal timeline scrolling starts at its top. Combined exits
+0 with 1542 backend/439 runtime, 27 Worker HTTP checks and browser/native/service/
+build; desktop16 pass at `.local/connector-ui-{combined,desktop}.log`.
+Synthetic Chromium is not device/touch/Safari or live connector evidence.
+
 Owner connector catalog (2026-09-17 Asia/Jakarta): GET /v1/connectors/catalog
 returns the existing pinned WhatsApp catalog through authenticated owner ingress.
 The envelope labels it bundled-diagnostic-baseline, runtime inventory unobserved,

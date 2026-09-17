@@ -7,6 +7,7 @@ let recoveryView=null;
 let taskFeed=null;
 let routineHistory=null;
 let routinePreflight=null;
+let connectorView=null;
 let snapshot=null,selected=localStorage.getItem('personal.selected'),events=[],loading=false,lastSignature='',editing=null;
 let selectionVersion=0;
 let memorySearchSelection='';
@@ -55,6 +56,35 @@ async function command(type,payload,key=crypto.randomUUID()){
 function items(kind){return snapshot?.objects?.filter(x=>x.kind===kind)??[];}
 function current(){return snapshot?.objects?.find(x=>x.id===selected);}
 function skillsSelected(){return selected==='skills';}
+function managedSelected(){return skillsSelected()||selected==='connectors';}
+function connectorsAllowed(){return !alphaSeen&&!snapshot?.summary.owner_alpha;}
+function connectorOnline(){return navigator.onLine&&$('connection').textContent==='Connected';}
+function validateConnectorCatalog(value){
+ const w=value?.catalog?.whatsapp;
+ if(value?.scope!=='bundled-diagnostic-baseline'||value.runtime_inventory!=='unobserved'||value.authority!=='not-granted'||value.catalog.schemaVersion!==1||!w||!['package','version','revision','source','evidenceScope'].every(k=>typeof w[k]==='string')||!Array.isArray(w.prerequisites)||!w.prerequisites.every(x=>typeof x==='string')||w.protocol?.whatsapp_get_chat_messages!=='incompatible'||w.protocol?.whatsapp_search_messages!=='synthetic-verified'||typeof w.protocol?.recentReadBlocker!=='string')throw Error('Unexpected connector catalog response. No baseline is shown.');
+ return w;
+}
+async function loadConnectorCatalog(){
+ if(selected!=='connectors'||!connectorsAllowed()||!connectorOnline()||connectorView?.loading)return;
+ const view={loading:true,page:null,error:''};connectorView=view;render();
+ try{const page=validateConnectorCatalog(await api('/v1/connectors/catalog'));if(connectorView===view&&selected==='connectors'&&connectorsAllowed()&&connectorOnline()){view.page=page;view.loading=false;render();}}
+ catch(e){if(connectorView===view&&selected==='connectors'&&connectorsAllowed()){view.loading=false;view.error=e.message;render();}}
+}
+function renderConnectors(){
+ document.querySelector('.app').classList.add('skills-mode');$('conversation-type').textContent='OWNER DIAGNOSTICS';$('conversation-name').textContent='Connectors';
+ for(const id of ['edit-bot','show-details','composer','details','runtime-banner'])$(id).hidden=true;
+ $('details').classList.remove('open');
+ const signature=JSON.stringify(['connectors',connectorView,connectorOnline(),connectorsAllowed()]);if(lastSignature===signature)return;lastSignature=signature;
+ const timeline=$('timeline');timeline.replaceChildren();timeline.scrollTo({top:0,behavior:'instant'});
+ const intro=node('div',undefined,'skills-intro');intro.append(node('h2','Bundled connector baseline'),node('p','Runtime inventory is unobserved. Authority is not granted. This diagnostic does not probe, wake, install, pair or enable anything.','muted'));
+ const refresh=button('Refresh catalog',loadConnectorCatalog,'quiet');refresh.disabled=!connectorOnline()||!connectorsAllowed()||Boolean(connectorView?.loading);intro.append(refresh);timeline.append(intro);
+ const notice=node('p',!connectorsAllowed()?'Connector diagnostics are unavailable in owner-alpha.':!connectorOnline()?'Catalog unavailable offline. Reconnect, then Refresh catalog.':connectorView?.loading?'Loading bundled baseline…':connectorView?.error||(!connectorView?.page?'Select Refresh catalog to read the bundled baseline.':''),'skill-card');notice.setAttribute('role',connectorView?.error?'alert':'status');if(notice.textContent)timeline.append(notice);
+ const w=connectorView?.page;if(!w||!connectorOnline()||!connectorsAllowed())return;
+ const card=node('section',undefined,'skill-card');card.append(node('h3','WhatsApp'),node('p',`Pinned package: ${w.package} · Version: ${w.version}`),node('p',`Revision: ${w.revision}`),node('p',`Source: ${w.source}`),node('p',w.evidenceScope,'review-notice'),node('p','Verified artifacts in disposable tests do not establish an installed, paired or callable runtime. No current runtime freshness is established.'));
+ for(const [name,tool] of [['Recent messages','whatsapp_get_chat_messages'],['Scoped search','whatsapp_search_messages']]){const row=node('div',undefined,'skill-detail');row.append(node('h4',`${name} — ${w.protocol[tool]}`),node('p',tool));card.append(row);}
+ card.append(node('p',w.protocol.recentReadBlocker,'review-notice'),node('h4','Prerequisites'));const list=node('ul');for(const text of w.prerequisites)list.append(node('li',text));card.append(list);timeline.append(card);
+ timeline.scrollTo({top:0,behavior:'instant'});
+}
 function button(text,fn,cls=''){const b=node('button',text,cls);b.type='button';b.onclick=fn;return b;}
 function acceptHistory(conversationId,history){
  const floor=history.pruned_through??0,previous=historyFloors.get(conversationId)??0;
@@ -69,8 +99,8 @@ function alphaConversationAvailable(id){return !(alphaSeen||snapshot?.summary.ow
 async function refresh(force=false){
  if(loading||document.hidden&&!force)return;loading=true;
  try{const value=await api('/v1/state');snapshot=value;
-  if(!selected||selected!=='skills'&&!value.objects.some(x=>x.id===selected))selected=items('persona').find(x=>!x.body.archived)?.id;
-  const conversationId=selected,readable=conversationId!=='skills'&&alphaConversationAvailable(conversationId);if(readable){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId&&acceptHistory(conversationId,history)){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
+  if(!selected||!managedSelected()&&!value.objects.some(x=>x.id===selected))selected=items('persona').find(x=>!x.body.archived)?.id;
+  const conversationId=selected,readable=!managedSelected()&&alphaConversationAvailable(conversationId);if(readable){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId&&acceptHistory(conversationId,history)){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
   if(readable){
    try{const page=await api('/v1/conversations/'+conversationId+'/tasks');if(!page.counts||!Array.isArray(page.runs))throw new Error('Invalid task page');if(selected===conversationId)taskFeed={conversationId,page,error:false};}
    catch{if(selected===conversationId)taskFeed={conversationId,page:taskFeed?.conversationId===conversationId?taskFeed.page:null,error:true};}
@@ -80,7 +110,7 @@ async function refresh(force=false){
  }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);if(taskFeed)taskFeed.error=true;if(recoveryView?.kind==='tasks')recoveryView.page=null;render();}
  finally{loading=false;}
 }
-function choose(id){selectionVersion++;skillHistories.clear();routineHistory=null;routinePreflight=null;recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
+function choose(id){if(id==='connectors'&&!connectorsAllowed())return;selectionVersion++;connectorView=null;skillHistories.clear();routineHistory=null;routinePreflight=null;recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id==='connectors')loadConnectorCatalog();if(!managedSelected())$('message').focus();}
 function recoveryUrl(view){return '/v1/conversations/'+view.conversationId+'/'+(view.kind==='tasks'?'tasks':'recovery')+(view.cursor?'?after='+encodeURIComponent(view.cursor):'');}
 async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=null){
  if(!alphaConversationAvailable(selected)){report('History and task pages are unavailable for this conversation in the owner-alpha session.');return;}
@@ -92,13 +122,15 @@ async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=nul
 function render(){
  if(!snapshot)return;
  if(snapshot.summary.owner_alpha)alphaBlock();
+ $('show-connectors').hidden=!connectorsAllowed();$('show-connectors').setAttribute('aria-current',String(selected==='connectors'));
+ if(!connectorsAllowed()||!connectorOnline())connectorView=null;
  if(routinePreflight&&!routinePreflightCurrent(routinePreflight))routinePreflight=null;
  if(routinePreflight&&($('connection').textContent!=='Connected'||!navigator.onLine))invalidateRoutinePreflight();
  if(routineHistory&&!routineHistoryCurrent(routineHistory))routineHistory=null;
  if(routineHistory&&($('connection').textContent!=='Connected'||!navigator.onLine)){routineHistory.page=null;routineHistory.loading=false;routineHistory.error='History unavailable offline. Reopen history after reconnecting.';routineHistory.invalid=true;}
  const searchSelection=JSON.stringify([selected,selectionVersion,recoveryView?.kind]);
  if(conversationSearchSelection!==searchSelection){$('conversation-search').value='';conversationSearchSelection=searchSelection;}
- $('conversation-search-panel').hidden=skillsSelected()||Boolean(recoveryView);
+ $('conversation-search-panel').hidden=managedSelected()||Boolean(recoveryView);
  renderBudget();renderMonitoring();renderTaskStrip();renderRoster();
  for(const [kind,target] of [['room','rooms']]){
   $(target).replaceChildren();
@@ -107,6 +139,7 @@ function render(){
   }
  }
  $('show-skills').setAttribute('aria-current',String(skillsSelected()));
+ if(selected==='connectors'){renderConnectors();return;}
  if(skillsSelected()){renderSkills();return;}
  document.querySelector('.app').classList.remove('skills-mode');$('details').hidden=false;$('composer').hidden=false;$('show-details').hidden=false;$('edit-bot').hidden=false;
  const object=current();$('conversation-name').textContent=object?.body.name??'Choose a bot';$('conversation-type').textContent=object?.kind==='room'?'SHARED ROOM':'ASSISTANT';$('edit-bot').hidden=object?.kind!=='persona';
@@ -249,7 +282,7 @@ $('clear-conversation-search').onclick=()=>{$('conversation-search').value='';re
  $('memory-search').oninput=()=>renderMemories();
  $('clear-memory-search').onclick=()=>{$('memory-search').value='';renderMemories();$('memory-search').focus();};
 function renderTaskStrip(){
- const strip=$('task-strip'),target=$('task-strip-content');strip.hidden=skillsSelected()||!alphaConversationAvailable(selected);if(strip.hidden)return;
+ const strip=$('task-strip'),target=$('task-strip-content');strip.hidden=managedSelected()||!alphaConversationAvailable(selected);if(strip.hidden)return;
  const feed=taskFeed?.conversationId===selected?taskFeed:null,page=feed?.page;
  const signature=JSON.stringify([selected,feed?.error,page?.counts,page?.runs,items('persona').map(bot=>[bot.id,bot.body.name])]);
  if(strip.dataset.signature===signature)return;strip.dataset.signature=signature;target.replaceChildren();
@@ -883,6 +916,7 @@ $('add-bot').onclick=()=>editBot();$('edit-bot').onclick=()=>editBot(current());
 $('add-room').onclick=()=>{const bots=items('persona').filter(x=>!x.body.archived);const fields=[field('Room name','name'),selectField('Default responder','responder',bots.map(x=>[x.id,x.body.name]),bots[0]?.id)];for(const bot of bots){const l=node('label',undefined,'check');const c=node('input');c.type='checkbox';c.name='members';c.value=bot.id;c.checked=true;l.append(c,document.createTextNode(bot.body.name));fields.push(l);}openEditor('New room',fields,form=>command('room.put',{id:crypto.randomUUID(),expected_revision:0,name:form.get('name'),member_ids:form.getAll('members'),default_responder_id:form.get('responder')}));};
 $('show-details').onclick=()=>$('details').classList.add('open');$('close-details').onclick=()=>$('details').classList.remove('open');$('refresh').onclick=()=>refresh(true);
 $('show-skills').onclick=()=>choose('skills');
+ $('show-connectors').onclick=()=>choose('connectors');
 $('export-control').onclick=async()=>{
  const trigger=$('export-control'),status=$('export-status');
  if(trigger.disabled)return;
@@ -905,4 +939,4 @@ $('export-control').onclick=async()=>{
 installImportSetup({trigger:$('import-setup'),api,command,onAdopted:()=>refresh(true)});
 setInterval(()=>{if(alphaSeen)renderAlphaSession();},250);
 document.addEventListener('visibilitychange',()=>{if(alphaSeen)renderAlphaSession();});
-await refresh(true);if(selected)$('message').value=localStorage.getItem('personal.draft.'+selected)??'';setInterval(()=>refresh(),5000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(true);});
+await refresh(true);if(selected==='connectors')loadConnectorCatalog();if(selected)$('message').value=localStorage.getItem('personal.draft.'+selected)??'';setInterval(()=>refresh(),5000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(true);});

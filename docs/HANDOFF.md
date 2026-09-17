@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Connectors UI worker delivered; patch/hash reviewed and integrated. No active
+worker remains. Host Chromium fixture passes and five desktop/narrow/loading/error
+renders inspected. Combined verifier exits 0 at `.local/connector-ui-combined.log`:
+1542 backend/439 runtime, 27 Worker HTTP checks plus browser/native/service/build.
+Desktop16 pass at `.local/connector-ui-desktop.log`; no active worker/check remains.
+Catalog fixture is wired into verify-codex.sh. No backend/catalog status changes
+in UI batch, no live calls. Next E09 gap is trusted installed/callable inventory
+and guided supported setup, not another baseline display or implicit pairing.
+Keep recent-read SDK incompatibility and separate live/account/settlement gates.
+
 Owner connector-catalog API integrated. 46 focused HTTP/auth tests and typecheck
 pass (`.local/connector-catalog-focused-final.log`); initial test-only JSON unknown
 typing failure corrected. Combined verifier exits 0 (1542 backend/439 runtime,
@@ -16,10 +26,10 @@ Owner-alpha denies. No new schemas/migration/runtime behavior or current live cl
 UI worker T-01a0acd6-f40d-770f-a3a0-e69fd7ede7bb has exact local HEAD76e7929 bundle
 plus API patch (`.local/connector-ui-base.{bundle,patch}`), and owns public/app.js,
 public/index.html, optional style.css, scripts/test-portal-connector-catalog.mjs,
-docs/CONNECTOR_CATALOG_UI.md. It will reply with patch/evidence. Do not duplicate.
+docs/CONNECTOR_CATALOG_UI.md. Delivery is now integrated; do not duplicate.
 Requested on-demand read-only nav page beside Skills, per-operation distinctions,
 no polling/writes/install/pairing/probes, stale/offline/alpha fences. Host owns
-integration/shared docs/verifier. API verification complete; next is UI integration.
+integration/shared docs/verifier. API verification complete; UI final checks above.
 
 Routine capacity prerequisite added to tests/schedule.test.ts: installation-wide
 20/21 boundary, slot reuse/edits/disabled drafts and full 20-routine delayed batch.
