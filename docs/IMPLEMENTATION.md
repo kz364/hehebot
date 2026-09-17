@@ -4,6 +4,16 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner onboarding recheck (2026-09-17): following “done”, privately verified same
+account and active token; workers.dev now exists and Access apps list200/zero.
+One unrelated Worker exists, not hehebot-portal; untouched. Organization/users/
+subscriptions remain403. No team-domain/owner-email file or environment setting
+exists here; coordinating thread confirms none supplied there either. Request only
+those two private inputs; no repeat onboarding or consent. Exact owner sub still
+requires verified login/bootstrap. No shared writes, deployment/public URL, tests
+or billed-resource creation. Raw response mode0600 at
+`.local/cloudflare-preflight-current.json`; remaining billing balance unverified.
+
 Continuation pause (2026-09-17): saved schedule read, clean checkout/current handoff
 checked, no active assignment or new account input. Schedule update confirmed
 enabled:false while the prioritized deployment awaits the already-requested

@@ -4,11 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
-Scheduled continuation is now paused (enabled:false confirmed). Local preparation
-is complete for the prioritized deployment; wait for the already-requested account
-onboarding/Access permission and private owner identity inputs. Resume deployment
-and continuation when available. Do not repeat approval requests or unchanged
-account probes, or open connector expansion to fill the wait. No active worker/check.
+Owner reported “done”; private read-only recheck confirms same account/active token,
+workers.dev initialized and Access apps200/empty. One unrelated Worker exists;
+hehebot-portal absent. Organization/users/billing still403. No shared writes.
+Two exact inputs remain missing: teamDomain and ownerEmail, privately supplied in
+0600 `.local/secrets/cloudflare-owner.json` or another identified private file.
+Coordinating thread confirms no values/path supplied yet. Do not repeat onboarding
+or consent; do not infer owner sub. Obtain it via verified owner-login bootstrap.
+Latest raw evidence `.local/cloudflare-preflight-current.json` stays private.
+Schedule remains paused until inputs arrive; no active worker/check or deployment.
 
 PRIORITY: owner authorized bounded Cloudflare Worker/SQLite + owner-only Access
 deployment on current unpublished checkout, within existing remaining $10, no paid

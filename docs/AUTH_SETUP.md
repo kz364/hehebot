@@ -199,21 +199,21 @@ configured cloudflareaccess.com issuer, audience and owner subject. Cloudflare's
 new `ctx.access` is not a replacement, especially with Static Assets routing.
 Local bypass remains loopback-only. A service-token identity is not the owner.
 
-Private read-only preflight found one account, a valid token and zero Workers.
-The workers.dev subdomain endpoint returned 10007 (not created); Access apps
-returned `access.api.error.not_enabled`. Access organization/users and subscription
-reads returned authentication errors. This does not prove write permission or a
-Free subscription. Account/token values and raw evidence stay in private files;
-no shared writes occurred. Exact Access owner subject is still unknown.
+After the owner reported onboarding done, private read-only recheck verified the
+same account/active token, initialized workers.dev and a successful Access app list
+(zero apps). One other Worker now exists; it is not `hehebot-portal` and must remain
+untouched. Organization/users/subscriptions still return403. No shared writes by
+this host occurred; write permissions, Free plan and remaining billing allowance
+are not established by read success. Raw evidence is private.
 
-Smallest unblock: the owner opens Workers & Pages in that account to initialize
-its workers.dev subdomain, then completes Zero Trust/Access **Free** onboarding
-and selects a team name. Stop if a paid upgrade is required. Privately provide
-the team domain and exact owner login email (not a public transcript), and grant
-the account-scoped token Workers Scripts/Edit, Account Settings/Read and Access
-application/policy management permissions. Recheck actual API capability rather
-than assuming a scope label is sufficient. Obtain the owner subject from a real
-verified Access login; do not guess it from the Cloudflare account or email.
+Only two setup values are currently missing: the team domain ending in
+`.cloudflareaccess.com` and the exact owner login email. Supply them privately in
+mode0600 `.local/secrets/cloudflare-owner.json` as `teamDomain` and `ownerEmail`,
+or identify an existing private file containing them. No JWT/API token belongs in
+the public thread. Onboarding need not be repeated. Use the existing credential
+and check app/policy writes once exact identity inputs exist; request additional
+permission only on an actual denial. Obtain owner subject through a real verified
+Access login/bootstrap; do not guess it from account identity or email.
 
 Before enabling production ingress, create/read back the exact-host Access app
 and owner-only policy, obtain its audience and verified owner subject, prepare
