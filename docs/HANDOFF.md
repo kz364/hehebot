@@ -4,6 +4,18 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest: routine history now adds captured_routine_revision from exact retained
+current-attempt snapshot only. No full context exposed, no live-object fallback;
+missing/unstarted/mismatched snapshots null. Labels distinguish capture from
+execution/delivery. Claims overwrite context per attempt, so prior-attempt
+attribution remains a separate persistence gap.25 focused tests/typecheck,
+history/preflight browser, desktop16 pass; three renders inspected. Combined
+passed1427 backend/434 runtime plus browser/native/service/build, exit0 at
+.local/routine-revision-combined.log. No active worker or live action.
+Next: inspect required manual occurrence identity/attempt attribution contract
+before any schema expansion; retain old import/export compatibility if needed.
+Cloudflare approval unchanged; no repeated request.
+
 Newest: preflight UI worker finished, reviewed and integrated. Explicit GET-only
 panel keeps Run now unchanged and history independent; shows observation time/
 revision, blockers, execution flag and hypothetical timezone/local/UTC schedule.

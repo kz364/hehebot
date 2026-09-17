@@ -4,6 +4,18 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Routine revision attribution (2026-09-17 Asia/Jakarta): routine history projects
+only numeric `captured_routine_revision` from matching current-attempt context;
+unknown/unstarted/mismatched snapshots are null, never current-object fallback.
+Claims rebuild context on each attempt, so this is not original/prior-attempt
+history or execution proof. Conversation task shape stays unchanged. Red/green
+SQLite regression and25 focused tests/typecheck pass; history/preflight browser
+checks pass and three known/unavailable/narrow renders inspected. Fixture drawer
+state was corrected after an intercepted click. Desktop16 pass. Combined passed
+1427 backend/434 runtime plus browser/native/service/build, exit0 in
+`.local/routine-revision-combined.log`. No active workers, live actions or
+production changes; prior-attempt attribution still requires separate durable data.
+
 Routine preflight portal (2026-09-17 Asia/Jakarta): integrated the worker's
 on-demand GET-only disclosure. It shows blockers, observation revision/time,
 execution-enabled independently of command checks, explicit schedule timezone

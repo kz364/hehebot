@@ -78,3 +78,24 @@ it('leaves neighboring conversation history unfinished-only', () => {
   expect(f.core.routineTaskPage(target.id).runs.map(run => run.id)).toEqual([uuid(1), uuid(2)]);
   expect(f.core.taskPage(bot).runs.map(run => run.id)).toEqual([uuid(2)]);
 });
+
+it('projects only a matching current-attempt captured revision, never the live routine or private snapshot',()=>{
+ const target=routine({id:uuid(80)});f.store.put(target.id,'routine',target,0,'owner',f.core.now());
+ const captured=f.core.context(bot,'PRIVATE_INSTRUCTIONS',target.id,null);
+ const run=f.core.enqueue(bot,'PRIVATE_INSTRUCTIONS',null,target.id,null);
+ f.db.exec("UPDATE runs SET current_attempt=1,status='running' WHERE id=?",run);
+ f.store.put(target.id,'routine',{...target,instructions:'NEW_PRIVATE_INSTRUCTIONS'},1,'owner',f.core.now());
+ const read=()=>f.core.routineTaskPage(target.id).runs[0];
+ expect(read()).toMatchObject({captured_routine_revision:1});
+ expect(JSON.stringify(read())).not.toMatch(/PRIVATE_INSTRUCTIONS|context_json|checkpoint_json/);
+ expect(f.core.taskPage(bot).runs[0]).not.toHaveProperty('captured_routine_revision');
+ for(const value of [{}, {...captured,routine:{...captured.routine,id:uuid(81)}}, {...captured,routine:{...captured.routine,revision:'1'}}, {...captured,routine:{...captured.routine,body:{...target,persona_id:otherBot}}}]){
+  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',JSON.stringify(value),run);
+  expect(read()).toMatchObject({captured_routine_revision:null});
+ }
+ f.db.exec('UPDATE runs SET context_json=?,current_attempt=0 WHERE id=?',JSON.stringify(captured),run);
+ expect(read()).toMatchObject({captured_routine_revision:null});
+ // A subsequent claim replaces the context; this page is not prior-attempt history.
+ f.db.exec('UPDATE runs SET context_json=?,current_attempt=2 WHERE id=?',JSON.stringify(f.core.context(bot,'RETRY_PRIVATE',target.id,null)),run);
+ expect(read()).toMatchObject({captured_routine_revision:2});
+});

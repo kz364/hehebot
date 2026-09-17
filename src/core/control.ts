@@ -556,7 +556,12 @@ export class ControlCore {
   const rows=this.store.db.all<Run & {request_status:string|null}>(`SELECT r.*,c.status AS request_status FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE ${eligible} AND r.id>? ORDER BY r.id LIMIT ?`,id,after??'',limit+1);
   const runs=rows.slice(0,limit),previews=new OutputPreviews(this.store,()=>this.now()),steering=new TaskSteering(this.store,()=>this.now());
   const questions=this.questions.list();
-  return {observed_at:this.now(),counts,runs:runs.map(({context_json,checkpoint_json,...run})=>run),
+  return {observed_at:this.now(),counts,runs:runs.map(({context_json,checkpoint_json,...run})=>{
+   if(unfinishedOnly)return run;
+   const captured=(JSON.parse(context_json) as Partial<ContextSnapshot>|null)?.routine;
+   const revision=run.current_attempt>0&&captured?.kind==='routine'&&captured.id===run.routine_id&&captured.body?.persona_id===run.persona_id&&Number.isSafeInteger(captured.revision)&&captured.revision>0?captured.revision:null;
+   return {...run,captured_routine_revision:revision};
+  }),
    output_previews:runs.flatMap(run=>{const value=previews.read(run.id,run.current_attempt,!!this.ownerAlpha.policy);return value?[value]:[];}),
    steering:runs.flatMap(run=>steering.receipts({run_id:run.id,attempt:run.current_attempt})),
    recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run,questions)),
