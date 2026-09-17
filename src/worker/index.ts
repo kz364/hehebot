@@ -51,6 +51,13 @@ export default {
    if(conversation&&request.method==='GET'){const before=url.searchParams.get('before');requireThat(before===null||/^\d+$/.test(before)&&Number.isSafeInteger(Number(before)),'INVALID_INPUT','Invalid history cursor.',422);return json(unwrap(await control.getTimeline(owner,conversation[1],before===null?undefined:Number(before))));}
    const tasks=path.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/tasks$/i);
    if(tasks&&request.method==='GET')return json(unwrap(await control.getTasks(owner,tasks[1],url.searchParams.get('after')??undefined,Number(url.searchParams.get('limit')??10))));
+   const routineRuns=path.match(/^\/v1\/routines\/([0-9a-f-]{36})\/runs$/i);
+   if(routineRuns&&request.method==='GET'){
+    const after=url.searchParams.get('after'),limit=url.searchParams.get('limit');
+    requireThat(after===null||/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(after),'INVALID_INPUT','Invalid task cursor.',422);
+    requireThat(limit===null||/^[1-9]\d*$/.test(limit)&&Number(limit)<=10,'INVALID_INPUT','Limit must be 1–10.',422);
+    return json(unwrap(await control.getRoutineTasks(owner,routineRuns[1],after??undefined,limit===null?10:Number(limit))));
+   }
    const recovery=path.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/recovery$/i);
    if(recovery&&request.method==='GET')return json(unwrap(await control.getRecovery(owner,recovery[1],url.searchParams.get('after')??undefined,Number(url.searchParams.get('limit')??20))));
    const receipt=path.match(/^\/v1\/receipts\/([0-9a-f-]{36})$/i);

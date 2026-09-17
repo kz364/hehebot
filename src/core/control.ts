@@ -526,14 +526,20 @@ export class ControlCore {
    timeline:after===undefined?this.store.latestEvents(now):undefined};
  }
  taskPage(conversationId:string,after?:string,limit=10){
-  requireThat(after===undefined||/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(after),'INVALID_INPUT','Invalid task cursor.',422);
-  requireThat(Number.isInteger(limit)&&limit>=1&&limit<=10,'INVALID_INPUT','Limit must be 1–10.',422);
   const object=this.store.get(conversationId);
   requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);
-  const scope=object.kind==='persona'?'r.persona_id':"json_extract(r.context_json,'$.room_id')";
-  const eligible=`${scope}=? AND r.status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')`;
-  const counts=this.store.db.all<{total:number;waiting:number;recovery:number}>(`SELECT COUNT(*) AS total,COALESCE(SUM(r.status='waiting'),0) AS waiting,COALESCE(SUM(r.status='recovery_required'),0) AS recovery FROM runs r WHERE ${eligible}`,conversationId)[0];
-  const rows=this.store.db.all<Run & {request_status:string|null}>(`SELECT r.*,c.status AS request_status FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE ${eligible} AND r.id>? ORDER BY r.id LIMIT ?`,conversationId,after??'',limit+1);
+  return this.scopedTaskPage(object.kind==='persona'?'r.persona_id':"json_extract(r.context_json,'$.room_id')",conversationId,true,after,limit);
+ }
+ routineTaskPage(routineId:string,after?:string,limit=10){
+  this.store.get(routineId,'routine');
+  return this.scopedTaskPage('r.routine_id',routineId,false,after,limit);
+ }
+ private scopedTaskPage(scope:string,id:string,unfinishedOnly:boolean,after?:string,limit=10){
+  requireThat(after===undefined||/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(after),'INVALID_INPUT','Invalid task cursor.',422);
+  requireThat(Number.isInteger(limit)&&limit>=1&&limit<=10,'INVALID_INPUT','Limit must be 1–10.',422);
+  const eligible=`${scope}=?${unfinishedOnly?" AND r.status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')":''}`;
+  const counts=this.store.db.all<{total:number;waiting:number;recovery:number}>(`SELECT COUNT(*) AS total,COALESCE(SUM(r.status='waiting'),0) AS waiting,COALESCE(SUM(r.status='recovery_required'),0) AS recovery FROM runs r WHERE ${eligible}`,id)[0];
+  const rows=this.store.db.all<Run & {request_status:string|null}>(`SELECT r.*,c.status AS request_status FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE ${eligible} AND r.id>? ORDER BY r.id LIMIT ?`,id,after??'',limit+1);
   const runs=rows.slice(0,limit),previews=new OutputPreviews(this.store,()=>this.now()),steering=new TaskSteering(this.store,()=>this.now());
   const questions=this.questions.list();
   return {observed_at:this.now(),counts,runs:runs.map(({context_json,checkpoint_json,...run})=>run),

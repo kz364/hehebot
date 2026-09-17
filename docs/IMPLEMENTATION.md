@@ -4,6 +4,23 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Routine history API (2026-09-17 Asia/Jakarta): authenticated owner GET
+`/v1/routines/:id/runs?after=<UUID>&limit=<1..10>` returns the canonical task-page
+shape with all statuses scoped to exact routine_id. Pagination uses immutable
+ascending UUIDs, not chronological order; restart to see arrivals before a cursor.
+Only live routines are addressable here. Existing conversation task pages still
+include only unfinished work. Shared projection strips context/checkpoints and
+retains current-attempt output/steering/recovery semantics without a new delivery
+or settlement claim. The RPC rate-limits but does not reconcile, arm alarms or
+enqueue work.16 new real-SQLite/HTTP tests plus neighboring coverage pass48 tests;
+typecheck and desktop16 pass. A test-only readonly array typing error was corrected
+to an exact status-order assertion. Combined verification passed1402 backend tests
+then timed out at FakeProvider boot before model requests; isolated service retry
+passed. Original `.local/routine-history-combined.log` retained; remaining checks
+run in `.local/routine-history-combined-remaining.log`. Portal history is delegated
+to an isolated worker; preflight and live routine
+acceptance remain separate; the restricted alpha gateway has not been expanded.
+
 Portal skill-history restoration (2026-09-17 Asia/Jakarta): History on an approved
 card loads retained revision pages on demand, including historical name and all
 procedural fields. A confirmation stages `skill.restore` with the captured current

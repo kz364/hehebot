@@ -4,6 +4,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest: owner GET /v1/routines/:id/runs?after=<UUID>&limit=<1..10> and
+ControlCore.routineTaskPage expose all statuses for exact live routine_id. Shared
+task projection preserves current-attempt preview/steering/recovery and strips
+context/checkpoints; existing conversation pages remain unfinished-only. Ordering
+is ascending UUID, not newest-first. RPC rate-only: no reconcile/alarms/enqueue.
+48 focused tests/typecheck and desktop16 pass. Combined verifier passed1402 backend
+tests, then stopped at FakeProvider boot before model requests. Isolated service
+retry passed; remaining checks run at .local/routine-history-combined-remaining.log.
+Original log retained at .local/routine-history-combined.log.
+Test readonly-array typing issue corrected. Routine history UI worker
+T-01a0acd6-f40d-770f-a3a0-e69fd7ede7bb awaits exact host base; owns public app/style,
+browser fixture and its dedicated doc. No live actions. UI must distinguish execution
+versus provisional-output/delivery; do not expand alpha gateway or
+repeat pending Cloudflare approval request. Preflight still separate work.
+
 Newest: portal History action and paged historical bodies, including name, are
 implemented with staged restore confirmation. Stable command/proposal identity,
 separate approval, navigation cache clearing, stale/offline/error guards and zero
