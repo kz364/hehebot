@@ -46,6 +46,21 @@ function renderAlphaSession(){
 const names={IDLE_PERMITTED:'Idle — hibernation permitted',STOPPED:'Sleeping',START_REQUESTED:'Waking',BOOTING:'Starting',READY:'Awake',DRAINING:'Finishing up',STOP_COMMITTED:'Stopping',STOPPING:'Stopping',RECOVERY_REQUIRED:'Recovery needed'};
 const statuses={queued:'Queued',claimed:'Starting',running:'Working',finishing:'Saving result',completed:'Completed',waiting:'Waiting',failed:'Failed',cancelling:'Cancelling',cancelled:'Cancelled',recovery_required:'Needs recovery'};
 const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
+const tokenCounters=[['inputTokens','Input tokens'],['cachedInputTokens','Cached input tokens'],['cacheWriteInputTokens','Cache-write input tokens'],['outputTokens','Output tokens'],['reasoningOutputTokens','Reasoning output tokens'],['totalTokens','Total tokens']];
+function renderTokenUsage(container,run,source){
+ const section=node('section',undefined,'skill-detail token-usage');section.setAttribute('aria-label','Token usage for current attempt');section.append(node('h4','Token usage'));
+ const rows=Array.isArray(source?.token_usage_snapshots)?source.token_usage_snapshots.filter(row=>row?.run_id===run.id&&row?.attempt===run.current_attempt):[];
+ const validCounters=value=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===tokenCounters.length&&tokenCounters.every(([key])=>Object.hasOwn(value,key)&&Number.isSafeInteger(value[key])&&value[key]>=0);
+ const usage=rows.length===1?rows[0]:null;
+ const valid=usage&&Number.isSafeInteger(usage.attempt)&&usage.attempt>0&&Number.isSafeInteger(usage.version)&&usage.version>0&&usage.usage&&typeof usage.usage==='object'&&!Array.isArray(usage.usage)&&Object.keys(usage.usage).length===3&&validCounters(usage.usage.total)&&validCounters(usage.usage.last)&&(usage.usage.modelContextWindow===null||Number.isSafeInteger(usage.usage.modelContextWindow)&&usage.usage.modelContextWindow>=0);
+ if(!valid)section.append(node('p','Token usage unavailable for this attempt.','hint'));
+ else{
+  section.append(node('p',`Native context/session snapshot · attempt ${usage.attempt} · observation version ${usage.version}`,'hint'));
+  for(const [heading,value] of [['Native cumulative snapshot',usage.usage.total],['Native last snapshot',usage.usage.last]]){section.append(node('p',heading,'status'));for(const [key,label] of tokenCounters)section.append(node('p',`${label}: ${value[key].toLocaleString()}`));}
+  section.append(node('p',`Model context window: ${usage.usage.modelContextWindow===null?'unavailable':usage.usage.modelContextWindow.toLocaleString()}`));
+ }
+ section.append(node('p','Persisted observation. Counts may be partial or stale; they are not live and are not additive across tasks or children, or proof of billing or settlement.','hint'));container.append(section);
+}
 function report(message){$('error').textContent=message;$('error').hidden=!message;}
 function time(iso){return new Date(iso).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}
 async function api(path,options={}){const response=await fetch(path,options);let value;try{value=await response.json();}catch{throw new Error('The portal returned an unexpected response.');}if(!response.ok)throw new Error(value.error?.message??'The request failed.');return value;}
@@ -159,7 +174,7 @@ function render(){
  const recovery=(view?(view.page?.recovery??[]):snapshot.recovery??[]).filter(x=>runs.some(run=>run.id===x.run_id));
  const previews=(view?.kind==='tasks'?view.page?.output_previews??[]:snapshot.output_previews??[]).filter(x=>runs.some(run=>run.id===x.run_id&&run.current_attempt===x.attempt&&(snapshot.summary.owner_alpha?['running','finishing','cancelling','recovery_required']:['running','finishing','recovery_required']).includes(run.status)&&!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code)));
  const questions=(snapshot.questions??[]).filter(q=>q.conversation_id===selected||q.persona_id===selected);
- const signature=JSON.stringify([selected,query,conversation,runs,steering,recovery,previews,questions,$('connection').textContent,navigator.onLine,alphaSeen,snapshot.summary.owner_alpha,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
+ const signature=JSON.stringify([selected,query,conversation,runs,steering,recovery,previews,questions,$('connection').textContent,navigator.onLine,alphaSeen,snapshot.summary.owner_alpha,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.token_usage_snapshots,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;const expanded=new Set([...timeline.querySelectorAll('.task-card[open]')].map(card=>card.dataset.runId));timeline.replaceChildren();
   if(view){
    const taskMode=view.kind==='tasks',label=taskMode?'task':'recovery';
@@ -221,6 +236,7 @@ function render(){
     if(run.error_code)card.append(node('p',`Waiting or recovery reason: ${run.error_code}`,'hint'));
     if(run.status==='cancelling')card.append(node('p','Cancellation requested, not confirmed. Children, tools and effects may remain unresolved.','review-notice'));
    }
+   renderTokenUsage(card,run,view?.kind==='tasks'?view.page:view?null:snapshot);
    const preview=previews.find(item=>item.run_id===run.id);
    if(preview){
     card.querySelector('summary').append(node('span',' · Provisional output','status'));
@@ -551,6 +567,7 @@ function renderRoutineHistory(card,routine){
     execution.append(node('p',`Attempt ${run.execution.attempt} · Recorded status: ${run.execution.status}`),node('p',`Recorded start/claim time: ${run.execution.started_at??'not recorded'}`),node('p',`Application settlement time: ${run.execution.settled_at??'not recorded'}`),node('p',run.execution.result_body_retained?'Result body retained. Retention alone does not verify execution or delivery.':'Result body not retained. Payloads may be pruned after 90 days; absence does not mean execution is incomplete.','hint'));
    }else execution.append(node('p',run.execution===null?'No record for the current attempt. A missing record is not evidence of failure.':'Current attempt record unavailable.','hint'));
    execution.append(node('p','Application records only. Claim time does not prove native acknowledgement or inference. Application settlement does not verify live native-family settlement or safe sleep.','hint'));item.append(execution);
+   renderTokenUsage(item,run,page);
    const delivery=node('section',undefined,'skill-detail run-delivery');delivery.setAttribute('aria-label','Run-level delivery records');delivery.append(node('h4','Run-level delivery records'));
    if(run.run_delivery){
     const {counts,portal}=run.run_delivery;

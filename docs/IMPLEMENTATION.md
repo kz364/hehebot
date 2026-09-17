@@ -4,6 +4,27 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+E11 read-only token display (2026-09-17, local): expanded conversation/current-task
+and routine-history cards share strict unique-current-attempt validation. Native
+cumulative and last snapshots retain six separate counters plus nullable context
+window; attempt/version identify the observation, not freshness. Missing, malformed,
+duplicate and mismatched observations show unavailable. Selected page data never
+falls back to global state, and recovery-only pages have no usage contract. Counts
+are literal DOM text, not dollar estimates, percentages, sums or settlement proof.
+Usage-only changes participate in rendering; no new polling, route, command or grant.
+
+`node scripts/test-portal-token-usage.mjs` passes asymmetric/decreasing/zero/absent/
+malformed/duplicate/stale and page-isolation cases with35 existing GETs/zero writes.
+Task, routine-history and alpha-session neighbors pass; build/typecheck and desktop16
+pass. Final desktop1280px/narrow390px at2x and unavailable screenshots inspected:
+token labels/counters/disclosure readable without clipping. Wide unavailable capture
+also shows unrelated existing search-header overlap; not changed here. Screenshots
+`.amp/in/artifacts/token-usage-{desktop,narrow,unavailable}.png`; logs
+`.local/token-usage-ui-{final,desktop}.log`. Chromium synthetic API evidence, not
+physical mobile/touch/Safari/live production verification. No CSS/backend or live
+changes/spend. Fixture added to verifier; prior backend1604/runtime472 evidence below
+predates only this UI-only stage, not a newly rerun full suite.
+
 E11 token snapshot publication (2026-09-17, local): existing native journal usage
 is sent through `token-usage` during the existing task-control output-maintenance
 cadence. Root and registered-child observations retain separate task/attempt/native

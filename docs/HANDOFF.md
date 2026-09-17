@@ -4,6 +4,20 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+E11 read-only UI now integrated locally: shared helper in public/app.js validates
+unique current-attempt snapshots, six safe counters per group and nullable window;
+shows native cumulative/last labels, attempt/version and partial/stale/non-additive/
+non-billing disclosure. Missing/malformed/stale/duplicate is unavailable, not zero.
+Selected task/routine pages never borrow global usage; recovery has no usage contract.
+Host token fixture passes35 existing GETs/zero commands; neighboring task/history/
+alpha fixtures, build and desktop16 pass (.local/token-usage-ui-{final,desktop}.log).
+Final2x desktop/narrow/unavailable screenshots inspected under .amp/in/artifacts/
+token-usage-*.png. Token content unclipped; unrelated search header overlap visible
+in wide unavailable view. No CSS/backend/deploy/provider/model/spend changes.
+Fixture wired into verifier; full prior1604/472 evidence below predates this UI-only
+stage. Workers/checks done. Next return to exact provider retirement clarification,
+not more cold/process polling or peripheral UI. Continuation remains enabled.
+
 E11 independent follow-through is verified locally: token-usage ledger,
 runtime exact pending-payload publication through existing publishOutputs cadence,
 authenticated runtime command and owner state/task-page token_usage_snapshots.
