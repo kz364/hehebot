@@ -79,5 +79,11 @@ export function migrateApplication(db:Database,now:string):void {
   db.exec('CREATE INDEX native_task_links_session ON native_task_links(native_session_key)');
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(11,?)',now);
  });
- requireThat([10,11].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===10)version=11;
+ if(version===11)db.transaction(()=>{
+  // Historical attempts have no captured attribution; never infer it from current context.
+  db.exec("ALTER TABLE attempts ADD COLUMN captured_routine_revision INTEGER CHECK(captured_routine_revision IS NULL OR (typeof(captured_routine_revision)='integer' AND captured_routine_revision>0 AND captured_routine_revision<=9007199254740991))");
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(12,?)',now);
+ });
+ requireThat([11,12].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

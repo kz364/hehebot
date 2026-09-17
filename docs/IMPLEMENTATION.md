@@ -4,6 +4,22 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Durable attempt attribution integrated (2026-09-17 Asia/Jakarta): host writes
+captured revision with root claim, inherits exact parent attempt for same-persona
+children, leaves cross-persona/legacy values null, and shows latest3 stored pairs.
+No inference/delivery proof is implied. V12 migration and compatibility integrated;
+exact v9–11 import/export and v8+ backup/inspection stay supported without
+upgrading reconstructed legacy data. Host97 integrated tests pass; earlier112
+lifecycle/history/child tests, typecheck, history/preflight browser and desktop16
+pass. Three updated renders inspected. Initial combined run passed1443/failed2
+on old positional retention fixtures; explicit-column fixes and13 retention tests
+pass, including preservation of attribution when result payloads expire.
+Final verifier passed1445 backend/434 runtime plus browser/native/service/build,
+exit0 in `.local/attempt-revision-combined-final.log`. Final desktop render
+reinspected; no active worker or verifier remains.
+Existing live sessions are not migrated or reset. Manual occurrence identity is separate because current
+budget and overlap predicates rely on non-null occurrence meaning scheduled.
+
 Routine revision attribution (2026-09-17 Asia/Jakarta): routine history projects
 only numeric `captured_routine_revision` from matching current-attempt context;
 unknown/unstarted/mismatched snapshots are null, never current-object fallback.

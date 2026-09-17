@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (11, '2026-09-16T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (12, '2026-09-17T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -71,7 +71,7 @@ CREATE TABLE attempts (
  run_id TEXT NOT NULL REFERENCES runs(id), attempt INTEGER NOT NULL CHECK(attempt > 0),
  submission_key TEXT NOT NULL UNIQUE, epoch INTEGER NOT NULL, boot_id TEXT NOT NULL,
  native_run_ref TEXT, status TEXT NOT NULL, deadline_at TEXT NOT NULL,
- started_at TEXT, settled_at TEXT, result_json TEXT CHECK(result_json IS NULL OR json_valid(result_json)), coordinator_release_json TEXT CHECK(coordinator_release_json IS NULL OR json_valid(coordinator_release_json)),
+ started_at TEXT, settled_at TEXT, result_json TEXT CHECK(result_json IS NULL OR json_valid(result_json)), coordinator_release_json TEXT CHECK(coordinator_release_json IS NULL OR json_valid(coordinator_release_json)), captured_routine_revision INTEGER CHECK(captured_routine_revision IS NULL OR (typeof(captured_routine_revision)='integer' AND captured_routine_revision>0 AND captured_routine_revision<=9007199254740991)),
  PRIMARY KEY(run_id,attempt)
 );
 CREATE INDEX attempts_result_expiry ON attempts(settled_at,run_id,attempt) WHERE result_json IS NOT NULL AND settled_at IS NOT NULL AND status IN ('completed','failed','cancelled');

@@ -4,6 +4,22 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Integrated: durable per-attempt routine revision capture. Schema worker
+T-01a0ad1a-f103-75e9-a19f-fe26a6eacbe3 finished v12 migration/pins and legacy
+compatibility; both verified patches applied. Host claim/child/history changes
+pass97 integrated tests; earlier112 lifecycle/history cases, typecheck,
+history/preflight browser and desktop16 pass. Three updated renders inspected.
+First combined run passed1443 tests but found two old positional retention
+fixtures; explicit-column fixes and all13 retention tests now pass, preserving
+attribution after result pruning. Final verifier passed1445 backend/434 runtime
+plus browser/native/service/build, exit0 in .local/attempt-revision-combined-final.log.
+Final desktop render reinspected. No verification process remains active.
+Old attempts stay null, no backfill or context fallback. Latest3 retained
+attempt/revision pairs are shown. No worker assignment remains active.
+Manual occurrence IDs are deferred: budget/coalescing currently treat non-null
+occurrence IDs as scheduled work, so origin needs explicit future treatment.
+No live/shared actions. Keep existing Cloudflare approval pending without reasking.
+
 Newest: routine history now adds captured_routine_revision from exact retained
 current-attempt snapshot only. No full context exposed, no live-object fallback;
 missing/unstarted/mismatched snapshots null. Labels distinguish capture from

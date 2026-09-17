@@ -13,13 +13,14 @@ styles; no stylesheet change is needed.
   traversal. Concurrent arrivals before the cursor require restarting.
 - All retained statuses and whole-routine counts are shown, with the page's
   observation time. Existing conversation tasks remain unfinished-only.
-- `captured_routine_revision` is projected only from a matching retained routine
-  snapshot for a started/current attempt. It is not taken from the current routine
-  object or occurrence version. Missing, unstarted or mismatched snapshots return
-  null and display unavailable. Only the numeric revision is exposed, never the
-  private context. Retries rebuild the snapshot; this is not prior-attempt history
-  or proof that inference executed. Desktop/narrow known/unavailable states and a
-  red/green SQLite regression cover edits, replacement, absence and identity.
+- With schema v12, `captured_routine_revision` comes from the current durable
+  attempt, recorded atomically at claim. `attempt_revisions` lists the latest three
+  retained attempt/revision pairs, descending by attempt. Retries retain earlier
+  attribution. Same-persona children inherit the exact parent-attempt value;
+  cross-persona children have no routine revision. Legacy attempts remain null:
+  neither migration nor reads infer missing values from context/current routine.
+  Only numeric attribution is exposed, never private context or prior output.
+  These are captures, not proof that inference executed or effects settled.
 - Recorded status and original request application are not output delivery or
   settlement receipts. Current-attempt provisional output remains clearly
   provisional and is never presented as a delivered result. Terminal previews,

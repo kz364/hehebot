@@ -68,10 +68,36 @@ beforeEach(async () => {
     INSERT INTO flight_restore_deadlines VALUES('leg-83',2,'2026-09-20T21:00:00.000Z','Asia/Jakarta','2026-09-19T21:00:00.000Z','routine-29','source-43','outcome_unknown','child-83','{"observation":"${canary}"}');
   `);
   wire = { format: 'hehebot-control-export', version: 1, createdAt: originalTime,
-    schemaSha256: '8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a', schemaVersions: [11], tables: tables(db) };
+    schemaSha256: 'a333b2b0ca9d5e7572e84d8aa3f8210b99e3b946a831bbd6dd4ff231173d0bf6', schemaVersions: [12], tables: tables(db) };
   await save();
 });
 afterEach(async () => { db.close(); await rm(directory, { recursive: true, force: true }); });
+
+it.each([1, 73, 9007199254740991])('roundtrips captured revision %s alongside an unknown historical attempt', async revision => {
+  db.prepare("UPDATE attempts SET captured_routine_revision=? WHERE run_id='root-29'").run(revision);
+  const exported = exportControl({
+    all: <T>(sql: string, ...values: SqlValue[]) => db.prepare(sql).all(...values) as T[],
+    exec: () => { throw Error('Read only'); },
+    transaction: <T>(fn: () => T) => { db.exec('BEGIN'); try { return fn(); } finally { db.exec('ROLLBACK'); } },
+  }, originalTime);
+  await writeFile(input, exported);
+  await importControlExport(input, destination);
+  const copy = new DatabaseSync(join(destination, 'control.sqlite'), { readOnly: true });
+  try {
+    expect(copy.prepare('SELECT run_id,captured_routine_revision FROM attempts ORDER BY run_id').all()).toEqual([
+      { run_id: 'child-83', captured_routine_revision: null }, { run_id: 'root-29', captured_routine_revision: revision },
+    ]);
+  } finally { copy.close(); }
+});
+
+it.each([
+  { type: 'integer', value: '0' }, { type: 'integer', value: '-1' },
+  { type: 'integer', value: '9007199254740992' }, { type: 'text', value: '1.5' },
+  { type: 'text', value: '73' }, { type: 'text', value: 'not-a-revision' },
+])('rejects invalid or affinity-coerced captured revision %j', async value => {
+  Object.assign(field('attempts', 'captured_routine_revision'), value);
+  await save(); await rejected();
+});
 
 it('reconstructs exact typed data, int64 edges, deleted event high-water and original time', async () => {
   wire.tables.forEach(t => t.rows.reverse()); await save();
@@ -125,12 +151,16 @@ it.each(['same', 'parent', 'attempt', 'persona'])('roundtrips shared thread turn
   } finally { copy.close(); }
 });
 
-it.each([9, 10, 11])('preserves schema%s migration history and flight deadlines without inventing release or upgrading legacy snapshots', async version => {
+it.each([9, 10, 11, 12])('preserves schema%s migration history and flight deadlines without inventing attribution or upgrading legacy snapshots', async version => {
+  if (version < 12) {
+    db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision');
+    wire.schemaSha256 = '8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a';
+  }
+  db.prepare('UPDATE schema_versions SET version=? WHERE version=12').run(version);
   if (version < 11) {
     const links = db.prepare('SELECT * FROM native_task_links').all();
     db.exec('DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');
     for (const link of links) db.prepare('INSERT INTO native_task_links VALUES(?,?,?,?,?)').run(...Object.values(link));
-    db.prepare('UPDATE schema_versions SET version=? WHERE version=11').run(version);
     wire.schemaSha256 = '682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4';
   }
   if (version === 9) {
@@ -146,19 +176,20 @@ it.each([9, 10, 11])('preserves schema%s migration history and flight deadlines 
     expect(copy.prepare('SELECT * FROM schema_versions ORDER BY version').all()).toEqual(db.prepare('SELECT * FROM schema_versions ORDER BY version').all());
     expect(copy.prepare('SELECT * FROM attempts ORDER BY run_id').all()).toEqual(db.prepare('SELECT * FROM attempts ORDER BY run_id').all());
     expect(copy.prepare('PRAGMA table_info(attempts)').all().some(row => row.name === 'coordinator_release_json')).toBe(version >= 10);
+    expect(copy.prepare('PRAGMA table_info(attempts)').all().some(row => row.name === 'captured_routine_revision')).toBe(version >= 12);
     expect(copy.prepare('SELECT * FROM flight_restore_deadlines ORDER BY leg_id,revision').all()).toEqual(db.prepare('SELECT * FROM flight_restore_deadlines ORDER BY leg_id,revision').all());
     expect(copy.prepare('SELECT status FROM flight_restore_deadlines WHERE revision=2').get()!.status).toBe('outcome_unknown');
   } finally { copy.close(); }
 });
 
-it.each([[], [8], [11, 8], [8, 8, 11], [0, 11], [1.5, 11], [12], [8, 11], [9], [10]].map(versions => ({ versions })))('rejects invalid or row-mismatched header history $versions', async ({ versions }) => {
+it.each([[], [8], [12, 8], [8, 8, 12], [0, 12], [1.5, 12], [13], [8, 12], [9], [10], [11]].map(versions => ({ versions })))('rejects invalid or row-mismatched header history $versions', async ({ versions }) => {
   wire.schemaVersions = versions; await save(); await rejected();
 });
 
 it('rejects omitted history rows in the header and missing flight data tables', async () => {
   db.prepare('INSERT INTO schema_versions VALUES(?,?)').run(8, '2026-08-17T01:23:45.678Z');
-  wire.tables = tables(db); await save(); await rejected(); // Header [11] omits real row8.
-  wire.schemaVersions = [8, 11]; wire.tables = wire.tables.filter(t => t.name !== 'flight_restore_deadlines');
+  wire.tables = tables(db); await save(); await rejected(); // Header [12] omits real row8.
+  wire.schemaVersions = [8, 12]; wire.tables = wire.tables.filter(t => t.name !== 'flight_restore_deadlines');
   await save(); await rejected();
 });
 

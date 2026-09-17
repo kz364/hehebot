@@ -13,8 +13,10 @@ const sibling={...routine,id:randomUUID(),body:{...routine.body,name:'Empty rout
 const state={objects:[{id:bot,kind:'persona',body:{name:'Travel'}},{id:other,kind:'persona',body:{name:'Finance'}},routine,sibling],runs:[],summary:{phase:'STOPPED',execution_enabled:false,queued_runs:0,blocked_runs:0}};
 const statuses=['running','completed','failed','cancelled','waiting','finishing','cancelling','recovery_required','queued','claimed','completed','waiting','failed'];
 const runs=statuses.map((status,n)=>({id:id(n+1),routine_id:routine.id,persona_id:bot,title:`Review ${n+1}`,status,current_attempt:2,request_status:'applied',created_at:`2026-09-${String((n*7)%20+1).padStart(2,'0')}T00:00:00Z`,error_code:status==='waiting'?'CAPABILITY_UNAVAILABLE':null}));
-runs[0].captured_routine_revision=1;
+runs[0].captured_routine_revision=2;
+runs[0].attempt_revisions=[{attempt:2,captured_routine_revision:2},{attempt:1,captured_routine_revision:1}];
 runs[1].captured_routine_revision=null;
+runs[1].attempt_revisions=[{attempt:2,captured_routine_revision:null}];
 const requests=[],violations=[];let fail=false,offline=false,held=null,malformed=false;
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
 const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
@@ -63,7 +65,8 @@ try{
  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('${panel} [data-run-id]'),n=>n.dataset.runId)`),Array.from({length:10},(_,n)=>id(n+1)));
  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('${panel} .task-card>summary'),n=>n.textContent)`),['Review 1 · Working','Review 2 · Completed','Review 3 · Failed','Review 4 · Cancelled','Review 5 · Waiting','Review 6 · Saving result','Review 7 · Cancelling','Review 8 · Needs recovery','Review 9 · Queued','Review 10 · Starting']);
  assert.equal(requests[0],`/v1/routines/${routine.id}/runs?limit=10`);
- assert.match(await evaluate(`document.querySelector('${panel} [data-run-id="${id(1)}"]').textContent`),/Captured routine revision: 1 for current attempt/);
+ assert.match(await evaluate(`document.querySelector('${panel} [data-run-id="${id(1)}"]').textContent`),/Captured routine revision: 2 for current attempt/);
+ assert.match(await evaluate(`document.querySelector('${panel} [data-run-id="${id(1)}"]').textContent`),/Attempt 2: routine revision 2.*Attempt 1: routine revision 1/);
  assert.match(await evaluate(`document.querySelector('${panel} [data-run-id="${id(2)}"]').textContent`),/Captured routine revision unavailable/);
  assert.match(await text(),/Total 13 · Waiting 2 · Recovery 1/);assert.match(await text(),/not newest first/);
  assert.doesNotMatch(await text(),/OLD ATTEMPT|TERMINAL PREVIEW/);

@@ -48,13 +48,14 @@ export class NativeTaskLedger {
    const oldContext=JSON.parse(parent.context_json) as ContextSnapshot;
    const context=input.persona_id===parent.persona_id?{...oldContext,instruction:input.title}:this.core.context(input.persona_id,input.title,null,oldContext.room_id);
    const id=this.core.options.uuid(),now=this.core.now();
-   const deadline=this.store.db.all<{deadline_at:string}>('SELECT deadline_at FROM attempts WHERE run_id=? AND attempt=?',parent.id,input.parent_attempt)[0].deadline_at;
+   const parentAttempt=this.store.db.all<{deadline_at:string;captured_routine_revision:number|null}>('SELECT deadline_at,captured_routine_revision FROM attempts WHERE run_id=? AND attempt=?',parent.id,input.parent_attempt)[0];
+   const deadline=parentAttempt.deadline_at;
    // Revoked alpha context stays revoked even when its deadline also expired.
    const revoked=this.core.ownerAlpha.policy&&['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(parent.error_code??'');
    const cancelCode=revoked?parent.error_code:deadline<=now?'DEADLINE_EXCEEDED':['cancelled','cancelling','recovery_required'].includes(parent.status)?parent.error_code??'OWNER_CANCELLED':null;
    const cancellation=cancelCode!==null;
    this.store.db.exec("INSERT INTO runs(id,command_id,persona_id,routine_id,context_json,status,current_attempt,error_code,created_at,updated_at,role,parent_run_id,title) VALUES(?,?,?,?,?,?,1,?,?,?,'background',?,?)",id,parent.command_id,input.persona_id,input.persona_id===parent.persona_id?parent.routine_id:null,JSON.stringify(context),cancellation?'cancelling':'claimed',cancelCode,now,now,parent.id,input.title);
-   this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,native_run_ref,epoch,boot_id,status,deadline_at,started_at) VALUES(?,1,?,?,?,?,?,?,?)",id,`native:${input.native_run_ref}`,input.native_run_ref,identity.epoch,identity.boot_id,'claimed',deadline,now);
+   this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,native_run_ref,epoch,boot_id,status,deadline_at,started_at,captured_routine_revision) VALUES(?,1,?,?,?,?,?,?,?,?)",id,`native:${input.native_run_ref}`,input.native_run_ref,identity.epoch,identity.boot_id,'claimed',deadline,now,input.persona_id===parent.persona_id?parentAttempt.captured_routine_revision:null);
    this.store.db.exec('INSERT INTO native_task_links(run_id,parent_run_id,parent_attempt,native_run_ref,native_session_key) VALUES(?,?,?,?,?)',id,parent.id,input.parent_attempt,input.native_run_ref,input.native_session_key);
    this.store.event(this.core.options.uuid(),input.persona_id,'task.registered','native',parent.command_id,{run_id:id,parent_run_id:parent.id,title:input.title,status:cancellation?'cancelling':'claimed'},now);
    const run=this.store.run(id);return started?this.acknowledgeStart(identity,input,run):run;

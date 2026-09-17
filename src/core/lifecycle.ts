@@ -123,7 +123,7 @@ export class LifecycleCore {
    const context=this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id,run.command_id);
    const attempt=run.current_attempt+1,submissionKey=`${run.id}:${attempt}`,deadline=this.core.ownerAlpha.policy?this.core.ownerAlpha.admit(run):new Date(this.core.options.now().getTime()+20*60000).toISOString();
    this.store.db.exec("UPDATE runs SET status='claimed',current_attempt=?,context_json=?,updated_at=? WHERE id=?",attempt,JSON.stringify(context),this.core.now(),run.id);
-   this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,started_at) VALUES(?,?,?,?,?,'claimed',?,?)",run.id,attempt,submissionKey,identity.epoch,identity.boot_id,deadline,this.core.now());
+   this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,started_at,captured_routine_revision) VALUES(?,?,?,?,?,'claimed',?,?,?)",run.id,attempt,submissionKey,identity.epoch,identity.boot_id,deadline,this.core.now(),context.routine?.revision??null);
    if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='claimed' WHERE id=?",run.occurrence_id);
    for(const event of context.context_events)this.store.db.exec('UPDATE consumer_cursors SET consumed_sequence=MAX(consumed_sequence,?) WHERE consumer_id=? AND conversation_id=?',event.sequence,run.persona_id,context.room_id);
    this.touch();return {run:this.store.run(run.id),submission_key:submissionKey,deadline_at:deadline,...(this.core.ownerAlpha.backgroundRoot(run.id)?{owner_alpha_background:true as const}:{})};

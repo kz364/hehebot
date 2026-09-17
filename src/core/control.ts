@@ -558,9 +558,8 @@ export class ControlCore {
   const questions=this.questions.list();
   return {observed_at:this.now(),counts,runs:runs.map(({context_json,checkpoint_json,...run})=>{
    if(unfinishedOnly)return run;
-   const captured=(JSON.parse(context_json) as Partial<ContextSnapshot>|null)?.routine;
-   const revision=run.current_attempt>0&&captured?.kind==='routine'&&captured.id===run.routine_id&&captured.body?.persona_id===run.persona_id&&Number.isSafeInteger(captured.revision)&&captured.revision>0?captured.revision:null;
-   return {...run,captured_routine_revision:revision};
+   const attempt_revisions=this.store.db.all<{attempt:number;captured_routine_revision:number|null}>('SELECT attempt,captured_routine_revision FROM attempts WHERE run_id=? AND attempt<=? ORDER BY attempt DESC LIMIT 3',run.id,run.current_attempt);
+   return {...run,captured_routine_revision:attempt_revisions.find(value=>value.attempt===run.current_attempt)?.captured_routine_revision??null,attempt_revisions};
   }),
    output_previews:runs.flatMap(run=>{const value=previews.read(run.id,run.current_attempt,!!this.ownerAlpha.policy);return value?[value]:[];}),
    steering:runs.flatMap(run=>steering.receipts({run_id:run.id,attempt:run.current_attempt})),

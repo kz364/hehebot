@@ -490,6 +490,10 @@ function renderRoutineHistory(card,routine){
   for(const run of page.runs){
    const item=node('details',undefined,'task-card');item.dataset.runId=run.id;item.append(node('summary',`${run.title??'Routine run'} · ${statuses[run.status]??run.status}`),node('p',`Task ${run.id} · attempt ${run.current_attempt}`,'hint'),node('p',`Original request: ${run.request_status??'receipt unavailable'}. Request application is not task completion.`,'hint'));
    item.append(node('p',Number.isSafeInteger(run.captured_routine_revision)&&run.captured_routine_revision>0?`Captured routine revision: ${run.captured_routine_revision} for current attempt. Capture is not proof of execution or delivery.`:'Captured routine revision unavailable; no claimed snapshot or retained attribution. The current routine revision is not substituted.','hint'));
+   if(run.attempt_revisions?.length){
+    item.append(node('p','Latest 3 retained attempt captures (not execution proof):','hint'));
+    for(const entry of run.attempt_revisions.slice(0,3))item.append(node('p',`Attempt ${entry.attempt}: ${Number.isSafeInteger(entry.captured_routine_revision)&&entry.captured_routine_revision>0?`routine revision ${entry.captured_routine_revision}`:'routine revision unavailable'}`,'hint'));
+   }
    item.open=view.expanded.has(run.id);item.ontoggle=()=>{if(item.isConnected){if(item.open)view.expanded.add(run.id);else view.expanded.delete(run.id);}};
    if(run.error_code)item.append(node('p',`Recorded reason: ${run.error_code}`,'hint'));
    if(run.status==='cancelling')item.append(node('p','Cancellation requested, not confirmed. Children, tools and effects may remain unresolved.','review-notice'));
