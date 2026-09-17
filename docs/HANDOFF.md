@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest follow-through: Worker generation-mode reconciliation/alarms now preserve
+all historical custody and only run the fenced watchdog. Internal status exposes
+the exact generation descriptor. Real workerd/SQLite read/accept/alarm and persisted
+Wrangler reopen pass (`scripts/test-owner-alpha-successor-worker.mjs`), along with
+ordinary27 Worker checks, migration/capacity fixtures, typecheck/build. Logs
+.local/alpha-successor-worker{,-reopen}.log. New fixture is in verify-codex.sh;
+full1590/464 below predates only this narrow Worker change. No active workers/tests.
+No public activation or operator config wiring yet, and no live retirement proof.
+
 Newest stage implements core-only initial epoch1→2 activation and runtime launch
 pinning. Core preserves original configured policy/custody, appends immutable
 generation/event, derives quota from attempts, verifies activation receipt/cutoff,
@@ -18,14 +27,14 @@ build; desktop16 pass. First run caught a SQL column typo (causation_id→cause_
 fixed before rerun. Logs .local/alpha-generation-{focused,retention,combined-rerun,desktop}.log.
 No active workers/checks remain.
 
-Next: wire default-absent operator grant/config, explicit authenticated idempotent
-owner command, generation status descriptor and Worker maintenance exclusion.
+Next: wire default-absent operator grant/config and explicit authenticated idempotent
+owner command; status descriptor and successor-mode maintenance are now wired above.
 Current core method takes a synthetic already-applied command with full envelope;
 real dispatch must bind only operator authority and fit accept()'s atomic
 accepted→applied transaction, not mark a command applied prematurely. Generation
-reconstruction reads that retained receipt/event, so do not prune them. Avoid
-beforeRequest reconciliation for activation and suspend/scope later historical
-pruning/budget/question/preview maintenance, not merely watchdog. No public command
+reconstruction reads that retained receipt/event, so do not prune them. Still avoid
+beforeRequest reconciliation for activation itself (before generation mode exists).
+Successor-mode historical pruning/budget/question/preview maintenance is suspended. No public command
 or environment is wired yet. Live retirement evidence remains unavailable. No
 live calls/deployment/spend. Continuation enabled; no new approval needed.
 

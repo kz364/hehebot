@@ -96,6 +96,10 @@ export class PersonalControl extends DurableObject<Env> {
   try{this.reconcile();}finally{await this.arm();}
  }
  private reconcile(){
+  // A retained owner-alpha generation must remain byte-for-byte historical.
+  // Its bounded runtime only needs lease/deadline supervision; every other
+  // maintenance path can mutate state admitted before the generation cutoff.
+  if(this.core.ownerAlpha.activeGeneration()){this.lifecycle.watchdog();return;}
   this.core.expireMemories();this.core.expireCommandPayloads();this.core.expireFollowups();this.core.expireQueuedContexts();this.retention.prune();this.resultRetention.prune();this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();this.core.reconcileBudget();
   new TaskSteering(this.store,()=>this.core.now()).prune();
   this.core.questions.prune();
@@ -144,7 +148,7 @@ export class PersonalControl extends DurableObject<Env> {
   requireThat(validateRuntime(input),'INVALID_INPUT','Invalid runtime envelope.',422);
   const command=input as RuntimeCommand;
   const alpha=this.core.ownerAlpha.policy;
-  if(command.type==='status'){const state=this.lifecycle.get();return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{}),...(this.hostedOwnerAlpha?{owner_alpha_hosted:true}:{}),...(this.ownerBindingSha256?{owner_binding_sha256:this.ownerBindingSha256}:{})};}
+  if(command.type==='status'){const state=this.lifecycle.get(),generation=this.core.ownerAlpha.activeGeneration();return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{}),...(generation?{owner_alpha_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{}),...(this.hostedOwnerAlpha?{owner_alpha_hosted:true}:{}),...(this.ownerBindingSha256?{owner_binding_sha256:this.ownerBindingSha256}:{})};}
   requireThat(this.core.options.executionEnabled||alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','steer-pending','agent-routines','agent-skill'].includes(command.type)||alpha.text_only&&command.type==='complete'||alpha.background_first_root&&command.type==='native-child'),'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified for this operation.');
   if(command.type==='whatsapp-read-authorize')return new WhatsAppReadAccess(this.core,this.lifecycle).authorize(command.payload);
   let result:unknown={ok:true};
@@ -223,6 +227,13 @@ export class PersonalControl extends DurableObject<Env> {
   await this.arm();return result;
  });}
  private async arm(delayMs=0):Promise<void>{
+  const generation=this.core.ownerAlpha.activeGeneration();
+  if(generation){
+   const state=this.lifecycle.get();
+   if(!['STOPPED','RECOVERY_REQUIRED'].includes(state.phase))await this.ctx.storage.setAlarm(Date.now()+Math.max(delayMs,5000));
+   else await this.ctx.storage.deleteAlarm();
+   return;
+  }
   const times:number[]=[];
   const budgetDue=this.core.nextBudgetMaintenance();if(budgetDue)times.push(Date.parse(budgetDue));
   const retentionDue=this.retention.nextDue();if(retentionDue)times.push(Date.parse(retentionDue));

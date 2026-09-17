@@ -19,6 +19,7 @@ node --test macos/tests/*.test.mjs
 node scripts/verify-wappmcp.mjs
 node --test tests/wappmcp-prepare.mjs
 npm run test:e2e
+node scripts/test-owner-alpha-successor-worker.mjs
 node scripts/test-portal-connector-catalog.mjs
 node scripts/test-portal-skill-draft.mjs
 node scripts/test-portal-skill-references.mjs

@@ -4,6 +4,26 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Worker successor follow-through (2026-09-17): once an active generation exists,
+`PersonalControl.reconcile` runs only the generation-fenced watchdog. Retention,
+routine/retry/budget/question/preview/steering and other maintenance remain suspended
+for this bounded successor, preserving historical custody rather than reconciling
+it. Alarm selection ignores old due times; recovery deletes the alarm. Internal
+runtime status exposes only the generation's epoch/boot/transition descriptor.
+Ordinary no-successor maintenance is unchanged.
+
+The new `test-owner-alpha-successor-worker.mjs` starts actual workerd/SQLite with
+allowlisted subprocess environment and disposable storage. Actual state reads,
+fresh accept and explicit alarm invocation preserve old run/attempt/unknown effect,
+overdue retry, queued context/command/event and original policy. Successor lease
+expiry still closes epoch2. Stopping/reopening Wrangler on the same disposable
+SQLite preserves exact history, lifecycle, descriptor and absent alarm. Synthetic
+fixture-only applied activation is not a public API or retirement proof. Script,
+ordinary27 Worker checks and existing migration/capacity cases, typecheck/build
+pass; logs `.local/alpha-successor-worker{,-reopen}.log`. Added to the combined
+verifier; the previous full1590/464 run below predates this narrow follow-up.
+No live resource/account/model calls, deployment or additional spend.
+
 Retained generation core (2026-09-17, local/unpublished): trusted internal
 `LifecycleCore.activateOwnerAlphaSuccessor` can consume a matching preexisting
 synthetic applied command and operator binding. It validates expired recovery
