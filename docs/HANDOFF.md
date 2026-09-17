@@ -4,6 +4,41 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Local follow-through now adds runtime/codex-text-only.mjs: exact versioned
+startup CLI overrides, catalog/config digests, empty thread tools/turn environments,
+readback verification; completionEligible stays false. Native fixture consumes the
+shared values rather than duplicated TOML. Host fixed catalog-path binding and
+synthetic-attestation bypass; attestations are not model entitlement proof.
+All three native modes and28 profile/transport tests pass. Lifecycle drive now
+fences provider await results against epoch/boot/provider reference/operation;
+tests include changed ownership, matching retirement and idle wrong-Sprite race.
+Combined verifier exits0:1562 backend/449 runtime,27 Worker HTTP checks plus
+native/browser/service/build; desktop16 pass. Logs .local/text-only-profile-*.log.
+All delegated workers/checks finished. One bounded read-only Sprite exec below;
+no new model call, service change, deployment or paid resource.
+
+Next implementation remains actual text-only receipt/coverage/service plus backend
+admission. Read-only worker proposed additive immutable session/admission tables,
+an explicit owner command under /v1/commands, and exact pre-attempt contract/profile
+digest binding; proposal not implemented or a reason to alter old owner_alpha.
+Legacy attempts must never become completion-eligible retrospectively. Preserve
+old expiry/run/journals, effects and locks; no auto retry. Before same-nativeHome
+new generation, establish old process retirement with generation-bound evidence.
+Official Sprites lifecycle describes actual cold memory loss, but a concrete Fly
+forum clarification says API cold can retain processes and btime updates on resume:
+https://community.fly.io/t/when-is-a-sprite-actually-cold-reported-cold-sprite-woke-with-its-original-process-running/28288/3
+Host ten-second-bounded read-only exec succeeded: kernel btime15:10:31Z,
+observed16:29:38Z, uptime4747.40s. This does NOT prove retirement of13:18Z attempt.
+Current kernel ID retained privately as a baseline in
+.local/sprite-retirement-kernel-observation.log; no prior kernel ID in relevant
+retained probe logs. Application boot_id is unrelated random UUID. Do not repeat
+cold/btime polling; seek verified kernel-ID change or provider memory-discard
+evidence before generation-bound retirement. Probe billing increment unverified.
+Exec kill is process-group signaling only; old provider exec ID was not retained. Distinguish
+true process retirement from remote-effect/task completion; unknown custody must
+not be reset. Supported observation clarification/proof is the remaining external
+question, not missing owner spending approval. Continuation remains enabled.
+
 LATEST: real hosted trial FAILED completion, not permission/account access. UI sent
 one prompt13:18:28.168Z, command7ee4ae8b-4779-4d92-bb6b-1a2857184954,
 run0639f8f7-0d27-411f-a57f-a2c56689c9fa. Exact HEHEBOT_HOSTED_CHAT_OK_73 persisted

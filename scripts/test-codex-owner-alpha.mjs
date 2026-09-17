@@ -8,16 +8,17 @@ import { createServer } from 'node:http';
 import { mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
+import { CODEX_TEXT_ONLY_FEATURES, createCodexTextOnlyProfile,
+  verifyCodexTextOnlyProfile } from '../runtime/codex-text-only.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--profile-overrides', '--text-only'].includes(arg)), 'Unknown fixture option');
 const textOnly = process.argv.includes('--text-only');
 const profileOverrides = textOnly || process.argv.includes('--profile-overrides');
-const disabled = ['multi_agent', 'multi_agent_v2', 'apps', 'plugins', 'tool_suggest',
+const disabled = textOnly ? CODEX_TEXT_ONLY_FEATURES : ['multi_agent', 'multi_agent_v2', 'apps', 'plugins', 'tool_suggest',
   'image_generation', 'standalone_web_search', 'token_budget', 'request_permissions_tool',
-  'exec_permission_approvals', 'code_mode', 'code_mode_only',
-  ...(textOnly ? ['goals', 'hooks', 'view_image', 'sleep_tool'] : [])];
+  'exec_permission_approvals', 'code_mode', 'code_mode_only'];
 // Pinned spec: V1 multi_agent_v1.spawn_agent; V2 collaboration.spawn_agent;
 // V2 without namespace tools uses plain spawn_agent. Try all, even when hidden.
 const probes = [
@@ -39,6 +40,7 @@ const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 const startedAt = Date.now();
 let directory, home, transport, server, rootId, modelRequests = 0;
 let configPath, originalConfig, catalogPath, originalCatalog;
+let textOnlyProfile, effectiveConfig, commandedConfigContent;
 let deadline;
 async function wait(predicate) {
   const until = Date.now() + 15000;
@@ -141,16 +143,16 @@ try {
       default_verbosity: null, apply_patch_tool_type: null, truncation_policy: { mode: 'bytes', limit: 10000 },
       supports_image_detail_original: false, context_window: 272000, auto_compact_token_limit: null,
       effective_context_window_percent: 95, experimental_supported_tools: [] }] };
+    textOnlyProfile = createCodexTextOnlyProfile({ codexVersion: '0.154.0', model: 'fixture-model',
+      modelCatalog: catalog, catalogPath, catalogValidation: 'synthetic-fixture', syntheticFixture: true });
     await writeFile(catalogPath, JSON.stringify(catalog), { mode: 0o600 });
     originalCatalog = await readFile(catalogPath);
     report.modelCatalogSha256 = createHash('sha256').update(originalCatalog).digest('hex');
   }
   const filesystemEntries = Object.entries(filesystem).map(([path, mode]) => `${JSON.stringify(path)} = ${JSON.stringify(mode)}`);
   const config = `model = "fixture-model"\nmodel_provider = "fixture"\nweb_search = "disabled"\n` +
-    (textOnly ? `model_catalog_json = ${JSON.stringify(catalogPath)}\n[tools.experimental_request_user_input]\nenabled = false\n[tools.update_plan]\nenabled = false\n` : '') +
     (profileOverrides ? '' : 'default_permissions = "owner-alpha"\n') +
-    `[agents]\nenabled = false\n[features]\n` +
-    disabled.map(key => `${key} = false\n`).join('') +
+    (textOnly ? '' : `[agents]\nenabled = false\n[features]\n` + disabled.map(key => `${key} = false\n`).join('')) +
     (profileOverrides ? '' : `[permissions.owner-alpha.filesystem]\n${filesystemEntries.join('\n')}\n[permissions.owner-alpha.network]\nenabled = false\n`) +
     `[model_providers.fixture]\nname = "Scripted loopback only"\nbase_url = "http://127.0.0.1:${server.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\nrequest_max_retries = 0\nstream_max_retries = 0\n`;
   configPath = join(home, 'config.toml');
@@ -160,7 +162,9 @@ try {
   if (profileOverrides) {
     assert.doesNotMatch(config, /default_permissions|\[permissions\./);
     report.originalProfileAbsent = true;
+    commandedConfigContent = textOnly ? JSON.stringify(textOnlyProfile.startupConfig) : undefined;
     transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 10000, configOverrides: {
+      ...(textOnly ? textOnlyProfile.startupConfig : {}),
       'permissions.owner-alpha': { filesystem, network: { enabled: false } }, default_permissions: 'owner-alpha',
     } });
   } else transport = spawnCodex({ binary, home, cwd: workspace, timeoutMs: 10000 });
@@ -172,6 +176,7 @@ try {
   deadline = setTimeout(() => { raw.failures.push('ALPHA_DEADLINE_EXCEEDED'); transport.close(); server.closeAllConnections(); }, 240000);
   await transport.initialize({ experimentalApi: true });
   const { config: effective } = await rpc('config/read', { includeLayers: false, cwd: workspace });
+  effectiveConfig = effective;
   assert.equal(effective.agents.enabled, false);
   for (const key of disabled) assert.equal(effective.features[key], false);
   assert.equal(effective.web_search, 'disabled');
@@ -194,14 +199,14 @@ try {
     network: { enabled: effective.permissions['owner-alpha'].network.enabled } };
   const started = await rpc('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture',
     permissions: 'owner-alpha', approvalPolicy: 'untrusted', baseInstructions: 'You are Travel. Only this root is admitted.',
-    ...(textOnly ? { dynamicTools: [] } : {}) });
+    ...(textOnly ? textOnlyProfile.threadStart : {}) });
   assert.equal(started.approvalPolicy, 'untrusted');
   report.threadApprovalPolicy = started.approvalPolicy;
   rootId = started.thread.id;
   for (const [prompt, expected] of [['ROOT_SPAWN_DENIAL_19', 'ROOT_ONLY_DENIALS_VISIBLE_19'],
     ['ROOT_COMPLETION_43', 'ROOT_COMPLETION_OK_43']]) {
     const { turn } = await rpc('turn/start', { threadId: rootId, input: [{ type: 'text', text: prompt }],
-      ...(textOnly ? { environments: [] } : {}) });
+      ...(textOnly ? textOnlyProfile.turnStart : {}) });
     report.rootTurns++;
     await wait(() => raw.events.some(event => event.method === 'turn/completed' && event.params?.turn.id === turn.id));
     const { thread } = await rpc('thread/read', { threadId: rootId, includeTurns: true });
@@ -222,6 +227,11 @@ try {
   assert.equal(modelRequests, 3); assert.deepEqual(raw.failures, []);
   if (textOnly) {
     assert.deepEqual(await readFile(catalogPath), originalCatalog);
+    const verified = verifyCodexTextOnlyProfile(textOnlyProfile, { codexVersion: '0.154.0', model: 'fixture-model',
+      configReadback: effectiveConfig, catalogContent: originalCatalog,
+      commandedConfigContent });
+    assert.equal(verified.completionEligible, false);
+    report.textOnlyProfile = verified.version;
     report.modelCatalogUnchanged = true;
     report.forbiddenDispatchesRejected = probes.length;
   }

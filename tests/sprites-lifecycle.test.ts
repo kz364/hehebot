@@ -50,6 +50,18 @@ describe('provider-managed Sprite idle lifecycle', () => {
     expect(provider.calls).toEqual([{ action: 'wake', epoch: 1 }]);
     expect(provider.observation.executionStopped).toBe(false);
   });
+  it('does not wake the old Sprite when its reference changes during observation', async () => {
+    const run = enqueue(), replacement = { ...ref, id: 'different-sprite' };
+    provider.observe = async () => {
+      f.db.exec('UPDATE lifecycle SET provider_ref_json=?', JSON.stringify(replacement));
+      return provider.observation;
+    };
+    await life.drive(provider);
+    expect(provider.calls).toEqual([]);
+    expect(life.get()).toMatchObject({ phase: 'STOPPED', epoch: 0, provider_ref_json: JSON.stringify(replacement) });
+    expect(f.store.run(run).status).toBe('queued');
+    expect(f.db.all('SELECT * FROM controller_operations')).toEqual([]);
+  });
   it('clean commit permits idle, revokes old identity and does not call stop', async () => {
     const { identity, run } = await completeAndPermitIdle();
     expect(f.store.run(run).status).toBe('completed');

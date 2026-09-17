@@ -312,14 +312,16 @@ export class LifecycleCore {
    if(!queued||!['STOPPED','IDLE_PERMITTED'].includes(state.phase))return;
    requireThat(state.phase==='IDLE_PERMITTED'||state.epoch===0,'CAPABILITY_UNAVAILABLE','Existing ownership requires a clean idle handoff.');
    requireThat(!this.store.db.all("SELECT id FROM runs WHERE status IN ('claimed','running','finishing','cancelling') LIMIT 1").length&&!this.store.db.all("SELECT id FROM operations WHERE status!='settled' LIMIT 1").length,'CAPABILITY_UNAVAILABLE','Live work prevents idle admission.');
-   const idleObservation=await provider.observe(ref);state=this.get();
+   const observedState=state,idleObservation=await provider.observe(ref);state=this.get();
    // Observation is an await boundary. A different alarm/boot may have won.
+   if(state.epoch!==observedState.epoch||state.boot_id!==observedState.boot_id||state.provider_ref_json!==observedState.provider_ref_json||state.provider_operation_id!==observedState.provider_operation_id)return;
    if(!['STOPPED','IDLE_PERMITTED'].includes(state.phase)||!this.nextClaimableRun())return;
    requireThat(provider.capabilities.explicitWake&&idleObservation.persistentState==='retained'&&(idleObservation.phase==='running'||idleObservation.executionPaused===true),'CAPABILITY_UNAVAILABLE','The same persistent runtime is not confirmed available.');
    await this.requestWake(provider,ref,state);return;
   }
-  const observation=await provider.observe(ref);
+  const observedState=state,observation=await provider.observe(ref);
   state=this.get();
+  if(state.epoch!==observedState.epoch||state.boot_id!==observedState.boot_id||state.provider_ref_json!==observedState.provider_ref_json||state.provider_operation_id!==observedState.provider_operation_id)return;
   if(observation.executionStopped&&['STOPPING','STOP_COMMITTED','RECOVERY_REQUIRED'].includes(state.phase)){this.observeStopped(observation);state=this.get();}
   if(state.phase==='STOPPED'&&this.nextClaimableRun()){
    requireThat(provider.capabilities.explicitWake&&provider.capabilities.explicitStop&&provider.capabilities.confirmedStop,'CAPABILITY_UNAVAILABLE','This provider needs a verified lifecycle bridge before execution.');

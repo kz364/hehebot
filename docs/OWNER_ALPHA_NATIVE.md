@@ -41,6 +41,15 @@ extension audit, live ChatGPT behavior or permission to close historical tasks.
 Runtime admission, receipt construction, output identity, coverage, Worker gates,
 observation-loss handling and safe session lifecycle still need separate work.
 
+The shared `runtime/codex-text-only.mjs` constructor now supplies the actual startup
+CLI overrides and thread/turn fields exercised by this fixture. Its immutable
+binding covers the selected model, absolute catalog path and exact catalog/config
+bytes. Verification rejects drift, enabled optional tool readback and inherited
+notify/MCP settings. The genuine-catalog/account flags are caller attestations;
+this helper does not itself authenticate or validate upstream catalog provenance.
+The synthetic exception must be explicit and cannot be mixed with genuine mode.
+Neither construction nor verification grants completion eligibility.
+
 The script imports the existing transport (including its sanitized environment
 and default-denied callbacks). It creates a private disposable home under
 `.local/owner-alpha-native-*`, a workspace, and one loopback scripted provider.

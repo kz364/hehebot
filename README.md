@@ -4,7 +4,7 @@ Hehebot is a personal-assistant control plane with a dedicated portal, durable C
 
 The only supported execution harness is **Codex app-server 0.154.0**. Fly Sprites is the selected initial runtime provider. The optional Electron desktop shell displays the remote portal and does not run an agent locally.
 
-**Current status:** a bounded authenticated owner-alpha chat, read-only routine lookup and persisted provisional reply have been observed locally, alongside scripted integration fixtures. Production execution gates remain false; no cloud deployment has occurred. A root Codex turn completing is not proof that tools, children, effects, output delivery, or persistence have settled.
+**Current status:** the protected cloud portal/control plane is deployed and authenticated state reads work. A hosted chat reply persisted as provisional output, but task completion failed and remains recovery-required. Local restricted-profile and integration fixtures are preparation, not completed hosted chat. Production execution gates remain false. A root Codex turn completing is not proof that tools, children, effects, output delivery, or persistence have settled.
 
 ## Start here
 

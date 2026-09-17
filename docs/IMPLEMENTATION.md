@@ -4,6 +4,58 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Text-only profile integration (2026-09-17, local/unpublished): the shared
+`codex-text-only-v1` constructor supplies the actual CLI overrides, thread model/
+empty dynamic tools and turn empty environments used by the native fixture.
+Host review removed duplicated fixture configuration, added absolute catalog-path
+binding, rejected mixed synthetic/genuine attestations and contradictory optional
+tool readback. Catalog provenance/account checks remain caller attestations, not
+proof produced by this helper. Native validation still returns completionEligible
+false. Profile/transport28 tests and all three native owner-alpha modes pass;
+text-only has17 exact unsupported calls, empty tools on every provider request,
+two root outputs and unchanged private config/catalog. No historical attempt gains
+eligibility. Runtime/service admission, coverage and backend completion remain
+unimplemented. Logs: .local/text-only-profile-{native,neighbor,normal,runtime}.log.
+
+The retained-session review also found and fixed a concrete lifecycle race:
+provider observation awaits now compare epoch, boot ID, provider reference and
+controller operation against captured ownership before any cleanup/wake/stop.
+Tests cover changed recovery generation, same-epoch identity changes, matching
+positive retirement and an idle Sprite reference change; concurrent state is
+preserved. This does not change provider stop semantics or authorize retirement.
+Focused lifecycle/provider/typecheck evidence is in
+.local/text-only-profile-lifecycle.log (126 tests). Combined verifier exits0 with
+1562 backend/449 runtime tests,27 Worker HTTP checks plus native/browser/service/
+build; desktop16 pass. Logs .local/text-only-profile-{combined,desktop}.log.
+
+Retirement evidence remains distinct from task completion. Official
+[Sprites lifecycle](https://docs.sprites.dev/concepts/lifecycle/) says actual cold
+discards all process memory, but also calls the transition unobservable. The
+[Get Sprite API](https://sprites.dev/api/sprites/) exposes cold/warm/running
+without a post-generation observation ordering contract. The documented
+[exec kill](https://sprites.dev/api/sprites/exec) signals a process group; it does
+not promise escaped-descendant termination. No historical exec-session ID was
+retained; an owner-alpha session ID is not a provider exec ID. Fresh cold GET alone
+must not clear global custody. Next retirement work needs immutable Sprite identity,
+expected epoch/boot, no-restart fencing and authoritative post-execution memory-loss
+evidence. Even that would retire processes only: old output stays provisional,
+unknown effects/locks persist and no historical replay is allowed.
+
+One authorized read-only exec probe (timeout10s, exit0) reused the existing Sprite:
+kernel btime15:10:31Z, observed16:29:38Z, uptime4747.40s, after the failed13:18Z
+attempt. This initially looked promising but does NOT prove a reboot. The
+[Fly forum clarification](https://community.fly.io/t/when-is-a-sprite-actually-cold-reported-cold-sprite-woke-with-its-original-process-running/28288/3)
+explicitly says cold often retains memory and btime updates on resume; reports
+include original processes/boot IDs surviving13–28h of cold status. Current boot
+ID is retained privately in .local/sprite-retirement-kernel-observation.log as a
+baseline, not a retirement receipt. Relevant retained Sprite/hosted logs contain
+no earlier kernel boot ID. Application boot_id is a random UUID and cannot be
+compared to the kernel ID. A verified later kernel-ID change on the same immutable
+Sprite, with no-restart and generation fences, is a possible evidence path;
+repeated cold/btime polling is not. No service change, new model call, credential
+movement, deployment or new paid resource. Probe billing increment and cumulative
+balance remain unverified; existing total $10 authority continues.
+
 Hosted trial outcome (2026-09-17): runtime-only Access app and dedicated service
 credentials passed independent host and Sprite ControlClient tests, including
 owner-binding digest match, wrong/missing bearer401 and public root/state302.

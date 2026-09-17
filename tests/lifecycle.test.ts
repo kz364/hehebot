@@ -433,6 +433,47 @@ describe('drain, stop and takeover races', () => {
     expect(provider.calls.map(c => c.action)).toEqual(['stop', 'wake']);
     expect(life.get()).toMatchObject({ phase: 'BOOTING', epoch: 2, wake_after_stop: 0 });
   });
+  it('does not apply a stopped observation to a replacement recovery epoch and active attempt', async () => {
+    const claim = claimed(), op = operation(claim.run.id); life.submitted(identity, claim.run.id, 1, 'old-root'); life.heartbeat(identity, [op]);
+    f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',provider_operation_id='old-controller-operation'");
+    const provider = new FakeProvider(); provider.setPhase(ref, 'stopped');
+    const observe = provider.observe.bind(provider);
+    provider.observe = async observedRef => {
+      const result = await observe(observedRef), nextBoot = randomUUID();
+      f.db.exec("UPDATE lifecycle SET epoch=2,boot_id=?,provider_ref_json=?,provider_operation_id='new-controller-operation'", nextBoot, JSON.stringify({ ...ref, id: 'replacement-runtime' }));
+      f.db.exec('UPDATE attempts SET epoch=2,boot_id=? WHERE run_id=? AND attempt=1', nextBoot, claim.run.id);
+      return result;
+    };
+    await life.drive(provider);
+    expect(f.db.all('SELECT status,epoch FROM attempts WHERE run_id=?', claim.run.id)).toEqual([{ status: 'running', epoch: 2 }]);
+    expect(f.db.all('SELECT status FROM operations WHERE id=?', op.id)).toEqual([{ status: 'active' }]);
+    expect(f.store.run(claim.run.id).status).toBe('running');
+    expect(provider.calls).toEqual([]);
+  });
+  it.each([
+    ['boot_id', randomUUID()],
+    ['provider_ref_json', JSON.stringify({ ...ref, id: 'replacement-runtime' })],
+    ['provider_operation_id', 'replacement-controller-operation'],
+  ] as const)('discards a stopped observation when same-epoch %s ownership changes', async (field, replacement) => {
+    const claim = claimed(), op = operation(claim.run.id); life.submitted(identity, claim.run.id, 1, 'same-epoch-root'); life.heartbeat(identity, [op]);
+    f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',provider_operation_id='original-controller-operation'");
+    const provider = new FakeProvider(); provider.setPhase(ref, 'stopped');
+    const observe = provider.observe.bind(provider);
+    provider.observe = async observedRef => { const result = await observe(observedRef); f.db.exec(`UPDATE lifecycle SET ${field}=?`, replacement); return result; };
+    await life.drive(provider);
+    expect(f.db.all('SELECT status FROM operations WHERE id=?', op.id)).toEqual([{ status: 'active' }]);
+    expect(f.store.run(claim.run.id).status).toBe('running');
+    expect(provider.calls).toEqual([]);
+  });
+  it('applies a stopped observation when captured lifecycle ownership still matches', async () => {
+    const claim = claimed(), op = operation(claim.run.id); life.submitted(identity, claim.run.id, 1, 'matching-root'); life.heartbeat(identity, [op]);
+    f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',provider_operation_id='matching-controller-operation'");
+    const provider = new FakeProvider(); provider.setPhase(ref, 'stopped');
+    await life.drive(provider);
+    expect(life.get()).toMatchObject({ phase: 'STOPPED', boot_id: null, provider_operation_id: null });
+    expect(f.db.all('SELECT status FROM operations WHERE id=?', op.id)).toEqual([{ status: 'settled' }]);
+    expect(f.store.run(claim.run.id).status).toBe('recovery_required');
+  });
   it('provider-confirmed stop is required before clearing operation leases', () => {
     const claim = claimed(), op = operation(claim.run.id); life.heartbeat(identity, [op]);
     f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
