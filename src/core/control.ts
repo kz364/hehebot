@@ -202,7 +202,9 @@ export class ControlCore {
     // An explicit one-off may run a paused routine, but never changes its schedule
     // or silently duplicates queued, cancelling or uncertain work.
     const blocker=this.routineRunBlockers(routine)[0];if(blocker)throw blocker;
-    return this.enqueue(routine.body.persona_id,routine.body.instructions,commandId,p.id,null);
+    const occurrence=this.options.uuid();
+    this.store.db.exec("INSERT INTO occurrences(id,routine_id,routine_version,nominal_due_at,status,created_at,origin) VALUES(?,?,?,NULL,'queued',?,'manual')",occurrence,p.id,routine.revision,now);
+    return this.enqueue(routine.body.persona_id,routine.body.instructions,commandId,p.id,occurrence);
    }
    case 'routine.delete': {
     const p=command.payload,routine=this.store.get<RoutinePut>(p.id,'routine');
@@ -490,12 +492,12 @@ export class ControlCore {
    if(!current.body.enabled||current.revision!==item.routine_version){this.store.db.exec('DELETE FROM schedule_state WHERE routine_id=?',item.routine_id);return;}
    const ticks=dueOccurrences(current.body,item.next_due_at,now);
    for(const nominal of ticks.selected){
-    if(this.store.db.all('SELECT id FROM occurrences WHERE routine_id=? AND routine_version=? AND nominal_due_at=?',current.id,current.revision,nominal).length)continue;
+    if(this.store.db.all("SELECT id FROM occurrences WHERE routine_id=? AND routine_version=? AND nominal_due_at=? AND origin='scheduled'",current.id,current.revision,nominal).length)continue;
     const id=this.options.uuid();
-    const busy=this.store.db.all<Run>("SELECT * FROM runs WHERE routine_id=? AND status IN ('claimed','running','finishing','queued','waiting')",current.id);
+    const busy=this.store.db.all<Run&{occurrence_origin:string|null}>("SELECT r.*,o.origin AS occurrence_origin FROM runs r LEFT JOIN occurrences o ON o.id=r.occurrence_id WHERE r.routine_id=? AND r.status IN ('claimed','running','finishing','queued','waiting')",current.id);
     const skip=busy.length>0&&current.body.policy.overlap==='skip';
     if(busy.length&&current.body.policy.overlap==='queue_one'){
-     for(const run of busy.filter(x=>x.occurrence_id&&['queued','waiting'].includes(x.status))){this.store.db.exec("UPDATE runs SET status='cancelled',updated_at=? WHERE id=?",now,run.id);if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='skipped' WHERE id=?",run.occurrence_id);}
+     for(const run of busy.filter(x=>x.occurrence_origin==='scheduled'&&['queued','waiting'].includes(x.status))){this.store.db.exec("UPDATE runs SET status='cancelled',updated_at=? WHERE id=?",now,run.id);if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='skipped' WHERE id=?",run.occurrence_id);}
     }
     this.store.db.exec('INSERT INTO occurrences(id,routine_id,routine_version,nominal_due_at,status,coalesced_count,created_at) VALUES(?,?,?,?,?,?,?)',id,current.id,current.revision,nominal,skip?'skipped':'queued',ticks.skipped,now);
     if(!skip)this.enqueue(current.body.persona_id,current.body.instructions,null,current.id,id);

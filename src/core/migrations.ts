@@ -85,5 +85,31 @@ export function migrateApplication(db:Database,now:string):void {
   db.exec("ALTER TABLE attempts ADD COLUMN captured_routine_revision INTEGER CHECK(captured_routine_revision IS NULL OR (typeof(captured_routine_revision)='integer' AND captured_routine_revision>0 AND captured_routine_revision<=9007199254740991))");
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(12,?)',now);
  });
- requireThat([11,12].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===11)version=12;
+ if(version===12)db.transaction(()=>{
+  // runs references occurrences with NO ACTION, never CASCADE/SET NULL. Keep
+  // those references and FK enforcement intact while replacing the parent.
+  db.exec('PRAGMA defer_foreign_keys=ON');
+  try{
+   db.exec(`CREATE TABLE occurrences_v13 (
+ id TEXT PRIMARY KEY, routine_id TEXT NOT NULL REFERENCES objects(id), routine_version INTEGER NOT NULL,
+ nominal_due_at TEXT, status TEXT NOT NULL CHECK(status IN ('queued','claimed','completed','skipped','superseded','failed')),
+ coalesced_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL,
+ origin TEXT NOT NULL DEFAULT 'scheduled' CHECK(origin IN ('scheduled','manual')),
+ CHECK((origin='scheduled' AND nominal_due_at IS NOT NULL) OR (origin='manual' AND nominal_due_at IS NULL)),
+ UNIQUE(routine_id,routine_version,nominal_due_at)
+)`);
+   db.exec("INSERT INTO occurrences_v13 SELECT id,routine_id,routine_version,nominal_due_at,status,coalesced_count,created_at,'scheduled' FROM occurrences");
+   db.exec('DROP TABLE occurrences');
+   db.exec('ALTER TABLE occurrences_v13 RENAME TO occurrences');
+   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(13,?)',now);
+   requireThat(db.all('PRAGMA foreign_key_check').length===0,'SCHEMA_MISMATCH','Occurrence migration must preserve foreign keys.',503);
+  }finally{
+   // SQLite retains the DROP's deferred violation counter after a valid rebuild.
+   // OFF clears it, not validates it: the scan above is mandatory; any error
+   // still escapes the callback and rolls back the entire transaction.
+   db.exec('PRAGMA defer_foreign_keys=OFF');
+  }
+ });
+ requireThat([12,13].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

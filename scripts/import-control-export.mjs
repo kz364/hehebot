@@ -9,12 +9,13 @@ import { snapshotControl, verifyControl } from './backup-control.mjs';
 
 export const MAX_EXPORT_BYTES = 4 * 1024 * 1024;
 export const MAX_EXPORT_ROWS = 10000;
-const sqlHash = '04c9273362e9b7a975804e2e04a2258fdcb9a8e2a6c99282343c4f37f3349830';
+const sqlHash = '8d72d4d0ed1c2563b6d87d3865bb49d614b9737044bfc54745bb1a4a566ce6a1';
 const schemaPins = {
   9: '15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c',
   10: '682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4',
   11: '8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a',
   12: 'a333b2b0ca9d5e7572e84d8aa3f8210b99e3b946a831bbd6dd4ff231173d0bf6',
+  13: '0eaf3801cdd090fbeeb7d2d362f19c1e7157ae01bb7a09264409bbf504a17d2f',
 };
 const hash = value => createHash('sha256').update(value).digest('hex');
 /** @returns {never} */
@@ -110,7 +111,7 @@ export async function importControlExport(exportFile, snapshotDirectory) {
     const input = parseExport(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, size)));
     keys(input, ['format', 'version', 'createdAt', 'schemaSha256', 'schemaVersions', 'tables']);
     const latest = Array.isArray(input.schemaVersions) ? input.schemaVersions.at(-1) : null;
-    if (input.format !== 'hehebot-control-export' || input.version !== 1 || ![9, 10, 11, 12].includes(latest) || input.schemaSha256 !== schemaPins[latest] ||
+    if (input.format !== 'hehebot-control-export' || input.version !== 1 || ![9, 10, 11, 12, 13].includes(latest) || input.schemaSha256 !== schemaPins[latest] ||
         input.schemaVersions.length < 1 || input.schemaVersions.length > latest || !input.schemaVersions.every((version, i) =>
           Number.isInteger(version) && version >= 1 && version <= latest && (!i || version > input.schemaVersions[i - 1])) ||
         typeof input.createdAt !== 'string' ||
@@ -126,6 +127,12 @@ export async function importControlExport(exportFile, snapshotDirectory) {
       db.exec(sql.toString('utf8'));
       // Reconstruct legacy snapshots without inventing receipts or upgrading
       // their history. Only this disposable, empty local staging DB is changed.
+      if (latest < 13) db.exec(`DROP TABLE occurrences; CREATE TABLE occurrences (
+ id TEXT PRIMARY KEY, routine_id TEXT NOT NULL REFERENCES objects(id), routine_version INTEGER NOT NULL,
+ nominal_due_at TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('queued','claimed','completed','skipped','superseded','failed')),
+ coalesced_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL,
+ UNIQUE(routine_id,routine_version,nominal_due_at)
+)`);
       if (latest < 12) db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision');
       if (latest < 11) db.exec('DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');
       if (latest === 9) db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json');

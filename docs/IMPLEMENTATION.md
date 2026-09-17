@@ -4,6 +4,23 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Manual occurrence identity integrated (2026-09-17 Asia/Jakarta): host implements
+atomic manual occurrence/run/receipt creation, existing exact-key deduplication,
+identity retention across retries and explicit scheduled-origin budget/overlap
+predicates. V13 schema/compatibility integrated;97 host lifecycle/migration/import/
+budget tests and desktop16 pass; earlier47 routine tests and typecheck pass.
+Exact legacy v9–12 exports/imports retain original schema/history; v8+ backup and
+inspection remain supported. FK scan follows the final version-marker write
+before clearing SQLite's stale deferred counter. Regression tests inject failures
+after table replacement and final write, preserving referenced runs/attempts.
+Full verifier `.local/manual-occurrence-combined.log` passed1464 backend/434 runtime,
+actual local Worker startup migration/reopen, browser/native/service/build; exit0.
+The Worker check preserves live referenced rows across restart and second reopen,
+asserts exact fresh/migrated schema and failed-version/final-write rollback.
+Paused run-once remains non-resuming;
+manual occurrences have no nominal schedule time and no historical backfill.
+No live/shared migration or model/provider call is implied.
+
 Durable attempt attribution integrated (2026-09-17 Asia/Jakarta): host writes
 captured revision with root claim, inherits exact parent attempt for same-persona
 children, leaves cross-persona/legacy values null, and shows latest3 stored pairs.

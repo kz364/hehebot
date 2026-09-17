@@ -2,6 +2,7 @@ import {describe,it,expect} from 'vitest';
 import {DatabaseSync} from 'node:sqlite';
 import {migrateApplication} from '../src/core/migrations';
 import type {Database,SqlValue} from '../src/core/store';
+import {legacyOccurrencesSql} from './legacy-occurrences';
 function legacy(){
  const sqlite=new DatabaseSync(':memory:');
  sqlite.exec(`PRAGMA foreign_keys=ON;
@@ -15,6 +16,7 @@ function legacy(){
  INSERT INTO commands(id,payload_json) VALUES('command-1','{"text":"synthetic preserved command"}');
  INSERT INTO runs VALUES('run-1','waiting','{"synthetic":"preserve context"}','command-1');
  INSERT INTO objects VALUES('object-1','{"synthetic":"preserve object"}');`);
+ sqlite.exec(legacyOccurrencesSql);
  const db:Database={all:<T>(sql:string,...values:SqlValue[])=>sqlite.prepare(sql).all(...values) as T[],exec:(sql:string,...values:SqlValue[])=>{sqlite.prepare(sql).run(...values);},transaction:<T>(fn:()=>T)=>{sqlite.exec('BEGIN');try{const value=fn();sqlite.exec('COMMIT');return value;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
  return{sqlite,db};
 }
@@ -27,7 +29,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual([{id:'run-1',status:'waiting',context_json:'{"synthetic":"preserve context"}',command_id:'command-1',role:'coordinator',parent_run_id:null,title:null}]);
    expect(db.all("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('native_task_links','resource_locks','task_followups','skill_proposals','skill_enablements')")).toHaveLength(5);
    expect(db.all('SELECT * FROM room_publications')).toEqual([]);
-   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(12);
+   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(13);
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=2')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=3')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=4')[0].applied_at).toBe('2026-09-10T00:00:00Z');
@@ -55,7 +57,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual(before);
    sqlite.exec('DROP INDEX room_publications_cause');
    migrateApplication(db,'2026-09-12T00:00:00Z');
-   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:12}]);
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:13}]);
   }finally{sqlite.close();}
  });
  it('preserves v7 followups and foreign keys, and rolls back a failed table replacement',()=>{
@@ -132,7 +134,7 @@ describe('application v1 migration',()=>{
  it('migrates v11 atomically without inferring historical attribution and reruns without writes',()=>{
   const {db,sqlite}=legacy();try{
    migrateApplication(db,'2026-09-10T00:00:00Z');
-   sqlite.exec(`ALTER TABLE attempts DROP COLUMN captured_routine_revision; DELETE FROM schema_versions WHERE version=12;
+   sqlite.exec(`ALTER TABLE attempts DROP COLUMN captured_routine_revision; DELETE FROM schema_versions WHERE version>=12;
     INSERT INTO attempts(run_id,attempt,status) VALUES('run-1',3,'running'),('run-1',2,'completed');
     UPDATE runs SET context_json='{"routine":{"id":"routine-19","revision":73}}';
     CREATE TRIGGER reject_v12 BEFORE INSERT ON schema_versions WHEN NEW.version=12 BEGIN SELECT RAISE(ABORT,'synthetic v12 failure'); END`);

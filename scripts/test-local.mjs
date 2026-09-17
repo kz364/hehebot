@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { importControlExport } from './import-control-export.mjs';
 import { verifyControl } from './backup-control.mjs';
+await import('./test-schema-migration.mjs');
 const directory=await mkdtemp(join(tmpdir(),'hehe-worker-test-'));
 const child=spawn(process.execPath,['node_modules/wrangler/bin/wrangler.js','dev','--local','--env','local','--ip','127.0.0.1','--port','0','--persist-to',directory],{env:{...process.env,WRANGLER_LOG_PATH:join(directory,'logs'),WRANGLER_SEND_METRICS:'false'},stdio:['ignore','pipe','pipe']});
 let logs='';child.stdout.on('data',x=>{logs+=x.toString();});child.stderr.on('data',x=>{logs+=x.toString();});
@@ -50,7 +51,7 @@ try{
  for(let i=0;i<24;i++){const result=await send('persona.put',{id:crypto.randomUUID(),expected_revision:0,name:`Export fixture ${i}`,instructions:'Synthetic export data: '+String(i)+':'+ 'x'.repeat(15500),tool_policy_ids:[],archived:true});assert.equal(result.value.status,'applied');}
  const exported=await fetch(base+'/v1/export/control');assert.equal(exported.status,200,'Bounded application export must succeed');assert.match(exported.headers.get('Content-Disposition'),/attachment/);assert.match(exported.headers.get('Cache-Control'),/no-store/);
  const text=await exported.text();assert.ok(Buffer.byteLength(text)>1024*1024&&Buffer.byteLength(text)<=4*1024*1024,'Exercise streamed RPC above the plain-value size limit');
- const data=JSON.parse(text);assert.equal(data.format,'hehebot-control-export');assert.equal(data.schemaSha256,'a333b2b0ca9d5e7572e84d8aa3f8210b99e3b946a831bbd6dd4ff231173d0bf6');assert.ok(data.tables.find(table=>table.name==='runs').rows.some(row=>row[0].value===sent.value.resource_id));assert.ok(data.tables.some(table=>table.name==='flight_restore_deadlines'));assert.equal(data.tables.some(table=>table.name.startsWith('_cf_')||table.name.startsWith('__miniflare')),false);checks++;
+ const data=JSON.parse(text);assert.equal(data.format,'hehebot-control-export');assert.equal(data.schemaSha256,'0eaf3801cdd090fbeeb7d2d362f19c1e7157ae01bb7a09264409bbf504a17d2f');assert.ok(data.tables.find(table=>table.name==='runs').rows.some(row=>row[0].value===sent.value.resource_id));assert.ok(data.tables.some(table=>table.name==='flight_restore_deadlines'));assert.equal(data.tables.some(table=>table.name.startsWith('_cf_')||table.name.startsWith('__miniflare')),false);checks++;
  const exportFile=join(directory,'control-export.json'),snapshot=join(directory,'reconstructed');
  await writeFile(exportFile,text,{mode:0o600});
  assert.equal((await importControlExport(exportFile,snapshot)).activation_allowed,false);

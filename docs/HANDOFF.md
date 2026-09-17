@@ -4,6 +4,22 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Integrated: manual routine occurrence identity (UX12). Atomic routine.run
+creation, stable retry identity, explicit scheduled budget/overlap predicates.
+Origin scheduled/manual defaults scheduled; manual nominal time is null.
+Historical rows stay scheduled; legacy manual runs receive no invented identity.
+Schema worker T-01a0ad1a-f103-75e9-a19f-fe26a6eacbe3 finished and both patches
+are integrated. Final FK scan follows version write; SQLite/Worker regression
+includes final-write orphan rollback.97 host integrated tests and desktop16 pass;
+earlier47 routine tests/typecheck pass. Full verifier passed1464 backend/434 runtime
+plus real Worker migration/reopen, browser/native/service/build, exit0 in
+.local/manual-occurrence-combined.log. No active worker or verification process.
+Next inspect
+routine-history execution-versus-delivery metadata (attempt/result/outbox records),
+without implying root completion settles effects or proves owner receipt.
+Outbox identifies run, not attempt: never attribute an old delivery to a retry.
+No live/shared migration, deployment or additional spending authority.
+
 Integrated: durable per-attempt routine revision capture. Schema worker
 T-01a0ad1a-f103-75e9-a19f-fe26a6eacbe3 finished v12 migration/pins and legacy
 compatibility; both verified patches applied. Host claim/child/history changes

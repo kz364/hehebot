@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from 'vitest';
 import { exportControl } from '../src/core/control-export';
 import { fixture, bot } from './helpers';
 import type { Database } from '../src/core/store';
+import {legacyOccurrences} from './legacy-occurrences';
 
 let f:ReturnType<typeof fixture>;
 beforeEach(()=>{f=fixture();});
@@ -21,7 +22,7 @@ it('exports one read transaction with exact typed values, int64 and deleted-even
   transaction:fn=>f.db.transaction(()=>{transactions++;inside=true;try{return fn();}finally{inside=false;}}),
  };
  const exported=JSON.parse(exportControl(db,now));
- expect(transactions).toBe(1);expect(exported).toMatchObject({format:'hehebot-control-export',version:1,createdAt:now,schemaVersions:[12],schemaSha256:'a333b2b0ca9d5e7572e84d8aa3f8210b99e3b946a831bbd6dd4ff231173d0bf6'});
+ expect(transactions).toBe(1);expect(exported).toMatchObject({format:'hehebot-control-export',version:1,createdAt:now,schemaVersions:[13],schemaSha256:'0eaf3801cdd090fbeeb7d2d362f19c1e7157ae01bb7a09264409bbf504a17d2f'});
  const table=(name:string)=>exported.tables.find((value:{name:string})=>value.name===name);
  expect(table('rate_limits')).toEqual({name:'rate_limits',columns:['subject','window_start','count'],rows:[[
   {type:'text',value:'huge'},{type:'integer',value:'-9223372036854775808'},{type:'integer',value:'9223372036854775807'},
@@ -47,19 +48,21 @@ it.each(['raw','escaped','rows'])('rejects oversized %s before returning a parti
  expect(()=>exportControl(f.db,f.core.now())).toThrowError(expect.objectContaining({code:'EXPORT_LIMIT'}));
 });
 
-it.each([9,10,11])('keeps v%s exports readable without migration or fabricated attribution',version=>{
- f.db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision');
+it.each([9,10,11,12])('keeps v%s exports readable without migration or fabricated attribution',version=>{
+ legacyOccurrences(f.db.sqlite);
+ if(version<12)f.db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision');
  if(version<11){
   f.db.exec('DROP TABLE native_task_links');
   f.db.exec('CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');
  }
  if(version===9)f.db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json');
- f.db.exec('UPDATE schema_versions SET version=? WHERE version=12',version);
+ f.db.exec('UPDATE schema_versions SET version=? WHERE version=13',version);
  const before=f.db.all('SELECT total_changes() AS n');
  const exported=JSON.parse(exportControl(f.db,f.core.now()));
- expect(exported).toMatchObject({schemaVersions:[version],schemaSha256:version===9?'15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c':version===10?'682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4':'8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a'});
+ expect(exported).toMatchObject({schemaVersions:[version],schemaSha256:version===9?'15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c':version===10?'682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4':version===11?'8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a':'a333b2b0ca9d5e7572e84d8aa3f8210b99e3b946a831bbd6dd4ff231173d0bf6'});
  expect(exported.tables.find((t:{name:string})=>t.name==='attempts').columns.includes('coordinator_release_json')).toBe(version>=10);
- expect(exported.tables.find((t:{name:string})=>t.name==='attempts').columns.includes('captured_routine_revision')).toBe(false);
+ expect(exported.tables.find((t:{name:string})=>t.name==='attempts').columns.includes('captured_routine_revision')).toBe(version>=12);
+ expect(exported.tables.find((t:{name:string})=>t.name==='occurrences').columns.includes('origin')).toBe(false);
  expect(f.db.all('SELECT total_changes() AS n')).toEqual(before);
 });
 

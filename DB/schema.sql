@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (12, '2026-09-17T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (13, '2026-09-17T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -50,10 +50,12 @@ CREATE TABLE consumer_cursors (
  delivered_sequence INTEGER NOT NULL DEFAULT 0, consumed_sequence INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(consumer_id,conversation_id), CHECK(consumed_sequence <= delivered_sequence)
 );
-CREATE TABLE occurrences (
+CREATE TABLE "occurrences" (
  id TEXT PRIMARY KEY, routine_id TEXT NOT NULL REFERENCES objects(id), routine_version INTEGER NOT NULL,
- nominal_due_at TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('queued','claimed','completed','skipped','superseded','failed')),
+ nominal_due_at TEXT, status TEXT NOT NULL CHECK(status IN ('queued','claimed','completed','skipped','superseded','failed')),
  coalesced_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL,
+ origin TEXT NOT NULL DEFAULT 'scheduled' CHECK(origin IN ('scheduled','manual')),
+ CHECK((origin='scheduled' AND nominal_due_at IS NOT NULL) OR (origin='manual' AND nominal_due_at IS NULL)),
  UNIQUE(routine_id,routine_version,nominal_due_at)
 );
 CREATE TABLE runs (

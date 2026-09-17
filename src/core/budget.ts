@@ -143,7 +143,7 @@ export class BudgetLedger {
     if (!ids.length) return { sql: '0', bindings: [] };
     return { sql: `COALESCE((r.role='coordinator' AND r.parent_run_id IS NULL AND r.current_attempt=0
       AND r.status IN ('queued','waiting') AND r.routine_id IN (${ids.map(() => '?').join(',')})
-      AND r.occurrence_id IS NOT NULL AND EXISTS(SELECT 1 FROM occurrences bo WHERE bo.id=r.occurrence_id AND bo.routine_id=r.routine_id)),0)`, bindings: ids };
+      AND r.occurrence_id IS NOT NULL AND EXISTS(SELECT 1 FROM occurrences bo WHERE bo.id=r.occurrence_id AND bo.routine_id=r.routine_id AND bo.origin='scheduled')),0)`, bindings: ids };
   }
 
   private exception(revision: number): BudgetAdmissionPredicate {

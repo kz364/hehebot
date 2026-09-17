@@ -9,6 +9,7 @@ import { importControlExport, MAX_EXPORT_BYTES } from '../scripts/import-control
 import { verifyControl } from '../scripts/backup-control.mjs';
 import { exportControl } from '../src/core/control-export';
 import type { SqlValue } from '../src/core/store';
+import {legacyOccurrences} from './legacy-occurrences';
 
 type Cell = { type: string; value: string | null };
 type Table = { name: string; columns: string[]; rows: Cell[][] };
@@ -68,10 +69,43 @@ beforeEach(async () => {
     INSERT INTO flight_restore_deadlines VALUES('leg-83',2,'2026-09-20T21:00:00.000Z','Asia/Jakarta','2026-09-19T21:00:00.000Z','routine-29','source-43','outcome_unknown','child-83','{"observation":"${canary}"}');
   `);
   wire = { format: 'hehebot-control-export', version: 1, createdAt: originalTime,
-    schemaSha256: 'a333b2b0ca9d5e7572e84d8aa3f8210b99e3b946a831bbd6dd4ff231173d0bf6', schemaVersions: [12], tables: tables(db) };
+    schemaSha256: '0eaf3801cdd090fbeeb7d2d362f19c1e7157ae01bb7a09264409bbf504a17d2f', schemaVersions: [13], tables: tables(db) };
   await save();
 });
 afterEach(async () => { db.close(); await rm(directory, { recursive: true, force: true }); });
+
+it('roundtrips distinct manual null-due occurrences and their exact run references', async () => {
+  db.exec(`INSERT INTO objects VALUES('routine-17','routine',19,'{}',NULL,'t1','t7');
+    INSERT INTO occurrences(id,routine_id,routine_version,nominal_due_at,status,created_at,origin) VALUES
+    ('manual-43','routine-17',7,NULL,'completed','t3','manual'),('manual-89','routine-17',7,NULL,'failed','t4','manual'),
+    ('scheduled-53','routine-17',7,'2026-09-17T03:15:00.000Z','completed','t2','scheduled');
+    UPDATE runs SET routine_id='routine-17',occurrence_id=CASE id WHEN 'root-29' THEN 'manual-43' ELSE 'manual-89' END`);
+  const exported = exportControl({
+    all: <T>(sql: string, ...values: SqlValue[]) => db.prepare(sql).all(...values) as T[],
+    exec: () => { throw Error('Read only'); },
+    transaction: <T>(fn: () => T) => { db.exec('BEGIN'); try { return fn(); } finally { db.exec('ROLLBACK'); } },
+  }, originalTime);
+  await writeFile(input, exported); await importControlExport(input, destination);
+  const copy = new DatabaseSync(join(destination, 'control.sqlite'), { readOnly: true });
+  try {
+    expect(copy.prepare('SELECT id,origin,nominal_due_at FROM occurrences ORDER BY id').all()).toEqual([
+      {id:'manual-43',origin:'manual',nominal_due_at:null},{id:'manual-89',origin:'manual',nominal_due_at:null},
+      {id:'scheduled-53',origin:'scheduled',nominal_due_at:'2026-09-17T03:15:00.000Z'},
+    ]);
+    expect(copy.prepare('SELECT id,occurrence_id FROM runs ORDER BY id').all()).toEqual([
+      {id:'child-83',occurrence_id:'manual-89'},{id:'root-29',occurrence_id:'manual-43'},
+    ]);
+    expect(copy.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+  } finally { copy.close(); }
+});
+
+it.each([['scheduled',null],['manual','due'],['unknown',null],[null,null]])('rejects imported origin/due mismatch %s/%s', async (origin,due) => {
+  db.exec("INSERT INTO occurrences(id,routine_id,routine_version,nominal_due_at,status,created_at) VALUES('occurrence','persona-73',7,'due','completed','t3')");
+  wire.tables=tables(db);
+  Object.assign(field('occurrences','origin'),{type:origin===null?'null':'text',value:origin});
+  Object.assign(field('occurrences','nominal_due_at'),{type:due===null?'null':'text',value:due});
+  await save(); await rejected();
+});
 
 it.each([1, 73, 9007199254740991])('roundtrips captured revision %s alongside an unknown historical attempt', async revision => {
   db.prepare("UPDATE attempts SET captured_routine_revision=? WHERE run_id='root-29'").run(revision);
@@ -151,12 +185,19 @@ it.each(['same', 'parent', 'attempt', 'persona'])('roundtrips shared thread turn
   } finally { copy.close(); }
 });
 
-it.each([9, 10, 11, 12])('preserves schema%s migration history and flight deadlines without inventing attribution or upgrading legacy snapshots', async version => {
+it.each([9, 10, 11, 12, 13])('preserves schema%s migration history and referenced occurrences without inventing attribution or upgrading legacy snapshots', async version => {
+  db.exec(`INSERT INTO objects VALUES('routine-17','routine',19,'{}',NULL,'t1','t7');
+    INSERT INTO occurrences(id,routine_id,routine_version,nominal_due_at,status,coalesced_count,created_at) VALUES('occurrence-43','routine-17',7,'2026-09-17T03:15:00.000Z','completed',5,'t3');
+    UPDATE runs SET occurrence_id='occurrence-43',routine_id='routine-17' WHERE id='root-29'`);
+  if (version < 13) {
+    legacyOccurrences(db);
+    wire.schemaSha256 = 'a333b2b0ca9d5e7572e84d8aa3f8210b99e3b946a831bbd6dd4ff231173d0bf6';
+  }
   if (version < 12) {
     db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision');
     wire.schemaSha256 = '8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a';
   }
-  db.prepare('UPDATE schema_versions SET version=? WHERE version=12').run(version);
+  db.prepare('UPDATE schema_versions SET version=? WHERE version=13').run(version);
   if (version < 11) {
     const links = db.prepare('SELECT * FROM native_task_links').all();
     db.exec('DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');
@@ -174,6 +215,9 @@ it.each([9, 10, 11, 12])('preserves schema%s migration history and flight deadli
   const copy = new DatabaseSync(join(destination, 'control.sqlite'), { readOnly: true });
   try {
     expect(copy.prepare('SELECT * FROM schema_versions ORDER BY version').all()).toEqual(db.prepare('SELECT * FROM schema_versions ORDER BY version').all());
+    expect(copy.prepare('SELECT * FROM occurrences').all()).toEqual(db.prepare('SELECT * FROM occurrences').all());
+    expect(copy.prepare("SELECT occurrence_id FROM runs WHERE id='root-29'").get()).toEqual({occurrence_id:'occurrence-43'});
+    expect(copy.prepare('PRAGMA table_info(occurrences)').all().some(row => row.name === 'origin')).toBe(version >= 13);
     expect(copy.prepare('SELECT * FROM attempts ORDER BY run_id').all()).toEqual(db.prepare('SELECT * FROM attempts ORDER BY run_id').all());
     expect(copy.prepare('PRAGMA table_info(attempts)').all().some(row => row.name === 'coordinator_release_json')).toBe(version >= 10);
     expect(copy.prepare('PRAGMA table_info(attempts)').all().some(row => row.name === 'captured_routine_revision')).toBe(version >= 12);
@@ -182,14 +226,14 @@ it.each([9, 10, 11, 12])('preserves schema%s migration history and flight deadli
   } finally { copy.close(); }
 });
 
-it.each([[], [8], [12, 8], [8, 8, 12], [0, 12], [1.5, 12], [13], [8, 12], [9], [10], [11]].map(versions => ({ versions })))('rejects invalid or row-mismatched header history $versions', async ({ versions }) => {
+it.each([[], [8], [13, 8], [8, 8, 13], [0, 13], [1.5, 13], [14], [8, 13], [9], [10], [11], [12]].map(versions => ({ versions })))('rejects invalid or row-mismatched header history $versions', async ({ versions }) => {
   wire.schemaVersions = versions; await save(); await rejected();
 });
 
 it('rejects omitted history rows in the header and missing flight data tables', async () => {
   db.prepare('INSERT INTO schema_versions VALUES(?,?)').run(8, '2026-08-17T01:23:45.678Z');
-  wire.tables = tables(db); await save(); await rejected(); // Header [12] omits real row8.
-  wire.schemaVersions = [8, 12]; wire.tables = wire.tables.filter(t => t.name !== 'flight_restore_deadlines');
+  wire.tables = tables(db); await save(); await rejected(); // Header [13] omits real row8.
+  wire.schemaVersions = [8, 13]; wire.tables = wire.tables.filter(t => t.name !== 'flight_restore_deadlines');
   await save(); await rejected();
 });
 
