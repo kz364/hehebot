@@ -4,21 +4,23 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
-Owner reported permission “updated”; host re-read token and checked existing apps
-before one create attempt. Still403/1010 auth.forbidden; readback apps0. Active
-token identity unchanged, private file mtime unchanged; dashboard policy edits
-could still have occurred. Token permission GET403/9109 prevents scope inspection.
-Official app-create API names Access: Apps and Policies Write. Exact remaining
-check is Account-level Edit + correct selected-account resource on the actual
-stored token (or private replacement). No retries absent new permission evidence.
+After the owner's blanket-permission report, one bounded retry still returned
+403/1010 auth.forbidden; app listings before/after were empty. Stop create retries.
+Dashboard edits do not change token value/mtime; do not request replacement for
+that reason. Exact account and Bearer-only route verified, token active through
+2026-09-30. Ray a3c6ea200e7506ac-SEA at 2026-09-17 08:59:23 UTC. Owner membership
+is accepted Super Administrator, but token creator role/scope remains unverified.
+Token details/groups and organization reads denied; IdPs empty. Root cause is
+not established. AUTH_SETUP.md gives account-resource/creator-role/team-Free-plan/
+IP checks and exact-host exact-owner-email manual app fallback. Discover/verify
+that app before any further create. Private diagnostic files retain raw evidence.
 
 Private `.local/secrets/cloudflare-owner.json` now exists, mode0600/owner validated;
 team JWKS works. Exact-host/one-owner-email Access app creation was attempted under
 existing approval but returned403/code1010 auth.forbidden. Post-denial listing
 confirms zero apps/no target. No successful shared mutation/Worker/database/public
-URL. Exact remaining request: existing account token needs Access: Apps and Policies
-Edit, same account. Keep token private in existing file if replaced. No repeated
-onboarding/config upload/consent. Once changed, check for existing app before retry,
+URL. No repeated generic broaden-permissions, config upload or consent request.
+Use the diagnostic checklist or manual fallback above; check for existing app,
 then use protected verified owner-login bootstrap to obtain exact OWNER_SUB without
 exposing portal data. Never infer sub from email. Private evidence at
 `.local/cloudflare-access-{plan,created,after-denial}.json`; no contents in chat.
@@ -33,12 +35,12 @@ or access.dev dependency. Wrangler4.130.0 dry run passes; previews explicitly fa
 default ingress remains disabled pending protection; issuer/audience/owner checks
 and loopback bypass unchanged. 42 auth/policy +8 hosted-runtime pass at
 `.local/workers-dev-auth.log`, build at `.local/workers-dev-build.log`.
-Private preflight reused `.local/secrets/CLOUDFLARE_API_TOKEN` (0600), found one
+Historical initial preflight reused `.local/secrets/CLOUDFLARE_API_TOKEN` (0600), found one
 account/active token/zero Workers. No workers.dev subdomain (10007), Access apps
 not_enabled, organization/users/billing403. Raw private evidence:
 `.local/cloudflare-preflight.json`; never print its values. No shared writes or
-deployed URL. Ask only for Workers & Pages initialization and Zero Trust Free
-onboarding, private team domain/exact owner login and Access-management permission.
+deployed URL. These initial onboarding blockers are superseded: workers.dev is
+initialized and private team/owner config exists. Follow the latest diagnosis above.
 Do not guess owner sub; obtain it through verified login. No repeated deployment
 authorization request or account probes until setup changes. AUTH_SETUP.md has
 exact plan. Remaining billing balance unverified. Resume deployment ahead of

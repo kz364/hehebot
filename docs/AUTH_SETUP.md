@@ -212,20 +212,53 @@ An authorized exact-host self-hosted app creation with one exact-email allow pol
 returned HTTP403/code1010 `auth.forbidden`. Subsequent app listing confirmed zero
 apps and no matching target; no successful shared mutation occurred.
 
-The exact remaining action is to grant the existing account-scoped API token
-**Access: Apps and Policies → Edit**, retaining its Worker deployment permissions.
-The retry after “updated” still returned403/1010. Check that this is an **Account**
-permission for the selected account resource on the token actually stored here,
-not a Zone permission or a different token. The official create API calls the
-permission `Access: Apps and Policies Write`. Permission introspection itself is
-denied403/9109, so the host cannot confirm the dashboard selection.
-If a replacement token is issued, save it privately in the existing mode0600
-`.local/secrets/CLOUDFLARE_API_TOKEN` file. Do not resend owner configuration or
-repeat onboarding/consent. Retry app creation only after permission changes;
-check for an existing matching app first. Owner subject still requires verified
-Access login/bootstrap, never inference from account identity or email. Until then
-no portal/database is exposed; a future protected bootstrap page may only verify
-identity and provide private signed proof, not bypass owner pinning for portal data.
+Owner confirms the original token was edited; unchanged value/mtime is expected,
+not a reason for replacement. After the blanket-permission report, one bounded
+retry still failed. **Stop further create attempts pending diagnosis or a manually
+created app**, rather than repeatedly asking for broader credentials.
+
+Sanitized support diagnostic: `POST /accounts/<verified-account-id>/access/apps`,
+HTTP403, `[{"code":1010,"error":"auth.forbidden"}]`, 2026-09-17 08:59:23 UTC,
+Cloudflare Ray `a3c6ea200e7506ac-SEA` (no X-Request-ID supplied). Authorization uses
+Bearer token only; no legacy key/email headers. Selected account matches original
+authorized account and current account listing. Token verifies active, expires
+2026-09-30T23:59:59Z. Apps list before/after remains empty. Owner-email account
+membership is accepted Super Administrator; the token creator's own identity/role
+is not established by that fact. Token detail/permission-group reads403/9109;
+user memberships and Zero Trust organization reads403/10000. Account members and
+IdP reads succeed; IdPs are empty. Team-to-account mapping/Free-plan activation
+remain unverified. Private raw diagnostics are retained; never publish headers,
+tokens, account identifiers or owner identity when asking support.
+
+Dashboard debugging, using the existing token/account:
+1. Inspect the saved token summary: **Account → Access: Apps and Policies → Edit**
+   and the exact selected account resource. The official create API names this
+   `Access: Apps and Policies Write`; do not confuse a Zone grant with this route.
+2. Confirm the token creator has accepted membership and Access-management role
+   on that same account. The configured owner's Super Administrator role alone
+   does not identify the token creator.
+3. Open Zero Trust under that account and compare Settings/team domain privately
+   with the supplied config. Confirm onboarding and **Free** plan selection are
+   complete. [Official setup](https://developers.cloudflare.com/cloudflare-one/setup/)
+   says plan selection/payment details are required even for Free; stop if a paid
+   upgrade is requested. Empty IdPs/organization403 do not by themselves prove the
+   root cause, but prevent verification here.
+4. Inspect any Client IP Address Filtering and TTL restrictions. Same-token GETs
+   work from the orb, so blanket expiry/IP denial is not demonstrated; do not
+   disable restrictions indiscriminately. Use the Ray/time above with Cloudflare
+   support if the dashboard summary and organization look correct.
+
+Manual fallback: in the same Zero Trust account, Access → Applications → Add a
+self-hosted app. Copy the **exact production hostname** from private
+`.local/cloudflare-access-plan.json` (`host`), no wildcard/preview/path restriction.
+Add only an Allow policy including the exact email from private owner config;
+no Everyone, email-domain, Bypass or service-token rule. Use one-hour sessions.
+Then report app creation; the host will discover and verify the existing app and
+policy rather than create another. This does not deploy a Worker or activate work.
+
+Owner subject still requires verified Access login/bootstrap, never inference
+from email. A protected bootstrap may only verify identity/provide private signed
+proof; it must not bypass exact-owner pinning for portal/database data.
 
 Before enabling production ingress, create/read back the exact-host Access app
 and owner-only policy, obtain its audience and verified owner subject, prepare

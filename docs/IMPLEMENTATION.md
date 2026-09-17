@@ -12,10 +12,21 @@ After the owner's permission-update report, token re-read and app-list-before-cr
 preceded one new attempt: same403/1010, app-list-after again0. Token active/same ID,
 file unchanged since original provisioning, which does not disprove dashboard scope
 edits. Token permission introspection denied403/9109. Official create docs confirm
-Access: Apps and Policies Write; owner must check Account scope/selected resource
-on this token or privately replace it. No further retry without changed input.
-No Worker/database/bootstrap published or successful shared mutation. Ask only
-for account-scoped Access: Apps and Policies Edit on existing token; retain existing
+Access: Apps and Policies Write. Subsequent blanket-permission report prompted one
+bounded retry after verifying original authorized account against current listing
+and Bearer-only authentication: still403/1010, apps before/after0. Token active
+through 2026-09-30T23:59:59Z. Ray a3c6ea200e7506ac-SEA at
+2026-09-17 08:59:23 UTC; no X-Request-ID. Account members read succeeds and configured
+owner is accepted Super Administrator; this does not identify the token creator.
+Token detail/groups denied403/9109, memberships/organization denied403/10000;
+IdPs read succeeds but empty. Team-account mapping/Free-plan onboarding and token
+creator scope remain unverified; no definitive root cause established. Stop create
+attempts. AUTH_SETUP.md records dashboard resource/role/team-plan/IP checks and
+manual exact-host, exact-owner-only app fallback. Dashboard edits need not change
+token value/mtime; no replacement request for that reason. Private diagnostics:
+`.local/cloudflare-access-diagnostic.json` and
+`.local/cloudflare-access-readonly-diagnostics.json`.
+No Worker/database/bootstrap published or successful shared mutation. Retain existing
 scope/approval, no renewed budget or repeated setup. Subject still needs verified
 login after protection is available. Private plan/error/readback files retained;
 no secrets printed. Documentation-only checkpoint, no tests rerun. Billing remains
