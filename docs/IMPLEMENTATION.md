@@ -4,6 +4,35 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+E11 token snapshot publication (2026-09-17, local): existing native journal usage
+is sent through `token-usage` during the existing task-control output-maintenance
+cadence. Root and registered-child observations retain separate task/attempt/native
+bindings. A durable pending payload precedes dispatch; unknown acknowledgement must
+retry that exact version/content before newer snapshots, including decreases.
+Unchanged observations add no calls. A fenced target stops further publication.
+This adds no inference, provider wake path, tool or task grant.
+
+Worker `TokenUsageSnapshots` validates six safe nonnegative integer counters per
+total/last group and nullable context window. Current epoch/boot/attempt/native
+reference, active status and deadline are required. Same-version semantic duplicates
+do not write; conflicts and stale versions reject. Counts replace, never accumulate.
+Fixed first-observation90-day retention cannot be extended by updates. Ordinary
+maintenance prunes; successor mode preserves its existing historical boundary.
+Owner state/task pages expose `token_usage_snapshots` only for returned current
+attempts, without native references. Terminal readback is historical observation,
+not guaranteed final/fresh usage. Absence is unknown, not zero; root and child
+native context/session snapshots are not additive task spend or billing receipts.
+Neither observations nor reads settle work, modify budget or refresh progress.
+
+Core14 and preview-neighbor13 tests, runtime publisher4 and actual signed-Access
+Worker8 tests pass, including exact uncertain retry, replacement/decrease, custody
+fences, malformed input and unchanged task rows. Desktop16 pass. Combined verification
+passed1604 backend/472 runtime and browser/HTTP checks before the process disappeared
+without a final marker; remaining crash/native/service/build sequence resumed
+separately and exits0. This is not an uninterrupted full-verifier pass.
+Logs `.local/token-usage-{focused,combined,combined-remaining,desktop}.log`.
+No UI/live deployment/provider/model call or additional spending in this stage.
+
 Retirement investigation (2026-09-17): one bounded read-only census on the verified
 same immutable Sprite returned tini/tail plus inspector, no per-process errors,
 one observed PID/mount namespace. Independent provider GET found no service

@@ -4,6 +4,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+E11 independent follow-through is verified locally: token-usage ledger,
+runtime exact pending-payload publication through existing publishOutputs cadence,
+authenticated runtime command and owner state/task-page token_usage_snapshots.
+Root and registered child native context/session observations remain separate;
+not additive task costs, fresh/final totals, billing or settlement. Missing is absent.
+Fixed90-day expiry; successor mode still skips historical maintenance.
+Core14, preview neighbors13, runtime publisher4, signed Worker8 and desktop16 pass.
+Combined log .local/token-usage-combined.log passed1604 backend/472 runtime and
+browser/HTTP checks, then process disappeared without final success marker.
+No tracked process remained; resumed from test-control-crash through native/service/
+build in .local/token-usage-combined-remaining.log, exits0. Do not claim uninterrupted
+full pass. Workers/checks finished. Next independent work is truthful owner display;
+hosted completion still takes priority when retirement is resolved. No live calls,
+spend, UI change or deployment. Retirement external blocker below unchanged.
+
 Newest read-only investigation: same immutable Sprite verified; process inventory
 shows only /.pilot/tini, coreutils tail and inspector in one PID namespace, no
 read errors. Provider services=[] and exec-session list empty. Private evidence:

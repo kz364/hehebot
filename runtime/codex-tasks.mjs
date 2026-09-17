@@ -85,12 +85,13 @@ export class CodexTaskControl {
       const native = await this.adapter.requireRun(this.attemptId);
       let mapped = await this.mapping();
       const targets = [{ run_id: this.parent.runId, attempt: this.parent.attempt,
-        native_ref: native.nativeRunId, preview: native.outputPreview }];
+        native_ref: native.nativeRunId, preview: native.outputPreview, usage: native.tokenUsage }];
       for (const [key, child] of Object.entries(mapped.children)) if (child.runId && child.started) {
         targets.push({ run_id: child.runId, attempt: 1, native_ref: child.receipt.native_run_ref,
-          preview: native.childObligations?.[key]?.outputPreview });
+          preview: native.childObligations?.[key]?.outputPreview,
+          usage: native.childObligations?.[key]?.tokenUsage });
       }
-      for (const { preview, ...target } of targets) {
+      for (const { preview, usage, ...target } of targets) {
         if (!preview || (mapped.outputVersions?.[target.run_id] ?? 0) >= preview.version) continue;
         this.assertLease();
         const reply = await this.control.request('output-preview', { identity: this.identity, ...target, ...preview });
@@ -99,6 +100,30 @@ export class CodexTaskControl {
         // Exact version is safe to replay after a lost ack. A fenced display is
         // discarded, not task cancellation or an inference/effect retry.
         mapped = await this.journal.update(this.key, { outputVersions: { ...mapped.outputVersions, [target.run_id]: preview.version } });
+      }
+      for (const { usage, preview: _, ...target } of targets) {
+        let state = mapped.usagePublications?.[target.run_id];
+        if (state?.fenced) continue;
+        let payload = state?.pending;
+        if (!payload) {
+          if (usage === undefined || state?.usage !== undefined && hash(state.usage) === hash(usage)) continue;
+          payload = { identity: this.identity, ...target, version: (state?.version ?? 0) + 1,
+            usage: structuredClone(usage) };
+          // Persist the exact mutation before dispatch. Transport uncertainty must
+          // replay this payload even when the native cumulative snapshot changes.
+          state = { ...state, version: payload.version, pending: payload };
+          mapped = await this.journal.update(this.key, { usagePublications: {
+            ...mapped.usagePublications, [target.run_id]: state } });
+        }
+        this.assertLease();
+        const reply = await this.control.request('token-usage', payload);
+        this.assertLease();
+        if (reply?.accepted !== true && !(reply?.accepted === false && reply.reason === 'USAGE_FENCED')) fail('INVALID_USAGE_RECEIPT');
+        state = reply.accepted === true
+          ? { version: payload.version, usage: payload.usage }
+          : { version: payload.version, usage: state?.usage, fenced: true };
+        mapped = await this.journal.update(this.key, { usagePublications: {
+          ...mapped.usagePublications, [target.run_id]: state } });
       }
     });
   }

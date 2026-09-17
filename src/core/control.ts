@@ -14,6 +14,7 @@ import {nativeDescendantsSettledSql} from './native-tasks';
 import {EffectLedger} from './effects';
 import {ResourceLedger} from './resources';
 import {OutputPreviews} from './output-preview';
+import {TokenUsageSnapshots} from './token-usage';
 import {captureWhatsAppReadPolicies} from './whatsapp-access';
 import {OwnerAlpha,ownerAlphaSuccessorSha256} from './owner-alpha';
 import {timelineExpirySql} from './timeline-retention';
@@ -545,6 +546,7 @@ export class ControlCore {
   const runs=this.store.db.all<Run>('SELECT * FROM runs ORDER BY created_at DESC LIMIT 100');
   const steering=new TaskSteering(this.store,()=>now);
   const previews=new OutputPreviews(this.store,()=>now);
+  const usage=new TokenUsageSnapshots(this.store,()=>now);
   const questions=this.questions.list();
   const alpha=this.ownerAlpha.summary(),policy=alpha?.policy;
   let alphaSummary:{owner_alpha?:true;owner_alpha_session?:{persona_id:string;expires_at:string;max_runs:number;admitted_runs:number;max_task_seconds:number}}={};
@@ -565,6 +567,7 @@ export class ControlCore {
    skill_proposals:after===undefined?this.store.db.all<{id:string;skill_id:string;proposal_revision:number;expected_skill_revision:number;body_json:string;provenance_json:string;status:string;executable_files_changed:number;created_at:string;reviewed_at:string|null}>("SELECT id,skill_id,proposal_revision,expected_skill_revision,body_json,provenance_json,status,executable_files_changed,created_at,reviewed_at FROM skill_proposals ORDER BY created_at,id").map(({body_json,provenance_json,executable_files_changed,...row})=>({...row,body:JSON.parse(body_json),provenance:JSON.parse(provenance_json),executable_files_changed:Boolean(executable_files_changed)})):undefined,
    steering:runs.flatMap(run=>steering.receipts({run_id:run.id,attempt:run.current_attempt})),
    output_previews:runs.flatMap(run=>{const value=previews.read(run.id,run.current_attempt,!!this.ownerAlpha.policy);return value?[value]:[];}),
+   token_usage_snapshots:runs.flatMap(run=>{const value=usage.read(run.id,run.current_attempt);return value?[value]:[];}),
    recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run,questions)),
    runs:runs.map(({context_json,checkpoint_json,...rest})=>rest),
    summary:{...alphaSummary,phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},
@@ -586,6 +589,7 @@ export class ControlCore {
   const counts=this.store.db.all<{total:number;waiting:number;recovery:number}>(`SELECT COUNT(*) AS total,COALESCE(SUM(r.status='waiting'),0) AS waiting,COALESCE(SUM(r.status='recovery_required'),0) AS recovery FROM runs r WHERE ${eligible}`,id)[0];
   const rows=this.store.db.all<Run & {request_status:string|null}>(`SELECT r.*,c.status AS request_status FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE ${eligible} AND r.id>? ORDER BY r.id LIMIT ?`,id,after??'',limit+1);
   const runs=rows.slice(0,limit),previews=new OutputPreviews(this.store,()=>this.now()),steering=new TaskSteering(this.store,()=>this.now());
+  const usage=new TokenUsageSnapshots(this.store,()=>this.now());
   const questions=this.questions.list();
   return {observed_at:this.now(),counts,runs:runs.map(({context_json,checkpoint_json,...run})=>{
    if(unfinishedOnly)return run;
@@ -599,6 +603,7 @@ export class ControlCore {
     execution:attempt?{...attempt,result_body_retained:!!attempt.result_body_retained}:null,run_delivery:{counts,portal}};
   }),
    output_previews:runs.flatMap(run=>{const value=previews.read(run.id,run.current_attempt,!!this.ownerAlpha.policy);return value?[value]:[];}),
+   token_usage_snapshots:runs.flatMap(run=>{const value=usage.read(run.id,run.current_attempt);return value?[value]:[];}),
    steering:runs.flatMap(run=>steering.receipts({run_id:run.id,attempt:run.current_attempt})),
    recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run,questions)),
    next_cursor:rows.length>limit?runs.at(-1)!.id:null};

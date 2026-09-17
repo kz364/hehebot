@@ -117,3 +117,77 @@ test('missing hosted successor grant refuses activation', () => withFixture(asyn
 test('hosted successor binding mismatch fails closed', () => withFixture(async fixture => {
   assert.equal((await fixture.fetchImpl('/v1/state', { headers: { 'Cf-Access-Jwt-Assertion': fixture.ownerJwt } })).status, 500);
 }, { ownerAlphaSuccessor: (ownerBindingSha256, ownerAlpha) => successor(ownerBindingSha256, ownerAlpha, '0'.repeat(64)) }));
+
+test('hosted token usage is validated, fenced, and projected without native custody', () => withFixture(async fixture => {
+  const owner = { 'Cf-Access-Jwt-Assertion': fixture.ownerJwt };
+  const internal = (type, payload, bearer = runtimeToken) => fixture.fetchImpl(`/internal/${type}`, {
+    method: 'POST', headers: { ...service, Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const bootId = randomUUID();
+  const boot = await internal('boot', { boot_id: bootId });
+  assert.equal(boot.status, 200);
+  const identity = await json(boot);
+  assert.deepEqual(identity, { epoch: 1, boot_id: bootId });
+  assert.equal((await internal('ready', { identity })).status, 200);
+
+  const message = await fixture.fetchImpl('/v1/commands', { method: 'POST', headers: { ...owner,
+    Origin: fixture.origin, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() },
+    body: JSON.stringify({ schema_version: 1, type: 'message.send', payload: {
+      conversation_id: persona, text: 'Measure this hosted run' } }) });
+  assert.equal(message.status, 202);
+  const runId = (await json(message)).resource_id;
+  assert.match(runId, /^[0-9a-f-]{36}$/);
+  const claim = await internal('claim', { identity });
+  assert.equal(claim.status, 200);
+  assert.equal((await json(claim)).run.id, runId);
+  const nativeRef = `native-${randomUUID()}`;
+  assert.equal((await internal('submitted', { identity, run_id: runId, attempt: 1, native_ref: nativeRef })).status, 200);
+
+  const readState = async () => json(await fixture.fetchImpl('/v1/state', { headers: owner }));
+  const readTasks = async () => json(await fixture.fetchImpl(`/v1/conversations/${persona}/tasks`, { headers: owner }));
+  const before = await readState();
+  const beforeTasks = await readTasks();
+  assert.deepEqual(before.token_usage_snapshots, []);
+  assert.deepEqual(beforeTasks.token_usage_snapshots, []);
+  const lifecycle = before.runs.find(run => run.id === runId);
+  assert.ok(lifecycle);
+
+  const counts = (inputTokens, cachedInputTokens, cacheWriteInputTokens, outputTokens, reasoningOutputTokens, totalTokens) =>
+    ({ inputTokens, cachedInputTokens, cacheWriteInputTokens, outputTokens, reasoningOutputTokens, totalTokens });
+  const usageV1 = { total: counts(101, 23, 7, 31, 11, 132), last: counts(17, 5, 2, 9, 3, 26),
+    modelContextWindow: 200000 };
+  const payload = { identity, run_id: runId, attempt: 1, native_ref: nativeRef, version: 1, usage: usageV1 };
+  for (const candidate of [payload, payload]) {
+    const response = await internal('token-usage', candidate);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await json(response), { accepted: true });
+  }
+  const usageV2 = { total: counts(90, 20, 6, 28, 10, 118), last: counts(8, 2, 1, 4, 1, 12),
+    modelContextWindow: 200000 };
+  const decreased = await internal('token-usage', { ...payload, version: 2, usage: usageV2 });
+  assert.equal(decreased.status, 200);
+  assert.deepEqual(await json(decreased), { accepted: true });
+
+  const expected = { run_id: runId, attempt: 1, version: 2, usage: usageV2 };
+  const after = await readState();
+  const afterTasks = await readTasks();
+  assert.deepEqual(after.token_usage_snapshots, [expected]);
+  assert.deepEqual(afterTasks.token_usage_snapshots, [expected]);
+  assert.equal('native_ref' in after.token_usage_snapshots[0], false);
+  assert.equal('native_ref' in afterTasks.token_usage_snapshots[0], false);
+  assert.deepEqual(after.runs.find(run => run.id === runId), lifecycle);
+
+  const fenced = await internal('token-usage', { ...payload, native_ref: 'wrong-native-ref', version: 3 });
+  assert.equal(fenced.status, 200);
+  assert.deepEqual(await json(fenced), { accepted: false, reason: 'USAGE_FENCED' });
+  const conflict = await internal('token-usage', { ...payload, version: 2, usage: usageV1 });
+  assert.equal(conflict.status, 409);
+  assert.equal((await json(conflict)).error.code, 'IDEMPOTENCY_CONFLICT');
+  const malformed = await internal('token-usage', { ...payload, version: 3,
+    usage: { ...usageV2, last: { ...usageV2.last, inputTokens: Number.MAX_SAFE_INTEGER + 1 } } });
+  assert.equal(malformed.status, 422);
+  assert.equal((await json(malformed)).error.code, 'INVALID_INPUT');
+  assert.equal((await internal('token-usage', payload, 'wrong')).status, 401);
+  assert.deepEqual((await readState()).token_usage_snapshots, [expected]);
+}));

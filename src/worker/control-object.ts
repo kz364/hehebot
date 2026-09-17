@@ -18,6 +18,7 @@ import { EffectLedger } from '../core/effects';
 import { RootChildEffects } from '../core/root-child-effects';
 import { TaskSteering } from '../core/task-steering';
 import { OutputPreviews } from '../core/output-preview';
+import { TokenUsageSnapshots } from '../core/token-usage';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { createProvider, type ProviderConfig, type RuntimeRef } from '../providers';
 import validateRuntime from '../generated/validate-runtime.js';
@@ -108,6 +109,7 @@ export class PersonalControl extends DurableObject<Env> {
   new TaskSteering(this.store,()=>this.core.now()).prune();
   this.core.questions.prune();
   new OutputPreviews(this.store,()=>this.core.now()).prune();
+  new TokenUsageSnapshots(this.store,()=>this.core.now()).prune();
  }
  async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{
   // Even rejected activation must leave retained predecessor history untouched.
@@ -161,10 +163,21 @@ export class PersonalControl extends DurableObject<Env> {
   const command=input as RuntimeCommand;
   const alpha=this.core.ownerAlpha.policy;
   if(command.type==='status'){const state=this.lifecycle.get(),generation=this.core.ownerAlpha.activeGeneration();return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{}),...(generation?{owner_alpha_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{}),...(this.hostedOwnerAlpha?{owner_alpha_hosted:true}:{}),...(this.ownerBindingSha256?{owner_binding_sha256:this.ownerBindingSha256}:{})};}
-  requireThat(this.core.options.executionEnabled||alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','steer-pending','agent-routines','agent-skill'].includes(command.type)||alpha.text_only&&command.type==='complete'||alpha.background_first_root&&command.type==='native-child'),'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified for this operation.');
+  requireThat(this.core.options.executionEnabled||alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','token-usage','steer-pending','agent-routines','agent-skill'].includes(command.type)||alpha.text_only&&command.type==='complete'||alpha.background_first_root&&command.type==='native-child'),'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified for this operation.');
   if(command.type==='whatsapp-read-authorize')return new WhatsAppReadAccess(this.core,this.lifecycle).authorize(command.payload);
   let result:unknown={ok:true};
   switch(command.type){
+   case 'token-usage':{
+    const {identity,...snapshot}=command.payload;
+    try{
+     new TokenUsageSnapshots(this.store,()=>this.core.now()).record(identity,snapshot,this.lifecycle);
+     result={accepted:true};
+    }catch(error){
+     if(!(error instanceof ControlError)||error.code!=='USAGE_FENCED')throw error;
+     result={accepted:false,reason:'USAGE_FENCED'};
+    }
+    break;
+   }
    case 'question-record':{
     const p=command.payload;result={id:this.core.questions.record(p.identity,p.run_id,p.attempt,p.question)};break;
    }
@@ -251,6 +264,7 @@ export class PersonalControl extends DurableObject<Env> {
   const retentionDue=this.retention.nextDue();if(retentionDue)times.push(Date.parse(retentionDue));
   const resultDue=this.resultRetention.nextDue();if(resultDue)times.push(Date.parse(resultDue));
   const previewDue=new OutputPreviews(this.store,()=>this.core.now()).nextDue();if(previewDue)times.push(Date.parse(previewDue));
+  const usageDue=new TokenUsageSnapshots(this.store,()=>this.core.now()).nextDue();if(usageDue)times.push(Date.parse(usageDue));
   const steeringDue=new TaskSteering(this.store,()=>this.core.now()).nextExpiry();if(steeringDue)times.push(Date.parse(steeringDue));
   const questionDue=this.core.questions.nextExpiry();if(questionDue)times.push(Date.parse(questionDue));
   const commandExpiry=this.core.nextCommandPayloadExpiry();if(commandExpiry)times.push(Date.parse(commandExpiry));

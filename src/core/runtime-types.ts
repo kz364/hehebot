@@ -7,6 +7,7 @@ import type {RootChildEffectIntent,RootChildEffectResult} from './root-child-eff
 import type {BudgetReport} from './budget';
 import type {SteeringTarget,SteeringOutcome} from './task-steering';
 import type {OutputPreview} from './output-preview';
+import type {TokenUsageSnapshot} from './token-usage';
 import type {NativeQuestionInput} from './native-questions';
 import type {WhatsAppReadRequest} from './whatsapp-access';
 import type {TextOnlyProfile} from './owner-alpha';
@@ -19,6 +20,7 @@ export type RuntimePayloads={
  'question-take':Base & {question_id:string;connection_id:string};
  'question-resolve':Base & {question_id:string;connection_id:string};
  'output-preview':Base & OutputPreview;
+ 'token-usage':Base & TokenUsageSnapshot;
  'steer-pending':Base & {targets:SteeringTarget[]};
  'steer-result':Base & SteeringTarget & {command_id:string;status:SteeringOutcome};
  'budget-report':Base & Attempt & {report:BudgetReport};
