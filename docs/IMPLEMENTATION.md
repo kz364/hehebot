@@ -16,8 +16,10 @@ enqueue work.16 new real-SQLite/HTTP tests plus neighboring coverage pass48 test
 typecheck and desktop16 pass. A test-only readonly array typing error was corrected
 to an exact status-order assertion. Combined verification passed1402 backend tests
 then timed out at FakeProvider boot before model requests; isolated service retry
-passed. Original `.local/routine-history-combined.log` retained; remaining checks
-run in `.local/routine-history-combined-remaining.log`. Portal history is delegated
+passed. Original `.local/routine-history-combined.log` retained; remaining native,
+service and build checks passed in `.local/routine-history-combined-remaining.log`
+(exit0). This is a resumed sequence, not a clean uninterrupted combined pass.
+Portal history is delegated
 to an isolated worker; preflight and live routine
 acceptance remain separate; the restricted alpha gateway has not been expanded.
 
