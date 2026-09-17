@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest: routine history UI worker is finished, reviewed and integrated. On-demand
+routine-card pages are read-only, UUID-ordered (not chronological), with explicit
+provisional-output/delivery/settlement limits. Alpha has zero new history reads;
+offline/stale/navigation/late responses cannot restore invalidated pages. Host
+history/delete/tasks/alpha browser checks and desktop16 pass, six DPR2 renders
+inspected. Full verifier includes new browser fixture and passed uninterrupted:
+1402 backend/434 runtime plus browser/native/service/build, exit0 at
+.local/routine-history-ui-combined.log. No active assignment or live actions.
+Next E05 work is routine preflight; existing schedulePreview is pure, while
+routine.run already checks revision/action grants/unfinished work. Do not claim
+configuration readiness from a schedule preview or widen alpha gateway access.
+Cloudflare account/hostname/publication approval remains pending; do not repeat.
+
 Newest: owner GET /v1/routines/:id/runs?after=<UUID>&limit=<1..10> and
 ControlCore.routineTaskPage expose all statuses for exact live routine_id. Shared
 task projection preserves current-attempt preview/steering/recovery and strips

@@ -4,6 +4,19 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Routine history portal (2026-09-17 Asia/Jakarta): integrated the owned UI patch
+against the exact unpublished API base. Routine cards expose on-demand all-status
+history with exclusive UUID pages, observation/counts and explicit request,
+provisional-output and settlement distinctions. No history mutations or polling;
+alpha sends no history requests. Offline, stale/deleted/reassigned routines,
+navigation and late responses clear or fence rows. Host browser history, deletion,
+tasks and alpha checks pass; six DPR2 renders inspected, including narrow, loading,
+empty, error and offline. Desktop16 pass. Combined verification now includes the
+history fixture and passed uninterrupted:1402 backend/434 runtime plus browser,
+native/service and build checks (`.local/routine-history-ui-combined.log`, exit0).
+Worker is integrated; no active assignment or live account/provider action.
+This remains synthetic browser evidence, not delivery or settlement proof.
+
 Routine history API (2026-09-17 Asia/Jakarta): authenticated owner GET
 `/v1/routines/:id/runs?after=<UUID>&limit=<1..10>` returns the canonical task-page
 shape with all statuses scoped to exact routine_id. Pagination uses immutable

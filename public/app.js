@@ -5,6 +5,7 @@ const historyFloors=new Map();
 const skillHistories=new Map();
 let recoveryView=null;
 let taskFeed=null;
+let routineHistory=null;
 let snapshot=null,selected=localStorage.getItem('personal.selected'),events=[],loading=false,lastSignature='',editing=null;
 let selectionVersion=0;
 let memorySearchSelection='';
@@ -78,7 +79,7 @@ async function refresh(force=false){
  }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);if(taskFeed)taskFeed.error=true;if(recoveryView?.kind==='tasks')recoveryView.page=null;render();}
  finally{loading=false;}
 }
-function choose(id){selectionVersion++;skillHistories.clear();recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
+function choose(id){selectionVersion++;skillHistories.clear();routineHistory=null;recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
 function recoveryUrl(view){return '/v1/conversations/'+view.conversationId+'/'+(view.kind==='tasks'?'tasks':'recovery')+(view.cursor?'?after='+encodeURIComponent(view.cursor):'');}
 async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=null){
  if(!alphaConversationAvailable(selected)){report('History and task pages are unavailable for this conversation in the owner-alpha session.');return;}
@@ -89,6 +90,8 @@ async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=nul
 }
 function render(){
  if(!snapshot)return;
+ if(routineHistory&&!routineHistoryCurrent(routineHistory))routineHistory=null;
+ if(routineHistory&&($('connection').textContent!=='Connected'||!navigator.onLine)){routineHistory.page=null;routineHistory.loading=false;routineHistory.error='History unavailable offline. Reopen history after reconnecting.';routineHistory.invalid=true;}
  const searchSelection=JSON.stringify([selected,selectionVersion,recoveryView?.kind]);
  if(conversationSearchSelection!==searchSelection){$('conversation-search').value='';conversationSearchSelection=searchSelection;}
  $('conversation-search-panel').hidden=skillsSelected()||Boolean(recoveryView);
@@ -208,7 +211,7 @@ function render(){
   const card=node('div',undefined,'card');card.append(node('h4',r.body.name),node('span',r.body.enabled?'Scheduled':'Paused','status'),node('p',r.body.schedule?`${r.body.schedule.cron} · ${r.body.schedule.timezone}`:'Event-triggered'),node('p',r.body.instructions));const actions=node('div',undefined,'actions');actions.append(button('Edit',()=>editRoutine(r)),button(r.body.enabled?'Pause':'Enable',()=>act(()=>command('routine.put',{...r.body,expected_revision:r.revision,enabled:!r.body.enabled}))));
   const remove=button('Delete',()=>deleteRoutine(r),'danger');remove.disabled=$('connection').textContent!=='Connected';remove.dataset.action='delete-routine';
   actions.append(button('Run now',()=>act(()=>command('routine.run',{id:r.id,expected_revision:r.revision}))),remove);
-  card.append(actions);$('routines').append(card);
+  card.append(actions);renderRoutineHistory(card,r);$('routines').append(card);
  }if(!$('routines').children.length)$('routines').append(node('p','No routines for this bot yet.','muted'));
  $('add-routine').disabled=object?.kind!=='persona';
  renderMemories();
@@ -404,6 +407,54 @@ function renderSkillComparison(target,proposal,skill){
 function renderSkillBody(target,body){
  target.append(detail('Purpose',body.description),detail('When to use',body.when_to_use),detail('Inputs and access',body.inputs_access),detail('Procedure',body.steps),detail('Decision rules',body.decision_rules),detail('Validation',body.validation),detail('Output',body.output),detail('Failure handling',body.failure_handling),detail('Approval boundaries',body.approval_boundaries));
 }
+function routineHistoryCurrent(view){
+ return !(alphaSeen||snapshot?.summary.owner_alpha)&&selected===view.owner&&selectionVersion===view.version&&items('routine').some(r=>r.id===view.id&&!r.deleted_at&&r.revision===view.revision&&r.body.persona_id===view.owner);
+}
+async function loadRoutineHistory(routine,cursor=null){
+ if(alphaSeen||snapshot?.summary.owner_alpha)return;
+ const view={id:routine.id,revision:routine.revision,owner:selected,version:selectionVersion,cursor,page:null,loading:true,error:'',expanded:new Set()};
+ if(!routineHistoryCurrent(view))return;
+ routineHistory=view;render();
+ try{
+  if($('connection').textContent!=='Connected'||!navigator.onLine)throw Error('History unavailable offline. Reopen history after reconnecting.');
+  const page=await api(`/v1/routines/${encodeURIComponent(view.id)}/runs?${cursor?`after=${encodeURIComponent(cursor)}&`:''}limit=10`);
+  if(routineHistory!==view||!routineHistoryCurrent(view)||view.invalid)return;
+  if($('connection').textContent!=='Connected'||!navigator.onLine)throw Error('History unavailable offline. Reopen history after reconnecting.');
+  if(!page.counts||!Array.isArray(page.runs)||page.runs.length>10||!page.runs.every((run,i)=>run.routine_id===view.id&&run.persona_id===view.owner&&typeof run.id==='string'&&(!cursor||run.id>cursor)&&(!i||run.id>page.runs[i-1].id))||(page.next_cursor!==null&&page.next_cursor!==page.runs.at(-1)?.id))throw Error('Invalid routine history response. Reopen history to read again.');
+  view.page=page;
+ }catch(error){if(routineHistory===view&&routineHistoryCurrent(view))view.error=error.message;}
+ finally{if(routineHistory===view){view.loading=false;render();}}
+}
+function renderRoutineHistory(card,routine){
+ if(alphaSeen||snapshot?.summary.owner_alpha||routine.deleted_at)return;
+ const view=routineHistory?.id===routine.id?routineHistory:null;
+ const toggle=button(view?'Hide run history':'Run history',()=>{if(view){routineHistory=null;render();}else loadRoutineHistory(routine);},'quiet');toggle.dataset.action='routine-history';toggle.setAttribute('aria-expanded',String(Boolean(view)));card.querySelector('.actions').append(toggle);
+ if(!view)return;
+ const panel=node('section',undefined,'routine-history');panel.dataset.routineHistory=routine.id;panel.setAttribute('aria-label',`${routine.body.name} run history`);
+ panel.append(node('h4','Run history'),node('p','All retained statuses for this routine, in stable task-ID order—not newest first. Pages are observations, not a live feed. Start at the first page to include new runs.','hint'));
+ if(view.loading){const notice=node('p','Loading run history…','hint');notice.setAttribute('role','status');panel.append(notice);}
+ if(view.error){const notice=node('p',view.error,'review-notice');notice.setAttribute('role','alert');panel.append(notice);}
+ const page=view.page;
+ if(page){
+  panel.append(node('p',`Observed ${time(page.observed_at)} · Total ${page.counts.total} · Waiting ${page.counts.waiting} · Recovery ${page.counts.recovery}`,'hint'),node('p','Recorded run status is separate from output delivery and native, child, tool or effect settlement. This page does not verify delivery or safe sleep.','hint'));
+  if(!page.runs.length){const empty=node('p','No retained runs on this page. This does not prove the routine ran successfully.','hint');empty.setAttribute('role','status');panel.append(empty);}
+  for(const run of page.runs){
+   const item=node('details',undefined,'task-card');item.dataset.runId=run.id;item.append(node('summary',`${run.title??'Routine run'} · ${statuses[run.status]??run.status}`),node('p',`Task ${run.id} · attempt ${run.current_attempt}`,'hint'),node('p',`Original request: ${run.request_status??'receipt unavailable'}. Request application is not task completion.`,'hint'));
+   item.open=view.expanded.has(run.id);item.ontoggle=()=>{if(item.isConnected){if(item.open)view.expanded.add(run.id);else view.expanded.delete(run.id);}};
+   if(run.error_code)item.append(node('p',`Recorded reason: ${run.error_code}`,'hint'));
+   if(run.status==='cancelling')item.append(node('p','Cancellation requested, not confirmed. Children, tools and effects may remain unresolved.','review-notice'));
+   const preview=(page.output_previews??[]).find(p=>p.run_id===run.id&&p.attempt===run.current_attempt&&['running','finishing','recovery_required'].includes(run.status)&&!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code));
+   if(preview){const output=node('section',undefined,'output-preview');output.setAttribute('aria-label','Provisional task output');output.append(node('p','Latest native message — provisional. This is not a completed result; children, tools or effects may still be unresolved.','hint'),node('div',preview.text,'message-body'));if(preview.truncated)output.append(node('p','Preview shortened. This is not the complete native message.','hint'));item.append(output);}
+   for(const receipt of (page.steering??[]).filter(r=>r.run_id===run.id&&r.attempt===run.current_attempt))item.append(node('p',`Steering delivery: ${receipt.status}. Native acceptance does not verify understanding or completion.`,'hint'));
+   const recovery=(page.recovery??[]).find(r=>r.run_id===run.id&&r.attempt===run.current_attempt);
+   if(recovery)item.append(node('p',recovery.executor_terminated?'Executor termination recorded. External effects require separate review.':'Executor termination is not confirmed.','review-notice'));
+   panel.append(item);
+  }
+  const controls=node('div',undefined,'actions');controls.append(button('First history page',()=>loadRoutineHistory(routine),'quiet'));if(page.next_cursor)controls.append(button('Next history page',()=>loadRoutineHistory(routine,page.next_cursor),'quiet'));panel.append(controls);
+ }
+ card.append(panel);
+}
+window.addEventListener('offline',()=>{if(routineHistory){routineHistory.invalid=true;routineHistory.page=null;routineHistory.loading=false;routineHistory.error='History unavailable offline. Reopen history after reconnecting.';render();}});
 function skillHistoryAllowed(){return !(alphaSeen||snapshot?.summary.owner_alpha);}
 function historyUrl(skillId,before){return `/v1/skills/${encodeURIComponent(skillId)}/revisions?${before?`before=${before}&`:''}limit=10`;}
 async function loadSkillHistory(skill,before=null){
