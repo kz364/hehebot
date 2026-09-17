@@ -12,9 +12,12 @@ rechecking after the observation. Paused manual execution remains allowed withou
 resuming. Execution-enabled is separate from command allowance; connector/model/
 input/effect readiness and delivery are explicitly unverified. Reads use the
 schedule-preview rate bucket without reconciliation, alarms, UUIDs or task writes.
-51 focused tests and typecheck passed; subsequent grant-change regression added.
-Combined verification is running in `.local/routine-preflight-combined.log`.
-No UI or alpha gateway expansion, real inference, provider or account action.
+52 focused tests, typecheck and desktop16 passed, including grant-change regression.
+Combined verification passed1425 backend/434 runtime plus browser/native/service/
+build checks in `.local/routine-preflight-combined.log` (exit0). The additional
+grant-change test was added after backend verification and passed the52-test rerun.
+UI is delegated on exact unpublished base; no alpha gateway expansion, real
+inference, provider or account action.
 
 Routine history portal (2026-09-17 Asia/Jakarta): integrated the owned UI patch
 against the exact unpublished API base. Routine cards expose on-demand all-status

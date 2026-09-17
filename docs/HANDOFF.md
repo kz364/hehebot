@@ -9,10 +9,14 @@ grant/busy/persona checks. Response distinguishes command_allowed from
 execution_enabled; schedule preview is not admission/delivery/credential proof.
 Existing missing/deleted persona NOT_FOUND and archived CAPABILITY_UNAVAILABLE
 codes preserved. Reads are rate-only, no reconciliation/alarms/task writes.
-51 focused tests/typecheck passed; grant-change-after-preflight regression added.
-Combined running at .local/routine-preflight-combined.log; verify final result.
-Test subagent finished, no active assignment. Next: on-demand preflight UI with
-stale observation warnings and no automatic test run. Alpha gateway unchanged;
+52 focused tests/typecheck/desktop16 passed, including grant-change-after-preflight.
+Combined passed1425 backend/434 runtime plus browser/native/service/build, exit0
+at .local/routine-preflight-combined.log. Extra grant-change test passed focused
+rerun after the full backend stage; no source changes during verification.
+Test subagent finished. UI worker T-01a0acf2-c565-772e-8025-183e4257343e has exact
+unpublished base17e82a4 via .local/routine-preflight-ui-base.bundle; owns only
+app/style, browser fixture and dedicated UI doc. On-demand observation display,
+no automatic test run or cached authority. Alpha gateway unchanged;
 Cloudflare decision still pending, no live actions or repeated approval request.
 
 Newest: routine history UI worker is finished, reviewed and integrated. On-demand
