@@ -4,6 +4,28 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Routine capacity prerequisite (2026-09-17 Asia/Jakarta): `tests/schedule.test.ts`
+now tests the installation-wide 20/21 enabled boundary with 13/7 routines across two personas,
+editing at capacity, disabled drafts and slot reuse. No runtime behavior changed.
+A second case makes all 20 routines due after twelve 15-minute ticks: coalescing
+creates 20 runs, each recording 11 omitted ticks, not 240 runs. Reconstructing
+ControlCore on the same SQLite store and repeating reconciliation adds none.
+At 03:30, 13 queue-one routines replace their own pending run, while seven skip
+routines preserve theirs. Four optional routines remain BUDGET_UNKNOWN; final
+counts are 13 cancelled, 16 queued, four waiting, 40 occurrences and zero
+attempts/effects/outbox records. Queue sequence is 25 (16 initial plus nine
+replacement admissions); it is not a count of actual provider wakes.
+
+Command: `npx vitest run tests/schedule.test.ts tests/routine-lifecycle.test.ts
+tests/budget-admission.test.ts` passes 3 files/33 tests; `npm run typecheck`
+passes (`.local/routine-capacity-focused.log`). This is a test/docs-only
+checkpoint, so the unchanged native/browser implementation retains its preceding
+combined evidence rather than repeating it. No latency/throughput measurement,
+workerd restart proof, live model execution or dollar-cost estimate is implied.
+Keep the cap pending real Worker batch/alarm and execution/cost evidence. Even
+20 minimum-cadence routines have 1920 nominal daily ticks before coalescing,
+overlap and budget gates; that arithmetic is not billable inference or wake count.
+
 Task-to-skill portal (2026-09-17 Asia/Jakarta): eligible retained task cards now
 open the existing bounded editor with a blank procedure and explicit source
 persona/run/attempt disclosure. Nothing is copied from task input/output, and

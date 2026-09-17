@@ -4,6 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Routine capacity prerequisite added to tests/schedule.test.ts: installation-wide
+20/21 boundary, slot reuse/edits/disabled drafts and full 20-routine delayed batch.
+13 queue-one/7 skip with four budget-unknown routines gives exact independent
+replacement/parking, no duplicate after ControlCore reconstruction. 33 focused
+schedule/lifecycle/budget tests and typecheck pass at
+`.local/routine-capacity-focused.log`. Tests/docs only; no cap or application
+change. No native/browser rerun for this checkpoint; prior combined evidence
+below remains for unchanged implementation. Next: real Worker full-batch alarm
+and persistent reopen evidence before any capacity increase. No throughput or
+live cost claim, no active worker/check or new authorization.
+
 Task-to-skill UI worker finished; hash-verified patch integrated. Host fixed
 streamed UTF-8 fixture decoding and wired the new browser test into the verifier.
 Host focused Chromium passes, desktop16 pass; desktop/narrow/reference/error
