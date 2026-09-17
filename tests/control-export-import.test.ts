@@ -74,6 +74,30 @@ beforeEach(async () => {
 });
 afterEach(async () => { db.close(); await rm(directory, { recursive: true, force: true }); });
 
+it('roundtrips skill references, explicit removal and admitted prior content without materializing documents', async () => {
+  const base = { name: 'Review notes', description: 'Synthetic method.', when_to_use: 'For a test.', inputs_access: [], steps: ['Review.'], decision_rules: [], validation: ['Check.'], output: 'Notes.', failure_handling: ['Stop.'], approval_boundaries: ['No effects.'], contains_private_facts: false };
+  const original = JSON.stringify({ ...base, references: [{ name: 'review-notes.md', text: 'First 37\n雪 🧭\n  preserve whitespace and \\literal\\ text\n' }] });
+  const current = JSON.stringify({ ...base, references: [] });
+  const context = JSON.stringify({ skills: [{ id: 'skill-71', revision: 1, body: JSON.parse(original) }], authorization_policy_ids: [] });
+  db.prepare("INSERT INTO objects VALUES('skill-71','skill',2,?,NULL,'t1','t7')").run(current);
+  db.prepare("INSERT INTO object_revisions VALUES('skill-71',1,?,'owner',NULL,'t1')").run(original);
+  db.prepare("INSERT INTO object_revisions VALUES('skill-71',2,?,'owner',NULL,'t7')").run(current);
+  db.prepare("UPDATE runs SET context_json=? WHERE id='root-29'").run(context);
+  const exported = exportControl({
+    all: <T>(sql: string, ...values: SqlValue[]) => db.prepare(sql).all(...values) as T[],
+    exec: () => { throw Error('Read only'); },
+    transaction: <T>(fn: () => T) => { db.exec('BEGIN'); try { return fn(); } finally { db.exec('ROLLBACK'); } },
+  }, originalTime);
+  await writeFile(input, exported); await importControlExport(input, destination);
+  const copy = new DatabaseSync(join(destination, 'control.sqlite'), { readOnly: true });
+  try {
+    expect(copy.prepare("SELECT body_json FROM objects WHERE id='skill-71'").get()).toEqual({ body_json: current });
+    expect(copy.prepare("SELECT revision,body_json FROM object_revisions WHERE object_id='skill-71' ORDER BY revision").all()).toEqual([{ revision: 1, body_json: original }, { revision: 2, body_json: current }]);
+    expect(copy.prepare("SELECT context_json FROM runs WHERE id='root-29'").get()).toEqual({ context_json: context });
+    expect(await readdir(destination)).not.toContain('review-notes.md');
+  } finally { copy.close(); }
+});
+
 it('roundtrips distinct manual null-due occurrences and their exact run references', async () => {
   db.exec(`INSERT INTO objects VALUES('routine-17','routine',19,'{}',NULL,'t1','t7');
     INSERT INTO occurrences(id,routine_id,routine_version,nominal_due_at,status,created_at,origin) VALUES

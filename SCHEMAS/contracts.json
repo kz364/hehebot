@@ -17,6 +17,17 @@
         "output": { "type": "string", "minLength": 1, "maxLength": 2000 },
         "failure_handling": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 1000 }, "minItems": 1, "maxItems": 50 },
         "approval_boundaries": { "type": "array", "items": { "type": "string", "minLength": 1, "maxLength": 1000 }, "minItems": 1, "maxItems": 50 },
+        "references": {
+          "type": "array", "maxItems": 4,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "maxLength": 80, "pattern": "^[a-z0-9][a-z0-9._-]{0,63}\\.(md|txt)$" },
+              "text": { "type": "string", "minLength": 1, "maxLength": 16000 }
+            },
+            "required": ["name", "text"]
+          }
+        },
         "contains_private_facts": { "const": false }
       },
       "required": ["name","description","when_to_use","inputs_access","steps","decision_rules","validation","output","failure_handling","approval_boundaries","contains_private_facts"]

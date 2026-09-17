@@ -1,12 +1,21 @@
 import {requireThat} from './errors';
 import {Store} from './store';
 import type {SkillBody,SkillProposal,StoredObject} from './types';
+import validateCommand from '../generated/validate-command.js';
 
 type ProposalRow={id:string;skill_id:string;proposal_revision:number;expected_skill_revision:number;body_json:string;provenance_json:string;status:string;executable_files_changed:number};
 const normalized=(value:string)=>value.trim().toLocaleLowerCase('en-US').replace(/\s+/g,' ');
 
 export class SkillCatalog {
  constructor(private store:Store,private now:()=>string,private uuid:()=>string){}
+ private validateProposal(p:SkillProposal):void {
+  requireThat(!p.executable_files_changed,'CAPABILITY_UNAVAILABLE','Executable skill files require a separately configured capability review.');
+  // Restores and imported pending proposals do not pass command ingress with
+  // their retained body. Reuse the canonical schema before accepting that data.
+  requireThat(validateCommand({schema_version:1,type:'skill.propose',payload:p}),'INVALID_INPUT','The skill proposal contains invalid or missing fields.',422);
+  const references=p.body.references??[];
+  requireThat(new Set(references.map(reference=>reference.name)).size===references.length,'INVALID_INPUT','Supporting reference names must be unique.',422);
+ }
  history(skillId:string,before?:number,limit=10){
   requireThat(before===undefined||Number.isSafeInteger(before)&&before>0,'INVALID_INPUT','Invalid revision cursor.',422);
   requireThat(Number.isInteger(limit)&&limit>=1&&limit<=20,'INVALID_INPUT','Limit must be 1–20.',422);
@@ -17,7 +26,7 @@ export class SkillCatalog {
   return {skill_id:skillId,current_revision:current.revision,revisions,next_cursor:rows.length>limit?revisions.at(-1)!.revision:null};
  }
  propose(owner:string,commandId:string,p:SkillProposal):string {
-  requireThat(!p.executable_files_changed,'CAPABILITY_UNAVAILABLE','Executable skill files require a separately configured capability review.');
+  this.validateProposal(p);
   const existing=this.store.db.all<{revision:number;kind:string;deleted_at:string|null}>('SELECT revision,kind,deleted_at FROM objects WHERE id=?',p.skill_id)[0];
   requireThat((existing?.revision??0)===p.expected_skill_revision&&(!existing||existing.kind==='skill'&&!existing.deleted_at),'REVISION_CONFLICT','Reload the skill before proposing this change.');
   const duplicate=this.store.list<SkillBody>('skill').find(x=>x.id!==p.skill_id&&normalized(x.body.name)===normalized(p.body.name));
@@ -34,8 +43,8 @@ export class SkillCatalog {
   requireThat(row&&row.status==='pending','REVISION_CONFLICT','This proposal is no longer pending.');
   requireThat(row.proposal_revision===p.expected_proposal_revision,'REVISION_CONFLICT','Reload the proposal before reviewing it.');
   if(p.decision==='approve'){
-   requireThat(!row.executable_files_changed,'CAPABILITY_UNAVAILABLE','Executable skill changes require capability review.');
    const body=JSON.parse(row.body_json) as SkillBody;
+   this.validateProposal({proposal_id:row.id,skill_id:row.skill_id,expected_skill_revision:row.expected_skill_revision,body,provenance:JSON.parse(row.provenance_json),executable_files_changed:!!row.executable_files_changed});
    const duplicate=this.store.list<SkillBody>('skill').find(x=>x.id!==row.skill_id&&normalized(x.body.name)===normalized(body.name));
    requireThat(!duplicate,'UPDATE_EXISTING_SKILL','A skill with this name was approved while this proposal was pending; update its stable ID.',409);
    const revision=this.store.put(row.skill_id,'skill',body,row.expected_skill_revision,owner,this.now(),commandId);

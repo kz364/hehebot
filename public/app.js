@@ -394,7 +394,17 @@ function renderRecovery(card,run,recovery,title){
 function lines(value){return String(value??'').split('\n').map(x=>x.trim()).filter(Boolean);}
 function detail(label,value){const wrap=node('section',undefined,'skill-detail');wrap.append(node('h4',label));if(Array.isArray(value)){const list=node('ul');for(const item of value)list.append(node('li',item));wrap.append(list);}else wrap.append(node('p',value||'Not specified'));return wrap;}
 function enablement(skillId,personaId){return (snapshot.skill_enablements??[]).find(x=>x.skill_id===skillId&&x.persona_id===personaId);}
-const skillFields=[['name','Name'],['description','Purpose'],['when_to_use','When to use'],['inputs_access','Inputs and access'],['steps','Procedure'],['decision_rules','Decision rules'],['validation','Validation'],['output','Output'],['failure_handling','Failure handling'],['approval_boundaries','Approval boundaries']];
+const skillFields=[['name','Name'],['description','Purpose'],['when_to_use','When to use'],['inputs_access','Inputs and access'],['steps','Procedure'],['decision_rules','Decision rules'],['validation','Validation'],['output','Output'],['failure_handling','Failure handling'],['approval_boundaries','Approval boundaries'],['references','Supporting references']];
+const referenceShapeValid=value=>value===undefined||Array.isArray(value)&&value.every(r=>r&&typeof r.name==='string'&&typeof r.text==='string'&&Object.keys(r).length===2);
+function skillFieldDetail(key,label,value){
+ if(key!=='references')return detail(label,Array.isArray(value)&&!value.length?'None':value);
+ const section=node('section',undefined,'skill-detail skill-references');section.append(node('h4',label));
+ if(!referenceShapeValid(value)){section.append(node('p','Invalid stored reference data. Approval is blocked; reject this proposal or use a valid retained revision.','review-notice'));return section;}
+ if(value?.length)section.append(node('p','The application stores this text; it does not install, fetch or execute it. Names are storage policy, not content scanning or a safety guarantee. References grant no authority; separately granted model tools remain separate.','hint'));
+ if(!value?.length)section.append(node('p',value===undefined?'Not specified (legacy field omitted).':'None (explicit empty list).'));
+ for(const reference of value??[]){const document=node('section',undefined,'card');document.append(node('h4',reference.name),node('div',reference.text,'message-body'));section.append(document);}
+ return section;
+}
 function proposalSkill(proposal){return items('skill').find(x=>x.id===proposal.skill_id&&!x.deleted_at);}
 function renderSkillComparison(target,proposal,skill){
  target.append(node('p',`Skill ${proposal.skill_id} · Proposal revision ${proposal.proposal_revision} · Base revision ${proposal.expected_skill_revision}`,'message-body'));
@@ -403,12 +413,13 @@ function renderSkillComparison(target,proposal,skill){
  for(const [key,label] of skillFields){
   const section=node('section',undefined,'card message-body');section.dataset.skillField=key;
   section.append(node('h4',`${label} · ${skill?(JSON.stringify(skill.body[key])===JSON.stringify(proposal.body[key])?'Unchanged':'Changed'):'Proposed'}`));
-  if(skill)section.append(detail('Current approved',Array.isArray(skill.body[key])&&!skill.body[key].length?'None':skill.body[key]));
-  section.append(detail('Proposed',Array.isArray(proposal.body[key])&&!proposal.body[key].length?'None':proposal.body[key]));target.append(section);
+  if(skill)section.append(skillFieldDetail(key,'Current approved',skill.body[key]));
+  section.append(skillFieldDetail(key,'Proposed',proposal.body[key]));target.append(section);
  }
 }
 function renderSkillBody(target,body){
  target.append(detail('Purpose',body.description),detail('When to use',body.when_to_use),detail('Inputs and access',body.inputs_access),detail('Procedure',body.steps),detail('Decision rules',body.decision_rules),detail('Validation',body.validation),detail('Output',body.output),detail('Failure handling',body.failure_handling),detail('Approval boundaries',body.approval_boundaries));
+ target.append(skillFieldDetail('references','Supporting references',body.references));
 }
 function routinePreflightCurrent(view){
  return !(alphaSeen||snapshot?.summary.owner_alpha)&&selected===view.owner&&selectionVersion===view.version&&items('persona').some(p=>p.id===view.owner&&!p.deleted_at&&p.revision===view.personaRevision)&&items('routine').some(r=>r.id===view.id&&!r.deleted_at&&r.revision===view.revision&&r.body.persona_id===view.owner);
@@ -541,7 +552,7 @@ function stageSkillRestore(skill,row){
  const capturedSkill=structuredClone(skill),source=structuredClone(row),proposalId=crypto.randomUUID(),key=crypto.randomUUID(),version=selectionVersion;
  const affirmation=node('label',undefined,'check affirmation'),check=node('input');check.type='checkbox';check.name='confirm';check.required=true;affirmation.append(check,document.createTextNode(`Stage revision ${source.revision} as a pending proposal for separate review.`));
  $('editor').classList.add('roster-editor');
- openEditor(`Stage restore: ${capturedSkill.body.name}`,[node('p',`Current approved revision ${capturedSkill.revision} · Historical source revision ${source.revision}`,'message-body'),node('p','This stages a pending restore proposal only. It does not approve, enable, or immediately replace the skill. Review and approval remain a separate action.','review-notice'),node('p','Only retained revisions are available; gaps may exist and expired history cannot be restored here. A lost reply may still mean staging succeeded. Retry unchanged to send the identical proposal and key.','hint'),...skillFields.map(([field,label])=>detail(label,source.body[field])),affirmation],()=>{
+ openEditor(`Stage restore: ${capturedSkill.body.name}`,[node('p',`Current approved revision ${capturedSkill.revision} · Historical source revision ${source.revision}`,'message-body'),node('p','This stages a pending restore proposal only. It does not approve, enable, or immediately replace the skill. Review and approval remain a separate action.','review-notice'),node('p','Only retained revisions are available; gaps may exist and expired history cannot be restored here. The restore proposal contains the whole source body. Approving it removes current references absent from this source. A lost reply may still mean staging succeeded. Retry unchanged to send the identical proposal and key.','hint'),...skillFields.map(([field,label])=>skillFieldDetail(field,label,source.body[field])),affirmation],()=>{
   const latest=items('skill').find(x=>x.id===capturedSkill.id&&!x.deleted_at),history=skillHistories.get(capturedSkill.id);
   if(!skillHistoryAllowed()||$('connection').textContent!=='Connected'||!navigator.onLine||selected!=='skills'||selectionVersion!==version||!latest||latest.revision!==capturedSkill.revision||history?.loading||history?.error||!history?.rows.some(item=>item.revision===source.revision&&JSON.stringify(item.body)===JSON.stringify(source.body)))throw new Error('The skill, selected history, navigation, or connection changed. Close and refresh before staging a restore.');
   return command('skill.restore',{proposal_id:proposalId,skill_id:capturedSkill.id,expected_skill_revision:capturedSkill.revision,source_revision:source.revision},key);
@@ -599,15 +610,46 @@ function reviewProposal(proposal,decision){
   return command('skill.review',{proposal_id:proposal.id,expected_proposal_revision:proposal.proposal_revision,decision},key);
  },decision==='approve'?'Approve proposal':'Reject proposal');
 }
+function skillReferenceEditor(body){
+ const element=node('section',undefined,'skill-reference-editor'),rows=node('div'),originals=new WeakMap();
+ element.append(node('h3','Supporting references'),node('p','Up to 4 stored text documents. Use unique lower-case basenames ending in .md or .txt (no paths), and 1–16,000 Unicode codepoints per document. The application does not install, fetch or execute this text. Naming rules are not content scanning or a guarantee about separately granted model tools. Changes require proposal review, not activation or new authority. The private-facts affirmation covers references too.','hint'));
+ if(!referenceShapeValid(body.references)||(body.references?.length??0)>4){
+  const message='Invalid stored reference data. This editor cannot preserve it; use a valid retained revision rather than silently dropping documents.';
+  element.append(node('p',message,'review-notice'));return {element,read(){throw new Error(message);}};
+ }
+ const add=button('Add text reference',()=>append({name:'',text:''}),'quiet');add.dataset.action='add-reference';
+ function append(reference){
+  if(rows.children.length>=4)return;
+  const row=node('section',undefined,'card reference-editor-row'),name=field('Reference name','reference_name',reference.name),text=field('Reference text','reference_text',reference.text,'textarea');
+  const input=name.querySelector('input');input.maxLength=80;input.pattern='[a-z0-9][a-z0-9._\\-]{0,63}\\.(md|txt)';
+  originals.set(row,{text:reference.text,value:text.querySelector('textarea').value}); // Preserve original newline bytes on unrelated edits.
+  const remove=button('Remove reference',()=>{row.remove();add.disabled=false;},'quiet danger');remove.dataset.action='remove-reference';row.append(name,text,remove);rows.append(row);add.disabled=rows.children.length>=4;
+ }
+ for(const reference of body.references??[])append(reference);
+ element.append(rows,add);
+ return {element,read(){
+  const references=[...rows.children].map(row=>{const text=row.querySelector('textarea').value,original=originals.get(row);return {name:row.querySelector('input').value,text:text===original.value?original.text:text};}),names=new Set();
+  for(const reference of references){
+   if(!/^[a-z0-9][a-z0-9._-]{0,63}\.(md|txt)$/.test(reference.name)||names.has(reference.name))throw new Error('Reference names must be unique lower-case .md or .txt basenames, with no paths.');
+   if(!reference.text.length||[...reference.text].length>16000)throw new Error('Reference text must contain 1–16,000 Unicode codepoints.');
+   names.add(reference.name);
+  }
+  return !Object.hasOwn(body,'references')&&!references.length?undefined:references;
+ }};
+}
 function editSkillProposal(skill){
  const proposalId=crypto.randomUUID(),key=crypto.randomUUID();let submitted;
  const draftId=skill?.id??crypto.randomUUID(),body=skill?.body??{};const existing=items('skill');const options=[['new','Create a new stable skill'],...existing.map(x=>[x.id,`Update ${x.body.name} (revision ${x.revision})`])];
  const fields=[selectField('Draft target','target',options,skill?.id??'new'),field('Name','name',body.name??''),field('Purpose','description',body.description??'','textarea'),field('When should a bot use it?','when_to_use',body.when_to_use??'','textarea'),field('Inputs and access (one per line)','inputs_access',(body.inputs_access??[]).join('\n'),'textarea'),field('Steps (one per line)','steps',(body.steps??[]).join('\n'),'textarea'),field('Decision rules (one per line)','decision_rules',(body.decision_rules??[]).join('\n'),'textarea'),field('Validation checks (one per line)','validation',(body.validation??[]).join('\n'),'textarea'),field('Expected output','output',body.output??'','textarea'),field('Failure handling (one per line)','failure_handling',(body.failure_handling??[]).join('\n'),'textarea'),field('Approval boundaries (one per line)','approval_boundaries',(body.approval_boundaries??[]).join('\n'),'textarea')];
+ const references=skillReferenceEditor(body);fields.push(references.element,node('p','To change the draft target, close and reopen Propose an update on that exact skill, or Draft skill for a new skill. This prevents silently dropping its references.','hint'));
  const affirmation=node('label',undefined,'check affirmation');const check=node('input');check.type='checkbox';check.name='affirm';check.required=true;affirmation.append(check,document.createTextNode('I affirm this procedural draft contains no private facts.'));fields.push(node('p','The portal does not scan for private facts. Your affirmation is required, and submission creates a pending proposal—not an approved skill.','review-notice'),affirmation);
+ $('editor').classList.add('roster-editor');
  openEditor(skill?'Propose a skill update':'Draft a skill',fields,form=>{
   const target=form.get('target'),existingSkill=existing.find(x=>x.id===target),current=items('skill').find(x=>x.id===target&&!x.deleted_at);
+  if(target!==(skill?.id??'new'))throw new Error('Draft target changed. Close and reopen the exact target to retain its supporting references.');
   if($('connection').textContent!=='Connected'||target!=='new'&&(!existingSkill||!current||current.revision!==existingSkill.revision))throw new Error('This skill is stale, missing, or offline. Close this editor and refresh before drafting again.');
   const payload={proposal_id:proposalId,skill_id:existingSkill?.id??draftId,expected_skill_revision:existingSkill?.revision??0,body:{name:form.get('name'),description:form.get('description'),when_to_use:form.get('when_to_use'),inputs_access:lines(form.get('inputs_access')),steps:lines(form.get('steps')),decision_rules:lines(form.get('decision_rules')),validation:lines(form.get('validation')),output:form.get('output'),failure_handling:lines(form.get('failure_handling')),approval_boundaries:lines(form.get('approval_boundaries')),contains_private_facts:false},provenance:{kind:'owner',source_ref:'portal:owner-draft'},executable_files_changed:false};
+  const documents=references.read();if(documents!==undefined)payload.body.references=documents;
   const fingerprint=JSON.stringify(payload);
   if(submitted&&submitted!==fingerprint)throw new Error('This draft was already submitted. Retry its unchanged contents or close and refresh to inspect the proposal before making changes.');
   submitted=fingerprint;

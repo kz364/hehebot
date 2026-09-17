@@ -46,7 +46,7 @@ await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
 const capture=async name=>{await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',new URL(`skill-review-${name}.png`,artifacts).pathname);};
 const checkReviewScroll=async()=>{
- const result=await evaluate(`(()=>{const fields=document.querySelector('#editor-fields');fields.scrollTop=fields.scrollHeight;const area=fields.getBoundingClientRect(),last=fields.querySelector('[data-skill-field="approval_boundaries"]').getBoundingClientRect(),footer=document.querySelector('#editor .dialog-footer').getBoundingClientRect();return {scrolls:fields.scrollTop>0,lastVisible:last.top>=area.top&&last.bottom<=area.bottom+1,footerSeparate:footer.top>=area.bottom};})()`);
+ const result=await evaluate(`(()=>{const fields=document.querySelector('#editor-fields');fields.scrollTop=fields.scrollHeight;const area=fields.getBoundingClientRect(),last=fields.querySelector('[data-skill-field="references"]').getBoundingClientRect(),footer=document.querySelector('#editor .dialog-footer').getBoundingClientRect();return {scrolls:fields.scrollTop>0,lastVisible:last.top>=area.top&&last.bottom<=area.bottom+1,footerSeparate:footer.top>=area.bottom};})()`);
  assert.deepEqual(result,{scrolls:true,lastVisible:true,footerSeparate:true});
 };
 const open=async(decision='approve',id=proposal.id)=>{
@@ -62,10 +62,11 @@ try{
  await click(`${card(proposal.id)} > summary`);
  assert.equal(commands.length,0);
  const values=await evaluate(`Array.from(document.querySelectorAll('${card(proposal.id)} [data-skill-field]')).map(s=>[s.dataset.skillField,s.querySelector('h4').textContent,Array.from(s.querySelectorAll('.skill-detail')).map(d=>d.textContent)])`);
- assert.equal(values.length,10);
+ assert.equal(values.length,11);
  for(const [key,title,parts] of values){
   const changed=['name','description','steps','failure_handling'].includes(key);
   assert.ok(title.endsWith(changed?'Changed':'Unchanged'),`${key}: change marker`);
+  if(key==='references'){assert.equal(parts.length,2);for(const part of parts)assert.match(part,/Not specified \(legacy field omitted\)/);continue;}
   const text=value=>Array.isArray(value)?value.length?value.join(''):'None':value;
   assert.deepEqual(parts,[`Current approved${text(body[key])}`,`Proposed${text(proposal.body[key])}`]);
  }
@@ -76,7 +77,7 @@ try{
  assert.match((await browser('get','text','#editor')).stdout,/already-enabled bots for future tasks.*already-admitted tasks/s);
  await submit();assert.equal(commands.length,0);assert.equal(await evaluate('document.querySelector("#editor-form").checkValidity()'),false);
  await close();assert.equal(await evaluate('document.querySelector("#editor").open'),false);
- console.log('PASS: ten exact field comparisons, ordered list changes, empty-list removal, unchanged fields, hostile markup as text, staged review, required private-facts affirmation and Escape.');
+ console.log('PASS: eleven exact field comparisons, ordered list changes, empty-list removal, unchanged fields, hostile markup as text, staged review, required private-facts affirmation and Escape.');
  for(const decision of ['approve','reject']){
   for(const change of ['proposal revision','proposal status','skill revision','skill missing','offline']){
    Object.assign(state,structuredClone(initial));offline=false;await refresh();await open(decision);if(decision==='approve')await affirm();
@@ -88,7 +89,7 @@ try{
    await refresh();await submit();await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,0);
    assert.match((await browser('get','text','#editor-error')).stdout,/stale, changed, or offline/);
    if(change==='offline'){
-    assert.equal(await evaluate('Array.from(document.querySelectorAll("[data-action^=skill-]")).every(b=>b.disabled)'),true);
+    assert.equal(await evaluate('Array.from(document.querySelectorAll("[data-action=skill-approve],[data-action=skill-reject]")).every(b=>b.disabled)'),true);
     if(decision==='approve'){
      await browser('set','viewport','390','844','2');
      await browser('eval','document.querySelector("#editor-fields").scrollTop=document.querySelector("#editor-fields").scrollHeight');

@@ -14,7 +14,7 @@ export type RoutinePut = BasePut & {
   action_policy_ids: string[];
 };
 export type MemoryPut = BasePut & { scope: Scope; text: string; source_event_id: string; expires_at: string | null; sensitivity: 'ordinary' | 'sensitive' };
-export type SkillBody = { name:string; description:string; when_to_use:string; inputs_access:string[]; steps:string[]; decision_rules:string[]; validation:string[]; output:string; failure_handling:string[]; approval_boundaries:string[]; contains_private_facts:false };
+export type SkillBody = { name:string; description:string; when_to_use:string; inputs_access:string[]; steps:string[]; decision_rules:string[]; validation:string[]; output:string; failure_handling:string[]; approval_boundaries:string[]; references?:{name:string;text:string}[]; contains_private_facts:false };
 export type SkillProvenance = { kind:'owner'|'task'|'notes'|'file'|'url'|'import'|'model'; source_ref:string };
 export type SkillProposal = { proposal_id:string; skill_id:string; expected_skill_revision:number; body:SkillBody; provenance:SkillProvenance; executable_files_changed:boolean };
 export type RoomPublish = { room_id: string; kind: 'context_update' | 'action_request' | 'message'; recipient_ids: string[]; text: string; references: { kind: string; id: string; revision: number }[]; cause_id: string };

@@ -4,6 +4,38 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Verified locally: bounded skill text references, no filesystem/executable support.
+Contract: optional `SkillBody.references`, max four `{name,text}` entries; names
+match `^[a-z0-9][a-z0-9._-]{0,63}\.(md|txt)$`, max 80 characters; text 1–16000
+Unicode code points. Duplicate names reject in SkillCatalog.propose, including
+restore. Omission remains omitted; [] explicitly removes. Existing executable
+flag denial, staged review, enablement and admitted snapshots remain unchanged.
+Workers received `.local/skill-references-base.bundle` at unpublished local main
+95076b9 (SHA256 128df1381b70752f8756646f1b23174cda7a323216777d805c92d0267c397482).
+Both schema and UI workers finished; patches verified and integrated. Host owns
+the combined checkout. Host reproduced malformed imported history/pending bodies
+bypassing ingress, then reused canonical validation in propose and approve;
+invalid pending proposals can still be rejected. Focused backend 210/runtime
+tools 13 and typecheck pass. Combined verifier passed 1506 backend/435 runtime
+plus real Worker/browser/native/service/build checks; desktop 16 passed. Final
+UI follow-up reproduced malformed-reference rendering failure and now blocks
+invalid/over-limit edits without truncating imports. Neighboring browser fixtures
+pass; a save-wait timeout is retained in browser-final.log, followed by passing
+diagnostic and browser-final-2 runs. The fixture now observes exact revision,
+reference contents and connection after refresh; two final consecutive runs pass
+in observed-refresh.log. Eight reference/editor/restore/invalid-state renders were
+inspected, including final comparison and narrow controls. No worker or check is
+active. Logs use `.local/skill-references-*`. Local/unpublished; no live/shared actions.
+
+Next UX11 work: explicit skill-test admission, before adding any safe-test UI.
+Current message.send takes only conversation/text; skill.enable is persona-wide.
+ControlCore.enqueue captures context, but LifecycleCore.claim recaptures enabled
+skills for each attempt. An explicit test must retain the exact approved skill
+revision through claim/retry without enabling it globally or expanding tools.
+Read these owning paths and existing restricted runtime profiles before choosing
+a command/claim contract. Do not label ordinary inference as isolated or safe;
+real model use, executable supporting files and connector effects remain separate.
+
 Integrated: routine-history execution/delivery disclosure. 97 backend/HTTP/
 retention/lifecycle tests and typecheck pass, `.local/routine-delivery-focused.log`.
 Exact current attempt only; content-free run-level outbox counts/portal status
@@ -19,10 +51,9 @@ plus real Worker, browser, native/service/build checks at
 `.local/routine-delivery-combined-final.log`. Final render reinspected; no active
 worker or verification process remains. This checkpoint is local/unpublished.
 Cloudflare approval remains pending; no live/provider/shared changes or new spend.
-Next remaining E05 work: supporting-file policy before safe-test execution. Current skill
-schema is prose only and executable changes reject; no supporting-file storage
-or safe-test runner exists. Keep this separate from history, preserve staged
-review and admitted revisions, and do not mistake imported text for capability.
+The supporting-text prerequisite is covered by the newer checkpoint above;
+installed executable files and a safe-test runner remain unimplemented. Preserve
+staged review and admitted revisions; imported text is not capability.
 
 Integrated: manual routine occurrence identity (UX12). Atomic routine.run
 creation, stable retry identity, explicit scheduled budget/overlap predicates.

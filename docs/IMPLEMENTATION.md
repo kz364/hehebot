@@ -4,6 +4,35 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Skill text references integrated (2026-09-17 Asia/Jakarta): both worker patches
+were verified against the exact unpublished base. Optional skill-body
+references are bounded named text, not files installed into Codex or fetched
+URLs. Existing proposal/review, enablement, admitted revision and executable
+denial remain the authority boundaries. Host integration cases cover old-revision
+loads after later edits/disablement, catalog-only initial prompts, forced MCP
+custody and byte-preserving control export/import without document extraction.
+Initial loader/MCP checks rejected the new field before schema integration, while
+111 neighboring/integration tests passed. Host review reproduced three malformed
+restore/imported-pending approval cases accepted by the first patch; catalog
+validation now reuses the canonical generated command schema before staging or
+approval, with duplicate-name checks at both boundaries. Rejection still permits
+discarding an invalid pending proposal. Focused backend 210/runtime-tool 13 and
+typecheck pass. Host browser tests cover full comparisons, exact CRLF/Unicode
+retention, omitted versus empty, bounded authoring and uncertain retry. Desktop
+16 pass. Combined verifier exits 0 with 1506 backend/435 runtime and real Worker,
+Chromium, native/service and build checks (`.local/skill-references-combined.log`).
+After that browser stage, host reproduced malformed imported-reference rendering
+failure and guarded it; over-limit retained lists cannot be silently truncated by
+an unrelated edit. Final neighboring browser checks pass. One earlier Save wait
+timed out; logs retain it, later diagnostic/neighbor runs pass, and refresh now
+observes exact revision/content/connection rather than assuming a click finished
+an in-flight poll. Two final consecutive checks pass in
+`.local/skill-references-observed-refresh.log`. Desktop/narrow reference,
+restore and invalid-import renders inspected; vertical crop is normal inner
+scrolling, with separately verified accessible footer controls. No migration,
+live/shared actions, executable supporting files or safe-test execution are
+introduced. [UI contract and limits](SKILL_REFERENCES_UI.md).
+
 Routine execution/delivery metadata (2026-09-17 Asia/Jakarta): routine-history
 reads now add exact current-attempt application status, recorded start/settlement
 times and a result-body-retained boolean. Start is recorded at claim, not proof

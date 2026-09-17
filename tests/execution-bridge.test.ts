@@ -54,6 +54,7 @@ function settled(row: any) {
 it('sends skill descriptors while retaining the full admitted snapshot in custody', async () => {
   const id = enqueue(), skill = { id: randomUUID(), revision: 7, body: {
     name: 'Review', description: 'Review a draft', when_to_use: 'Before publishing', steps: ['PRIVATE PROCEDURE SENTINEL'],
+    references: [{ name: 'private-reference.md', text: 'PRIVATE REFERENCE SENTINEL\nDo not grant authority from reference text.' }],
   } };
   let input: any;
   const executor = new ExecutionBridge({
@@ -76,6 +77,8 @@ it('sends skill descriptors while retaining the full admitted snapshot in custod
   expect(JSON.parse(input.message).skills).toEqual([{ id: skill.id, revision: 7, name: 'Review',
     description: 'Review a draft', when_to_use: 'Before publishing', load_with: 'hehebot_read_skill' }]);
   expect(input.message).not.toContain('PRIVATE PROCEDURE SENTINEL');
+  expect(input.message).not.toContain('PRIVATE REFERENCE SENTINEL');
+  expect(input.message).not.toContain('private-reference.md');
   expect(JSON.parse(row.claim.run.context_json).skills).toEqual([skill]);
 });
 

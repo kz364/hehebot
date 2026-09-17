@@ -19,6 +19,7 @@ node --test macos/tests/*.test.mjs
 node scripts/verify-wappmcp.mjs
 npm run test:e2e
 node scripts/test-portal-skill-draft.mjs
+node scripts/test-portal-skill-references.mjs
 node scripts/test-portal-skill-history.mjs
 node scripts/test-portal-routine-history.mjs
 node scripts/test-portal-routine-preflight.mjs
