@@ -12,17 +12,19 @@ schedule/lifecycle/budget tests and typecheck pass at
 `.local/routine-capacity-focused.log`. Tests/docs only; no cap or application
 change. No native/browser rerun for this checkpoint; prior combined evidence
 below remains for unchanged implementation. Real Worker full-batch alarm and
-persistent reopen fixture is now owned by existing worker thread
-T-01a0ad1a-f103-75e9-a19f-fe26a6eacbe3. Exact unpublished host base c6b284c was
-transferred as `.local/routine-worker-base.bundle` (SHA256
-6cdbd1c1429dd49e8c4e9161998c469791bcab4c7372ae952960300c3e051075).
-Do not duplicate it. Owned files: scripts/test-routine-capacity-worker.mjs and
-tests/routine-capacity-worker.ts only. It must invoke real PersonalControl methods
-on disposable workerd SQLite, retain both execution flags false, distinguish
-explicit alarm-handler invocation from timed/hosted delivery, and stop/reopen
-the same disposable persistence with exact row comparisons. Host owns integration,
-verifier wiring and shared progress. Worker will reply with patch/hash/evidence.
-No throughput/live cost claim or new authorization.
+persistent reopen fixture is delivered/integrated; no active worker/check remains.
+Host verified hashes and ran scripts/test-routine-capacity-worker.mjs, typecheck,
+full backend1540 tests and test:e2e (migration, capacity/reopen, 26 Worker HTTP
+checks), all passing at `.local/routine-capacity-{worker-host,backend,e2e}.log`.
+test-local.mjs now imports the fixture, so the combined verifier includes it.
+It invokes real PersonalControl methods on workerd SQLite, both gates false,
+fixed future test clock; it proves explicit alarm-handler invocation and exact
+persisted restart, NOT timed/hosted alarm delivery. Environment allowlisted,
+disposable HOME/storage, loopback fixture routes; no production changes.
+Retain the cap. No further duplicate/refusal matrix is needed for this boundary;
+the remaining capacity decision needs representative execution/throughput/cost
+evidence under applicable authorization. Do not renew live budgets or repeat the
+unchanged Cloudflare approval request. Continue remaining independent P1 work.
 
 Task-to-skill UI worker finished; hash-verified patch integrated. Host fixed
 streamed UTF-8 fixture decoding and wired the new browser test into the verifier.

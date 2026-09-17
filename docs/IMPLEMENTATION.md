@@ -4,6 +4,29 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Real Worker capacity follow-through (2026-09-17 Asia/Jakarta): hash-verified
+two-file fixture integrated and imported by test-local.mjs. A test-only
+PersonalControl subclass injects a fixed future clock and readback, leaving real
+constructor/accept/reconcile/alarm/arm code intact. Disposable Wrangler workerd
+SQLite proves 20 enabled routines (13/7 across two personas), atomic 21st refusal,
+disabled draft, 20 coalesced runs after twelve missed ticks, duplicate identity
+retention, 13 replacements/seven skips, then exact rows/IDs/context/alarm after
+stopping and reopening Wrangler on the same storage. Next alarms are 00:15,
+03:15 and 03:45 at each stage. Execution/native flags remain false; active runs
+are CAPABILITY_UNAVAILABLE, all attempts zero, no attempts/effects/outbox, and
+lifecycle STOPPED/STOP with queue_sequence0. Budget variant remains in the
+separate core test below, not claimed by this fixture.
+
+Host commands: node check and `node scripts/test-routine-capacity-worker.mjs`,
+`npm run typecheck`, `npm test` (76 files/1540 tests), `npm run test:e2e`
+(migration/reopen, capacity/reopen, 26 existing Worker HTTP checks) all pass.
+Logs: `.local/routine-capacity-{worker-host,backend,e2e}.log`. Fixture-only changes;
+unchanged native/browser/desktop code retains its preceding combined evidence.
+No hosted/timed alarm delivery, production ingress auth, live execution,
+throughput or dollar-cost evidence. Routes are loopback-only, subprocess env is
+allowlisted with disposable HOME, and cleanup removes processes/config/storage.
+Retain the cap; there is no evidence here for a cost-safe increase.
+
 Routine capacity prerequisite (2026-09-17 Asia/Jakarta): `tests/schedule.test.ts`
 now tests the installation-wide 20/21 enabled boundary with 13/7 routines across two personas,
 editing at capacity, disabled drafts and slot reuse. No runtime behavior changed.

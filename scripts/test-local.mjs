@@ -8,6 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { importControlExport } from './import-control-export.mjs';
 import { verifyControl } from './backup-control.mjs';
 await import('./test-schema-migration.mjs');
+await import('./test-routine-capacity-worker.mjs');
 const directory=await mkdtemp(join(tmpdir(),'hehe-worker-test-'));
 const child=spawn(process.execPath,['node_modules/wrangler/bin/wrangler.js','dev','--local','--env','local','--ip','127.0.0.1','--port','0','--persist-to',directory],{env:{...process.env,WRANGLER_LOG_PATH:join(directory,'logs'),WRANGLER_SEND_METRICS:'false'},stdio:['ignore','pipe','pipe']});
 let logs='';child.stdout.on('data',x=>{logs+=x.toString();});child.stderr.on('data',x=>{logs+=x.toString();});
