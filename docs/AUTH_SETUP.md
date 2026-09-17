@@ -181,7 +181,21 @@ remaining existing $10 total allowance and without paid upgrades. Use the curren
 integrated unpublished local checkout, not origin/main. This does not authorize
 Git push, Sprite changes, agents/routines/connectors, model inference/login or
 private retained-state upload. Keep execution/native flags false and provider
-configuration empty; omit hosted-alpha admission. Deployment is not yet executed.
+configuration empty; omit hosted-alpha admission. Only the identity bootstrap is
+deployed; full portal/SQLite deployment awaits the verified owner subject.
+
+Current checkpoint: the browser operator created and independently read back the
+exact-host owner-only Access app after reload. Host deployed the separate
+`src/worker/owner-bootstrap.ts` entrypoint, with no assets/storage/runtime bindings.
+Live anonymous root/API/assets/bootstrap and forged-header requests redirect to
+the configured Access team. Previews are disabled. The owner opens production
+`/__owner-bootstrap`, completes Access login, and saves the returned verified JSON
+privately as mode0600 `.local/secrets/cloudflare-owner-sub.json`. Never request a
+JWT/cookie/session export. This endpoint verifies signature, issuer, audience and
+exact email but exposes no portal data; full auth still requires exact OWNER_SUB.
+Replace this temporary entrypoint with the full portal only after pinning the
+verified subject. The bearer Access API discrepancy below remains unresolved;
+do not recreate the app merely because that token lists zero apps.
 
 **No domain purchase is needed.** Cloudflare documents production workers.dev
 protection in [Workers Access](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)

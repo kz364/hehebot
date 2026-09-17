@@ -1,8 +1,28 @@
 # Implementation status
 
-Hehebot has demonstrated authenticated chat, a scoped routine read and a persisted provisional reply, not production operation. Direct Codex app-server **0.154.0** is the only supported harness. No cloud deployment has occurred; production execution and native-verification flags remain false.
+Hehebot has demonstrated authenticated chat, a scoped routine read and a persisted provisional reply, not production operation. Direct Codex app-server **0.154.0** is the only supported harness. An identity-only bootstrap Worker is deployed; full portal/control-plane deployment awaits owner subject verification. Production execution and native-verification flags remain false.
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
+
+Identity-only deployment (2026-09-17): browser independently reloaded/read back the
+exact-host Access app and sole exact-email Allow policy, one-hour duration and no
+bypass, then released ownership. Host app/policy GET403/1010 and list200/empty
+persist; token discrepancy unresolved. No duplicate or unrelated app mutation.
+Separate owner-bootstrap entrypoint has no database/assets/runtime bindings. It
+accepts only exact-host HTTPS GET /__owner-bootstrap and verifies signed RS256
+issuer/audience/email before returning the subject with private/no-store. It
+neither guesses OWNER_SUB nor grants control-plane access using email alone.
+34 bootstrap/auth tests pass, typecheck/dry-run exit0. Actual Wrangler4.130.0 deploy
+exit0, 36.49KiB upload/10.15KiB gzip, startup2ms. Live anonymous bootstrap/root/API/
+asset plus forged-header probes all302 to configured team Access login. API readback
+confirms production hostname enabled, previews disabled, only four bootstrap vars,
+zero target custom domains; account zone list200/empty. No successful authenticated
+owner login yet. Owner saves displayed verified JSON privately; only then pin
+OWNER_SUB and replace bootstrap with current full portal/fresh SQLite deployment.
+No retained state, inference, Sprite, connector activation or paid plan change.
+Actual billing balance unverified; limited Worker requests do not renew allowance.
+Private evidence: bootstrap-deploy.log, bootstrap-live-check.json,
+bootstrap-zone-check.json and cloudflare-access-handback-check.json in .local/.
 
 Access write attempt (2026-09-17): private owner config now present and validated
 without disclosure; expected team JWKS responds. Authorized POST for one self-hosted

@@ -1,8 +1,30 @@
 # Hehebot agent handoff
 
-Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. Authenticated chat, a scoped routine read and persisted provisional reply are observed; it is not deployed or production operational, and full settlement remains unverified.
+Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. Authenticated chat, a scoped routine read and persisted provisional reply are observed. An identity-only Worker is deployed; the full portal/control plane is not deployed or production operational, and full settlement remains unverified.
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
+
+LATEST: browser released Access ownership after independent post-reload dashboard
+GET verified exact-host app/sole owner policy, 1h/no bypass. Host bearer app/policy
+GET still403 and app list empty; discrepancy is unresolved, not proof app absent.
+Host deployed identity-only `src/worker/owner-bootstrap.ts` using private
+`.local/cloudflare-bootstrap.json`, Wrangler4.130.0 exit0. No assets/storage/runtime
+bindings; all control routes return503 even for valid identity. Exact-host GET
+`/__owner-bootstrap` verifies RS256 issuer/audience/exact email and returns signed
+subject only, not JWT. Never derive subject from email or create another app.
+Live anonymous root/bootstrap/API/asset and forged-header probes all302 to exact
+configured Access team; API confirms previews off/four vars only/zero target custom
+domains, zone list empty. This supersedes earlier no-deployment/creation blockers.
+34 auth/bootstrap tests + typecheck/dry-run pass. Private logs:
+`.local/bootstrap-{deploy,live-check,zone-check}` with log/json extensions;
+`.local/cloudflare-access-handback-check.json` records failed bearer readback.
+Owner action: open protected production `/__owner-bootstrap`, log in, save displayed
+JSON to mode0600 `.local/secrets/cloudflare-owner-sub.json` in host Terminal and
+report done. Do not request JWT/cookies or infer subject. Then validate supplied
+verified result, pin subject, deploy full current checkout with fresh SQLite, and
+verify owner access/negative auth. No full portal/SQLite, owner login, activation,
+paid upgrade or private-state upload yet. Budget balance unverified; original
+remaining $10 ceiling unchanged. Schedule stays paused awaiting owner login.
 
 After the owner's blanket-permission report, one bounded retry still returned
 403/1010 auth.forbidden; app listings before/after were empty. Stop create retries.
