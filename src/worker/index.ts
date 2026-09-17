@@ -51,6 +51,8 @@ export default {
    if(conversation&&request.method==='GET'){const before=url.searchParams.get('before');requireThat(before===null||/^\d+$/.test(before)&&Number.isSafeInteger(Number(before)),'INVALID_INPUT','Invalid history cursor.',422);return json(unwrap(await control.getTimeline(owner,conversation[1],before===null?undefined:Number(before))));}
    const tasks=path.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/tasks$/i);
    if(tasks&&request.method==='GET')return json(unwrap(await control.getTasks(owner,tasks[1],url.searchParams.get('after')??undefined,Number(url.searchParams.get('limit')??10))));
+   const routinePreflight=path.match(/^\/v1\/routines\/([0-9a-f-]{36})\/preflight$/i);
+   if(routinePreflight&&request.method==='GET')return json(unwrap(await control.getRoutinePreflight(owner,routinePreflight[1])));
    const routineRuns=path.match(/^\/v1\/routines\/([0-9a-f-]{36})\/runs$/i);
    if(routineRuns&&request.method==='GET'){
     const after=url.searchParams.get('after'),limit=url.searchParams.get('limit');

@@ -4,6 +4,18 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Routine preflight API (2026-09-17 Asia/Jakarta): owner-only
+`GET /v1/routines/:id/preflight` returns current revision/persona, enabled state,
+schedule preview, overlap/misfire policy and manual-run blockers. The command
+shares grant/unfinished-work/persona checks, preserving rejection codes and
+rechecking after the observation. Paused manual execution remains allowed without
+resuming. Execution-enabled is separate from command allowance; connector/model/
+input/effect readiness and delivery are explicitly unverified. Reads use the
+schedule-preview rate bucket without reconciliation, alarms, UUIDs or task writes.
+51 focused tests and typecheck passed; subsequent grant-change regression added.
+Combined verification is running in `.local/routine-preflight-combined.log`.
+No UI or alpha gateway expansion, real inference, provider or account action.
+
 Routine history portal (2026-09-17 Asia/Jakarta): integrated the owned UI patch
 against the exact unpublished API base. Routine cards expose on-demand all-status
 history with exclusive UUID pages, observation/counts and explicit request,

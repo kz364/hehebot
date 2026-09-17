@@ -103,6 +103,7 @@ export class PersonalControl extends DurableObject<Env> {
  async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{await this.beforeRequest(owner+':write',60);const result=this.core.accept(owner,key,hash,input);await this.arm();return result;});}
  getReceipt(owner:string,id:string){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receipt(id);});}
  getSchedulePreview(owner:string,cron:string,timezone:string){return rpcResult(()=>{this.rate(owner+':schedule-preview',30);return this.core.schedulePreview(cron,timezone);});}
+ getRoutinePreflight(owner:string,id:string){return rpcResult(()=>{this.rate(owner+':schedule-preview',30);return this.core.routinePreflight(id);});}
  getSkillHistory(owner:string,id:string,before?:number,limit=10){return rpcResult(()=>{this.rate(owner+':read',120);return new SkillCatalog(this.store,()=>this.core.now(),this.core.options.uuid).history(id,before,limit);});}
  async getState(owner:string,after?:number,limit=100){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return {...this.core.state(after,limit),provider:this.providerSummary()};});}
  getTasks(owner:string,id:string,after?:string,limit=10){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.taskPage(id,after,limit);});}

@@ -57,6 +57,20 @@ it('serves signed-owner routine history with exclusive pagination and no reconci
   expect(custody()).toEqual(before); expect(setAlarm).not.toHaveBeenCalled(); expect(deleteAlarm).not.toHaveBeenCalled();
 });
 
+it('serves preflight observations without reconciliation, alarms or captured private context', async () => {
+  const before=custody(),response=await request(`/v1/routines/${routineId}/preflight`),value=await response.json();
+  expect(response.status).toBe(200);
+  expect(value).toMatchObject({routine_id:routineId,routine_revision:1,persona_id:bot,manual_run:{command_allowed:false,execution_enabled:false,blockers:[{code:'RESOURCE_BUSY'}]}});
+  expect(JSON.stringify(value)).not.toMatch(/HTTP_PRIVATE_CONTEXT|context_json|checkpoint_json/);
+  expect(custody()).toEqual(before);expect(setAlarm).not.toHaveBeenCalled();expect(deleteAlarm).not.toHaveBeenCalled();
+});
+
+it.each(['missing','foreign','runtime'] as const)('denies %s credentials before preflight RPC',async actor=>{
+  const before=custody(),spy=vi.spyOn(control,'getRoutinePreflight');
+  expect((await request(`/v1/routines/${routineId}/preflight`,actor)).status).toBe(401);
+  expect(spy).not.toHaveBeenCalled();expect(custody()).toEqual(before);expect(setAlarm).not.toHaveBeenCalled();
+});
+
 it.each(['missing', 'foreign', 'runtime'] as const)('denies %s credentials before routine-history RPC', async actor => {
   const before = custody(), spy = vi.spyOn(control, 'getRoutineTasks');
   const response = await request(`/v1/routines/${routineId}/runs`, actor);

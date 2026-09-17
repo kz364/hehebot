@@ -49,6 +49,21 @@ export class ControlCore {
   const schedule={cron,timezone};validateSchedule(schedule);const observed_at=this.now();
   return {schedule,observed_at,next_times:preview(schedule,observed_at,3)};
  }
+ routinePreflight(id:string){
+  const routine=this.store.get<RoutinePut>(id,'routine'),observed_at=this.now(),blockers=this.routineRunBlockers(routine);
+  return {routine_id:routine.id,routine_revision:routine.revision,persona_id:routine.body.persona_id,observed_at,
+   enabled:routine.body.enabled,schedule:routine.body.schedule,next_times:routine.body.schedule?preview(routine.body.schedule,observed_at):[],policy:routine.body.policy,
+   manual_run:{command_allowed:blockers.length===0,blockers:blockers.map(({code,message})=>({code,message})),execution_enabled:this.options.executionEnabled},
+   limitations:['Observation only; the command rechecks current revision and authority. A paused routine may run once without resuming.',
+    'Schedule times are a preview, not admission or delivery promises. Connector credentials, model access, inputs and effect approvals are not verified.']};
+ }
+ private routineRunBlockers(routine:StoredObject<RoutinePut>):ControlError[]{
+  const blockers:ControlError[]=[];
+  if(!routine.body.action_policy_ids.every(id=>this.options.actionPolicyIds.includes(id)))blockers.push(new ControlError('FORBIDDEN','A routine action policy is no longer authorized.',403));
+  if(this.store.db.all("SELECT id FROM runs WHERE routine_id=? AND status NOT IN ('completed','failed','cancelled') LIMIT 1",routine.id).length)blockers.push(new ControlError('RESOURCE_BUSY','This routine already has unfinished work.'));
+  try{this.activePersona(routine.body.persona_id);}catch(error){if(!(error instanceof ControlError))throw error;blockers.push(error);}
+  return blockers;
+ }
  seed():void {
   const count=this.store.db.all<{n:number}>('SELECT COUNT(*) AS n FROM objects')[0].n;
   if(count)return;
@@ -184,10 +199,9 @@ export class ControlCore {
    case 'routine.run': {
     const p=command.payload,routine=this.store.get<RoutinePut>(p.id,'routine');
     requireThat(routine.revision===p.expected_revision,'REVISION_CONFLICT','Reload the routine before running it.');
-    requireThat(routine.body.action_policy_ids.every(id=>this.options.actionPolicyIds.includes(id)),'FORBIDDEN','A routine action policy is no longer authorized.',403);
     // An explicit one-off may run a paused routine, but never changes its schedule
     // or silently duplicates queued, cancelling or uncertain work.
-    requireThat(!this.store.db.all("SELECT id FROM runs WHERE routine_id=? AND status NOT IN ('completed','failed','cancelled')",p.id).length,'RESOURCE_BUSY','This routine already has unfinished work.');
+    const blocker=this.routineRunBlockers(routine)[0];if(blocker)throw blocker;
     return this.enqueue(routine.body.persona_id,routine.body.instructions,commandId,p.id,null);
    }
    case 'routine.delete': {

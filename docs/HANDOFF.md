@@ -4,6 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest: owner GET /v1/routines/:id/preflight implemented with shared manual-run
+grant/busy/persona checks. Response distinguishes command_allowed from
+execution_enabled; schedule preview is not admission/delivery/credential proof.
+Existing missing/deleted persona NOT_FOUND and archived CAPABILITY_UNAVAILABLE
+codes preserved. Reads are rate-only, no reconciliation/alarms/task writes.
+51 focused tests/typecheck passed; grant-change-after-preflight regression added.
+Combined running at .local/routine-preflight-combined.log; verify final result.
+Test subagent finished, no active assignment. Next: on-demand preflight UI with
+stale observation warnings and no automatic test run. Alpha gateway unchanged;
+Cloudflare decision still pending, no live actions or repeated approval request.
+
 Newest: routine history UI worker is finished, reviewed and integrated. On-demand
 routine-card pages are read-only, UUID-ordered (not chronological), with explicit
 provisional-output/delivery/settlement limits. Alpha has zero new history reads;
