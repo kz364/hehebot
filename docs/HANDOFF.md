@@ -1,10 +1,26 @@
 # Hehebot agent handoff
 
-Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. Authenticated chat, a scoped routine read and persisted provisional reply are observed. An identity-only Worker is deployed; the full portal/control plane is not deployed or production operational, and full settlement remains unverified.
+Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. Authenticated chat, a scoped routine read and persisted provisional reply are observed. The protected portal/control-plane Worker is deployed with execution disabled; authenticated first-load SQLite initialization and production operation remain unverified.
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
-LATEST: browser released Access ownership after independent post-reload dashboard
+LATEST: owner supplied verified bootstrap JSON, host saved it0600 privately and
+owner explicitly asked to continue. Full Worker/four public assets deployed with
+private `.local/cloudflare-control.json`; exact subject pinned, not inferred.
+Wrangler4.130.0 deploy exit0, new CONTROL namespace/SQLite migration configured.
+Remote vars all match, only ASSETS + CONTROL bindings, no bootstrap email vars,
+runtime credentials/alpha/provider/trigger activation. Execution/native false.
+Previews off, zero target custom domains; seven anonymous/forged ingress probes
+all302 to exact Access team.63 auth/owner-binding/hosted-policy tests pass; build
+and private release dry-run pass. No retained DB/journal/credentials uploaded.
+Next: owner opens production root and confirms authenticated portal/state load;
+orb has no owner session, so first-load database initialization is not yet proven.
+Do not reactivate bootstrap or request JWT/cookies. No further activation authorized.
+Logs `.local/control-{deploy-auth,deploy-build,release-dry-run,release-deploy}.log`
+and `.local/control-release-live-check.json`. No paid upgrade or known bill total;
+existing remaining allowance unchanged. No Git push. Earlier blockers superseded.
+
+Prior bootstrap: browser released Access ownership after independent post-reload dashboard
 GET verified exact-host app/sole owner policy, 1h/no bypass. Host bearer app/policy
 GET still403 and app list empty; discrepancy is unresolved, not proof app absent.
 Host deployed identity-only `src/worker/owner-bootstrap.ts` using private

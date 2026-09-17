@@ -181,10 +181,12 @@ remaining existing $10 total allowance and without paid upgrades. Use the curren
 integrated unpublished local checkout, not origin/main. This does not authorize
 Git push, Sprite changes, agents/routines/connectors, model inference/login or
 private retained-state upload. Keep execution/native flags false and provider
-configuration empty; omit hosted-alpha admission. Only the identity bootstrap is
-deployed; full portal/SQLite deployment awaits the verified owner subject.
+configuration empty; omit hosted-alpha admission. The full portal/control-plane
+Worker is now deployed with exact owner subject pinned after successful bootstrap.
+Remote bindings/config and anonymous rejection are verified; authenticated portal
+first-load SQLite initialization awaits owner browser confirmation.
 
-Current checkpoint: the browser operator created and independently read back the
+Prior bootstrap checkpoint: the browser operator created and independently read back the
 exact-host owner-only Access app after reload. Host deployed the separate
 `src/worker/owner-bootstrap.ts` entrypoint, with no assets/storage/runtime bindings.
 Live anonymous root/API/assets/bootstrap and forged-header requests redirect to

@@ -1,8 +1,25 @@
 # Implementation status
 
-Hehebot has demonstrated authenticated chat, a scoped routine read and a persisted provisional reply, not production operation. Direct Codex app-server **0.154.0** is the only supported harness. An identity-only bootstrap Worker is deployed; full portal/control-plane deployment awaits owner subject verification. Production execution and native-verification flags remain false.
+Hehebot has demonstrated authenticated chat, a scoped routine read and a persisted provisional reply, not production operation. Direct Codex app-server **0.154.0** is the only supported harness. The protected portal/control plane is deployed; authenticated first-load SQLite initialization remains unverified. Production execution and native-verification flags remain false.
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
+
+Full control-plane deployment (2026-09-17): owner supplied successful bootstrap
+identity and directed continuation. Host saved valid JSON0600 and generated private
+deployment configuration from checked-in wrangler config plus verified identity.
+63 auth/owner-binding/hosted-policy tests pass; npm run build and private release
+dry-run exit0. Actual Wrangler4.130.0 deploy exit0: four public files uploaded,
+2356.86KiB Worker/254.63KiB gzip, startup12ms, CONTROL namespace with SQLite migration
+configuration. No retained local state or runtime credentials uploaded. Remote
+settings readback matches all configured vars (including owner pin, issuer/AUD,
+disabled execution/native), and exactly ASSETS + CONTROL non-variable bindings.
+Previews disabled; zero target custom domains. Seven anonymous/forged probes of
+root, state, assets, command/internal POST, former bootstrap path all302 to exact
+Access team, no data. Owner bootstrap login succeeded; full portal/state login and
+new-store initialization still await owner browser confirmation. No claimed hosted
+assistant execution. No paid upgrade; billing balance unverified. Private evidence
+in .local/control-deploy-{auth,build}.log, control-release-{dry-run,deploy}.log and
+control-release-live-check.json. No Access app mutation or Git push.
 
 Identity-only deployment (2026-09-17): browser independently reloaded/read back the
 exact-host Access app and sole exact-email Allow policy, one-hour duration and no
