@@ -1,10 +1,80 @@
 # Hehebot agent handoff
 
-Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. Authenticated chat, a scoped routine read and persisted provisional reply are observed. The protected portal/control-plane Worker is deployed with execution disabled; authenticated first-load SQLite initialization and production operation remain unverified.
+Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. The protected portal/control plane and authenticated SQLite state read work. A hosted model reply persisted only as provisional output; task completion failed and custody remains recovery-required. Production execution/native gates remain false.
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
-LATEST: owner supplied verified bootstrap JSON, host saved it0600 privately and
+LATEST: real hosted trial FAILED completion, not permission/account access. UI sent
+one prompt13:18:28.168Z, command7ee4ae8b-4779-4d92-bb6b-1a2857184954,
+run0639f8f7-0d27-411f-a57f-a2c56689c9fa. Exact HEHEBOT_HOSTED_CHAT_OK_73 persisted
+as preview across reload (attempt1/version1); zero completed assistant events.
+Native rootSettled:true/nativeOutcome:completed, adapter finishing, family retained.
+120s DEADLINE_EXCEEDED→cancelling→CANCEL_UNCONFIRMED/recovery_required.
+Old run7481a204-9126-4ed3-a8db-a0106e7a9156 still waiting/attempt0 unchanged.
+Session fdbea48d-7043-41c4-a623-4bb2439ce9da expired13:22:11.726Z; launcher stopped
+after grace/exit0, retained state/no replay; Worker RECOVERY_REQUIRED epoch1,
+executionfalse, latest read-only Sprite observation cold (not settlement proof).
+No more live model calls or resets.
+Active private deployment config is .local/cloudflare-hosted-chat.json (contains
+expired immutable HEHEBOT_HOSTED_OWNER_ALPHA). Do not deploy older control config
+or remove policy: existing alpha custody rejects changes; never erase metadata.
+Session operator file .local/hosted-chat-operator.json; remote same filename under
+release .local. Exact stateDirectory in it; preserve journal/native home/credentials.
+Runtime Service Auth app12ef0820-068c-46a9-bef9-1cbe80ea7af1 covers /internal/* only;
+token files HEHEBOT_ACCESS_CLIENT_ID/SECRET and HEHEBOT_RUNTIME_TOKEN in .local/secrets
+are0600, uploaded to remote release .local/hosted-credentials/. App token expires
+2027-09-17T13:08:36Z; owner app unchanged. Host/Sprite status200 and independently
+computed owner-binding match; wrong/missing bearer401, public root/state302 even
+with service credentials. No credentials in chat. Browser worker finished; no
+active delegated task. Screenshot inspected at .amp/in/artifacts/hosted-chat-provisional-readback.png.
+Logs .local/hosted-chat-{deploy,launch}.log, hosted-runtime-auth-check.json,
+hosted-chat-final-status.json, sprite-chat-after.json. Budget remains existing$10;
+no new Sprite/paid upgrade/connector/routine activation; no more approval needed.
+
+Next LOCAL prerequisite: current alpha cannot produce completion receipts. Oracle
+and pinned-source investigation confirm no inference from root completion/event
+silence; goals can continue after turn end, native tools/background paths remain.
+Added scripts/test-codex-owner-alpha.mjs --text-only: static direct catalog, empty
+turn environments, no MCP/dynamic, disabled goals/hooks/utility tools. Native
+catalog[] +17 injected unsupported calls,2 roots/3 loopback requests pass;
+completionEligible:false. Config/read omits extension tool settings; exact native
+behavior verifies them. No live deployment/profile change. Full verifier exits0:
+1556 backend/444 runtime tests,27 Worker checks plus native/browser/service/build
+(.local/hosted-text-only-combined.log); desktop16 pass. No active check/worker.
+Latest Sprite evidence .local/sprite-chat-final-observation.json. Do not rerun live trial. Next versioned receipt/
+coverage/backend gates and safe session lifecycle remain unimplemented. Preserve
+historical failed task; new profile cannot retroactively qualify it for settlement.
+
+Prior preparation: owner confirms deployed portal loads, authorizes supervised runtime/chat
+within existing remaining $10 total and no repeated scoped approval requests.
+No connector/routine activation, new paid plan, old-message replay or extra Sprites.
+Reuse existing Sprite and its existing private native auth IN PLACE, never copy
+OAuth caches. Current source installed at /home/sprite/hehebot-hosted-chat; pinned
+0.154.0 is in that release's .local/codex-runtime. Existing nativeHome remains
+/home/sprite/hehebot/.local/codex-account. No native executor observed before prep.
+Supported account/read+model/list confirms ChatGPT and gpt-5.6-luna, zero inference.
+Real Tasks hold/renew/release fixture passed and removed its test task.
+Default Sprite caps make bwrap refuse session creation (zero turns/model requests).
+Same pristine fixture passes under `setpriv --bounding-set=-all --inh-caps=-all
+--ambient-caps=-all --no-new-privs`: effective/bounding/ambient all0, NNP1.
+Use this OS wrapper for hosted launcher; never disable sandbox/patch dependency.
+Remote diagnostic logs /tmp/hehebot-hosted-native-{contract,dropped-caps}.log;
+private raw native fixtures remain under release .local/owner-alpha-native-*.
+Dedicated bearer generated at .local/secrets/HEHEBOT_RUNTIME_TOKEN and deployed as
+Worker RUNTIME_TOKEN (secret put exit0). No admission policy enabled yet.
+Browser thread T-01a0aea2-0f37-71de-a34b-6b2b48285430 owns only /internal/* Service
+Auth application/token setup; parent owner app unchanged. It will upload private
+HEHEBOT_ACCESS_CLIENT_ID/HEHEBOT_ACCESS_CLIENT_SECRET under host .local/secrets.
+Host owns Worker/Sprite, no overlapping Access mutations. Await worker reply,
+not polling. Next verify service-only access rejects public paths, runtime bearer
+negative cases and independently computed owner-binding digest via internal/status.
+Then choose fresh session/one persona, deploy hosted policy and run existing locked
+launcher. Existing policy is immutable ≤5min/≤3 roots; not always-on chat. Old
+execution-disabled messages are waiting and claims select queued, so no replay.
+Production gates remain false. No live model request/new Sprite/paid upgrade yet;
+actual balance unverified. Budget authorization applies, no redundant consent.
+
+Prior deployment: owner supplied verified bootstrap JSON, host saved it0600 privately and
 owner explicitly asked to continue. Full Worker/four public assets deployed with
 private `.local/cloudflare-control.json`; exact subject pinned, not inferred.
 Wrangler4.130.0 deploy exit0, new CONTROL namespace/SQLite migration configured.

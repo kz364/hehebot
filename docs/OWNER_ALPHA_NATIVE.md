@@ -13,7 +13,33 @@ authorization are separate contracts. No execution/native-verification gate chan
 bash scripts/setup-codex.sh
 node scripts/test-codex-owner-alpha.mjs
 node scripts/test-codex-owner-alpha.mjs --profile-overrides
+node scripts/test-codex-owner-alpha.mjs --text-only
 ```
+
+### Text-only candidate is a separate local prerequisite
+
+`--text-only` keeps the profile-override test and adds a supported static
+`model_catalog_json` with `tool_mode:"direct"` and no experimental tools, explicit
+`turn/start.environments:[]`, no MCP/dynamic tools, and disabled goals/hooks/image/
+sleep features plus `tools.experimental_request_user_input.enabled:false` and
+`tools.update_plan.enabled:false`. These settings follow the pinned upstream
+[temporary structured request](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/tui/src/temporary_structured_request.rs)
+and [turn interface](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/src/protocol/v2/turn.rs).
+Empty environments alone leaves utility/extension tools; feature flags alone do
+not override model-selected code mode. The fixture uses a synthetic model, not
+fabricated live model eligibility or a Codex-owned cache/database modification.
+
+Every scripted provider request must contain exactly `tools:[]`. Seventeen
+injected spawn, shell, patch, image, goal, code-mode, user-input, plan, MCP-resource
+and clock calls must each return the exact unsupported-call error. Two exact root
+outputs, one native thread, no background terminals, unchanged config/catalog
+bytes and three loopback requests are checked. Native config/read omits the two
+extension tool settings; their effect is checked through actual catalog/dispatch
+behavior, not an invented readback field. The report deliberately retains
+`completionEligible:false`: this is not a settlement builder, an exhaustive
+extension audit, live ChatGPT behavior or permission to close historical tasks.
+Runtime admission, receipt construction, output identity, coverage, Worker gates,
+observation-loss handling and safe session lifecycle still need separate work.
 
 The script imports the existing transport (including its sanitized environment
 and default-denied callbacks). It creates a private disposable home under

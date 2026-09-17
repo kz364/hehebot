@@ -1,6 +1,6 @@
 # Accounts, authentication, and deployment checklist
 
-No cloud deployment has been completed. Bounded same-owner ChatGPT-backed chat, routine reads, V2 background responsiveness and exact cancellation have been observed in the orb; see [implementation evidence](IMPLEMENTATION.md). That does not prove deployment permission, unattended refresh, live provider containment, or connector effects. Never paste tokens, OAuth/device codes, QR codes, or personal data into documentation, prompts, or logs.
+The protected portal/control plane is deployed and authenticated SQLite reads work. One same-owner hosted ChatGPT reply persisted as provisional output, but task completion failed and custody remains recovery-required; see [implementation evidence](IMPLEMENTATION.md). This is not an operational chat service or proof of unattended refresh, provider containment, or connector effects. Never paste tokens, OAuth/device codes, QR codes, or personal data into documentation, prompts, or logs.
 
 ## Required boundaries
 
@@ -9,6 +9,24 @@ No cloud deployment has been completed. Bounded same-owner ChatGPT-backed chat, 
 3. **Application credentials:** deployment credentials, runtime bearer, wake token, connector credentials, and model auth are separate domains. Store secrets in platform/private stores with least privilege. New environment variables use `HEHEBOT_`; the wake request uses `x-hehe-wake-token`.
 4. **Codex:** install app-server 0.154.0 and complete the supported owner-authorized ChatGPT login in the same persistent runtime environment that executes work. Follow [Codex runtime setup](CODEX_RUNTIME_SETUP.md). Verify account/model availability, no inherited API key or paid fallback, one bounded no-tools turn, restart continuity, later refresh, quota behavior, and concurrent refresh ownership separately.
 5. **Connectors:** authorize each installation-owned account once and expose only scoped host tools. Catalog listing, enabled state, callable methods, OAuth scopes, and authorized effects are separate checks.
+
+Runtime access checkpoint (2026-09-17): a separate, most-specific self-hosted Access
+application covers only production `/internal/*`, with one Service Auth policy
+including one dedicated service token, no bypass and15-minute app session. Token
+expires2027-09-17 (8760h, shortest finite dashboard option); private ID/secret files
+are0600 and separate from Worker runtime bearer. Parent exact-owner app remains
+unchanged, including bare `/internal` and `/internal-other`. Host and real Sprite
+ControlClient checks: service credentials plus valid runtime bearer→status200 and
+independent owner-binding match; wrong/missing bearer→401; service credentials on
+public root/state→owner Access redirect. No owner cookies/JWTs were exported.
+This authorization does not settle native work or admit new tasks by itself.
+
+Owner subsequently authorized supervised runtime/chat within the remaining
+existing $10 total and directed no repeated scoped approvals absent budget risk.
+Do not renew that allowance per attempt. One existing Sprite and native auth home
+were reused, no paid API fallback or connector/routine activation. The bounded
+hosted session expired and retained recovery-required state; do not remove its
+immutable policy, reset custody, or replay the old task to obtain a green result.
 
 ## Connector gates
 

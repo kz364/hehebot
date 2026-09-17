@@ -1,8 +1,68 @@
 # Implementation status
 
-Hehebot has demonstrated authenticated chat, a scoped routine read and a persisted provisional reply, not production operation. Direct Codex app-server **0.154.0** is the only supported harness. The protected portal/control plane is deployed; authenticated first-load SQLite initialization remains unverified. Production execution and native-verification flags remain false.
+Hehebot has demonstrated authenticated chat, a scoped routine read and a persisted provisional reply, not production operation. Direct Codex app-server **0.154.0** is the only supported harness. The protected portal/control plane and authenticated SQLite reads work; the hosted trial produced provisional output but failed whole-task completion. Production execution and native-verification flags remain false.
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
+
+Hosted trial outcome (2026-09-17): runtime-only Access app and dedicated service
+credentials passed independent host and Sprite ControlClient tests, including
+owner-binding digest match, wrong/missing bearer401 and public root/state302.
+Authenticated browser /v1/state200 proves initialization. Owner approved connecting
+runtime/chat under remaining existing $10 with no repeated scoped approvals.
+The real launcher reported READY epoch1/providerHold:true with productionfalse.
+Browser sent exactly one fresh prompt at13:18:28.168Z: command
+7ee4ae8b-4779-4d92-bb6b-1a2857184954, run0639f8f7-0d27-411f-a57f-a2c56689c9fa.
+Exact HEHEBOT_HOSTED_CHAT_OK_73 preview persisted across reload (attempt1/version1),
+but no completed assistant event. Native journal independently reports rootSettled
+true/nativeOutcome completed/status finishing and retained family. At13:20:28.657Z
+deadline caused cancellation; at13:21:11.749Z readback was recovery_required /
+CANCEL_UNCONFIRMED. No manual cancel/retry/replay. Old waiting run
+7481a204-9126-4ed3-a8db-a0106e7a9156 remained attempt0/CAPABILITY_UNAVAILABLE.
+Session expired13:22:11.726Z plus30s grace; launcher exited0 with retained state,
+settlementProved:false/replayAllowed:false. Worker RECOVERY_REQUIRED, gates false.
+Sprite initially observed warm, later read-only observation cold; neither wrapper
+exit nor VM phase proves recursive termination. This is NOT successful completed chat. Inspected cropped screenshot:
+.amp/in/artifacts/hosted-chat-provisional-readback.png. Private logs/readbacks:
+.local/hosted-chat-{deploy,launch}.log, hosted-runtime-auth-check.json,
+hosted-chat-final-status.json and sprite-chat-after.json. Existing expired policy
+and journals must remain; no reset or retrospective completion qualification.
+
+Local follow-through: source investigation and focused oracle confirm root-only
+observations cannot justify the five-part completion receipt. Goals can continue
+after turn completion; current MCP/shell/extension surfaces are not closed, and
+history permits late item completions. Added --text-only to existing native
+fixture using supported empty environments, static direct model catalog, no MCP/
+dynamic tools, and disabled goals/hooks/utility features. Passed: exactly empty
+provider catalog on every request,17 exact unsupported dispatches, two root outputs,
+no background terminals, unchanged original config/catalog, three loopback calls.
+Initial config/read assertion failed because extension tool settings are omitted;
+kept exact behavioral catalog/dispatch assertions rather than invent readback.
+completionEligible remains false; no live admission change. Full verifier includes
+new mode and exits0:1556 backend/444 runtime tests,27 Worker checks plus native/
+browser/service/build; desktop16 passed. Logs .local/hosted-text-only-{combined,desktop}.log.
+No active check remains. Next is a distinct
+versioned closure/receipt/coverage contract plus narrowly scoped Worker completion
+and retained-session lifecycle, not longer timeouts or claiming root settlement.
+
+Hosted runtime preparation (2026-09-17): owner confirms portal loads and authorizes
+runtime/supervised chat under remaining existing $10 total without repeated scoped
+approval. Existing Sprite observed cold, no executor. Current tracked source copied
+to distinct /home/sprite/hehebot-hosted-chat; npm locked install, pinned0.154.0 and
+provider build pass. Existing native auth remains in place; supported account/read
+(refreshToken:false) and model/list confirm ChatGPT/gpt-5.6-luna, no inference.
+Real Sprite Tasks GET404→PUT200→readback→renew/readback→DELETE204→GET404 passed.
+Native profile fixture initially failed before any turn/model request because
+bundled bwrap rejects Sprite's inherited capabilities. Identical fixture under
+setpriv with bounding/inheritable/ambient caps dropped and no-new-privileges passes
+in825ms: config bytes unchanged, restricted profile readback, exact root outputs,
+spawn denials/no children. Effective/bounding/ambient caps all0 and NNP1 verified.
+No dependency patch or sandbox bypass. This is not recursive termination proof.
+Dedicated private runtime bearer deployed as Worker secret; no alpha admission
+yet. Existing browser worker owns runtime-only Access Service Auth setup, parent
+owner app unchanged. No model calls, new Sprite, connector/routine activation or
+paid upgrade; actual billing balance still unverified. Old waiting messages are
+not eligible for queued-only claims. Existing hosted session bounds remain ≤5min
+and ≤3 roots, not continuous service. Host retains deployment/runtime ownership.
 
 Full control-plane deployment (2026-09-17): owner supplied successful bootstrap
 identity and directed continuation. Host saved valid JSON0600 and generated private

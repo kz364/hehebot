@@ -11,27 +11,34 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
-assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => arg === '--profile-overrides'), 'Unknown fixture option');
-const profileOverrides = process.argv.includes('--profile-overrides');
+assert.ok(process.argv.slice(2).length <= 1 && process.argv.slice(2).every(arg => ['--profile-overrides', '--text-only'].includes(arg)), 'Unknown fixture option');
+const textOnly = process.argv.includes('--text-only');
+const profileOverrides = textOnly || process.argv.includes('--profile-overrides');
 const disabled = ['multi_agent', 'multi_agent_v2', 'apps', 'plugins', 'tool_suggest',
   'image_generation', 'standalone_web_search', 'token_budget', 'request_permissions_tool',
-  'exec_permission_approvals', 'code_mode', 'code_mode_only'];
+  'exec_permission_approvals', 'code_mode', 'code_mode_only',
+  ...(textOnly ? ['goals', 'hooks', 'view_image', 'sleep_tool'] : [])];
 // Pinned spec: V1 multi_agent_v1.spawn_agent; V2 collaboration.spawn_agent;
 // V2 without namespace tools uses plain spawn_agent. Try all, even when hidden.
 const probes = [
   { namespace: 'multi_agent_v1', name: 'spawn_agent' },
   { namespace: 'collaboration', name: 'spawn_agent' },
   { name: 'spawn_agent' },
+  ...(textOnly ? ['exec_command', 'write_stdin', 'apply_patch', 'view_image', 'create_goal',
+    'update_goal', 'get_goal', 'exec', 'wait', 'request_user_input', 'update_plan',
+    'list_mcp_resources', 'read_mcp_resource'].map(name => ({ name })) : []),
+  ...(textOnly ? [{ namespace: 'clock', name: 'sleep' }] : []),
 ];
 const raw = { rpc: [], events: [], requests: [], stderr: [], failures: [] };
 const report = { status: 'capability_gap', codex: '0.154.0', persona: 'Travel',
   profileSource: profileOverrides ? 'cli-overrides' : 'config-file',
+  ...(textOnly ? { textOnlyCandidate: true, completionEligible: false } : {}),
   rootTurns: 0, modelRequests: 0, externalModelCalls: 0, mcpServers: 0,
   productionAdmission: false, nativeVerified: false, modelJudgmentVerified: false };
 const sleep = ms => new Promise(ok => setTimeout(ok, ms));
 const startedAt = Date.now();
 let directory, home, transport, server, rootId, modelRequests = 0;
-let configPath, originalConfig;
+let configPath, originalConfig, catalogPath, originalCatalog;
 let deadline;
 async function wait(predicate) {
   const until = Date.now() + 15000;
@@ -96,6 +103,7 @@ try {
       const names = body.tools.flatMap(tool => tool.type === 'namespace'
         ? tool.tools.map(nested => `${tool.name}.${nested.name}`) : [tool.name ?? tool.type]);
       assert.ok(!names.some(name => /spawn_agent|web_search|image_generation|mcp|tool_suggest/.test(name)));
+      if (textOnly) assert.deepEqual(body.tools, [], 'TEXT_ONLY_CATALOG_MUST_BE_EMPTY');
       if (modelRequests === 1) {
         report.toolCatalog = names;
         send(res, probes.map((probe, index) => ({ ...probe, id: `fc_alpha_${index}`,
@@ -122,8 +130,24 @@ try {
     }
   });
   await new Promise(ok => server.listen(0, '127.0.0.1', ok));
+  if (textOnly) {
+    // Supported startup-owned catalog, never an edit to a native cache/database.
+    // Static direct metadata prevents remote/model-selected code mode overriding flags.
+    catalogPath = join(home, 'fixture-models.json');
+    const catalog = { models: [{ slug: 'fixture-model', display_name: 'Synthetic text-only fixture', description: null,
+      supported_reasoning_levels: [], shell_type: 'unified_exec', visibility: 'list', supported_in_api: true,
+      priority: 1, upgrade: null, model_messages: { instructions_template: 'Synthetic credential-free native fixture.', instructions_variables: null },
+      default_reasoning_summary: 'auto', support_verbosity: false, tool_mode: 'direct',
+      default_verbosity: null, apply_patch_tool_type: null, truncation_policy: { mode: 'bytes', limit: 10000 },
+      supports_image_detail_original: false, context_window: 272000, auto_compact_token_limit: null,
+      effective_context_window_percent: 95, experimental_supported_tools: [] }] };
+    await writeFile(catalogPath, JSON.stringify(catalog), { mode: 0o600 });
+    originalCatalog = await readFile(catalogPath);
+    report.modelCatalogSha256 = createHash('sha256').update(originalCatalog).digest('hex');
+  }
   const filesystemEntries = Object.entries(filesystem).map(([path, mode]) => `${JSON.stringify(path)} = ${JSON.stringify(mode)}`);
   const config = `model = "fixture-model"\nmodel_provider = "fixture"\nweb_search = "disabled"\n` +
+    (textOnly ? `model_catalog_json = ${JSON.stringify(catalogPath)}\n[tools.experimental_request_user_input]\nenabled = false\n[tools.update_plan]\nenabled = false\n` : '') +
     (profileOverrides ? '' : 'default_permissions = "owner-alpha"\n') +
     `[agents]\nenabled = false\n[features]\n` +
     disabled.map(key => `${key} = false\n`).join('') +
@@ -156,6 +180,12 @@ try {
   assert.deepEqual(effective.permissions['owner-alpha'].filesystem, { glob_scan_max_depth: null, ...filesystem });
   assert.equal(effective.permissions['owner-alpha'].network.enabled, false);
   assert.deepEqual(effective.mcp_servers, {});
+  if (textOnly) {
+    assert.equal(effective.model_catalog_json, catalogPath);
+    // This protocol's config/read omits these extension tool settings. Verify
+    // their effect via the exact provider catalog and injected dispatch probes.
+    assert.ok(effective.notify == null);
+  }
   report.configReadback = true;
   // Values come from native readback; redact only the random private paths.
   report.profileReadback = { default_permissions: effective.default_permissions,
@@ -163,13 +193,15 @@ try {
       .map(([path, value]) => [path.startsWith(directory) ? `<private>${path.slice(directory.length)}` : path, value])),
     network: { enabled: effective.permissions['owner-alpha'].network.enabled } };
   const started = await rpc('thread/start', { cwd: workspace, model: 'fixture-model', modelProvider: 'fixture',
-    permissions: 'owner-alpha', approvalPolicy: 'untrusted', baseInstructions: 'You are Travel. Only this root is admitted.' });
+    permissions: 'owner-alpha', approvalPolicy: 'untrusted', baseInstructions: 'You are Travel. Only this root is admitted.',
+    ...(textOnly ? { dynamicTools: [] } : {}) });
   assert.equal(started.approvalPolicy, 'untrusted');
   report.threadApprovalPolicy = started.approvalPolicy;
   rootId = started.thread.id;
   for (const [prompt, expected] of [['ROOT_SPAWN_DENIAL_19', 'ROOT_ONLY_DENIALS_VISIBLE_19'],
     ['ROOT_COMPLETION_43', 'ROOT_COMPLETION_OK_43']]) {
-    const { turn } = await rpc('turn/start', { threadId: rootId, input: [{ type: 'text', text: prompt }] });
+    const { turn } = await rpc('turn/start', { threadId: rootId, input: [{ type: 'text', text: prompt }],
+      ...(textOnly ? { environments: [] } : {}) });
     report.rootTurns++;
     await wait(() => raw.events.some(event => event.method === 'turn/completed' && event.params?.turn.id === turn.id));
     const { thread } = await rpc('thread/read', { threadId: rootId, includeTurns: true });
@@ -188,6 +220,11 @@ try {
   assert.equal(turns.length, 2); assert.ok(turns.every(event => event.params.threadId === rootId));
   assert.ok(!raw.events.some(event => event.params?.item?.type === 'collabAgentToolCall'));
   assert.equal(modelRequests, 3); assert.deepEqual(raw.failures, []);
+  if (textOnly) {
+    assert.deepEqual(await readFile(catalogPath), originalCatalog);
+    report.modelCatalogUnchanged = true;
+    report.forbiddenDispatchesRejected = probes.length;
+  }
   assert.ok(Date.now() - startedAt < 300000);
   report.noChildObserved = true;
   report.exactRootOutputs = ['ROOT_ONLY_DENIALS_VISIBLE_19', 'ROOT_COMPLETION_OK_43'];
