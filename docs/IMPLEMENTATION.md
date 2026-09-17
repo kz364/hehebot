@@ -4,6 +4,31 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Protected workers.dev preparation (2026-09-17 Asia/Jakarta): owner explicitly
+authorized control-plane Worker/SQLite and exact-owner Access on the verified
+account within the remaining existing $10 ceiling, no paid upgrades. No domain
+purchase required. Official Workers Access documentation and October 2025
+announcement support hostname-based production workers.dev with the existing
+Cf-Access-Jwt-Assertion/JWKS flow. Retain exact issuer/audience/subject checks;
+do not adopt ctx.access (Static Assets limitation) or assume new Wrangler APIs.
+Pinned Wrangler4.130.0 schema and dry-run accept explicit preview_urls:false.
+Default workers_dev remains false until Access is configured; assets run Worker
+first; no alternate routes added. 42 auth/policy tests and 8 hosted-runtime tests
+pass, as does npm run build at `.local/workers-dev-{auth,build}.log`. No full
+combined rerun for this docs/config/auth-regression-only change; preceding combined
+evidence remains `.local/wapp-prepare-combined.log` for unchanged implementation.
+
+Private read-only API check reused the mode0600 token: active token, one account,
+zero Workers. workers.dev subdomain returns10007; Access applications return
+not_enabled; organization/users/subscriptions return403. Account details/token/raw
+response remain private in `.local/cloudflare-preflight.json`. No writes/deployment
+or public URL exist, and no live owner authentication can yet be verified.
+Owner onboarding/Access permission and exact owner subject are unresolved, not
+a custom-domain requirement. AUTH_SETUP.md gives the minimal Free dashboard/private
+credential step. Billing/remaining balance is unverified; no new budget, Sprite
+activity, inference, connector use or retained-state upload. Connector expansion
+is lower priority than resuming this authorized deployment when inputs arrive.
+
 WhatsApp prepare-only mode (2026-09-17 Asia/Jakarta): the existing pinned verifier
 now accepts `--prepare /absolute/new-directory`. It reserves a private new directory,
 performs the unchanged artifact/approved-patch/synthetic compatibility checks and

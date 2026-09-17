@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTVerifyGetKey } from 'jose';
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { authenticateOwner, assertSameOrigin, verifyRuntimeToken, verifyWebhook, type AuthConfig } from '../src/worker/auth';
 const now = new Date('2026-09-10T00:00:00Z');
 const seconds = Math.floor(now.getTime() / 1000);
@@ -19,6 +20,29 @@ const request = (jwt: string) => new Request('https://portal.example/v1/state', 
 describe('owner Access authentication', () => {
   it('verifies a signed allowlisted owner', async () => {
     await expect(authenticateOwner(request(await token()), config, { jwks, now })).resolves.toBe(config.OWNER_SUB);
+  });
+  it('production workers.dev uses the same exact JWT owner and origin checks, never local bypass', async () => {
+    const origin = 'https://hehebot-portal.synthetic-account.workers.dev';
+    const make = (jwt: string) => new Request(`${origin}/v1/state`, { headers: { 'Cf-Access-Jwt-Assertion': jwt } });
+    await expect(authenticateOwner(make(await token()), config, { jwks, now })).resolves.toBe(config.OWNER_SUB);
+    for (const claims of [{ sub: 'other-member' }, { aud: 'preview-audience' }, { iss: 'https://other.cloudflareaccess.com' }]) {
+      await expect(authenticateOwner(make(await token(claims)), config, { jwks, now })).rejects.toMatchObject({ status: 401 });
+    }
+    await expect(authenticateOwner(new Request(origin, { headers: { 'X-Forwarded-Host': 'localhost', 'Cf-Access-Authenticated-User-Email': 'owner@example.com' } }),
+      { ...config, AUTH_MODE: 'local', INSTALLATION_ID: 'local-only' })).rejects.toMatchObject({ status: 401 });
+    expect(() => assertSameOrigin(new Request(`${origin}/v1/commands`, { headers: { Origin: origin } }))).not.toThrow();
+    expect(() => assertSameOrigin(new Request(`${origin}/v1/commands`, { headers: { Origin: 'https://preview-hehebot-portal.synthetic-account.workers.dev' } }))).toThrow();
+  });
+  it('checked-in deployment remains dark until Access setup; preview URLs and asset bypass stay disabled', () => {
+    const deployment = JSON.parse(readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8'));
+    expect(deployment.workers_dev).toBe(false);
+    expect(deployment.preview_urls).toBe(false);
+    expect(deployment.env.local.workers_dev).toBe(false);
+    expect(deployment.env.local.preview_urls).toBe(false);
+    expect(deployment.assets.run_worker_first).toBe(true);
+    expect(deployment.vars.AUTH_MODE).toBe('access');
+    expect(deployment.vars.EXECUTION_ENABLED).toBe('false');
+    expect(deployment.vars.NATIVE_VERIFIED).toBe('false');
   });
   it.each([{ iss: 'https://wrong.cloudflareaccess.com' }, { aud: 'other-audience' }, { sub: 'another-person' }, { exp: seconds - 1 }, { nbf: seconds + 30 }])('rejects wrong claims %j', async (claims) => {
     await expect(authenticateOwner(request(await token(claims)), config, { jwks, now })).rejects.toMatchObject({ code: 'UNAUTHORIZED', status: 401 });

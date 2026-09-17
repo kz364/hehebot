@@ -4,6 +4,26 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+PRIORITY: owner authorized bounded Cloudflare Worker/SQLite + owner-only Access
+deployment on current unpublished checkout, within existing remaining $10, no paid
+upgrade. No Sprite/inference/agents/routines/connectors/push/private-state upload.
+Protected production workers.dev is default; custom domain is not needed. Official
+docs support existing JWT-header flow; use hostname-based Access, no new ctx.access
+or access.dev dependency. Wrangler4.130.0 dry run passes; previews explicitly false,
+default ingress remains disabled pending protection; issuer/audience/owner checks
+and loopback bypass unchanged. 42 auth/policy +8 hosted-runtime pass at
+`.local/workers-dev-auth.log`, build at `.local/workers-dev-build.log`.
+Private preflight reused `.local/secrets/CLOUDFLARE_API_TOKEN` (0600), found one
+account/active token/zero Workers. No workers.dev subdomain (10007), Access apps
+not_enabled, organization/users/billing403. Raw private evidence:
+`.local/cloudflare-preflight.json`; never print its values. No shared writes or
+deployed URL. Ask only for Workers & Pages initialization and Zero Trust Free
+onboarding, private team domain/exact owner login and Access-management permission.
+Do not guess owner sub; obtain it through verified login. No repeated deployment
+authorization request or account probes until setup changes. AUTH_SETUP.md has
+exact plan. Remaining billing balance unverified. Resume deployment ahead of
+connector expansion; no active workers/checks.
+
 Prepare-only WhatsApp installation implemented in existing verifier; optional
 `--prepare /absolute/new-directory` reserves 0700 destination and retains checked
 graph plus 0600 historical receipt only after checks. No connector/browser/account

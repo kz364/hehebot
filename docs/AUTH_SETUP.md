@@ -157,7 +157,7 @@ Before requesting a concrete hosted deployment, prepare these inputs locally:
 | Input | Required review / current boundary |
 | --- | --- |
 | Exact release and target | Record the reviewed local revision, Worker name, account, hostname and existing Sprite reference. Local commits are not necessarily on origin/main. Do not upload retained alpha databases, native journals or credentials as deployment assets. |
-| Owner ingress | Use `AUTH_MODE=access`, exact issuer/audience/owner subject and HTTPS origin. Keep `workers_dev:false`; no unprotected alternate route. Wrong owner, issuer, audience, expiry and forged forwarded headers must reject. Never proxy the local bypass directly: URL host checks are not a network ACL. |
+| Owner ingress | Default to an Access-protected production `workers.dev` hostname; an owned/custom domain is optional, not required. Use `AUTH_MODE=access`, exact issuer/audience/owner subject and HTTPS origin. Keep `workers_dev:false` until protection is configured, then enable only that protected production hostname in reviewed private deployment configuration. Keep `preview_urls:false` and no alternate routes/custom domains. Wrong owner, issuer, audience, expiry and forged forwarded headers must reject. Never proxy the local bypass directly: URL host checks are not a network ACL. |
 | Runtime ingress | Separate runtime bearer, wake token and Access service credentials from browser identity. Review internal-route policy and logs independently; a working owner login is not runtime authorization. |
 | Execution mode | Preserve `EXECUTION_ENABLED:false`, `NATIVE_VERIFIED:false` and `lifecycleVerified:false`. Use the explicit hosted pin/policy boundary described above, never the local-alpha bypass. Its private composition is verified; deployment, real ingress and account/provider acceptance remain separate. |
 | Model account | The customer signs in through the supported flow on the selected persistent runtime. Do not copy the orb's OAuth cache or run concurrent refresh owners. Verify subscription eligibility and hosted-use terms; no paid API fallback. |
@@ -173,30 +173,61 @@ Neither these commands nor a checklist pass authorizes publishing, changing Acce
 provisioning, waking/mutating the Sprite, installing a model account or enabling
 production. Track each live acceptance result separately in TODO/IMPLEMENTATION.
 
-## Next proposed stage: protected control plane only
+## Authorized stage: protected workers.dev control plane only
 
-Prepared 2026-09-17 Asia/Jakarta, not authorized or executed. Candidate code is
-local commit `f358b0c23a742cc50d76c2f71232bb95d10f4154`, which passed the combined
-credential-free verifier and desktop checks. Proposed Worker name is the existing
-`hehebot-portal`; the existing selected Sprite name is `hehebot`. Its saved cold
-inspection is historical, not current availability evidence.
+On 2026-09-17 the owner explicitly authorized Worker/SQLite provisioning and
+owner-only Access in the previously verified Cloudflare account, within the
+remaining existing $10 total allowance and without paid upgrades. Use the current
+integrated unpublished local checkout, not origin/main. This does not authorize
+Git push, Sprite changes, agents/routines/connectors, model inference/login or
+private retained-state upload. Keep execution/native flags false and provider
+configuration empty; omit hosted-alpha admission. Deployment is not yet executed.
 
-The blocking inputs are the owner-selected Cloudflare account and protected HTTPS
-hostname, Access issuer/audience/owner subject, and private deployment access.
-`wrangler.jsonc` currently has no account or route and blank Access identity;
-the orb has no Cloudflare credential environment variables. Do not infer an account
-from Git ownership or publish to an unprotected workers.dev endpoint.
+**No domain purchase is needed.** Cloudflare documents production workers.dev
+protection in [Workers Access](https://developers.cloudflare.com/workers/configuration/cloudflare-access/)
+and the [October 2025 announcement](https://developers.cloudflare.com/changelog/post/2025-10-03-one-click-access-for-workers/).
+Prefer a hostname-based self-hosted Access application for the exact production
+hostname, covering every path. It supports the existing JWT assertion-header flow
+and avoids the documented Worker-level Access WebSocket limitation. Do not use a
+preview-only application, account-wide policy, broad email-domain allow, Everyone
+or bypass rule as a substitute for the exact owner policy.
 
-Request authorization for only Worker/SQLite publication and owner-only Access
-configuration on those named targets, followed by owner/runtime negative-auth and
-durable message/readback checks. Keep execution/native flags false, provider config
-empty, and omit hosted-alpha admission until the separately bounded runtime trial.
-No paid-plan upgrade, Sprite mutation, model login/inference, connector effect,
-Git push or retained-state upload belongs to this stage. Existing spending grants
-are not renewed. Stop if setup requires an unapproved paid change.
+Pinned Wrangler 4.130.0 accepts `workers_dev` and `preview_urls`; no upgrade or
+new `access.dev`/`ctx.access` API is needed. Keep `assets.run_worker_first:true`.
+The Worker continues verifying RS256 `Cf-Access-Jwt-Assertion` with the exact
+configured cloudflareaccess.com issuer, audience and owner subject. Cloudflare's
+new `ctx.access` is not a replacement, especially with Static Assets routing.
+Local bypass remains loopback-only. A service-token identity is not the owner.
 
-After target selection, prepare the exact private configuration and inspect its
-dry-run bindings before publication. Rollback closes ingress/admission and retains
-the new database; it must not delete data or reset native custody. This stage can
-establish protected durable intake, not hosted assistant execution. Model-account,
-Sprite runtime and containment acceptance remain separately scoped follow-ups.
+Private read-only preflight found one account, a valid token and zero Workers.
+The workers.dev subdomain endpoint returned 10007 (not created); Access apps
+returned `access.api.error.not_enabled`. Access organization/users and subscription
+reads returned authentication errors. This does not prove write permission or a
+Free subscription. Account/token values and raw evidence stay in private files;
+no shared writes occurred. Exact Access owner subject is still unknown.
+
+Smallest unblock: the owner opens Workers & Pages in that account to initialize
+its workers.dev subdomain, then completes Zero Trust/Access **Free** onboarding
+and selects a team name. Stop if a paid upgrade is required. Privately provide
+the team domain and exact owner login email (not a public transcript), and grant
+the account-scoped token Workers Scripts/Edit, Account Settings/Read and Access
+application/policy management permissions. Recheck actual API capability rather
+than assuming a scope label is sufficient. Obtain the owner subject from a real
+verified Access login; do not guess it from the Cloudflare account or email.
+
+Before enabling production ingress, create/read back the exact-host Access app
+and owner-only policy, obtain its audience and verified owner subject, prepare
+private deployment configuration and inspect dry-run bindings. Until then keep
+workers.dev/previews/routes disabled and authentication fail-closed. Deploy only
+the reviewed Worker/static assets and a fresh SQLite Durable Object namespace;
+never upload local databases, native journals, profiles or credentials as assets.
+Recheck no preview/alternate route exists, then verify missing/forged/foreign JWT
+rejection and real owner login/readback. Dashboard Access configuration alone is
+not proof of the Worker's exact-owner check. Runtime service access is separate.
+
+No new spending allowance was granted. Actual remaining billing balance is not
+verified by the earlier <$0.15 provider estimate; billing/plan evidence is still
+needed, and no paid change is permitted. Rollback closes ingress/admission and
+retains the new database, without resetting custody. This stage establishes
+protected durable intake, not hosted assistant execution. Model-account, Sprite
+runtime and containment acceptance remain separately scoped follow-ups.
