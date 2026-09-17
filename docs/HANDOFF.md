@@ -4,6 +4,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest stage: non-wired successor envelope parser/binding checks are implemented
+in src/core/owner-alpha.ts with tests/owner-alpha-successor.test.ts. Focused76
+successor/alpha/session-view tests and typecheck pass; evidence
+.local/alpha-successor-contract.log. This is after the full verification below.
+No activation/config/environment/command/DB mutation surface exists yet. Reuse its
+types for operator-pinned one-shot authority; do not add a signing-key system.
+Next stage: immutable runtime_metadata generations bound to existing attempt
+epoch/boot, original configured policy preserved, active-policy getter and exact
+preselected successor boot. Explicit owner activation consumes only matching
+operator grant and trusted retirement proof; event-sequence cutoff excludes all
+old inputs. Avoid beforeRequest reconciliation during activation and scope later
+watchdog/pruning/budget maintenance so historical custody does not change. Full
+transition remains unimplemented and live retirement evidence remains unavailable.
+No active workers or checks. Continuation is enabled; no new approval is needed.
+
 Fresh text-only completion is now integrated locally across profile receipt,
 service, coverage, bridge and backend. Exact profile admission is persisted before
 RPCs; fresh config/catalog/history plus flushed output must match; backend commits

@@ -4,6 +4,27 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Successor authority preparation (2026-09-17): `parseOwnerAlphaSuccessor` and
+`assertOwnerAlphaSuccessorBinding` validate a default-absent, one-shot operator
+envelope with exact owner binding, predecessor session/epoch/boot, retirement
+receipt digest and fresh text-only successor policy/boot. Existing policy parser
+remains the source of truth. Epoch advancement must remain safe; UUID case changes
+cannot disguise reused session/boot identities. No config wiring, command, state
+mutation or activation exists yet. Focused successor/alpha/session-view76 tests and
+typecheck pass (`.local/alpha-successor-contract.log`); the full verifier below
+predates this non-wired parser. Receipt hash binding is not retirement proof.
+
+Focused design review selected operator-pinned authority over a new signing-key
+subsystem: the operator already controls deployment/auth. The owner command must
+only consume that exact grant. Immutable generation metadata can bind existing
+attempt epoch/boot fields, without an attempts schema migration. Use an event-
+sequence cutoff, not clock equality, for fresh messages. Both the transition's
+pre-request reconciliation and later pruning/watchdog/budget maintenance must
+exclude retained historical custody; merely preserving rows in the transition
+transaction is insufficient. Keep the original configured policy and custody,
+derive active policy from a validated generation, and bind a preselected successor
+boot identity. The parser does not implement any of these later stages.
+
 Text-only completion integration (2026-09-17, local/unpublished): a fresh immutable
 alpha policy can pin `codex-text-only-v1` and its profile digest. The adapter records
 that admission before native RPCs, empty dynamic tools/environments and exact ACK

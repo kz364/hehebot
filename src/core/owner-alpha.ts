@@ -4,8 +4,24 @@ import type { Run } from './types';
 
 export type TextOnlyProfile={profile_version:'codex-text-only-v1';profile_sha256:string};
 export type OwnerAlphaPolicy = { session_id:string; persona_id:string; expires_at:string; max_runs:number; max_task_seconds:number; background_first_root?:true;text_only?:TextOnlyProfile };
+export type OwnerAlphaSuccessor = {
+ schema_version:1;
+ transition_id:string;
+ owner_binding_sha256:string;
+ predecessor:{session_id:string;epoch:number;boot_id:string};
+ retirement_receipt_sha256:string;
+ successor:{policy:OwnerAlphaPolicy&{text_only:TextOnlyProfile};boot_id:string};
+};
+export type OwnerAlphaSuccessorBinding = {
+ ownerBindingSha256:string;
+ predecessorPolicy:OwnerAlphaPolicy;
+ epoch:number;
+ bootId:string;
+ retirementReceiptSha256:string;
+};
 const key='owner_alpha';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const sha256=/^[0-9a-f]{64}$/;
 type OwnerAlphaEnv={AUTH_MODE?:string;EXECUTION_ENABLED?:string;NATIVE_VERIFIED?:string;PROVIDER_CONFIG?:string};
 type HostedOwnerAlphaEnv=OwnerAlphaEnv&{HEHEBOT_OWNER_ALPHA?:string};
 function parsePolicy(value:unknown):OwnerAlphaPolicy {
@@ -19,6 +35,31 @@ function parsePolicy(value:unknown):OwnerAlphaPolicy {
   Number.isInteger(p.max_runs)&&Number(p.max_runs)>=1&&Number(p.max_runs)<=3&&Number.isInteger(p.max_task_seconds)&&Number(p.max_task_seconds)>=1&&Number(p.max_task_seconds)<=300,
   'INVALID_CONFIGURATION','Invalid owner-alpha policy.',503);
  return {session_id:p.session_id as string,persona_id:p.persona_id as string,expires_at:p.expires_at as string,max_runs:p.max_runs as number,max_task_seconds:p.max_task_seconds as number,...(p.background_first_root===true?{background_first_root:true as const}:{}),...(text?{text_only:{profile_version:'codex-text-only-v1' as const,profile_sha256:text.profile_sha256 as string}}:{})};
+}
+export function parseOwnerAlphaSuccessor(value:string|undefined):OwnerAlphaSuccessor|undefined {
+ if(value===undefined||value==='')return undefined;
+ let e:Record<string,unknown>|undefined;
+ try{e=JSON.parse(value);}catch{requireThat(false,'INVALID_CONFIGURATION','Invalid owner-alpha successor configuration.',503);}
+ const predecessor=e?.predecessor as Record<string,unknown>|undefined;
+ const successor=e?.successor as Record<string,unknown>|undefined;
+ requireThat(e&&typeof e==='object'&&!Array.isArray(e)&&Object.keys(e).sort().join(',')==='owner_binding_sha256,predecessor,retirement_receipt_sha256,schema_version,successor,transition_id'&&
+  e.schema_version===1&&typeof e.transition_id==='string'&&uuid.test(e.transition_id)&&typeof e.owner_binding_sha256==='string'&&sha256.test(e.owner_binding_sha256)&&
+  predecessor&&typeof predecessor==='object'&&!Array.isArray(predecessor)&&Object.keys(predecessor).sort().join(',')==='boot_id,epoch,session_id'&&
+  typeof predecessor.session_id==='string'&&uuid.test(predecessor.session_id)&&Number.isSafeInteger(predecessor.epoch)&&Number(predecessor.epoch)>=1&&Number(predecessor.epoch)<Number.MAX_SAFE_INTEGER&&typeof predecessor.boot_id==='string'&&uuid.test(predecessor.boot_id)&&
+  typeof e.retirement_receipt_sha256==='string'&&sha256.test(e.retirement_receipt_sha256)&&successor&&typeof successor==='object'&&!Array.isArray(successor)&&Object.keys(successor).sort().join(',')==='boot_id,policy'&&
+  typeof successor.boot_id==='string'&&uuid.test(successor.boot_id)&&successor.boot_id.toLowerCase()!==predecessor.boot_id.toLowerCase(),
+  'INVALID_CONFIGURATION','Invalid owner-alpha successor configuration.',503);
+ const policy=parsePolicy(successor.policy);
+ requireThat(!!policy.text_only&&!policy.background_first_root&&policy.session_id.toLowerCase()!==predecessor.session_id.toLowerCase(),'INVALID_CONFIGURATION','Invalid owner-alpha successor policy.',503);
+ return {schema_version:1,transition_id:e.transition_id as string,owner_binding_sha256:e.owner_binding_sha256 as string,
+  predecessor:{session_id:predecessor.session_id as string,epoch:predecessor.epoch as number,boot_id:predecessor.boot_id as string},retirement_receipt_sha256:e.retirement_receipt_sha256 as string,
+  successor:{policy:policy as OwnerAlphaPolicy&{text_only:TextOnlyProfile},boot_id:successor.boot_id as string}};
+}
+export function assertOwnerAlphaSuccessorBinding(envelope:OwnerAlphaSuccessor,binding:OwnerAlphaSuccessorBinding):void {
+ requireThat(sha256.test(binding.ownerBindingSha256)&&Number.isSafeInteger(binding.epoch)&&binding.epoch>=1&&uuid.test(binding.bootId)&&sha256.test(binding.retirementReceiptSha256)&&
+  envelope.owner_binding_sha256===binding.ownerBindingSha256&&envelope.predecessor.session_id===binding.predecessorPolicy.session_id&&envelope.predecessor.epoch===binding.epoch&&
+  envelope.predecessor.boot_id===binding.bootId&&envelope.retirement_receipt_sha256===binding.retirementReceiptSha256,
+  'INVALID_CONFIGURATION','Owner-alpha successor binding does not match trusted retirement inputs.',503);
 }
 function emptyProvider(provider:unknown):boolean {
  return !!provider&&typeof provider==='object'&&!Array.isArray(provider)&&Object.keys(provider).length===0;
