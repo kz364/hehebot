@@ -131,6 +131,17 @@ export class ControlCore {
     const id=this.budget.override(owner,commandId,command.payload.run_id);this.reconcileBudget();return id;
    }
    case 'skill.propose':return skills.propose(owner,commandId,command.payload);
+   case 'skill.propose_from_task':{
+    requireThat(!this.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Task-sourced skill drafts are unavailable in owner-alpha sessions.');
+    requireThat(!/^(runtime|trigger):/.test(owner),'FORBIDDEN','Only the owner may select a task as a skill draft source.',403);
+    const p=command.payload,run=this.store.run(p.source_run_id);
+    requireThat(run.current_attempt===p.expected_attempt,'REVISION_CONFLICT','The source task attempt changed. Review it before staging this draft.');
+    requireThat(this.store.db.all('SELECT run_id FROM attempts WHERE run_id=? AND attempt=?',run.id,p.expected_attempt).length===1,'NOT_FOUND','The source attempt record is unavailable.',404);
+    // Record identity only: task input/output may be private, provisional or
+    // expired. The owner supplies a separate procedure for normal staged review.
+    return skills.propose(owner,commandId,{proposal_id:p.proposal_id,skill_id:p.skill_id,expected_skill_revision:p.expected_skill_revision,body:p.body,
+     provenance:{kind:'task',source_ref:`task:${run.persona_id}/${run.id}/${p.expected_attempt}`},executable_files_changed:false});
+   }
    case 'skill.review':return skills.review(owner,commandId,command.payload);
    case 'skill.enable':return skills.enable(owner,commandId,command.payload);
    case 'skill.delete':return skills.remove(owner,commandId,command.payload);

@@ -48,6 +48,23 @@
         }
       }, "required": ["schema_version","type","payload"]
     },
+    "skillProposeFromTask": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "schema_version": { "const": 1 }, "type": { "const": "skill.propose_from_task" },
+        "payload": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "proposal_id": { "$ref": "#/$defs/uuid" }, "skill_id": { "$ref": "#/$defs/uuid" },
+            "expected_skill_revision": { "type": "integer", "minimum": 0 },
+            "source_run_id": { "$ref": "#/$defs/uuid" },
+            "expected_attempt": { "type": "integer", "minimum": 1 },
+            "body": { "$ref": "#/$defs/skillBody" }
+          },
+          "required": ["proposal_id","skill_id","expected_skill_revision","source_run_id","expected_attempt","body"]
+        }
+      }, "required": ["schema_version","type","payload"]
+    },
     "skillReview": {
       "type": "object", "additionalProperties": false,
       "properties": { "schema_version": { "const": 1 }, "type": { "const": "skill.review" }, "payload": { "type": "object", "additionalProperties": false, "properties": { "proposal_id": { "$ref": "#/$defs/uuid" }, "expected_proposal_revision": { "type": "integer", "minimum": 1 }, "decision": { "enum": ["approve","reject"] } }, "required": ["proposal_id","expected_proposal_revision","decision"] } },
@@ -220,6 +237,7 @@
       }, "required": ["schema_version", "type", "payload"]
     },
     { "$ref": "#/$defs/skillPropose" },
+    { "$ref": "#/$defs/skillProposeFromTask" },
     { "$ref": "#/$defs/skillReview" },
     { "$ref": "#/$defs/skillEnable" },
     { "$ref": "#/$defs/skillRun" },

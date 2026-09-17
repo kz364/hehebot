@@ -65,6 +65,44 @@ describe('versioned command schema', () => {
       expect(() => parseCommand(command(incomplete))).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
     }
   });
+  it('accepts only the strict task-sourced skill proposal contract', () => {
+    const body = {
+      name:'Summarize task', description:'A reviewed summary procedure.', when_to_use:'When an owner requests a task summary.',
+      inputs_access:['Retained task output'], steps:['Read the retained output.'], decision_rules:[],
+      validation:['Check the summary against the retained output.'], output:'A concise summary.',
+      failure_handling:['Report unavailable retained output.'], approval_boundaries:['Do not perform effects.'],
+      references:[{name:'guide.md',text:'Use only retained task output.'}], contains_private_facts:false as const,
+    };
+    const payload = {proposal_id:bot,skill_id:bot,expected_skill_revision:0,source_run_id:bot,expected_attempt:1,body};
+    const command = (payload: unknown) => ({schema_version:1,type:'skill.propose_from_task',payload});
+    expect(parseCommand(command(payload))).toEqual(command(payload));
+    for (const missing of Object.keys(payload)) {
+      const incomplete = {...payload};
+      delete incomplete[missing as keyof typeof incomplete];
+      expect(() => parseCommand(command(incomplete))).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
+    }
+    for (const change of [
+      {proposal_id:'not-a-uuid'}, {skill_id:'not-a-uuid'}, {source_run_id:'not-a-uuid'},
+      {expected_skill_revision:-1}, {expected_skill_revision:0.5}, {expected_attempt:0}, {expected_attempt:1.5},
+      {provenance:{kind:'task',source_ref:bot}}, {executable_files_changed:false}, {automatic_approval:true},
+      {model:'codex'}, {caller_run_id:bot},
+    ]) expect(() => parseCommand(command({...payload,...change}))).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
+  });
+  it('applies private-fact and reference constraints to task-sourced skill proposals', () => {
+    const body = {
+      name:'Summarize task', description:'A reviewed summary procedure.', when_to_use:'For summaries.', inputs_access:[],
+      steps:['Read retained output.'], decision_rules:[], validation:['Verify output.'], output:'Summary.',
+      failure_handling:['Report failure.'], approval_boundaries:['No effects.'], contains_private_facts:false as const,
+    };
+    const payload = {proposal_id:bot,skill_id:bot,expected_skill_revision:0,source_run_id:bot,expected_attempt:1,body};
+    const command = (changedBody: unknown) => ({schema_version:1,type:'skill.propose_from_task',payload:{...payload,body:changedBody}});
+    for (const changedBody of [
+      {...body,contains_private_facts:true}, {...body,contains_private_facts:false,private_facts:['secret']},
+      {...body,references:[{name:'unsafe.exe',text:'text'}]}, {...body,references:[{name:'guide.md',text:''}]},
+      {...body,references:[{name:'a.md',text:'a'},{name:'b.md',text:'b'},{name:'c.md',text:'c'},{name:'d.md',text:'d'},{name:'e.md',text:'e'}]},
+      {...body,references:[{name:'guide.md',text:'x'.repeat(16001)}]},
+    ]) expect(() => parseCommand(command(changedBody))).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
+  });
   it('keeps legacy skill command serialization unchanged', () => {
     const legacy = {schema_version:1,type:'skill.enable',payload:{skill_id:bot,expected_skill_revision:1,persona_id:bot,enabled:true}};
     expect(JSON.stringify(parseCommand(legacy))).toBe(JSON.stringify(legacy));

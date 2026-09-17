@@ -4,6 +4,28 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Task-sourced proposal API is verified locally. Combined verifier exits 0 with
+1538 backend/439 runtime plus Worker/browser/native/service/build checks;
+desktop16 pass at `.local/task-skill-{combined,desktop}.log`. No host check remains
+running. Contract worker finished; host owns integration. New owner
+`skill.propose_from_task` takes exact
+current run/attempt, proposal/skill IDs, expected skill revision and owner-supplied
+SkillBody. It checks retained source custody and stages normal pending review,
+with generated persona/run/attempt provenance and no copied task text or context.
+Model/trigger/alpha denied; no automatic learning, inference, activation or task
+steering. Failed/provisional sources are allowed without claiming settlement.
+Existing free-form provenance remains unverified text. Focused89 tests/typecheck
+pass. Portal task-source editor integration is actively assigned to existing UI
+thread T-01a0acd6-f40d-770f-a3a0-e69fd7ede7bb; it will reply with an owned-only
+patch and rendered evidence. Do not duplicate this assignment. It received
+`.local/task-skill-ui-base.bundle` (host local HEAD 3fc353a) plus
+`.local/task-skill-ui-base.patch`, including the API and new test. Owned files:
+public/app.js, optional public/style.css, scripts/test-portal-skill-task-proposal.mjs
+and docs/SKILL_TASK_PROPOSAL_UI.md. Require exact source/attempt stale fences,
+no transcript prefill, alpha/offline/navigation denial and unchanged uncertain
+retry payloads. Host reviews/integrates and wires the verifier after delivery.
+No new live grant or hosted decision; do not repeat Cloudflare approval request.
+
 Skill metadata discovery is verified locally; full verifier exits 0 at
 `.local/skill-search-combined.log` (1527 backend/439 runtime plus Worker/browser/
 native/service/build). Runtime worker finished; no active worker/check remains.
@@ -16,9 +38,8 @@ substring query, max200 code points, exclusive ID pages of20, no semantic rank
 or cross-page snapshot. Focused42 backend/64 runtime/typecheck and desktop16 pass;
 stronger literal/deleted-record cases pass separately after the backend stage.
 No UI/migration/live/shared actions.
-Next UX11 gap is an explicit corrected-task learning handoff; inspect retained
-task/conversation provenance and privacy before choosing that contract. Search
-does not establish model judgment or learning acceptance. Cloudflare decision
+The owner task-source prerequisite is covered above. Search does not establish
+model judgment or learning acceptance. Cloudflare decision
 and spending grants are unchanged; continuation remains enabled.
 
 Run once is verified locally; full verifier exits 0 at

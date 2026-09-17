@@ -4,6 +4,34 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Task-sourced owner drafts (2026-09-17 Asia/Jakarta): the new owner command
+`skill.propose_from_task` takes proposal/skill IDs, expected skill revision,
+source run ID, expected attempt and a separately supplied `SkillBody`. It denies
+runtime/trigger actors and owner-alpha; requires the exact current attempt plus
+a retained attempt row; then reuses normal pending proposal validation, duplicate
+handling and review. Provenance is generated as
+`{kind:'task',source_ref:'task:<persona>/<run>/<attempt>'}`. No task transcript,
+input, output, checkpoint or memory is copied. No inference, run admission,
+steering, retry, activation or new authority is part of staging. Failed/unfinished
+sources are allowed: source linkage is not a claim of completion or settlement.
+A later source retry does not rewrite an already staged provenance record.
+
+This API stages owner-authored corrections; it does not extract or generate a
+procedure. `contains_private_facts:false` remains an owner assertion, not a
+redaction/content-safety proof. Existing free-form `skill.propose` provenance is
+unchanged and must not be mistaken for this command's checked source linkage.
+Approval remains separate and does not change admitted snapshots. No migration.
+Contract worker finished; 89 focused contract/core/HTTP tests and typecheck pass,
+including receipt replay after reconstruction, stale/missing source rejection,
+private-input/output canaries, failed-source retry, update-before-duplicate and
+denied model/alpha paths (`.local/task-skill-integration.log`). Full verifier
+exits 0 with 1538 backend/439 runtime tests plus Worker/browser/native/service
+and build checks; desktop16 pass (`.local/task-skill-{combined,desktop}.log`).
+Generated validator hashes match the twice-generated contract output. Portal
+source selection/editor integration is assigned to the existing UI worker on
+the exact unpublished base; host retains integration ownership. Automatic
+learning and real-model judgment are not verified. No live/shared actions.
+
 Skill catalog discovery (2026-09-17 Asia/Jakarta): `hehebot_search_skills` routes
 through authenticated `agent-skill-search` with host-bound task custody. The
 admitted persona must have `SKILL_PROPOSE_POLICY`; owner-alpha rejects discovery.

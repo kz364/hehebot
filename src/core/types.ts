@@ -37,6 +37,7 @@ export type PayloadMap = {
  'run.retry': { run_id: string; expected_attempt: number };
  'approval.resolve': { approval_id: string; decision: 'approve' | 'deny'; expected_revision: number };
  'skill.propose':SkillProposal;
+ 'skill.propose_from_task':{proposal_id:string;skill_id:string;expected_skill_revision:number;source_run_id:string;expected_attempt:number;body:SkillBody};
  'skill.review':{proposal_id:string;expected_proposal_revision:number;decision:'approve'|'reject'};
  'skill.enable':{skill_id:string;expected_skill_revision:number;persona_id:string;enabled:boolean};
  'skill.run':{skill_id:string;expected_skill_revision:number;persona_id:string;expected_persona_revision:number;text:string};

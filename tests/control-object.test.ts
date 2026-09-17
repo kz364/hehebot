@@ -91,6 +91,22 @@ it('serves scoped task pages only after owner authentication and validates page 
  expect((await worker.fetch(new Request(`http://127.0.0.1/v1/conversations/${otherBot}/tasks`),env)).status).toBe(200);
 });
 
+it('stages task-sourced owner drafts through command HTTP without copying task input or dispatching work',async()=>{
+ await initialize(true);await control.accept('owner',randomUUID(),'source-message',message());
+ const run=db.all<{id:string}>('SELECT id FROM runs')[0].id,identity={epoch:1,boot_id:randomUUID()};
+ db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
+ for(const [type,payload] of [['boot',{boot_id:identity.boot_id}],['ready',{identity}],['claim',{identity}]])expect(await control.runtime({type,payload})).toMatchObject({ok:true});
+ const env={AUTH_MODE:'local',INSTALLATION_ID:'local-only',CONTROL:{getByName:()=>control}} as unknown as Env,key=randomUUID();
+ const body={name:'Owner corrected process',description:'Generic procedure',when_to_use:'When reviewing totals',inputs_access:[],steps:['Check the units'],decision_rules:[],validation:['Recompute'],output:'Review',failure_handling:['Ask'],approval_boundaries:['No effects'],contains_private_facts:false};
+ const command={schema_version:1,type:'skill.propose_from_task',payload:{proposal_id:randomUUID(),skill_id:randomUUID(),expected_skill_revision:0,source_run_id:run,expected_attempt:1,body}};
+ const post=(origin='http://127.0.0.1')=>worker.fetch(new Request(origin+'/v1/commands',{method:'POST',headers:{'Content-Type':'application/json',Origin:origin,'Idempotency-Key':key},body:JSON.stringify(command)}),env);
+ expect((await post('https://control.invalid')).status).toBe(401);
+ const before=db.all('SELECT * FROM runs'),response=await post(),receipt=await response.json();expect(response.status).toBe(202);expect(receipt).toMatchObject({status:'applied',resource_id:command.payload.proposal_id});
+ expect(await (await post()).json()).toEqual(receipt);
+ expect(db.all('SELECT * FROM runs')).toEqual(before);expect(db.all('SELECT * FROM skill_enablements')).toEqual([]);
+ expect(db.all('SELECT body_json,provenance_json,status FROM skill_proposals')).toEqual([{body_json:JSON.stringify(body),provenance_json:JSON.stringify({kind:'task',source_ref:`task:${bot}/${run}/1`}),status:'pending'}]);
+});
+
 it('routes authenticated bounded skill discovery through the real runtime schema and SQLite boundary',async()=>{
  await initialize(true);const store=new Store(db),persona=store.get(bot,'persona');
  store.put(bot,'persona',{...persona.body,tool_policy_ids:[SKILL_PROPOSE_POLICY]},persona.revision,'owner',new Date().toISOString());
