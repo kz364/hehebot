@@ -16,6 +16,12 @@ export class SkillCatalog {
   const references=p.body.references??[];
   requireThat(new Set(references.map(reference=>reference.name)).size===references.length,'INVALID_INPUT','Supporting reference names must be unique.',422);
  }
+ approvedForRun(skillId:string,revision:number):StoredObject<SkillBody> {
+  const skill=this.store.get<SkillBody>(skillId,'skill');
+  requireThat(skill.revision===revision,'REVISION_CONFLICT','Reload the approved skill before running it.');
+  this.validateProposal({proposal_id:skillId,skill_id:skillId,expected_skill_revision:revision,body:skill.body,provenance:{kind:'owner',source_ref:'skill.run'},executable_files_changed:false});
+  return skill;
+ }
  history(skillId:string,before?:number,limit=10){
   requireThat(before===undefined||Number.isSafeInteger(before)&&before>0,'INVALID_INPUT','Invalid revision cursor.',422);
   requireThat(Number.isInteger(limit)&&limit>=1&&limit<=20,'INVALID_INPUT','Limit must be 1–20.',422);

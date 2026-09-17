@@ -91,6 +91,7 @@ async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=nul
 }
 function render(){
  if(!snapshot)return;
+ if(snapshot.summary.owner_alpha)alphaBlock();
  if(routinePreflight&&!routinePreflightCurrent(routinePreflight))routinePreflight=null;
  if(routinePreflight&&($('connection').textContent!=='Connected'||!navigator.onLine))invalidateRoutinePreflight();
  if(routineHistory&&!routineHistoryCurrent(routineHistory))routineHistory=null;
@@ -159,6 +160,10 @@ function render(){
      else if(event.payload.role==='background')label.append(node('span',' · Background task'));
      m.append(label);
     }
+    if(event.type==='message.user'&&event.payload.skill_invocation){
+     const invocation=event.payload.skill_invocation;
+     m.append(node('p',`Run once · ${invocation.skill_name??invocation.skill_id} · captured revision ${invocation.skill_revision}`,'hint result-outcome'));
+    }
     m.append(node('div',event.payload.text??'','message-body'));timeline.append(m);
    }else if(['run.accepted','run.cancellation_requested'].includes(event.type)){
     const run=runs.find(x=>x.id===event.payload.run_id);if(!run)continue;const e=node('div',undefined,'event');e.append(node('span',statuses[run.status]??run.status,'status'));
@@ -171,7 +176,7 @@ function render(){
    }else if(event.type==='task.followup_expired'){
     const e=node('div',undefined,'event');e.setAttribute('role','status');e.append(node('span','Follow-up expired','status'),node('span','A deferred follow-up expired after 90 days without delivery. Send a fresh follow-up on the task if it is still needed.'));timeline.append(e);
    }else if(event.type==='run.input_expired'){
-    const e=node('div',undefined,'event');e.setAttribute('role','status');e.append(node('span','Request expired','status'),node('span','A queued request expired after 90 days without starting. Send a fresh request if it is still needed.'));timeline.append(e);
+    const e=node('div',undefined,'event');e.setAttribute('role','status');const skillRun=Boolean(event.payload?.skill_id||event.payload?.skill_invocation);e.append(node('span','Request expired','status'),node('span',skillRun?'An unstarted Run once request expired after 30 days. Open the current approved skill and supply fresh input.':'A queued request expired after 90 days without starting. Send a fresh request if it is still needed.'));timeline.append(e);
    }else if(event.type.startsWith('room.')){const e=node('div',undefined,'event');e.append(node('span',event.type==='room.context_update'?'Context update':'Room update'),node('span',event.payload.text??''));timeline.append(e);}
   }
   for(const run of runs.filter(x=>view?.kind==='tasks'||x.role==='background'||['running','finishing','recovery_required'].includes(x.status)||previews.some(preview=>preview.run_id===x.id)||steering.some(receipt=>receipt.run_id===x.id))){
@@ -595,9 +600,25 @@ function renderSkills(){
  }
  const catalog=items('skill').filter(x=>!x.deleted_at);timeline.append(node('h2',`Approved catalog (${catalog.length})`,'subheading'));
  if(!catalog.length)timeline.append(node('p','No skills have been approved yet.','muted'));
- for(const skill of catalog){const card=node('details',undefined,'skill-card');const summary=node('summary');summary.append(node('span',skill.body.name),node('span',`Revision ${skill.revision}`,'status'));card.append(summary,node('p',skill.body.description,'skill-description'));renderSkillBody(card,skill.body);const bots=node('div',undefined,'skill-bots');bots.append(node('h4','Bot access'));for(const persona of items('persona').filter(x=>!x.body.archived)){const record=enablement(skill.id,persona.id),enabled=record?.enabled===true;const row=node('div',undefined,'skill-bot-row');row.append(node('span',persona.body.name),button(enabled?'Disable':'Enable',()=>act(()=>command('skill.enable',{skill_id:skill.id,expected_skill_revision:skill.revision,persona_id:persona.id,enabled:!enabled})),enabled?'quiet danger':'quiet'));bots.append(row);}const actions=node('div',undefined,'actions');actions.append(button('Propose an update',()=>editSkillProposal(skill),'quiet'));card.append(bots,actions);renderSkillHistory(card,skill);timeline.append(card);}
+ for(const skill of catalog){const card=node('details',undefined,'skill-card');card.dataset.skillId=skill.id;const summary=node('summary');summary.append(node('span',skill.body.name),node('span',`Revision ${skill.revision}`,'status'));card.append(summary,node('p',skill.body.description,'skill-description'));renderSkillBody(card,skill.body);const bots=node('div',undefined,'skill-bots');bots.append(node('h4','Bot access'));for(const persona of items('persona').filter(x=>!x.body.archived)){const record=enablement(skill.id,persona.id),enabled=record?.enabled===true;const row=node('div',undefined,'skill-bot-row');row.append(node('span',persona.body.name),button(enabled?'Disable':'Enable',()=>act(()=>command('skill.enable',{skill_id:skill.id,expected_skill_revision:skill.revision,persona_id:persona.id,enabled:!enabled})),enabled?'quiet danger':'quiet'));bots.append(row);}const actions=node('div',undefined,'actions');actions.append(button('Propose an update',()=>editSkillProposal(skill),'quiet'));if(!alphaSeen&&!snapshot.summary.owner_alpha){const run=button('Run once',()=>runSkillOnce(skill),'primary');run.dataset.action='skill-run';run.disabled=$('connection').textContent!=='Connected'||!navigator.onLine||!items('persona').some(item=>!item.body.archived&&!item.deleted_at);actions.append(run);}card.append(bots,actions);renderSkillHistory(card,skill);timeline.append(card);}
  for(const details of timeline.querySelectorAll('details'))details.open=openSummaries.has(details.querySelector('summary')?.textContent);
  timeline.scrollTop=scrollTop;
+}
+function runSkillOnce(skill){
+ const captured=structuredClone(skill),personas=items('persona').filter(item=>!item.body.archived&&!item.deleted_at),version=selectionVersion,key=crypto.randomUUID();let submittedBody=null;
+ const picker=selectField('Active bot','persona_id',personas.map(persona=>[persona.id,`${persona.body.name} (revision ${persona.revision})`]),personas[0]?.id),input=field('Input for this run','text','','textarea');input.querySelector('textarea').maxLength=32768;
+ const confirmation=node('label',undefined,'check affirmation'),check=node('input');check.type='checkbox';check.name='confirm';check.required=true;confirmation.append(check,document.createTextNode('Run this as ordinary work with the selected bot’s current permissions.'));
+ $('editor').classList.add('roster-editor');
+ openEditor(`Run once: ${captured.body.name}`,[node('p',`This request captures approved skill revision ${captured.revision}. The selected bot revision is checked at acceptance; its context and permissions are checked again at execution admission. Later skill edits or deletion do not change an accepted run or its retry. This does not change which bots have the skill enabled.`,'review-notice'),node('p',`${snapshot.summary.execution_enabled?'':'Execution is currently unavailable. The accepted request will wait durably and may run later when execution is enabled. '}This is real ordinary gated work, not a dry run, isolated test, no-effects mode, or safety guarantee. Current bot/runtime permissions apply and existing effect approvals are still required. An unstarted captured input expires after 30 days and then requires fresh input.`,'review-notice'),picker,input,confirmation],async form=>{
+  const latest=items('skill').find(item=>item.id===captured.id&&!item.deleted_at),persona=personas.find(item=>item.id===form.get('persona_id')),currentPersona=items('persona').find(item=>item.id===persona?.id&&!item.deleted_at),text=String(form.get('text'));
+  if(alphaSeen||snapshot.summary.owner_alpha||$('connection').textContent!=='Connected'||!navigator.onLine||selected!=='skills'||selectionVersion!==version||!latest||latest.revision!==captured.revision||!persona||!currentPersona||currentPersona.body.archived||currentPersona.revision!==persona.revision)throw new Error('The skill, bot, navigation, alpha mode, or connection changed. Close and refresh before running once.');
+  if(!text.trim()||new TextEncoder().encode(text).length>32768||[...text].length>32768)throw new Error('Input must be nonblank and at most 32,768 UTF-8 bytes.');
+  const payload={skill_id:captured.id,expected_skill_revision:captured.revision,persona_id:persona.id,expected_persona_revision:persona.revision,text},body=JSON.stringify({schema_version:1,type:'skill.run',payload});
+  if(submittedBody&&submittedBody!==body)throw new Error('This request has an uncertain prior outcome. Retry only the unchanged bot and input, or close and refresh.');
+  submittedBody=body;
+  await command('skill.run',payload,key);
+  if(selected==='skills'&&selectionVersion===version)choose(persona.id);
+ },'Confirm Run once');
 }
 function reviewProposal(proposal,decision){
  const skill=proposalSkill(proposal),key=crypto.randomUUID(),comparison=node('div',undefined,'message-body');renderSkillComparison(comparison,proposal,skill);

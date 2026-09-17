@@ -4,6 +4,38 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner skill Run once (2026-09-17 Asia/Jakarta): `skill.run` requires an explicit
+owner request, current approved skill/persona revisions and bounded nonblank
+input. It captures exactly one skill without changing enablement. Ordinary
+persona/context/permissions refresh on claim; the selected skill body and its
+references survive later catalog edits/deletion and retry. The adapter still
+sends metadata only and uses the existing task-scoped skill loader. Disabled
+execution leaves waiting work, owner-alpha rejects this command, and no runtime
+profile or tool grant is expanded. Unstarted selected snapshots expire at 30
+days, never rebuild from today's catalog, and require a fresh request. No schema
+migration. This is ordinary work, not an isolated safe-test implementation.
+
+Focused SQLite/HTTP/bridge checks pass 182 tests; typecheck passes. The new HTTP
+case exposed the fixture SQL shim's lazy writes; it now executes at `exec`, like
+Durable Objects, rather than only inside `toArray`. The browser fixture exposed
+alpha activation not being latched when first observed on the Skills page; the
+render entry now records it before the Skills early return. Browser checks pass
+for stale/offline/navigation guards, exact uncertain retry, frozen attribution,
+UTF-8 bounds and narrow footer geometry. Four renders inspected. A retained
+offline banner after reconnect is pre-existing, noncritical UI behavior, not a
+new delivery or completion claim. Initial combined verification passed 1524
+backend/435 runtime and Worker checks, then the reference browser fixture rejected
+the 16000-emoji boundary request. Per-chunk Buffer-to-string conversion corrupts
+split UTF-8 characters: a deterministic split produced 16002 code points instead
+of 16000. Both touched HTTP fixtures now use Node's streaming UTF-8 decoder.
+The reference rerun and full verifier pass at
+`.local/skill-run-reference-decoder.log` and `.local/skill-run-combined-final.log`:
+1524 backend/435 runtime tests, real Worker migration/HTTP, browser, pinned-native,
+service and dry-run build checks; exit 0. Initial failure is retained in
+`.local/skill-run-combined.log`. Desktop 16 tests pass. Regeneration reproduces
+both validator hashes. No worker or verification process remains active.
+No account/provider/model calls or publication. [UI contract](SKILL_RUN_UI.md).
+
 Skill text references integrated (2026-09-17 Asia/Jakarta): both worker patches
 were verified against the exact unpublished base. Optional skill-body
 references are bounded named text, not files installed into Codex or fetched

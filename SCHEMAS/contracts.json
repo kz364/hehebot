@@ -58,6 +58,11 @@
       "properties": { "schema_version": { "const": 1 }, "type": { "const": "skill.enable" }, "payload": { "type": "object", "additionalProperties": false, "properties": { "skill_id": { "$ref": "#/$defs/uuid" }, "expected_skill_revision": { "type": "integer", "minimum": 1 }, "persona_id": { "$ref": "#/$defs/uuid" }, "enabled": { "type": "boolean" } }, "required": ["skill_id","expected_skill_revision","persona_id","enabled"] } },
       "required": ["schema_version","type","payload"]
     },
+    "skillRun": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "schema_version": { "const": 1 }, "type": { "const": "skill.run" }, "payload": { "type": "object", "additionalProperties": false, "properties": { "skill_id": { "$ref": "#/$defs/uuid" }, "expected_skill_revision": { "type": "integer", "minimum": 1 }, "persona_id": { "$ref": "#/$defs/uuid" }, "expected_persona_revision": { "type": "integer", "minimum": 1 }, "text": { "type": "string", "minLength": 1, "maxLength": 32768 } }, "required": ["skill_id","expected_skill_revision","persona_id","expected_persona_revision","text"] } },
+      "required": ["schema_version","type","payload"]
+    },
     "skillDelete": {
       "type": "object", "additionalProperties": false,
       "properties": { "schema_version": { "const": 1 }, "type": { "const": "skill.delete" }, "payload": { "type": "object", "additionalProperties": false, "properties": { "id": { "$ref": "#/$defs/uuid" }, "expected_revision": { "type": "integer", "minimum": 1 } }, "required": ["id","expected_revision"] } },
@@ -217,6 +222,7 @@
     { "$ref": "#/$defs/skillPropose" },
     { "$ref": "#/$defs/skillReview" },
     { "$ref": "#/$defs/skillEnable" },
+    { "$ref": "#/$defs/skillRun" },
     { "$ref": "#/$defs/skillDelete" },
     { "$ref": "#/$defs/skillRestore" },
     {

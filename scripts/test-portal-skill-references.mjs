@@ -41,6 +41,8 @@ const server=createServer(async(req,res)=>{
  try{
   const url=new URL(req.url,'http://fixture');requests.push(`${req.method} ${req.url}`);
   if(req.method==='POST'&&url.pathname==='/v1/commands'){
+   // A network chunk may end inside an emoji; decode across chunk boundaries.
+   req.setEncoding('utf8');
    let raw='';for await(const chunk of req){raw+=chunk;assert.ok(raw.length<256000);}
    const command=JSON.parse(raw),key=req.headers['idempotency-key'];commands.push({command,key,raw});
    assert.ok(['skill.propose','skill.restore'].includes(command.type));

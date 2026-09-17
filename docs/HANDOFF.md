@@ -4,6 +4,34 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Run once is verified locally; full verifier exits 0 at
+`.local/skill-run-combined-final.log`: 1524 backend/435 runtime plus Worker,
+browser, native/service and dry-run build. Contract/UI tasks finished; no worker
+or verification process remains active. Changes are local/unpublished.
+Initial combined passed 1524 backend/435 runtime, then failed the reference
+fixture's maximum emoji request. Per-chunk Buffer decoding can split Unicode;
+streaming decoding fixes it and the focused reference rerun passes. Initial
+failure is retained in `.local/skill-run-combined.log`.
+`skill.run` is owner-only and rejects owner-alpha. It captures exactly one
+current approved skill with supplied input, not persona-wide enablement or new
+tool authority. Claims refresh ordinary context but preserve that skill revision
+through edits/deletion/retry. Unstarted pinned snapshots expire after 30 days;
+missing snapshot custody fails rather than selecting enabled skills. It is
+ordinary gated work, not an isolated safe test. Focused 182 tests and typecheck
+pass; browser passes with four inspected desktop/narrow/attribution captures.
+Desktop 16 pass. Retain failed HTTP fixture/bridge setup logs; host fixed eager
+SQL execution in the HTTP shim and valid required skill fields in the bridge
+fixture. Host also fixed alpha activation retention on Skills before its early
+render return. The old offline error banner may remain after reconnect; no
+unrelated UI cleanup was added. Next bounded UX11 gap: model-facing catalog
+discovery before proposing duplicate skills. `runtime/agent-tools.mjs` exposes
+propose and read-by-ID but no search; `src/core/agent-commands.ts` binds proposal
+provenance/policy and admitted reads; `src/core/skills.ts` rejects duplicate names.
+Design bounded metadata-only discovery under explicit existing proposal authority,
+not full-body cross-persona reads or permission expansion. Corrected-task handoff
+and real model judgment remain later evidence. No new live grant or P0 Cloudflare
+approval; do not repeat the pending approval request. Continuation stays enabled.
+
 Verified locally: bounded skill text references, no filesystem/executable support.
 Contract: optional `SkillBody.references`, max four `{name,text}` entries; names
 match `^[a-z0-9][a-z0-9._-]{0,63}\.(md|txt)$`, max 80 characters; text 1–16000
@@ -27,14 +55,10 @@ in observed-refresh.log. Eight reference/editor/restore/invalid-state renders we
 inspected, including final comparison and narrow controls. No worker or check is
 active. Logs use `.local/skill-references-*`. Local/unpublished; no live/shared actions.
 
-Next UX11 work: explicit skill-test admission, before adding any safe-test UI.
-Current message.send takes only conversation/text; skill.enable is persona-wide.
-ControlCore.enqueue captures context, but LifecycleCore.claim recaptures enabled
-skills for each attempt. An explicit test must retain the exact approved skill
-revision through claim/retry without enabling it globally or expanding tools.
-Read these owning paths and existing restricted runtime profiles before choosing
-a command/claim contract. Do not label ordinary inference as isolated or safe;
-real model use, executable supporting files and connector effects remain separate.
+The explicit selected-skill admission follow-up is now covered above. Safe-test
+isolation remains a separate unresolved capability: existing restricted profiles
+do not justify an absolute shell-denial claim. Real model use, executable
+supporting files and connector effects remain separate.
 
 Integrated: routine-history execution/delivery disclosure. 97 backend/HTTP/
 retention/lifecycle tests and typecheck pass, `.local/routine-delivery-focused.log`.

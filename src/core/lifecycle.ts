@@ -31,11 +31,13 @@ export class LifecycleCore {
   return this.store.db.transaction(()=>{
    if(this.core.ownerAlpha.policy&&!this.core.ownerAlpha.available())return undefined;
    const cutoff=new Date(this.core.options.now().getTime()-90*86400000).toISOString(),budget=this.core.budget.admissionPredicate();
+   const skillCutoff=new Date(this.core.options.now().getTime()-30*86400000).toISOString();
    const questions=[...new Set(this.core.questions.list().map(question=>question.run_id))];
    const alpha=this.core.ownerAlpha.policy;
    return this.store.db.all<Run>(`SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) AND (${nativeDescendantsSettledSql}) ${questions.length?`AND r.id NOT IN (${questions.map(()=>'?').join(',')})`:''}
+    AND (r.current_attempt>0 OR json_type(r.context_json,'$.skill_invocation') IS NULL OR r.created_at>?)
     ${alpha?`AND r.current_attempt=0 AND r.persona_id=? AND r.routine_id IS NULL AND r.occurrence_id IS NULL AND json_extract(r.context_json,'$.room_id') IS NULL AND c.type='message.send' AND c.owner_id NOT GLOB 'runtime:*' AND c.owner_id NOT GLOB 'trigger:*' AND json_extract(c.payload_json,'$.conversation_id')=r.persona_id`:''}
-    ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings,...questions,...(alpha?[alpha.persona_id]:[]))[0];
+    ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings,...questions,skillCutoff,...(alpha?[alpha.persona_id]:[]))[0];
   });
  }
  private touch():void{this.store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('last_activity',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(this.core.now()));}
@@ -119,8 +121,14 @@ export class LifecycleCore {
    )`)[0].count;
    if(unresolved>=32)return null;
    const run=this.nextClaimableRun();if(!run)return null;
-   const prior=JSON.parse(run.context_json) as Pick<ContextSnapshot,'instruction'|'room_id'>;
+   const prior=JSON.parse(run.context_json) as ContextSnapshot;
    const context=this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id,run.command_id);
+   const command=run.command_id?this.store.db.all<{type:string}>('SELECT type FROM commands WHERE id=?',run.command_id)[0]:null;
+   if(command?.type==='skill.run'||prior.skill_invocation){
+    const selected=prior.skill_invocation;
+    requireThat(command?.type==='skill.run'&&selected&&prior.skills?.length===1&&prior.skills[0].id===selected.skill_id&&prior.skills[0].revision===selected.skill_revision,'REVISION_CONFLICT','The explicitly selected skill snapshot is unavailable. Send a fresh request.');
+    context.skill_invocation=selected;context.skills=prior.skills;
+   }
    const attempt=run.current_attempt+1,submissionKey=`${run.id}:${attempt}`,deadline=this.core.ownerAlpha.policy?this.core.ownerAlpha.admit(run):new Date(this.core.options.now().getTime()+20*60000).toISOString();
    this.store.db.exec("UPDATE runs SET status='claimed',current_attempt=?,context_json=?,updated_at=? WHERE id=?",attempt,JSON.stringify(context),this.core.now(),run.id);
    this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,started_at,captured_routine_revision) VALUES(?,?,?,?,?,'claimed',?,?,?)",run.id,attempt,submissionKey,identity.epoch,identity.boot_id,deadline,this.core.now(),context.routine?.revision??null);

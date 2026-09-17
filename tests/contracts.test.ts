@@ -46,6 +46,29 @@ describe('versioned command schema', () => {
       expect(() => parseCommand(override(payload))).toThrowError(expect.objectContaining({ code: 'INVALID_INPUT' }));
     }
   });
+  it('accepts only the exact bounded skill invocation contract', () => {
+    const payload = {skill_id:bot,expected_skill_revision:1,persona_id:bot,expected_persona_revision:1,text:'Use the reviewed skill.'};
+    const command = (payload: unknown) => ({schema_version:1,type:'skill.run',payload});
+    expect(parseCommand(command(payload))).toEqual(command(payload));
+    expect(() => parseCommand(command({...payload,text:'😀'.repeat(8192)}))).not.toThrow();
+    expect(() => parseCommand(command({...payload,text:'x'.repeat(32768)}))).not.toThrow();
+    for (const invalid of [
+      {expected_skill_revision:0}, {expected_skill_revision:1.5}, {expected_persona_revision:0},
+      {skill_id:'not-a-uuid'}, {persona_id:'not-a-uuid'}, {text:''}, {text:'x'.repeat(32769)},
+      {dry_run:true}, {safe_test:true}, {enable:true}, {authority_policy_ids:[bot]},
+    ]) {
+      expect(() => parseCommand(command({...payload,...invalid}))).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
+    }
+    for (const missing of Object.keys(payload)) {
+      const incomplete = {...payload};
+      delete incomplete[missing as keyof typeof incomplete];
+      expect(() => parseCommand(command(incomplete))).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
+    }
+  });
+  it('keeps legacy skill command serialization unchanged', () => {
+    const legacy = {schema_version:1,type:'skill.enable',payload:{skill_id:bot,expected_skill_revision:1,persona_id:bot,enabled:true}};
+    expect(JSON.stringify(parseCommand(legacy))).toBe(JSON.stringify(legacy));
+  });
   it('enforces UTF-8 byte limit independently of code-point length', () => {
     const message = (text: string) => ({ schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text } });
     expect(() => parseCommand(message('😀'.repeat(8192)))).not.toThrow();

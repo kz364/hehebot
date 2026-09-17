@@ -5,7 +5,7 @@ import worker from '../src/worker/index';
 import { PersonalControl } from '../src/worker/control-object';
 import { Store } from '../src/core/store';
 import type { SkillBody } from '../src/core/types';
-import { TestDatabase } from './helpers';
+import { TestDatabase, bot } from './helpers';
 
 vi.mock('cloudflare:workers', () => ({ DurableObject: class { constructor(public ctx: unknown, public env: unknown) {} } }));
 vi.mock('../DB/schema.sql', () => ({ default: '' }));
@@ -40,7 +40,7 @@ beforeEach(async () => {
   db = new TestDatabase();
   db.exec("INSERT INTO lifecycle(singleton,provider_ref_json,phase,desired_state) VALUES(1,'{}','STOPPED','STOP')");
   let initialized: Promise<unknown> = Promise.resolve();
-  const ctx = { storage: { sql: { exec: (sql: string, ...values: (string | number | null)[]) => ({ toArray: () => db.all(sql, ...values) }) }, transactionSync: <T>(fn: () => T) => db.transaction(fn), setAlarm, deleteAlarm }, blockConcurrencyWhile: (fn: () => Promise<unknown>) => { initialized = fn(); } };
+  const ctx = { storage: { sql: { exec: (sql: string, ...values: (string | number | null)[]) => { const rows=db.all(sql,...values);return {toArray:()=>rows}; } }, transactionSync: <T>(fn: () => T) => db.transaction(fn), setAlarm, deleteAlarm }, blockConcurrencyWhile: (fn: () => Promise<unknown>) => { initialized = fn(); } };
   env = { AUTH_MODE: 'access', INSTALLATION_ID: 'history', ACCESS_ISSUER: issuer, ACCESS_AUD: 'history', OWNER_SUB: 'owner', EXECUTION_ENABLED: 'false', NATIVE_VERIFIED: 'false', PROVIDER_CONFIG: '{}', ACTION_POLICY_IDS: '[]', TOOL_POLICY_IDS: '[]', TRIGGER_CONFIG: '{}', RUNTIME_TOKEN: runtimeToken, CONTROL: { getByName: () => control } } as unknown as Env;
   control = new PersonalControl(ctx as unknown as DurableObjectState, env); await initialized;
   const store = new Store(db); skill = randomUUID();
@@ -48,6 +48,23 @@ beforeEach(async () => {
   setAlarm.mockClear(); deleteAlarm.mockClear();
 });
 afterEach(() => { db.close(); vi.useRealTimers(); vi.restoreAllMocks(); });
+
+it('admits explicit skill input only through owner command ingress, preserving receipt identity and the execution gate',async()=>{
+ const command={schema_version:1,type:'skill.run',payload:{skill_id:skill,expected_skill_revision:4,persona_id:bot,expected_persona_revision:1,text:'Compare 17 and 43.'}},key=randomUUID();
+ const post=(actor:'owner'|'foreign'|'runtime'|'missing')=>{
+  const h=headers(actor);h.set('Origin',origin);h.set('Content-Type','application/json');h.set('Idempotency-Key',key);
+  return worker.fetch(new Request(origin+'/v1/commands',{method:'POST',headers:h,body:JSON.stringify(command)}),env);
+ };
+ const before=custody(),accept=vi.spyOn(control,'accept');
+ for(const actor of ['foreign','runtime','missing'] as const){expect((await post(actor)).status).toBe(401);expect(custody()).toEqual(before);}
+ expect(accept).not.toHaveBeenCalled();
+ const response=await post('owner'),receipt=await response.json() as {status:string;resource_id:string};expect(response.status,JSON.stringify(receipt)).toBe(202);expect(receipt.status).toBe('applied');
+ expect(await (await post('owner')).json()).toEqual(receipt);
+ const run=db.all<{status:string;context_json:string}>('SELECT status,context_json FROM runs WHERE id=?',receipt.resource_id)[0];
+ expect(run.status).toBe('waiting');expect(JSON.parse(run.context_json)).toMatchObject({skill_invocation:{skill_id:skill,skill_revision:4},skills:[{id:skill,revision:4,body:body(4)}]});
+ expect(db.all('SELECT * FROM skill_enablements')).toEqual([]);expect(db.all('SELECT * FROM attempts')).toEqual([]);
+ expect(db.all('SELECT * FROM lifecycle')).toEqual(before.lifecycle);
+});
 
 it('serves authenticated bounded history with exclusive cursor and no metadata or control-plane action', async () => {
   const before = custody();

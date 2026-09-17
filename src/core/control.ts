@@ -17,7 +17,7 @@ import {OutputPreviews} from './output-preview';
 import {captureWhatsAppReadPolicies} from './whatsapp-access';
 import {OwnerAlpha} from './owner-alpha';
 import {timelineExpirySql} from './timeline-retention';
-import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, StoredObject, TimelineEvent } from './types';
+import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
  THEN MIN(strftime('%Y-%m-%dT%H:%M:%fZ',r.created_at,'+30 days'),strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(c.accepted_at,r.created_at),'+90 days'))
@@ -30,7 +30,7 @@ export const DEFAULT_BOTS = [
 export function parseCommand(value:unknown):Command {
  requireThat(validateCommand(value),'INVALID_INPUT','The command contains invalid or missing fields.',422);
  const command=value as Command;
- if(command.type==='message.send'||command.type==='run.steer') requireThat(new TextEncoder().encode(command.payload.text).length<=32768,'PAYLOAD_TOO_LARGE','Message exceeds 32768 bytes.',413);
+ if(command.type==='message.send'||command.type==='run.steer'||command.type==='skill.run') requireThat(new TextEncoder().encode(command.payload.text).length<=32768,'PAYLOAD_TOO_LARGE','Message exceeds 32768 bytes.',413);
  return command;
 }
 export class ControlCore {
@@ -135,6 +135,15 @@ export class ControlCore {
    case 'skill.enable':return skills.enable(owner,commandId,command.payload);
    case 'skill.delete':return skills.remove(owner,commandId,command.payload);
    case 'skill.restore':return skills.restore(owner,commandId,command.payload);
+   case 'skill.run': {
+    requireThat(!this.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Run skill once is unavailable in owner-alpha sessions.');
+    requireThat(!/^(runtime|trigger):/.test(owner),'FORBIDDEN','Only the owner may explicitly run a skill.',403);
+    const p=command.payload,persona=this.activePersona(p.persona_id),skill=skills.approvedForRun(p.skill_id,p.expected_skill_revision);
+    requireThat(persona.revision===p.expected_persona_revision,'REVISION_CONFLICT','Reload the bot before running this skill.');
+    requireThat(p.text.trim().length>0,'INVALID_INPUT','Enter input for this skill run.',422);
+    this.store.event(commandId,persona.id,'message.user',owner,null,{text:p.text,skill_invocation:{skill_id:skill.id,skill_revision:skill.revision,skill_name:skill.body.name}},now);
+    return this.enqueue(persona.id,p.text,commandId,null,null,null,skill);
+   }
    case 'setup.adopt': {
     const p=command.payload;
     requireThat(createHash('sha256').update(JSON.stringify(p.commands)).digest('hex')===p.reviewed_hash,'REVISION_CONFLICT','The reviewed import changed.');
@@ -246,9 +255,11 @@ export class ControlCore {
     const run=this.store.run(command.payload.run_id);
     requireThat(run.current_attempt===command.payload.expected_attempt,'REVISION_CONFLICT','The attempt has changed.');
     requireThat(['failed','waiting','cancelled','recovery_required'].includes(run.status),'INVALID_INPUT','This run is not eligible for retry.',422);
+    requireThat(run.error_code!=='MESSAGE_EXPIRED','MESSAGE_EXPIRED','This input expired. Send a fresh request.');
     if(run.current_attempt===0){
      const received=run.command_id?this.store.db.all<{accepted_at:string}>('SELECT accepted_at FROM commands WHERE id=?',run.command_id)[0].accepted_at:run.created_at;
      requireThat(Date.parse(received)+90*86400000>this.options.now().getTime(),'MESSAGE_EXPIRED','This unstarted instruction expired. Send a fresh request.');
+     requireThat(!JSON.parse(run.context_json).skill_invocation||Date.parse(run.created_at)+30*86400000>this.options.now().getTime(),'MESSAGE_EXPIRED','This unstarted skill snapshot expired. Send a fresh request.');
     }
     requireThat(run.current_attempt<3,'DEADLINE_EXCEEDED','This run has reached its retry limit.');
     const unsettledAttempt=this.store.db.all("SELECT run_id FROM attempts WHERE run_id=? AND status IN ('claimed','running')",run.id);
@@ -358,10 +369,13 @@ export class ControlCore {
    const now=this.now();
    const due=this.store.db.all<Run&{instruction_created_at:string}>(`SELECT r.*,COALESCE(c.accepted_at,r.created_at) AS instruction_created_at FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.current_attempt=0 AND r.status IN ('queued','waiting') AND (${queuedContextDueSql})<=? ORDER BY (${queuedContextDueSql}),r.id LIMIT 100`,now);
    for(const run of due){
-    if(Date.parse(run.instruction_created_at)+90*86400000<=Date.parse(now)){
+    const invocation=(JSON.parse(run.context_json) as ContextSnapshot).skill_invocation;
+    if(Date.parse(run.instruction_created_at)+90*86400000<=Date.parse(now)||invocation){
+     // A selected skill body cannot be rebuilt from today's enablements after
+     // its unstarted snapshot expires. Require a new explicit owner request.
      this.store.db.exec("UPDATE runs SET context_json='{}',status='failed',error_code='MESSAGE_EXPIRED',updated_at=? WHERE id=?",now,run.id);
      if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='skipped' WHERE id=? AND status='queued'",run.occurrence_id);
-     this.store.event(this.options.uuid(),run.persona_id,'run.input_expired','system:expiry',run.command_id,{run_id:run.id,reason:'MESSAGE_EXPIRED',requires_fresh_request:true},now);
+     this.store.event(this.options.uuid(),run.persona_id,'run.input_expired','system:expiry',run.command_id,{run_id:run.id,reason:'MESSAGE_EXPIRED',requires_fresh_request:true,...(invocation?{skill_invocation:invocation}:{})},now);
     }else{
      const {instruction,room_id}=JSON.parse(run.context_json) as ContextSnapshot;
      // Not an admitted authorization snapshot. Claim rebuilds all derived fields.
@@ -451,8 +465,9 @@ export class ControlCore {
   const scopeKey=`${personaId}/${routineId?`routine/${routineId}`:roomId?`room/${roomId}`:'personal'}`;
   return {...(history?{conversation_history:history}:{}),...(Object.keys(whatsapp).length?{whatsapp_read_policies:whatsapp}:{}),schema_version:1,persona,routine,memories,skills:new SkillCatalog(this.store,()=>this.now(),this.options.uuid).enabled(personaId),scope_key:scopeKey,instruction,room_id:roomId,context_events:contextEvents,context_history_gap:contextHistoryGap,task_summaries:this.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>("SELECT id,title,status,updated_at FROM runs WHERE role='background' AND persona_id=? AND json_extract(context_json,'$.scope_key')=? ORDER BY updated_at DESC,id LIMIT 30",personaId,scopeKey),authorization_policy_ids:routine?.body.action_policy_ids??[]};
  }
- enqueue(personaId:string,instruction:string,commandId:string|null,routineId:string|null,occurrenceId:string|null,roomId:string|null=null):string {
+ enqueue(personaId:string,instruction:string,commandId:string|null,routineId:string|null,occurrenceId:string|null,roomId:string|null=null,skill?:StoredObject<SkillBody>):string {
   const id=this.options.uuid(),now=this.now(),context=this.context(personaId,instruction,routineId,roomId,commandId);
+  if(skill){context.skills=[skill];context.skill_invocation={skill_id:skill.id,skill_revision:skill.revision};}
   const admitted=this.options.executionEnabled||(this.ownerAlpha.available()&&this.ownerAlpha.directMessage(personaId,commandId,routineId,occurrenceId,roomId));
   let status=admitted?'queued':'waiting',reason:string|null=admitted?null:'CAPABILITY_UNAVAILABLE';
   this.store.db.exec('INSERT INTO runs(id,command_id,occurrence_id,persona_id,routine_id,context_json,status,error_code,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',id,commandId,occurrenceId,personaId,routineId,JSON.stringify(context),status,reason,now,now);

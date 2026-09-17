@@ -82,6 +82,23 @@ it('sends skill descriptors while retaining the full admitted snapshot in custod
   expect(JSON.parse(row.claim.run.context_json).skills).toEqual([skill]);
 });
 
+it('explicit skill admission reaches the adapter with the pinned descriptor and unchanged authority', async () => {
+  const skillId=randomUUID(),proposal=randomUUID(),body={name:'Pinned review',description:'Review supplied input',when_to_use:'Explicitly requested',inputs_access:[],steps:['PRIVATE PROCEDURE 37'],decision_rules:[],validation:['Check supplied values'],output:'Review',failure_handling:['Explain missing input'],approval_boundaries:['No new authority'],contains_private_facts:false as const,references:[{name:'notes.md',text:'PRIVATE REFERENCE 91'}]};
+  expect(f.accept({schema_version:1,type:'skill.propose',payload:{proposal_id:proposal,skill_id:skillId,expected_skill_revision:0,body,provenance:{kind:'owner',source_ref:'synthetic'},executable_files_changed:false}}).status).toBe('applied');
+  expect(f.accept({schema_version:1,type:'skill.review',payload:{proposal_id:proposal,expected_proposal_revision:1,decision:'approve'}}).status).toBe('applied');
+  const receipt=f.accept({schema_version:1,type:'skill.run',payload:{skill_id:skillId,expected_skill_revision:1,persona_id:bot,expected_persona_revision:1,text:'Review 17 against 43.'}});
+  expect(receipt.status).toBe('applied');
+  expect(f.accept({schema_version:1,type:'skill.delete',payload:{id:skillId,expected_revision:1}}).status).toBe('applied');
+  const row=await bridge().claimNext(),context=JSON.parse(row.claim.run.context_json);
+  expect(row.claim.run.id).toBe(receipt.resource_id);expect(nativeCalls).toBe(1);
+  expect(nativeMessages[0]).toMatchObject({instruction:'Review 17 against 43.',skill_invocation:{skill_id:skillId,skill_revision:1}});
+  expect(nativeMessages[0].skills).toEqual([{id:skillId,revision:1,name:body.name,description:body.description,when_to_use:body.when_to_use,load_with:'hehebot_read_skill'}]);
+  expect(JSON.stringify(nativeMessages)).not.toMatch(/PRIVATE PROCEDURE|PRIVATE REFERENCE|notes\.md/);
+  expect(context.skills).toEqual([expect.objectContaining({id:skillId,revision:1,body})]);
+  expect(context.authorization_policy_ids).toEqual([]);expect(context.persona.body.tool_policy_ids).toEqual([]);
+  expect(f.db.all('SELECT * FROM skill_enablements')).toEqual([]);
+});
+
 it('real SQLite claim → native adapter/journal → completion publishes exactly one attributed reply', async () => {
   const id = enqueue(), executor = bridge();
   const row = await executor.claimNext();
