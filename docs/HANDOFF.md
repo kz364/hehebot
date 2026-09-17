@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest read-only investigation: same immutable Sprite verified; process inventory
+shows only /.pilot/tini, coreutils tail and inspector in one PID namespace, no
+read errors. Provider services=[] and exec-session list empty. Private evidence:
+.local/sprite-retirement-{inventory,identity,services}.json and
+.local/sprite-retirement-sessions.log. Namespace completeness and historical
+process identities remain unproved; do not turn this into a retirement receipt.
+Official superfly/sprites-js exposes POST /v1/sprites/{name}/restart, but client
+code is not a server guarantee of memory discard, non-restoration, disk/no-rollback
+or HTTP autostart fencing. Next exact external question is recorded in IMPLEMENTATION.
+No reboot, deployment, inference or replay; no new resource; inspection billing
+increment unverified. Do not repeat inventory/cold polling or add peripheral tests.
+Advisor, source researcher and retained-evidence worker finished; no active work.
+
 Current stage supersedes the older unwired notes below: public authenticated
 `owner-alpha.activate` and private `HEHEBOT_OWNER_ALPHA_SUCCESSOR` are wired locally.
 The command contains only transition_id/envelope_sha256; actual Access owner binding

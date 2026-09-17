@@ -4,6 +4,32 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Retirement investigation (2026-09-17): one bounded read-only census on the verified
+same immutable Sprite returned tini/tail plus inspector, no per-process errors,
+one observed PID/mount namespace. Independent provider GET found no service
+definitions; exec-session listing found none. This narrows visible surviving work
+but does not establish namespace completeness or correlate missing historical
+PID/start/namespace IDs. Empty configured model tool allowlist is not proof that
+legacy native tools could not create processes. Unknown task/effect custody remains.
+Private evidence: `.local/sprite-retirement-{inventory,identity,services}.json` and
+`.local/sprite-retirement-sessions.log`. No code changes or tests needed for this
+inspection; previous combined1590/467 and desktop16 evidence unchanged.
+
+The official SDK exposes [restartSprite](https://github.com/superfly/sprites-js/blob/4c2b346ed35456e07b5a69cd00a53292e40d6fc4/src/client.ts#L305-L321),
+POST `/v1/sprites/{name}/restart`, described only as restarting the backing machine.
+Its mocked202/queued response is not completion proof. Public server semantics
+were not found. [Service docs](https://docs.sprites.dev/concepts/services/) describe
+sticky stops but also HTTP-triggered autostart; their interaction with this endpoint
+is not a proven fence. Guest Linux reboot has PID-namespace-dependent behavior and
+must not be improvised on retained custody.
+
+Exact provider clarification needed: does this restart discard all prior guest
+execution/memory and prevent later restoration, preserve the immutable Sprite ID
+and current filesystem without rollback, and preserve explicit service-stop fences
+against HTTP autostart? Which observation proves completion rather than queued
+acceptance? No provider contact or restart was performed. Inspection billing remains
+unverified; no inference, new resource, paid upgrade, replay or deployment.
+
 Successor command integration (2026-09-17, local/unpublished): authenticated
 same-origin `/v1/commands` accepts `owner-alpha.activate` with only
 `{transition_id,envelope_sha256}`. The digest identifies the parsed/canonical
