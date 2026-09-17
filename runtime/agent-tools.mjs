@@ -8,7 +8,7 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { ControlClient } from './control-client.mjs';
 
-export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill']);
+export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills']);
 const COMMAND_TYPES = Object.freeze({ hehebot_propose_skill: 'skill.propose', hehebot_save_routine: 'routine.put', hehebot_run_routine: 'routine.run', hehebot_delete_routine: 'routine.delete' });
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_OUTSTANDING = 16;
@@ -49,7 +49,7 @@ export function buildToolDefinitions(contracts) {
     idempotency_key: resolveRefs(contracts.$defs.uuid, contracts), payload,
   }, required: ['idempotency_key', 'payload'] });
   return Object.freeze([
-    { name: AGENT_TOOL_NAMES[0], description: 'Propose a non-executable skill for later owner review.', inputSchema: wrap(skill) },
+    { name: AGENT_TOOL_NAMES[0], description: 'Propose a non-executable skill for later owner review. Search existing skills first to avoid proposing duplicates.', inputSchema: wrap(skill) },
     { name: AGENT_TOOL_NAMES[1], description: 'Create or update a routine within the admitted persona policy.', inputSchema: wrap(routine) },
     { name: AGENT_TOOL_NAMES[2], description: 'Run a routine once without changing its schedule. Rejects if unfinished work exists.', inputSchema: wrap(commandSchema(contracts, 'routine.run')) },
     { name: AGENT_TOOL_NAMES[3], description: 'Delete future automation and queued work; already active tasks continue.', inputSchema: wrap(commandSchema(contracts, 'routine.delete')) },
@@ -59,7 +59,27 @@ export function buildToolDefinitions(contracts) {
     { name: AGENT_TOOL_NAMES[5], description: 'Load an enabled skill from the admitted task catalog. Returns the pinned reviewed procedure; does not grant tools or permissions.', inputSchema: {
       type: 'object', additionalProperties: false, properties: { skill_id: resolveRefs(contracts.$defs.uuid, contracts) }, required: ['skill_id'],
     } },
+    { name: AGENT_TOOL_NAMES[6], description: 'Search the current approved skill catalog by literal case-insensitive ASCII substring of name, description, or when_to_use. Returns metadata only in 20-result exclusive-ID pages; it does not enable or load skills. Use before proposing duplicates.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: {
+        query: { type: 'string', minLength: 1, maxLength: 200 }, after: resolveRefs(contracts.$defs.uuid, contracts),
+      }, required: ['query'],
+    } },
   ]);
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function validSkillSearchResult(result) {
+  if (!result || typeof result !== 'object' || Array.isArray(result) ||
+      Object.keys(result).some(key => !['skills', 'next_cursor'].includes(key)) ||
+      !Object.hasOwn(result, 'skills') || !Object.hasOwn(result, 'next_cursor') ||
+      !Array.isArray(result.skills) || result.skills.length > 20 ||
+      !(result.next_cursor === null || typeof result.next_cursor === 'string' && UUID.test(result.next_cursor))) return false;
+  return result.skills.every(skill => skill && typeof skill === 'object' && !Array.isArray(skill) &&
+    Object.keys(skill).length === 5 && ['id', 'revision', 'name', 'description', 'when_to_use'].every(key => Object.hasOwn(skill, key)) &&
+    typeof skill.id === 'string' && UUID.test(skill.id) && Number.isSafeInteger(skill.revision) && skill.revision >= 1 &&
+    typeof skill.name === 'string' && skill.name.length >= 1 && [...skill.name].length <= 80 &&
+    typeof skill.description === 'string' && skill.description.length >= 1 && [...skill.description].length <= 2000 &&
+    typeof skill.when_to_use === 'string' && skill.when_to_use.length >= 1 && [...skill.when_to_use].length <= 4000);
 }
 
 export function createAgentToolsHandler({ controlClient, config, contracts }) {
@@ -93,6 +113,11 @@ export function createAgentToolsHandler({ controlClient, config, contracts }) {
     const payload = clone(args.payload);
     if (type === 'skill.propose') payload.provenance = { kind: 'model', source_ref: config.runId };
     try {
+      if (name === 'hehebot_search_skills') {
+        const result = await controlClient.request('agent-skill-search', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
+        if (!validSkillSearchResult(result)) throw new Error('INVALID_SKILL_SEARCH_RESULT');
+        return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify(result) }] } };
+      }
       if (name === 'hehebot_read_skill') {
         const result = await controlClient.request('agent-skill', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
         if (result?.skill?.id !== args.skill_id || !Number.isSafeInteger(result.skill.revision) || result.skill.revision < 1) throw new Error('INVALID_SKILL_RESULT');

@@ -261,6 +261,20 @@
     {
       "type":"object", "additionalProperties":false,
       "properties": {
+        "type":{"const":"agent-skill-search"},
+        "payload": {
+          "type":"object", "additionalProperties":false,
+          "properties": {
+            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
+            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
+            "query":{"type":"string","minLength":1,"maxLength":200},"after":{"type":"string","format":"uuid"}
+          },"required":["identity","run_id","attempt","query"]
+        }
+      },"required":["type","payload"]
+    },
+    {
+      "type":"object", "additionalProperties":false,
+      "properties": {
         "type":{"const":"agent-skill"},
         "payload": {
           "type":"object", "additionalProperties":false,

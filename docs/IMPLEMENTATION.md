@@ -4,6 +4,34 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Skill catalog discovery (2026-09-17 Asia/Jakarta): `hehebot_search_skills` routes
+through authenticated `agent-skill-search` with host-bound task custody. The
+admitted persona must have `SKILL_PROPOSE_POLICY`; owner-alpha rejects discovery.
+The service also requires explicit search and proposal tool allowlist entries;
+installing this code does not add search to existing grants. Query length is
+1–200 Unicode code points, nonblank; optional `after` is an exclusive UUID cursor.
+Search uses literal substrings of current approved name/description/when-to-use,
+ASCII case folding, ID ordering, and pages of at most 20. It is not semantic
+ranking or a snapshot across pages. Results contain only ID, revision and those
+three metadata fields, not bodies, references, private memory, provenance or
+enablement. Existing admitted full-body reads remain unchanged. Runtime response
+validation rejects extra fields and uses the schema's Unicode bounds.
+
+Focused verification passes 42 backend/HTTP and 64 runtime tests plus typecheck.
+Cases cover 20+3 asymmetric pages, literal wildcard characters, current revisions,
+zero core search writes, body-access denial, wrong credentials, schema bounds,
+stale identity/attempt, exact deadline, cancellation, alpha refusal, explicit
+grants and metadata-only transport. One initial fixture omitted memory scope;
+corrected test data passed. Runtime worker finished; host integrated and corrected
+Unicode units and implicit allowlist expansion. Combined verifier exits 0 at
+`.local/skill-search-combined.log`: 1527 backend/439 runtime, Worker/browser/native/
+service and dry-run build passed. Desktop16 pass; stronger literal/deleted-record
+cases pass separately in `.local/skill-search-literal-final.log`. Regeneration
+reproduces the runtime validator hash. Focused evidence is in
+`.local/skill-search-{integration,runtime-final}.log`. No UI, migration, account,
+provider, real-model, publication or gate changes. Search guidance does not prove
+that a real model chooses the right existing skill or learns from corrections.
+
 Owner skill Run once (2026-09-17 Asia/Jakarta): `skill.run` requires an explicit
 owner request, current approved skill/persona revisions and bounded nonblank
 input. It captures exactly one skill without changing enablement. Ordinary

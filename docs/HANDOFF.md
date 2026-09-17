@@ -4,6 +4,23 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Skill metadata discovery is verified locally; full verifier exits 0 at
+`.local/skill-search-combined.log` (1527 backend/439 runtime plus Worker/browser/
+native/service/build). Runtime worker finished; no active worker/check remains.
+Changes are local/unpublished. Endpoint `agent-skill-search`
+requires active admitted custody and `SKILL_PROPOSE_POLICY`, denies alpha, and
+returns current shared catalog metadata only. It neither enables skills nor
+widens admitted body reads. Service configs must explicitly allow both search
+and proposal tools; no automatic allowlist additions. Literal ASCII-folded
+substring query, max200 code points, exclusive ID pages of20, no semantic rank
+or cross-page snapshot. Focused42 backend/64 runtime/typecheck and desktop16 pass;
+stronger literal/deleted-record cases pass separately after the backend stage.
+No UI/migration/live/shared actions.
+Next UX11 gap is an explicit corrected-task learning handoff; inspect retained
+task/conversation provenance and privacy before choosing that contract. Search
+does not establish model judgment or learning acceptance. Cloudflare decision
+and spending grants are unchanged; continuation remains enabled.
+
 Run once is verified locally; full verifier exits 0 at
 `.local/skill-run-combined-final.log`: 1524 backend/435 runtime plus Worker,
 browser, native/service and dry-run build. Contract/UI tasks finished; no worker
@@ -23,13 +40,9 @@ Desktop 16 pass. Retain failed HTTP fixture/bridge setup logs; host fixed eager
 SQL execution in the HTTP shim and valid required skill fields in the bridge
 fixture. Host also fixed alpha activation retention on Skills before its early
 render return. The old offline error banner may remain after reconnect; no
-unrelated UI cleanup was added. Next bounded UX11 gap: model-facing catalog
-discovery before proposing duplicate skills. `runtime/agent-tools.mjs` exposes
-propose and read-by-ID but no search; `src/core/agent-commands.ts` binds proposal
-provenance/policy and admitted reads; `src/core/skills.ts` rejects duplicate names.
-Design bounded metadata-only discovery under explicit existing proposal authority,
-not full-body cross-persona reads or permission expansion. Corrected-task handoff
-and real model judgment remain later evidence. No new live grant or P0 Cloudflare
+unrelated UI cleanup was added. Catalog discovery is now covered by the newer
+checkpoint above. Corrected-task handoff and real model judgment remain later
+evidence. No new live grant or P0 Cloudflare
 approval; do not repeat the pending approval request. Continuation stays enabled.
 
 Verified locally: bounded skill text references, no filesystem/executable support.

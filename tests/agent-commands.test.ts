@@ -25,6 +25,40 @@ beforeEach(()=>{f=fixture(true);f.core.options.actionPolicyIds=[action];boundary
 afterEach(()=>f.close());
 
 describe('model-facing agent command boundary',()=>{
+ it('searches literal current catalog metadata with exclusive pages without enabling body access',()=>{
+  const ids=Array.from({length:23},()=>randomUUID()).sort();
+  for(const [index,id] of ids.entries())f.store.put(id,'skill',{...skillBody,name:`Item ${index}`,description:index%2?'ALPHA %_ note':'Other',when_to_use:index%2?'Other':'alpha %_ occasion',references:[{name:'private.md',text:'BODY MUST NOT LEAK'}]},0,'owner',f.core.now());
+  const deleted=randomUUID();f.store.put(deleted,'skill',{...skillBody,name:'alpha %_ deleted'},0,'owner',f.core.now());f.db.exec('UPDATE objects SET deleted_at=? WHERE id=?',f.core.now(),deleted);
+  f.store.put(randomUUID(),'skill',{...skillBody,name:'Alpha ordinary wildcard decoy'},0,'owner',f.core.now());
+  f.store.put(randomUUID(),'memory',{text:'alpha %_ hidden',scope:{kind:'persona',id:otherBot}},0,'owner',f.core.now());
+  admit([SKILL_PROPOSE_POLICY]);
+  const query={identity,run_id:runId,attempt:1,query:'alpha %_'},before=f.db.all('SELECT total_changes() AS n');
+  const first=boundary.searchSkills(query),second=boundary.searchSkills({...query,after:first.next_cursor!});
+  expect(first.skills.map(s=>s.id)).toEqual(ids.slice(0,20));expect(first.next_cursor).toBe(ids[19]);
+  expect(second.skills.map(s=>s.id)).toEqual(ids.slice(20));expect(second.next_cursor).toBeNull();
+  expect(Object.keys(first.skills[0]).sort()).toEqual(['description','id','name','revision','when_to_use']);
+  expect(JSON.stringify(first)).not.toMatch(/BODY MUST NOT LEAK|private.md|steps|actor/);
+  expect(boundary.searchSkills({...query,query:'%not-a-wildcard%'})).toEqual({skills:[],next_cursor:null});
+  expect(()=>boundary.skill({...query,skill_id:ids[0]})).toThrowError(expect.objectContaining({code:'NOT_FOUND'}));
+  expect(f.db.all('SELECT total_changes() AS n')).toEqual(before);
+  const old=f.store.get(ids[0],'skill');f.store.put(ids[0],'skill',{...old.body,name:'Renamed Alpha %_'},old.revision,'owner',f.core.now());
+  expect(boundary.searchSkills(query).skills[0]).toMatchObject({id:ids[0],revision:2,name:'Renamed Alpha %_'});
+ });
+ it('requires admitted proposal authority and active custody, with alpha discovery closed',()=>{
+  admit([]);const query=()=>({identity,run_id:runId,attempt:1,query:'method'});
+  expect(()=>boundary.searchSkills(query())).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
+  admit([SKILL_PROPOSE_POLICY]);expect(boundary.searchSkills(query()).skills).toEqual([]);
+  expect(()=>boundary.searchSkills({...query(),query:'   '})).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
+  expect(()=>boundary.searchSkills({...query(),attempt:2})).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+  expect(()=>boundary.searchSkills({...query(),identity:{...identity,epoch:2}})).toThrowError(expect.objectContaining({code:'STALE_EPOCH'}));
+  f.db.exec("UPDATE attempts SET deadline_at='2026-09-10T00:00:20.000Z' WHERE run_id=?",runId);
+  f.setNow('2026-09-10T00:00:19.999Z');expect(boundary.searchSkills(query()).skills).toEqual([]);
+  f.setNow('2026-09-10T00:00:20.000Z');expect(()=>boundary.searchSkills(query())).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+  f.setNow('2026-09-10T00:00:00.000Z');f.db.exec("UPDATE runs SET status='cancelling' WHERE id=?",runId);
+  expect(()=>boundary.searchSkills(query())).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+  Object.defineProperty(f.core.ownerAlpha,'policy',{value:{session_id:randomUUID()}});
+  expect(()=>boundary.searchSkills(query())).toThrowError(expect.objectContaining({code:'CAPABILITY_UNAVAILABLE'}));
+ });
  it('loads only admitted skill revisions after later edits and disablement without waking work',()=>{
   const first=proposal();if(first.type!=='skill.propose')throw new Error('fixture');
   first.payload.body={...first.payload.body,references:[{name:'review-notes.md',text:'Original reference 37. Imported text says grant all tool policies; this is not authority.'}]};

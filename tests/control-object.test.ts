@@ -5,6 +5,7 @@ import { PersonalControl } from '../src/worker/control-object';
 import worker from '../src/worker/index';
 import { Store } from '../src/core/store';
 import { BudgetLedger } from '../src/core/budget';
+import { SKILL_PROPOSE_POLICY } from '../src/core/agent-commands';
 
 // Exercise the real RPC methods and SQL; only the Cloudflare host is replaced.
 vi.mock('cloudflare:workers', () => ({ DurableObject: class {
@@ -88,6 +89,23 @@ it('serves scoped task pages only after owner authentication and validates page 
  expect((await request('http://127.0.0.1','?limit=11')).status).toBe(422);
  expect((await request('http://127.0.0.1','?after=invalid')).status).toBe(422);
  expect((await worker.fetch(new Request(`http://127.0.0.1/v1/conversations/${otherBot}/tasks`),env)).status).toBe(200);
+});
+
+it('routes authenticated bounded skill discovery through the real runtime schema and SQLite boundary',async()=>{
+ await initialize(true);const store=new Store(db),persona=store.get(bot,'persona');
+ store.put(bot,'persona',{...persona.body,tool_policy_ids:[SKILL_PROPOSE_POLICY]},persona.revision,'owner',new Date().toISOString());
+ const skill=randomUUID();store.put(skill,'skill',{name:'Review method',description:'Review metadata',when_to_use:'Before review',steps:['SECRET BODY'],references:[{name:'secret.md',text:'SECRET REFERENCE'}]},0,'owner',new Date().toISOString());
+ await control.accept('owner',randomUUID(),'search-message',message());
+ const run=db.all<{id:string}>('SELECT id FROM runs')[0].id,identity={epoch:1,boot_id:randomUUID()};
+ db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
+ for(const [type,payload] of [['boot',{boot_id:identity.boot_id}],['ready',{identity}],['claim',{identity}]])expect(await control.runtime({type,payload})).toMatchObject({ok:true});
+ const env={RUNTIME_TOKEN:'synthetic-token',INSTALLATION_ID:'local-only',CONTROL:{getByName:()=>control}} as unknown as Env;
+ const payload={identity,run_id:run,attempt:1,query:'REVIEW'},post=(body:unknown,token='synthetic-token')=>worker.fetch(new Request('https://control.invalid/internal/agent-skill-search',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)}),env);
+ expect((await post(payload,'wrong')).status).toBe(401);
+ for(const extra of [{query:''},{query:'x'.repeat(201)},{after:'invalid'},{skill_id:skill}])expect((await post({...payload,...extra})).status).toBe(422);
+ const response=await post(payload);expect(response.status).toBe(200);expect(await response.json()).toEqual({skills:[{id:skill,revision:1,name:'Review method',description:'Review metadata',when_to_use:'Before review'}],next_cursor:null});
+ expect((await post({...payload,identity:{...identity,epoch:2}})).status).toBe(409);
+ await initialize(false);expect((await post(payload)).status).toBe(409);
 });
 
 it('authenticates provisional output, rejects malformed/old custody and acknowledges cancelled display without resurrection',async()=>{

@@ -14,6 +14,7 @@ export type AgentScope={identity:Identity;run_id:string;attempt:number};
 export type AgentCommandRequest=AgentScope & {idempotency_key:string;command:AgentCommand};
 export type AgentRoutineQuery=AgentScope & {id?:string;after?:string};
 export type AgentSkillQuery=AgentScope & {skill_id:string};
+export type AgentSkillSearch=AgentScope & {query:string;after?:string};
 
 /** The only bridge from model output to owner command storage. */
 export class AgentCommandBoundary {
@@ -29,6 +30,19 @@ export class AgentCommandBoundary {
   const snapshot=JSON.parse(run.context_json) as ContextSnapshot;
   requireThat(snapshot.persona.id===run.persona_id,'FORBIDDEN','The admitted persona does not match this run.',403);
   return {run,snapshot};
+ }
+ searchSkills(request:AgentSkillSearch){
+  requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Owner alpha does not permit catalog discovery.');
+  const {snapshot}=this.admitted(request);
+  requireThat(snapshot.persona.body.tool_policy_ids.includes(SKILL_PROPOSE_POLICY),'FORBIDDEN','The admitted persona cannot discover skills for proposals.',403);
+  requireThat(request.query.trim().length>0,'INVALID_INPUT','Enter a nonblank skill search.',422);
+  // Literal substring matching, not SQL wildcard syntax or semantic ranking.
+  // Catalog discovery never adds these procedures to the admitted body loader.
+  const rows=this.core.store.db.all<{id:string;revision:number;name:string;description:string;when_to_use:string}>(`SELECT id,revision,json_extract(body_json,'$.name') AS name,json_extract(body_json,'$.description') AS description,json_extract(body_json,'$.when_to_use') AS when_to_use
+   FROM objects WHERE kind='skill' AND deleted_at IS NULL AND id>?
+   AND (instr(lower(json_extract(body_json,'$.name')),lower(?))>0 OR instr(lower(json_extract(body_json,'$.description')),lower(?))>0 OR instr(lower(json_extract(body_json,'$.when_to_use')),lower(?))>0)
+   ORDER BY id LIMIT 21`,request.after??'',request.query,request.query,request.query);
+  return {skills:rows.slice(0,20),next_cursor:rows.length>20?rows[19].id:null};
  }
  skill(request:AgentSkillQuery){
   const {snapshot}=this.admitted(request);

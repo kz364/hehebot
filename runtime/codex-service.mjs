@@ -123,6 +123,8 @@ export function createCodexService(config, dependencies) {
       for (const persona of Object.values(config.personas)) {
         if (!Array.isArray(persona.allowedTools) || new Set(persona.allowedTools).size !== persona.allowedTools.length ||
             persona.allowedTools.some(tool => !AGENT_TOOL_NAMES.includes(tool))) fail('INVALID_SERVICE_CONFIGURATION');
+        if (persona.allowedTools.includes('hehebot_search_skills') &&
+            (alpha || !persona.allowedTools.includes('hehebot_propose_skill'))) fail('INVALID_SERVICE_CONFIGURATION');
         if (config.restrictedPermissions && persona.allowedTools.some(tool => !['hehebot_list_routines', 'hehebot_read_skill'].includes(tool))) fail('INVALID_SERVICE_CONFIGURATION');
       }
       phase = 'starting';

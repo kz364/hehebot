@@ -203,6 +203,44 @@ test('skill read binds host identity and rejects mismatched or malformed returne
   assert.equal((await handle(message)).error.code, -32602); assert.equal(requests.length, 4);
 });
 
+test('skill search routes exact metadata query with trusted custody and strict bounded results', async () => {
+  const requests = [];
+  const metadata = { id: uuid(3), revision: 7, name: 'Useful skill', description: 'Does a useful thing', when_to_use: 'When useful' };
+  let result = { skills: [metadata], next_cursor: uuid(12) };
+  const { handle } = fixture({ request: async (...args) => { requests.push(args); return result; } });
+  const message = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: {
+    name: 'hehebot_search_skills', arguments: { query: 'USEFUL', after: uuid(11) },
+  } };
+  assert.deepEqual(JSON.parse((await handle(message)).result.content[0].text), result);
+  assert.deepEqual(requests, [['agent-skill-search', { query: 'USEFUL', after: uuid(11),
+    identity: config.identity, run_id: config.runId, attempt: config.attempt }]]);
+  for (const arguments_ of [{}, { query: '' }, { query: 'x'.repeat(201) }, { query: 'x', after: 'not-a-uuid' },
+    { query: 'x', identity: { epoch: 99 } }, { query: 'x', run_id: uuid(77) }]) {
+    message.params.arguments = arguments_;
+    assert.equal((await handle(message)).error.code, -32602);
+  }
+  assert.equal(requests.length, 1);
+
+  message.params.arguments = { query: 'useful' };
+  const malformed = [
+    null, {}, { skills: [], next_cursor: 'bad' }, { skills: Array(21).fill(metadata), next_cursor: null },
+    { skills: [{ ...metadata, body: {} }], next_cursor: null },
+    { skills: [{ ...metadata, references: [] }], next_cursor: null },
+    { skills: [{ ...metadata, provenance: {} }], next_cursor: null },
+    { skills: [{ ...metadata, revision: 0 }], next_cursor: null },
+    { skills: [{ ...metadata, description: '' }], next_cursor: null },
+    { skills: [metadata], next_cursor: null, private_field: true },
+  ];
+  for (const value of malformed) {
+    result = value;
+    assert.equal((await handle(message)).error.code, -32000);
+  }
+  assert.equal(requests.length, 1 + malformed.length);
+  result={skills:[{...metadata,name:'😀'.repeat(80),description:'😀'.repeat(2000),when_to_use:'😀'.repeat(4000)}],next_cursor:null};
+  assert.deepEqual(JSON.parse((await handle(message)).result.content[0].text),result);
+  result.skills[0].name+='😀';assert.equal((await handle(message)).error.code,-32000);
+});
+
 test('allowedTools is a host allowlist and cannot name owner-only commands', async () => {
   const one = createAgentToolsHandler({ controlClient: { request: async () => ({}) }, config: { ...config, allowedTools: [AGENT_TOOL_NAMES[1]] }, contracts });
   assert.deepEqual((await one({ jsonrpc: '2.0', id: 1, method: 'tools/list' })).result.tools.map(x => x.name), [AGENT_TOOL_NAMES[1]]);

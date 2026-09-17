@@ -126,6 +126,19 @@ test('assembly claims before creating a private root grant, binds events before 
   assert.equal(f.calls.length, count);
 });
 
+for(const search of [false,true])test(`service preserves explicit proposal/search allowlist search=${search}`, async t => {
+  const f = await fixture(t);
+  const expected=['hehebot_propose_skill',...(search?['hehebot_search_skills']:[])];
+  f.config.personas.bot.allowedTools = expected;
+  const service = createCodexService(f.config, f.dependencies);
+  await service.start();
+  const launch = f.calls.find(call => call.method === 'thread/start');
+  assert.deepEqual(Object.keys(launch.params.config.mcp_servers.hehebot.tools),expected);
+  const grant = JSON.parse(await readFile(launch.params.config.mcp_servers.hehebot.env.HEHEBOT_AGENT_TOOLS_CONFIG, 'utf8'));
+  assert.deepEqual(grant.allowedTools, expected);
+  await service.stop();
+});
+
 test('expired lease or disconnected native fences dispatch without release or replay', async t => {
   const f = await fixture(t); await f.service.start();
   const count = f.calls.length; f.advance(60001);
@@ -631,6 +644,19 @@ test('restricted mode rejects mutation tools and malformed options before any st
     { ...f.config, restrictedPermissions: true, personas: { bot: { ...f.config.personas.bot, allowedTools: ['hehebot_save_routine'] } } },
   ]) await assert.rejects(createCodexService(config, f.dependencies).start(), { code: 'INVALID_SERVICE_CONFIGURATION' });
   assert.deepEqual(f.calls, []);
+});
+
+test('service rejects standalone search grants without expanding read-only or alpha tools', async t => {
+  const f = await fixture(t);
+  for (const allowedTools of [['hehebot_search_skills'], ['hehebot_list_routines', 'hehebot_search_skills']]) {
+    const service = createCodexService({ ...f.config, personas: { bot: { ...f.config.personas.bot, allowedTools } } }, f.dependencies);
+    await assert.rejects(service.start(), { code: 'INVALID_SERVICE_CONFIGURATION' });
+  }
+  assert.deepEqual(f.calls, []);
+  const hosted = await hostedFixture(t);
+  hosted.config.personas[hosted.ownerAlpha.persona_id].allowedTools = ['hehebot_propose_skill', 'hehebot_search_skills'];
+  await assert.rejects(createCodexService(hosted.config, hosted.dependencies).start(), { code: 'INVALID_SERVICE_CONFIGURATION' });
+  assert.deepEqual(hosted.calls, []);
 });
 
 for (const changed of [false, true]) test(`owner alpha reuses config in place, denies drift=${changed}, and never acquires provider hold`, async t => {

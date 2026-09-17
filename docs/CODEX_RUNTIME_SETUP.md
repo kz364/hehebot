@@ -144,6 +144,16 @@ Each exercises six tool calls: pending skill proposal with forced admitted-run p
 
 Skill procedures load progressively through `hehebot_read_skill`. Initial native input contains only admitted catalog descriptors; full reviewed bodies remain pinned in the durable snapshot. Later edits/disablement affect future admissions. Reading a skill does not authorize its actions or prove execution of its instructions.
 
+Optional `hehebot_search_skills` discovers current shared catalog metadata before
+proposing duplicates. A non-alpha service must explicitly allow both search and
+proposal tools, and the admitted persona must hold `SKILL_PROPOSE_POLICY`.
+`{query, after?}` uses a nonblank query of at most 200 Unicode code points and an
+exclusive UUID cursor; pages contain at most 20 ID/revision/name/description/
+when-to-use records. Matching is literal substring with ASCII case folding, not
+semantic ranking. Search never enables a skill or grants access to its body.
+The checks cover HTTP/SQLite and runtime routing, not a real model's search or
+update judgment. Restricted/owner-alpha grants remain unchanged.
+
 The supervisor fixture proves actual source-routine admission and scripted native tool execution, not logical-task completion. Root-only bridge `complete` rejects with `NATIVE_SETTLEMENT_INCOMPLETE`; direct Worker completion rejects with `CANCEL_UNCONFIRMED` after real projected operation heartbeats. The Worker run remains running and the source routine paused. Activity is stubbed and the provider is fake. First scripted dynamic calls wait for durable binding; pre-ack denial is synthetic test evidence rather than a live-race proof.
 
 All model decisions in these fixtures are scripted. `externalModelCalls:0` is fixture-declared, not packet capture. Authenticated inference, model judgment, recursive child/tool/effect settlement, production service assembly, provider sleep and live connector behavior remain unverified. Passing reports keep `assistantOperational`, `productionAdmission` and `modelJudgmentVerified` false. Continue from [HANDOFF.md](HANDOFF.md).
