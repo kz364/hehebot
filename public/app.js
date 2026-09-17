@@ -2,6 +2,7 @@ import { installImportSetup } from './import-setup.js';
 const $=id=>document.getElementById(id);
 const olderEvents=new Map();
 const historyFloors=new Map();
+const skillHistories=new Map();
 let recoveryView=null;
 let taskFeed=null;
 let snapshot=null,selected=localStorage.getItem('personal.selected'),events=[],loading=false,lastSignature='',editing=null;
@@ -77,7 +78,7 @@ async function refresh(force=false){
  }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);if(taskFeed)taskFeed.error=true;if(recoveryView?.kind==='tasks')recoveryView.page=null;render();}
  finally{loading=false;}
 }
-function choose(id){selectionVersion++;recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
+function choose(id){selectionVersion++;skillHistories.clear();recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id!=='skills')$('message').focus();}
 function recoveryUrl(view){return '/v1/conversations/'+view.conversationId+'/'+(view.kind==='tasks'?'tasks':'recovery')+(view.cursor?'?after='+encodeURIComponent(view.cursor):'');}
 async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=null){
  if(!alphaConversationAvailable(selected)){report('History and task pages are unavailable for this conversation in the owner-alpha session.');return;}
@@ -403,8 +404,49 @@ function renderSkillComparison(target,proposal,skill){
 function renderSkillBody(target,body){
  target.append(detail('Purpose',body.description),detail('When to use',body.when_to_use),detail('Inputs and access',body.inputs_access),detail('Procedure',body.steps),detail('Decision rules',body.decision_rules),detail('Validation',body.validation),detail('Output',body.output),detail('Failure handling',body.failure_handling),detail('Approval boundaries',body.approval_boundaries));
 }
+function skillHistoryAllowed(){return !(alphaSeen||snapshot?.summary.owner_alpha);}
+function historyUrl(skillId,before){return `/v1/skills/${encodeURIComponent(skillId)}/revisions?${before?`before=${before}&`:''}limit=10`;}
+async function loadSkillHistory(skill,before=null){
+ if(!skillHistoryAllowed()){report('Skill history is unavailable in the owner-alpha session.');return;}
+ const version=selectionVersion,identity={id:skill.id,revision:skill.revision},existing=skillHistories.get(skill.id);
+ const view={skillRevision:skill.revision,rows:before?[...(existing?.rows??[])]:[],nextCursor:before,error:'',loading:true};skillHistories.set(skill.id,view);lastSignature='';renderSkills();
+ try{
+  if($('connection').textContent!=='Connected'||!navigator.onLine)throw new Error('History is unavailable offline. Reconnect and retry.');
+  const page=await api(historyUrl(skill.id,before));
+  const currentSkill=items('skill').find(x=>x.id===identity.id&&!x.deleted_at);
+  if(skillHistories.get(skill.id)!==view||selected!=='skills'||selectionVersion!==version||!skillHistoryAllowed())return;
+  if($('connection').textContent!=='Connected'||!navigator.onLine)throw new Error('History is unavailable offline. Reconnect and retry.');
+  if(!currentSkill||currentSkill.revision!==identity.revision||page.skill_id!==identity.id||page.current_revision!==identity.revision)throw new Error('The approved skill changed or was deleted. Refresh before reading or restoring history.');
+  if(!Array.isArray(page.revisions)||page.revisions.length>10||!page.revisions.every((row,index)=>Number.isSafeInteger(row.revision)&&row.revision>0&&row.revision<=identity.revision&&(!before||row.revision<before)&&(!index||row.revision<page.revisions[index-1].revision)&&row.body&&typeof row.created_at==='string')||(page.next_cursor!==null&&(!page.revisions.length||page.next_cursor!==page.revisions.at(-1).revision)))throw new Error('The portal returned invalid skill history.');
+  view.rows=[...new Map([...view.rows,...page.revisions].map(row=>[row.revision,row])).values()].sort((a,b)=>b.revision-a.revision);view.nextCursor=page.next_cursor;view.loading=false;lastSignature='';renderSkills();
+ }catch(e){if(skillHistories.get(skill.id)===view&&selected==='skills'&&selectionVersion===version){view.loading=false;view.error=e.message;lastSignature='';renderSkills();}}
+}
+function stageSkillRestore(skill,row){
+ const capturedSkill=structuredClone(skill),source=structuredClone(row),proposalId=crypto.randomUUID(),key=crypto.randomUUID(),version=selectionVersion;
+ const affirmation=node('label',undefined,'check affirmation'),check=node('input');check.type='checkbox';check.name='confirm';check.required=true;affirmation.append(check,document.createTextNode(`Stage revision ${source.revision} as a pending proposal for separate review.`));
+ $('editor').classList.add('roster-editor');
+ openEditor(`Stage restore: ${capturedSkill.body.name}`,[node('p',`Current approved revision ${capturedSkill.revision} · Historical source revision ${source.revision}`,'message-body'),node('p','This stages a pending restore proposal only. It does not approve, enable, or immediately replace the skill. Review and approval remain a separate action.','review-notice'),node('p','Only retained revisions are available; gaps may exist and expired history cannot be restored here. A lost reply may still mean staging succeeded. Retry unchanged to send the identical proposal and key.','hint'),...skillFields.map(([field,label])=>detail(label,source.body[field])),affirmation],()=>{
+  const latest=items('skill').find(x=>x.id===capturedSkill.id&&!x.deleted_at),history=skillHistories.get(capturedSkill.id);
+  if(!skillHistoryAllowed()||$('connection').textContent!=='Connected'||!navigator.onLine||selected!=='skills'||selectionVersion!==version||!latest||latest.revision!==capturedSkill.revision||history?.loading||history?.error||!history?.rows.some(item=>item.revision===source.revision&&JSON.stringify(item.body)===JSON.stringify(source.body)))throw new Error('The skill, selected history, navigation, or connection changed. Close and refresh before staging a restore.');
+  return command('skill.restore',{proposal_id:proposalId,skill_id:capturedSkill.id,expected_skill_revision:capturedSkill.revision,source_revision:source.revision},key);
+ },'Stage restore proposal');
+}
+function renderSkillHistory(card,skill){
+ const actions=card.querySelector('.actions'),allowed=skillHistoryAllowed(),view=skillHistories.get(skill.id);
+ if(!allowed)return;
+ const historyButton=button(view?'Hide history':'History',()=>{if(view){skillHistories.delete(skill.id);lastSignature='';renderSkills();}else loadSkillHistory(skill);},'quiet');historyButton.dataset.action='skill-history';actions.append(historyButton);
+ if(!view)return;
+ const panel=node('section',undefined,'skill-bots');panel.dataset.skillHistory=skill.id;panel.append(node('h4','Retained revision history'),node('p','Loaded on demand. Revisions descend but retained history may have gaps; unavailable or expired revisions cannot be restored. Staging creates a proposal and never approves or enables it.','hint'));
+ if(view.skillRevision!==skill.revision)panel.append(node('p','The approved revision changed. Close history and refresh before continuing.','review-notice'));
+ for(const row of view.rows){const item=node('details',undefined,'card');item.dataset.sourceRevision=String(row.revision);item.append(node('summary',`Revision ${row.revision} · ${time(row.created_at)}`),detail('Name',row.body.name));renderSkillBody(item,row.body);const stage=button('Stage restore',()=>stageSkillRestore(skill,row),'quiet');stage.dataset.action='stage-restore';stage.disabled=Boolean(view.loading||view.error)||view.skillRevision!==skill.revision||$('connection').textContent!=='Connected'||!navigator.onLine;item.append(stage);panel.append(item);}
+ if(view.loading){const status=node('p','Loading retained history…','hint');status.setAttribute('role','status');panel.append(status);}
+ if(view.error){const error=node('p',view.error,'review-notice');error.setAttribute('role','alert');panel.append(error,button('Retry history',()=>loadSkillHistory(skill,view.nextCursor),'quiet'));}
+ if(!view.loading&&!view.error&&view.nextCursor)panel.append(button('Load older retained revisions',()=>loadSkillHistory(skill,view.nextCursor),'quiet'));
+ if(!view.loading&&!view.error&&!view.rows.length)panel.append(node('p','No retained revision rows were returned.','muted'));
+ card.append(panel);
+}
 function renderSkills(){
- const signature=JSON.stringify(['skills',items('skill'),items('persona'),snapshot.skill_proposals,snapshot.skill_enablements,$('connection').textContent]);
+ const signature=JSON.stringify(['skills',items('skill'),items('persona'),snapshot.skill_proposals,snapshot.skill_enablements,$('connection').textContent,navigator.onLine,skillHistoryAllowed(),[...skillHistories]]);
  if(lastSignature===signature)return;
  lastSignature=signature;
  const openSummaries=new Set([...$('timeline').querySelectorAll('details[open] > summary')].map(x=>x.textContent));
@@ -426,7 +468,7 @@ function renderSkills(){
  }
  const catalog=items('skill').filter(x=>!x.deleted_at);timeline.append(node('h2',`Approved catalog (${catalog.length})`,'subheading'));
  if(!catalog.length)timeline.append(node('p','No skills have been approved yet.','muted'));
- for(const skill of catalog){const card=node('details',undefined,'skill-card');const summary=node('summary');summary.append(node('span',skill.body.name),node('span',`Revision ${skill.revision}`,'status'));card.append(summary,node('p',skill.body.description,'skill-description'));renderSkillBody(card,skill.body);const bots=node('div',undefined,'skill-bots');bots.append(node('h4','Bot access'));for(const persona of items('persona').filter(x=>!x.body.archived)){const record=enablement(skill.id,persona.id),enabled=record?.enabled===true;const row=node('div',undefined,'skill-bot-row');row.append(node('span',persona.body.name),button(enabled?'Disable':'Enable',()=>act(()=>command('skill.enable',{skill_id:skill.id,expected_skill_revision:skill.revision,persona_id:persona.id,enabled:!enabled})),enabled?'quiet danger':'quiet'));bots.append(row);}const actions=node('div',undefined,'actions');actions.append(button('Propose an update',()=>editSkillProposal(skill),'quiet'));card.append(bots,actions);timeline.append(card);}
+ for(const skill of catalog){const card=node('details',undefined,'skill-card');const summary=node('summary');summary.append(node('span',skill.body.name),node('span',`Revision ${skill.revision}`,'status'));card.append(summary,node('p',skill.body.description,'skill-description'));renderSkillBody(card,skill.body);const bots=node('div',undefined,'skill-bots');bots.append(node('h4','Bot access'));for(const persona of items('persona').filter(x=>!x.body.archived)){const record=enablement(skill.id,persona.id),enabled=record?.enabled===true;const row=node('div',undefined,'skill-bot-row');row.append(node('span',persona.body.name),button(enabled?'Disable':'Enable',()=>act(()=>command('skill.enable',{skill_id:skill.id,expected_skill_revision:skill.revision,persona_id:persona.id,enabled:!enabled})),enabled?'quiet danger':'quiet'));bots.append(row);}const actions=node('div',undefined,'actions');actions.append(button('Propose an update',()=>editSkillProposal(skill),'quiet'));card.append(bots,actions);renderSkillHistory(card,skill);timeline.append(card);}
  for(const details of timeline.querySelectorAll('details'))details.open=openSummaries.has(details.querySelector('summary')?.textContent);
  timeline.scrollTop=scrollTop;
 }

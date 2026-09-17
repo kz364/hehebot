@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Newest: portal History action and paged historical bodies, including name, are
+implemented with staged restore confirmation. Stable command/proposal identity,
+separate approval, navigation cache clearing, stale/offline/error guards and zero
+alpha history traffic are covered by scripts/test-portal-skill-history.mjs.
+Host browser passes7 reads/2 identical retry mutations; draft regression and
+desktop16 pass. DPR2 desktop/narrow/history/error/confirmation captures inspected.
+Full verifier exits0 with1,386 backend/434 runtime plus browser/native/service/build
+in .local/skill-history-ui-combined.log. Narrow dialog scroll/footer checks and
+inspected bottom capture confirm affirmation/lower fields are reachable.
+No active workers, backend permission or account/provider changes. Next local E05
+work: routine preflight/history; deployment authorization remains pending, do not
+repeat that request. No history restore is permitted through alpha gateway.
+
 Newest E05 prerequisite: SkillCatalog.history and authenticated GET
 /v1/skills/:id/revisions?before=<positive revision>&limit=<1..20> return
 {skill_id,current_revision,revisions:[{revision,body,created_at}],next_cursor}.

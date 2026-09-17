@@ -4,6 +4,21 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Portal skill-history restoration (2026-09-17 Asia/Jakarta): History on an approved
+card loads retained revision pages on demand, including historical name and all
+procedural fields. A confirmation stages `skill.restore` with the captured current
+and source revisions, proposal UUID and command key; approval remains separate.
+Navigation clears history; stale/deleted/offline state, mismatched page revision,
+invalid cursors and errored/loading history block staging. Alpha mode hides this
+surface and permits no new history traffic. Lost-response retry sends identical
+bytes/key, not a new proposal. Host Chromium fixture passes seven reads/two mutation
+requests; draft regression and desktop16 pass. Desktop/narrow history, error and
+confirmation captures were inspected at DPR2; narrow scroll/footer DOM checks and
+the bottom capture confirm lower fields and affirmation remain reachable.
+Combined verification exits0 with1,386 backend/434 runtime plus browser/native/
+service/build checks in `.local/skill-history-ui-combined.log`. This is synthetic browser plus existing
+SQLite contract evidence, not deployed mutation, Safari or native Mac acceptance.
+
 Skill revision reads (2026-09-17 Asia/Jakarta): owner-authenticated
 `GET /v1/skills/:id/revisions?before=<positive revision>&limit=<1..20>` returns
 `{skill_id,current_revision,revisions:[{revision,body,created_at}],next_cursor}`.
