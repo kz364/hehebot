@@ -4,6 +4,13 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Continuation pause (2026-09-17): saved schedule read, clean checkout/current handoff
+checked, no active assignment or new account input. Schedule update confirmed
+enabled:false while the prioritized deployment awaits the already-requested
+Cloudflare onboarding/Access permission/owner identity. No new account probes,
+tests, infrastructure writes or connector work. Resume on those private inputs;
+the bounded deployment authorization and existing budget limits remain unchanged.
+
 Protected workers.dev preparation (2026-09-17 Asia/Jakarta): owner explicitly
 authorized control-plane Worker/SQLite and exact-owner Access on the verified
 account within the remaining existing $10 ceiling, no paid upgrades. No domain

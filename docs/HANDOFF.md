@@ -4,6 +4,12 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Scheduled continuation is now paused (enabled:false confirmed). Local preparation
+is complete for the prioritized deployment; wait for the already-requested account
+onboarding/Access permission and private owner identity inputs. Resume deployment
+and continuation when available. Do not repeat approval requests or unchanged
+account probes, or open connector expansion to fill the wait. No active worker/check.
+
 PRIORITY: owner authorized bounded Cloudflare Worker/SQLite + owner-only Access
 deployment on current unpublished checkout, within existing remaining $10, no paid
 upgrade. No Sprite/inference/agents/routines/connectors/push/private-state upload.
