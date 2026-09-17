@@ -1,9 +1,43 @@
+import { createHash } from 'node:crypto';
+import validateRuntime from '../src/generated/validate-runtime.js';
 import { captureWappMcpResult, readWappMcp } from './wappmcp-reads.mjs';
 
 const fail = () => { throw Object.assign(new Error('WHATSAPP_OPERATION_INVALID'), { code: 'WHATSAPP_OPERATION_INVALID' }); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(value);
 const time = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
+
+/** Host-only binding to one already connected MCP client. Does not install,
+ * connect, register tools or assert artifact/process readiness. operationId must
+ * come from host call custody, not model arguments. Reopening with changed task
+ * custody is forbidden; timeout/SDK errors retain journaled uncertainty.
+ */
+export function createWappMcpReader({ journal, attemptId, controlClient, mcpClient, identity, runId, attempt, deadlineAt, grant }) {
+  if (!journal?.putIfAbsent || !journal?.serial || !journal?.get || !journal?.write || !id(attemptId) ||
+      typeof controlClient?.request !== 'function' || typeof mcpClient?.callTool !== 'function' || !time(deadlineAt)) fail();
+  let custody;
+  try { custody = structuredClone({ identity, run_id: runId, attempt, deadlineAt, grant }); } catch { fail(); }
+  const fingerprint = createHash('sha256').update(JSON.stringify(custody)).digest('hex');
+  const bindingId = `whatsapp-binding-${createHash('sha256').update(attemptId).digest('hex')}`;
+  const authorize = async ({ name, chatId }) => {
+    const payload = {
+      identity: structuredClone(custody.identity), run_id: custody.run_id, attempt: custody.attempt, name, chatId,
+    };
+    if (!validateRuntime({ type: 'whatsapp-read-authorize', payload })) fail();
+    const prior = await journal.putIfAbsent(bindingId, { fingerprint });
+    if (prior && prior.fingerprint !== fingerprint) fail();
+    return controlClient.request('whatsapp-read-authorize', payload);
+  };
+  return (operationId, name, args, signal) => readJournaledWappMcp(
+    { journal, attemptId, operationId }, custody.grant, name, args,
+    (tool, admitted, options) => {
+      const timeout = Date.parse(options.deadlineAt) - Date.now();
+      if (options.signal.aborted || timeout <= 0) fail();
+      // Use the SDK's default result schema, never repair incompatible results.
+      return mcpClient.callTool({ name: tool, arguments: admitted }, undefined,
+        { signal: options.signal, timeout, resetTimeoutOnProgress: false });
+    }, { deadlineAt: custody.deadlineAt, authorize, ...(signal === undefined ? {} : { signal }) });
+}
 
 /** Payload-free host records. An intent is uncertain after reconstruction; neither
  * cancellation nor an SDK rejection proves termination. A response settles only

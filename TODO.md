@@ -55,6 +55,8 @@ and all S/O/UX acceptance are later work, not prerequisites to any owner use.
 
 ## Current checkpoint
 
+- **WhatsApp task-to-transport binding verified locally:** an unregistered host reader captures exact task/attempt/lease, scopes and deadline, pins them durably against rebinding, and connects Worker authorization to journaled MCP calls. Cancellation and tightened deadlines reach the SDK; incompatible/error/late results retain uncertainty without replay. Actual pinned SDK/public factory passes scoped search with synthetic authority; recent-read rejection remains unknown and cannot replay. Combined exits 0: 1542 backend/444 runtime, 27 Worker HTTP checks plus browser/native/service/build; desktop16 pass (`.local/wapp-binding-{combined,desktop}.log`). No active worker/check. No production registration, installed/paired runtime, live callability or settlement claim. Next: trusted supported installation/startup/inventory, retaining the recent-read compatibility blocker. Local/unpublished; gates and external Cloudflare decision unchanged; continuation enabled.
+
 - **Connectors diagnostic page verified locally:** owner can open the bundled WhatsApp baseline, distinguish incompatible recent reads from synthetic-only scoped search, and inspect prerequisites without installation/account controls. Worker finished/integrated; host Chromium verifies no catalog polling/commands, managed-page routing, literal text, malformed/offline/late/alpha fences. Five desktop/narrow/loading/error renders inspected; heading starts at top and content wraps. Combined exits 0: 1542 backend/439 runtime, 27 Worker HTTP checks plus browser/native/service/build; desktop16 pass (`.local/connector-ui-{combined,desktop}.log`). No active worker/check; local/unpublished. Actual installed/callable inventory and guided supported setup remain the next E09 gap, not proved by this baseline. No live/shared actions or changed Cloudflare decision; continuation enabled.
 
 - **Owner connector-catalog API verified locally; UI active:** GET /v1/connectors/catalog exposes the existing pinned WhatsApp diagnostic as a bundled baseline with unobserved runtime inventory and no authority, not installation/callability proof. Signed owner-only, rate-limited, no-store; no overdue reconciliation/alarm/probe, alpha denied. 46 focused HTTP/auth tests and typecheck pass. Combined exits 0: 1542 backend/439 runtime plus 27 Worker HTTP checks, browser/native/service/build; desktop16 pass (`.local/connector-catalog-{combined,desktop}.log`). Existing UI worker has exact unpublished base and owns on-demand read-only Connectors page; host owns integration. Next: review/integrate that page; no host check remains running. Local/unpublished; no account/install/pairing/provider action, new grant or changed Cloudflare decision; continuation enabled.
@@ -242,8 +244,10 @@ Do not perform these implicitly. [AUTH_SETUP.md](docs/AUTH_SETUP.md) contains de
 catalog exists; guided setup and live inventory remain unimplemented. An unregistered scoped read boundary now has synthetic
 contract and cancellation/timeout tests. Host-only canonical UTC `deadlineAt`
 can cap the relative timeout. Worker task-grant/lease/revocation authority is now
-implemented and HTTPS-tested; trusted runtime transport assembly must still bind
-the admitted deadline and use the new journaled read assembly. This assembly now
+implemented and HTTPS-tested; the unregistered `createWappMcpReader` now binds
+captured custody/deadlines and Worker checks to an already connected SDK client.
+Trusted connection startup, inventory and production registration remain absent.
+The journaled read assembly
 records pre-dispatch intent and observed responses and exposes retained unknown
 invocations through operation snapshots. Browser/process termination, actual MCP
 registration and transport recovery remain unimplemented.

@@ -4,6 +4,26 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+WhatsApp transport binding (2026-09-17 Asia/Jakarta): `createWappMcpReader`
+captures host task/attempt/lease, scopes and deadline, persists a payload-free
+fingerprint against rebinding, validates actual authority envelopes with the
+generated runtime schema, and connects fixed-endpoint ControlClient checks to
+journaled MCP reads. The SDK receives tightened timeout/cancellation and retains
+its default result schema. No connector is installed/started/registered here.
+The host still supplies the correct initial task-to-journal association and one
+already connected client; one executor owns the journal. Read-only authority
+HTTP calls retain ControlClient's bounded timeout, not server-termination proof.
+
+Five binding tests and all 444 runtime tests pass (`.local/wapp-binding-runtime.log`).
+Actual pinned SDK/public-server fixture now also passes with synthetic authority:
+exact scoped search returns, recent-read rejection keeps unknown intent, no
+repair/fallback/replay. Both results preserve unknown browser settlement. Combined
+verification exits 0 at `.local/wapp-binding-combined.log`: backend1542,
+runtime444, pinned connector, 27 Worker HTTP checks and browser/native/service/build
+pass. Desktop16 pass at `.local/wapp-binding-desktop.log`. No live account/model/provider
+calls, changed pins or production gates. Startup/inventory, production registration,
+supported process supervision, pairing and live coverage remain open.
+
 Connectors portal (2026-09-17 Asia/Jakarta): hash-verified UI patch integrated.
 On-demand page beside Skills displays only bundled WhatsApp diagnostic metadata,
 unobserved runtime inventory/no authority, per-read-tool protocol differences,

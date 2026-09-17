@@ -4,6 +4,23 @@ Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external
 
 ## Active follow-up (2026-09-17 Asia/Jakarta)
 
+Host added unregistered WhatsApp task-to-transport binding in
+runtime/wappmcp-operations.mjs. Captured Worker identity/task/attempt/scopes/deadline
+are durably pinned against rebinding; actual authority payloads use generated
+validation. It calls the supplied connected MCP client with bounded timeout,
+invocation signal and unchanged SDK result validation. No startup, registration,
+pairing, browser supervision or live callability is established. Operation IDs and
+initial task-to-journal association remain trusted host responsibilities.
+Five new binding tests/all444 runtime pass. Existing public factory fixture now
+proves this binding with actual pinned SDK and synthetic authority/session:
+search returns; recent-read error remains unknown without replay. Combined exits
+0 at `.local/wapp-binding-combined.log`: backend1542/runtime444, 27 Worker HTTP
+checks plus browser/native/service/build. Desktop16 pass at
+`.local/wapp-binding-desktop.log`. No active worker/check. Next independent E09 work
+is trusted supported installation/startup/inventory, not another classifier or
+loosening the SDK schema. Do not silently enable partial search as history parity.
+Cloudflare/account decision and live gates are unchanged; continuation enabled.
+
 Connectors UI worker delivered; patch/hash reviewed and integrated. No active
 worker remains. Host Chromium fixture passes and five desktop/narrow/loading/error
 renders inspected. Combined verifier exits 0 at `.local/connector-ui-combined.log`:

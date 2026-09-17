@@ -71,9 +71,22 @@ negative SDK/termination evidence and incomplete license review.
 `src/core/whatsapp-access.ts` checks the admitted task snapshot intersected with
 current operator policy, exact chat/tool, attempt/lease, ancestor state and hard
 deadline. `runtime/wappmcp-reads.mjs` accepts host-held scopes and checks its trusted
-authorization callback before dispatch and before releasing results. Assembly
-must bind that callback to original Worker custody and preserve journal/lifecycle
-uncertainty. This classifier neither replaces nor invokes those checks.
+authorization callback before dispatch and before releasing results.
+`createWappMcpReader` in `runtime/wappmcp-operations.mjs` binds those checks to
+the fixed ControlClient endpoint, captured identity/run/attempt and host deadline.
+It takes an already connected, host-owned MCP SDK client and journal; it does not
+connect or register it. One executor owns the journal. The host must establish
+the correct initial attempt-to-task association and supply stable operation IDs;
+model arguments cannot supply either. A durable fingerprint rejects changed
+custody/scopes/deadlines on reconstruction. Exact schema validation precedes
+authority requests. The normal three authority checks are before intent, after
+intent persistence and before releasing the response. Worker deadlines only
+tighten the cap. MCP gets the resulting timeout and invocation AbortSignal,
+with progress-based timeout extension disabled and default result validation.
+ControlClient authority requests retain their own bounded timeout; aborting an
+invocation does not imply those read-only HTTP requests or server work stopped.
+No response/error/close can settle a browser or grant automatic replay.
+This classifier neither replaces nor invokes those checks.
 Notification allowlists filter incoming events; they never authorize reads or
 effects. Imported routines remain no-send. Even a live callable read cannot
 authorize another task/chat or a mutation, establish complete history, settle a
@@ -82,4 +95,10 @@ browser descendant or permit sleep.
 Focused verification: `node --test tests/runtime-connector-readiness.mjs`.
 The tests use independent asymmetric expected evidence and exercise the existing
 read boundary's denial path; they are credential-free contracts, not live E09
-acceptance. No shared verifier/manifests or status documents are changed here.
+acceptance. Binding coverage: `node --test tests/runtime-wappmcp-binding.mjs`.
+The existing public-server check in `node scripts/verify-wappmcp.mjs` also exercises
+the binding with real SDK/public factory and synthetic authority/session. Search
+can return a validated result; recent-read SDK rejection retains unknown intent
+and cannot replay. No production tool registration or installed/callable claim
+follows. Trusted startup/inventory, supported process supervision and separate
+pairing/live permissions remain necessary.

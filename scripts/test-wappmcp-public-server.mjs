@@ -5,6 +5,9 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readWappMcp } from '../runtime/wappmcp-reads.mjs';
+import { createWappMcpReader } from '../runtime/wappmcp-operations.mjs';
+import { FileJournal } from '../runtime/file-journal.mjs';
+import { ControlClient } from '../runtime/control-client.mjs';
 
 const hashes = {
   'index.js': 'dff70a42c3979a3abd6a8003eca714930b16c0451a657a66cd75bbad9a324abe',
@@ -108,6 +111,31 @@ export async function verifyWappMcpPublicServer(installation) {
     assert.deepEqual(rawSearch, { content: [{ type: 'text', text: JSON.stringify(searchValue, null, 2) }], structuredContent: searchValue });
     assert.deepEqual(calls.pop(), ['search', 'Synthetic meal', chatId, 3, 17]);
 
+    const journal = new FileJournal(join(bridge, 'journal')), attemptId = 'bound-attempt';
+    await journal.putIfAbsent(attemptId, { attemptId, status: 'running' });
+    const identity = { epoch: 7, boot_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
+    const runId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', deadlineAt = new Date(Date.now() + 4000).toISOString();
+    const authorityRequests = [];
+    const controlClient = new ControlClient({ origin: 'https://synthetic.example', token: 'synthetic-only', fetchImpl: async (url, init) => {
+      assert.equal(url, 'https://synthetic.example/internal/whatsapp-read-authorize');
+      authorityRequests.push(JSON.parse(init.body));
+      return new Response(JSON.stringify({ allowed: true, deadline_at: deadlineAt }), { headers: { 'content-type': 'application/json' } });
+    } });
+    const boundRead = createWappMcpReader({ journal, attemptId, controlClient, mcpClient: client,
+      identity, runId, attempt: 3, deadlineAt, grant: { chatIds: [chatId], tools: [search, recent] } });
+    assert.deepEqual(await bounded(boundRead('search', search, { chatId, query: 'Synthetic meal', page: 3, limit: 17 })), {
+      chatId, messages: messages.map(({ id, body, timestamp }) => ({ id, body, timestamp })),
+      coverage: 'unknown', query: 'Synthetic meal', page: 3,
+    });
+    assert.deepEqual(calls.pop(), ['search', 'Synthetic meal', chatId, 3, 17]);
+    await assert.rejects(boundRead('recent', recent, { chatId }), { code: 'WHATSAPP_READ_FAILED' });
+    assert.deepEqual(calls.pop(), ['recent', chatId, 50]);
+    assert.deepEqual(authorityRequests, [search, search, search, recent, recent].map(name => ({ identity, run_id: runId, attempt: 3, name, chatId })));
+    const records = (await journal.get(attemptId)).whatsappReads;
+    assert.equal(records.search.status, 'response'); assert.equal(records.recent.status, 'intent');
+    await assert.rejects(boundRead('recent', recent, { chatId }));
+    assert.deepEqual(calls, []); // No repair, fallback or replay after SDK rejection.
+
     // The SDK rejects the handler's array result before sending a success response.
     // Separately check the public helper's exact result, without bypassing that gate.
     const recentValue = createJsonResult(messages);
@@ -161,6 +189,7 @@ export async function verifyWappMcpPublicServer(installation) {
     return { status: 'passed', pluginVersion: '0.4.0', sdkVersion: '1.30.0', transport: 'in-memory',
       catalog, hostPermittedTools: grant.tools, schemaRejections: invalid.length, hostDenials: denied.length + 1,
       exactSearchResult: true, exactReadRouting: true, recentArrayCompatible: false,
+      journaledWorkerBinding: 'synthetic-authority-real-sdk', boundRecentRetainsUnknown: true,
       channelsEnabled: false, channelSubscriptionStarted: false, permissionRelayInvoked: false,
       notificationAllowlistIsAuthority: false, clientClosed: true, postCloseReadRejected: true,
       hashes, sessionConstructed: false, livePairing: false, sessionSettlementVerified: false,
