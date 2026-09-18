@@ -16,7 +16,7 @@ const OWNER = 'fixture-owner';
 const INSTALLATION = 'hosted-fixture';
 const ROUTINE_MANAGE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 
-export async function startHostedControlFixture({ directory, ownerAlpha, ownerAlphaSuccessor, runtimeToken, accessClientId, accessClientSecret }) {
+export async function startHostedControlFixture({ directory, ownerAlpha, ownerAlphaSuccessor, runtimeToken, accessClientId, accessClientSecret, manager }) {
   if (![directory, runtimeToken, accessClientId, accessClientSecret].every(value => typeof value === 'string' && value)) {
     throw new TypeError('Hosted fixture requires a private directory and non-empty synthetic credentials.');
   }
@@ -25,7 +25,7 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
   let mf, server, dispatcher;
   try {
     await mkdir(root, { recursive: true, mode: 0o700 });
-    await build({ entryPoints: [resolve('src/worker/index.ts')], outfile: bundle, bundle: true, format: 'esm',
+    await build({ entryPoints: [resolve(manager ? 'tests/fixtures/hosted-manager-control.ts' : 'src/worker/index.ts')], outfile: bundle, bundle: true, format: 'esm',
       platform: 'browser', target: 'es2022', loader: { '.sql': 'text' },
       external: ['cloudflare:workers', 'node:*'] });
     await run('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '2', '-subj', '/CN=localhost',
@@ -46,13 +46,18 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
     const outboundRequests = [];
     mf = new Miniflare(convertV4MiniflareOptions({ rootPath: root, modules: true, scriptPath: 'worker.mjs', compatibilityDate: '2026-09-10',
       compatibilityFlags: ['nodejs_compat'], resourcePersistencePath: join(root, 'miniflare'),
-      durableObjects: { CONTROL: { className: 'PersonalControl', useSQLite: true } },
+      durableObjects: { CONTROL: { className: manager ? 'HostedManagerControl' : 'PersonalControl', useSQLite: true } },
       bindings: { INSTALLATION_ID: INSTALLATION, AUTH_MODE: 'access', ACCESS_ISSUER: ISSUER, ACCESS_AUD: AUDIENCE,
         OWNER_SUB: OWNER, EXECUTION_ENABLED: 'false', NATIVE_VERIFIED: 'false', PROVIDER_CONFIG: '{}',
         ACTION_POLICY_IDS: '[]', TOOL_POLICY_IDS: JSON.stringify([ROUTINE_MANAGE_POLICY]),
         HEHEBOT_WHATSAPP_READ_POLICIES: '{}', TRIGGER_CONFIG: '{}', NATIVE_DELEGATIONS: '{}',
         FLIGHT_RESTORE_VERIFIED: 'false', FLIGHT_RESTORE_POLICY_ID: '', RUNTIME_TOKEN: runtimeToken,
         HEHEBOT_HOSTED_OWNER_ALPHA: JSON.stringify({ owner_binding_sha256: ownerBindingSha256, policy: ownerAlpha }),
+        ...(manager ? { HEHEBOT_OWNER_ALPHA_BOOTSTRAP: JSON.stringify({ ...manager.bootstrap,
+          installation_id: INSTALLATION, owner_id: OWNER, owner_binding_sha256: ownerBindingSha256 }),
+        HEHEBOT_OWNER_ALPHA_WAKE: JSON.stringify({ url: 'https://synthetic-manager.sprites.app' }),
+        HEHEBOT_OWNER_ALPHA_WAKE_TOKEN: 'synthetic-wake-' + 'w'.repeat(40), PROVIDER_TOKEN: 'synthetic-provider-' + 'p'.repeat(40),
+        HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN: manager.token, HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY: manager.signingKey } : {}),
         ...(successor === undefined ? {} : { HEHEBOT_OWNER_ALPHA_SUCCESSOR: JSON.stringify(successor) }) },
       outboundService: async request => {
         outboundRequests.push({ method: request.method, url: request.url });
@@ -95,7 +100,14 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
       if (mf) await mf.dispose();
       if (dispatcher) await dispatcher.close();
     };
-    return { origin, caFile, fetchImpl, ownerJwt, otherOwnerJwt, ownerBindingSha256, outboundRequests, close };
+    const fixtureCall = async path => {
+      const namespace = await mf.getDurableObjectNamespace('CONTROL');
+      const response = await namespace.get(namespace.idFromName(INSTALLATION)).fetch(`http://127.0.0.1/${path}`, { method: 'POST', body: '{}' });
+      if (!response.ok) throw new Error(`Fixture inspection/seed failed: ${response.status}`);
+      return response.json();
+    };
+    return { origin, caFile, fetchImpl, ownerJwt, otherOwnerJwt, ownerBindingSha256, outboundRequests, close,
+      ...(manager ? { retireUnusedPredecessor: () => fixtureCall('fixture-retire'), retainedManifest: () => fixtureCall('fixture-manifest') } : {}) };
   } catch (error) {
     if (server) await new Promise(resolveClose => server.close(() => resolveClose()));
     if (mf) await mf.dispose();

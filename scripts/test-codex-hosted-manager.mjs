@@ -1,0 +1,172 @@
+#!/usr/bin/env node
+// One credential-free positive handoff: real manager staging -> Sprite service
+// -> pinned Codex -> scripted loopback text -> Worker canonical completion.
+import assert from 'node:assert/strict';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
+import { createServer } from 'node:http';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { startHostedControlFixture } from '../tests/fixtures/hosted-control.mjs';
+import { ControlClient } from '../runtime/control-client.mjs';
+import { runHostedOwnerManager } from '../runtime/hosted-owner-manager.mjs';
+import { readOwnerAlphaConfig } from '../runtime/owner-alpha-entry.mjs';
+import { createSpriteCodexService } from '../runtime/sprites-codex-service.mjs';
+import { spawnCodex } from '../runtime/codex-transport.mjs';
+import { createCodexTextOnlyProfile, codexTextOnlyProfileSha256 } from '../runtime/codex-text-only.mjs';
+
+const persona = '11111111-1111-4111-8111-111111111111';
+const reply = 'MANAGER_TEXT_ONLY_CANONICAL_47';
+const pause = ms => new Promise(ok => setTimeout(ok, ms));
+const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const directory = await mkdtemp(join(tmpdir(), 'hehe-hosted-manager-'));
+const report = { status: 'failed', nativeStarts: 0, modelRequests: 0, spriteRequests: [] };
+let fixture, model, service, modelError;
+try {
+  const home = join(directory, 'native-home'), sessionsDirectory = join(directory, 'sessions');
+  await mkdir(home, { mode: 0o700 }); await mkdir(sessionsDirectory, { mode: 0o700 });
+  const textOnlyProfile = { codexVersion: '0.154.0', model: 'fixture-model', catalogPath: join(directory, 'catalog.json'),
+    catalogValidation: 'synthetic-fixture', syntheticFixture: true,
+    modelCatalog: { models: [{ slug: 'fixture-model', display_name: 'Synthetic manager fixture', description: null,
+      supported_reasoning_levels: [], shell_type: 'unified_exec', visibility: 'list', supported_in_api: true,
+      priority: 1, upgrade: null, model_messages: { instructions_template: 'Synthetic credential-free fixture.', instructions_variables: null },
+      default_reasoning_summary: 'auto', support_verbosity: false, tool_mode: 'direct', default_verbosity: null,
+      apply_patch_tool_type: null, truncation_policy: { mode: 'bytes', limit: 10000 }, supports_image_detail_original: false,
+      context_window: 272000, auto_compact_token_limit: null, effective_context_window_percent: 95, experimental_supported_tools: [] }] } };
+  const profile = createCodexTextOnlyProfile(textOnlyProfile);
+  await writeFile(textOnlyProfile.catalogPath, JSON.stringify(profile.modelCatalog), { mode: 0o600 });
+  const text_only = { profile_version: profile.version, profile_sha256: codexTextOnlyProfileSha256(profile) };
+  const originalPolicy = { session_id: randomUUID(), persona_id: persona, expires_at: new Date(Date.now() - 120000).toISOString(),
+    max_runs: 1, max_task_seconds: 30, text_only };
+  const accessClientId = randomBytes(24).toString('hex'), accessClientSecret = randomBytes(32).toString('hex');
+  const managerToken = randomBytes(32).toString('hex');
+  fixture = await startHostedControlFixture({ directory: join(directory, 'control'), ownerAlpha: originalPolicy,
+    runtimeToken: randomBytes(32).toString('hex'), accessClientId, accessClientSecret,
+    manager: { token: managerToken, signingKey: randomBytes(48).toString('hex'), bootstrap: {
+      policy_revision: 'native-manager-fixture-v1', persona_id: persona, text_only,
+      expires_at: new Date(Date.now() + 180000).toISOString(), session_seconds: 45, max_task_seconds: 30,
+      prior_cost_micro_usd: 0, prior_cost_source: 'synthetic-no-provider', total_cap_micro_usd: 10000000, reservation_micro_usd: 1000 } } });
+  await fixture.retireUnusedPredecessor();
+  const control = new ControlClient({ origin: fixture.origin, token: managerToken, principal: 'manager',
+    accessClientId, accessClientSecret, fetchImpl: fixture.fetchImpl });
+  const accessClientIdFile = join(directory, 'access-id'), accessClientSecretFile = join(directory, 'access-secret');
+  await writeFile(accessClientIdFile, accessClientId, { mode: 0o600 });
+  await writeFile(accessClientSecretFile, accessClientSecret, { mode: 0o600 });
+  const template = { stateDirectory: join(directory, 'unused-state'), nativeHome: home,
+    ownerAlpha: originalPolicy, hostedOwnerBindingSha256: fixture.ownerBindingSha256,
+    binary: resolve('.local/codex-runtime/node_modules/.bin/codex'), portalOrigin: fixture.origin,
+    runtimeTokenFile: join(directory, 'unused-token'), accessClientIdFile, accessClientSecretFile, tlsCAFile: fixture.caFile,
+    installationId: 'hosted-fixture', personas: { [persona]: { agentId: 'assistant', model: 'fixture-model', allowedTools: [] } }, textOnlyProfile };
+  const templatePath = join(directory, 'template.json'), templateBytes = JSON.stringify(template);
+  await writeFile(templatePath, templateBytes, { mode: 0o600 });
+  const manager = { kind: 'owner-alpha-manager-v1', portalOrigin: fixture.origin, installationId: 'hosted-fixture',
+    hostedOwnerBindingSha256: fixture.ownerBindingSha256, managerTokenFile: join(directory, 'unused-manager-file'),
+    templatePath, templateSha256: hash(templateBytes), sessionsDirectory };
+  assert.equal(await runHostedOwnerManager(manager, { epoch: 2, operationId: randomUUID() }, {
+    control, launch: () => assert.fail('Native launch before assignment') }), 'NO_ASSIGNMENT');
+  assert.equal(report.nativeStarts, 0); assert.deepEqual(await readdir(sessionsDirectory), []);
+
+  const ownerHeaders = { 'Cf-Access-Jwt-Assertion': fixture.ownerJwt };
+  const response = await fixture.fetchImpl('/v1/commands', { method: 'POST', headers: { ...ownerHeaders,
+    Origin: fixture.origin, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() },
+  body: JSON.stringify({ schema_version: 1, type: 'message.send', payload: { conversation_id: persona, text: 'One manager text-only fixture message.' } }) });
+  assert.equal(response.status, 202);
+  const receipt = await response.json(); assert.equal(receipt.status, 'applied');
+  const assignment = await control.request('manifest', {}); assert.ok(assignment);
+  assert.equal(assignment.grant.run_id, receipt.resource_id);
+  const retained = await fixture.retainedManifest();
+  for (const [key, value] of Object.entries(assignment.grant)) assert.deepEqual(retained[key], value);
+  assert.equal(retained.session_id, assignment.policy.session_id);
+  model = createServer(async (request, response) => {
+    try {
+      assert.equal(request.url, '/v1/responses');
+      const chunks = []; for await (const chunk of request) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks));
+      report.modelRequests++; assert.equal(report.modelRequests, 1); assert.deepEqual(body.tools, []);
+      const item = { id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
+        content: [{ type: 'output_text', text: reply, annotations: [] }] };
+      const result = { id: `resp_${randomUUID()}`, object: 'response', created_at: 1, status: 'completed', error: null,
+        incomplete_details: null, model: 'fixture-model', output: [item], tools: [], tool_choice: 'auto', parallel_tool_calls: false,
+        usage: { input_tokens: 11, output_tokens: 7, total_tokens: 18, input_tokens_details: { cached_tokens: 0 }, output_tokens_details: { reasoning_tokens: 0 } } };
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      const event = (type, fields) => response.write(`event: ${type}\ndata: ${JSON.stringify({ type, ...fields })}\n\n`);
+      event('response.created', { response: { ...result, status: 'in_progress', output: [] } });
+      event('response.output_item.added', { output_index: 0, item: { ...item, content: [] } });
+      event('response.content_part.added', { output_index: 0, item_id: item.id, content_index: 0, part: { type: 'output_text', text: '', annotations: [] } });
+      event('response.output_text.delta', { output_index: 0, item_id: item.id, content_index: 0, delta: reply });
+      event('response.output_text.done', { output_index: 0, item_id: item.id, content_index: 0, text: reply });
+      event('response.content_part.done', { output_index: 0, item_id: item.id, content_index: 0, part: item.content[0] });
+      event('response.output_item.done', { output_index: 0, item });
+      event('response.completed', { response: result }); response.end('data: [DONE]\n\n');
+    } catch (error) { modelError = error; response.destroy(); }
+  });
+  await new Promise(ok => model.listen(0, '127.0.0.1', ok));
+  let held;
+  const spriteRequest = (options, callback) => {
+    assert.equal(options.socketPath, '/.sprite/api.sock'); report.spriteRequests.push(options.method);
+    const request = new EventEmitter(); request.setTimeout = () => {}; request.destroy = () => {};
+    request.end = data => {
+      if (options.method === 'PUT') held = { name: options.path.split('/').at(-1), expires_at: new Date(Date.now() + JSON.parse(data).expire * 1000).toISOString() };
+      else assert.equal(options.method, 'GET');
+      const response = new EventEmitter(); response.statusCode = 200; callback(response);
+      response.emit('data', Buffer.from(JSON.stringify(options.method === 'GET' ? held : {}))); response.emit('end');
+    };
+    return request;
+  };
+  const result = await runHostedOwnerManager(manager, { epoch: assignment.grant.epoch, operationId: assignment.grant.transition_id }, {
+    control, launch: async (path, { expectedSha256 }) => {
+      const { config } = await readOwnerAlphaConfig(path, expectedSha256);
+      assert.deepEqual(config.ownerAlpha, assignment.policy);
+      assert.equal(await readFile(config.runtimeTokenFile, 'utf8'), assignment.runtime_token);
+      assert.equal(config.nativeHome, home);
+      service = createSpriteCodexService(config, { spriteRequest, fetchImpl: fixture.fetchImpl,
+        launch: options => { report.nativeStarts++; return spawnCodex(options); },
+        prepareNative: home => writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) });
+      const dispatched = await service.start();
+      assert.equal(dispatched.claim.run.id, assignment.grant.run_id);
+      const serviceJournal = JSON.parse(await readFile(join(config.stateDirectory, 'journal', 'service.json')));
+      assert.deepEqual(serviceJournal.identity, { epoch: assignment.grant.epoch, boot_id: assignment.grant.boot_id });
+      const end = Date.now() + 25000; let completed = false;
+      while (Date.now() < end) {
+        if (modelError) throw modelError;
+        await service.maintain();
+        const state = await (await fixture.fetchImpl('/v1/state', { headers: ownerHeaders })).json();
+        if (state.runs.find(run => run.id === receipt.resource_id)?.status === 'completed') { completed = true; break; }
+        await pause(100);
+      }
+      assert.ok(completed, 'canonical completion missing');
+      const history = await (await fixture.fetchImpl(`/v1/conversations/${persona}/events`, { headers: ownerHeaders })).json();
+      const results = history.events.filter(event => event.type === 'run.result' && event.payload.run_id === receipt.resource_id);
+      assert.equal(results.length, 1); assert.equal(results[0].payload.text, reply);
+      assert.equal(await control.request('manifest', {}), null, 'completed assignment is no longer launchable');
+      assert.deepEqual(await fixture.retainedManifest(), retained, 'durable assignment must not renew or change after completion');
+      const families = await service.supervisor.bridge.families();
+      assert.equal(families.length, 1); assert.equal(families[0].phase, 'complete');
+      assert.equal(families[0].claim.run.id, assignment.grant.run_id);
+      assert.equal(families[0].attemptId, dispatched.attemptId);
+      const journal = JSON.parse(await readFile(join(config.stateDirectory, 'journal', `${dispatched.attemptId}.json`)));
+      assert.equal(journal.textOnlyReceipt.profile_sha256, text_only.profile_sha256);
+      await service.stop(); service = null;
+      // Permit the real manager's expiry-gated retirement observation, without
+      // changing either the fixed policy or its clock. No model runs during wait.
+      await pause(Math.max(0, Date.parse(assignment.policy.expires_at) - Date.now()));
+      return { code: 0, signal: null };
+    } });
+  assert.equal(result, 'RETIREMENT_REPORTED'); assert.equal(report.nativeStarts, 1); assert.equal(report.modelRequests, 1);
+  assert.deepEqual(report.spriteRequests, ['PUT', 'GET']);
+  assert.ok(fixture.outboundRequests.every(request => request.method === 'GET' && request.url.endsWith('/cdn-cgi/access/certs')));
+  Object.assign(report, { status: 'passed', canonicalReply: reply, immutableAssignment: true, noNativeBeforeAssignment: true,
+    productionEnabled: false, providerOrAccountVerified: false });
+} catch (error) {
+  report.error = error.code ?? error.name;
+  report.frames = error.stack?.split('\n').filter(line => line.trimStart().startsWith('at '));
+  process.exitCode = 1;
+}
+finally {
+  await service?.stop().catch(() => {}); await fixture?.close().catch(() => {});
+  if (model) { model.closeAllConnections(); await new Promise(ok => model.close(ok)); }
+  if (report.status === 'passed') await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  else report.privateDiagnostics = directory;
+  console.log(JSON.stringify(report, null, 2));
+}

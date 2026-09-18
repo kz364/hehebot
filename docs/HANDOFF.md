@@ -4,6 +4,37 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+Latest host integration: manager/native positive composition and legacy hosted-owner
+regression pass; typecheck passes after `npm run types`. Four fixture/verifier files
+are integrated locally, not published. One actual native start/one scripted response
+reached canonical completion and immutable retained-manifest readback, followed by
+expiry-gated retirement. Synthetic account/holds do not prove live launcher or sleep.
+See `.local/hosted-manager-host.log` and `.local/hosted-manager-legacy-host.log`.
+
+Live staging progressed beyond the historical notes below: the SAME hehebot Sprite
+now has `hehebot-listener` Service registered at07:48Z, HTTP200 started/complete.
+Do not re-register blindly. New app is `/home/sprite/hehebot-hosted-bootstrap`;
+manager config/template and tokens are private. Signing key remains control-plane
+only. Worker source deployment and five-secret bulk activation completed exit0;
+manager authenticated manifest read returns null before admission. No fresh model
+session yet. Private `.local/cloudflare-message-bootstrap.json` contains the fixed
+trial expiring08:10:39.410Z; its bootstrap/wake values were activated as secrets,
+NOT deployed as conflicting plain vars. Base deploy config remains
+`.local/cloudflare-hosted-chat.json`. Conservative prior allowance$1/reservation$1,
+total$10; session180s/task120s. Browser worker is checking passive navigation before
+a separately specified single message. New combined verifier runs in
+`.local/manager-combined.log`. Generation7 exact
+retirement was observed under both locks at07:44:12.050Z. Registration monitoring
+completion is not readiness. Provider control-plane inventory reported cold at
+07:54:08Z; this is not proof of process loss. A later bounded permissions check
+confirmed guest session/native directories mode700 and sprite ownership.
+Never probe the Sprite URL merely for portal readiness.
+
+The$10 approval permits conservative bounded in-scope estimates; prior insistence
+on all-project billing or a provider-enforced cap was an added prerequisite, not
+an owner requirement. Preserve cumulative allowance, report uncertain billing and
+escalate credible overrun risk. Preflight observed8GiB RAM, not a future cap.
+
 Owner-authorized publication completed: integrated source through
 [`83806a7`](https://github.com/kz364/hehebot/commit/83806a77d30c4658acb52c77dfb2a132a12c5729)
 was pushed without force and remote HEAD verified. The sole remote-only agent-model

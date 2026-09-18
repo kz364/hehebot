@@ -12,6 +12,11 @@ does not deploy or enable the default-off bootstrap, connectors or production ga
 
 **Current local follow-up:** activation, portal state/history reads and alarms now
 produce zero Sprite notifications until a persisted message passes admission.
+Host-integrated manager/native composition now passes: one actual pinned Codex
+start, one scripted loopback response, canonical result, unchanged retained manifest
+and expiry-gated retirement. Legacy hosted regression and regenerated-Env typecheck
+also pass. These new fixture changes are local and not yet published; the previous
+full combined result below predates them.
 Fresh-session implementation is underway: host task-token/manager transport and
 runtime staging integration pass30 auth/wake and39 runtime checks. Existing browser
 fixture passes message-triggered eligible/unavailable/expired states, with all three
@@ -27,7 +32,14 @@ One admitted message produces one notification; real workerd SQLite/reopen and
 HTTP transport checks pass, as do typecheck,41 focused core/auth tests and19
 listener/launcher tests. Quiet `--listen` boots without session config and reads
 fresh immutable staging only on authenticated work; it does not mint/renew grants.
-These changes are local, not deployed; no Service installed or fresh model session.
+Worker bootstrap is deployed for a fixed trial ending08:10:39.410Z, with180s
+sessions/120s tasks, a$1 conservative prior allowance and$1 per-session reservation
+within the unchanged$10 cumulative limit. These allowances are not actual charges.
+Authenticated manager readback returns null before admission. The existing Sprite has one supported
+`hehebot-listener` HTTP Service registered at07:48Z; startup monitoring completed,
+and provider inventory reported cold at07:54:08Z. That does not prove process loss
+or cold-start readiness. No fresh model session yet; passive browser checks precede
+the single message test. Persistent imports pass after including generated contracts.
 Earlier combined runs failed missing mock getAlarm and unconsumed fixture POST
 bodies. Both regressions are fixed; `.local/bootstrap-combined.log` is the fresh
 full-green run, not a relabeling of those failures. The extended bootstrap workerd
@@ -35,10 +47,12 @@ fixture arrived after its stage and passed separately in `.local/bootstrap-worke
 Billing readback at2026-09-18T06:32:06Z: Fly Cost Explorer and upcoming invoice show
 $0.03, credit balance$0.00, Sprite cold. This is rounded, potentially lagged Fly
 usage, not all-project spend or proof of$9.97 remaining. Keep the existing$10 TOTAL.
-Next: establish an all-project prior-cost baseline and defensible whole-awake
-budget, then enable and verify same-Sprite quiet service cold bootstrap. Local
-reservation accounting is not a provider spend cap. Portal visits must remain
-control-plane-only throughout; no generic renewal of the existing approval is needed.
+Next: verify passive no-wake followed by same-Sprite message bootstrap under the
+fixed trial. The new combined verifier is running; only targeted new checks have passed.
+The owner did not require all-project billing or a provider-enforced cap as a
+prerequisite. Keep cumulative in-scope estimates and actual observations distinct;
+escalate credible overrun risk, not absent hard-cap support. Local reservations are
+not a provider spend cap. Portal visits remain control-plane-only throughout.
 
 **Last deployed P0 wake checkpoint:** Worker-triggered generation7 wake → native ready →
 one canonical completed portal reply passed, including full reload, attempt1 and

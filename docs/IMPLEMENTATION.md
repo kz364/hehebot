@@ -4,6 +4,42 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Manager/native composition and service staging (2026-09-18): host applied the
+four-file fixture patch against the published baseline after verifying its digest.
+`node scripts/test-codex-hosted-manager.mjs` passes: one actual pinned native start,
+one scripted loopback response, zero advertised tools, canonical result
+MANAGER_TEXT_ONLY_CANONICAL_47, exact profile/assignment and expiry-gated retirement.
+The launchable endpoint correctly returns null after completion; fixture-only
+SQLite inspection confirms the retained manifest is unchanged. Legacy hosted-owner
+fixture and typecheck pass; generated Env was refreshed with `npm run types`.
+Logs: `.local/hosted-manager-host.log`, `.local/hosted-manager-legacy-host.log`.
+This uses synthetic Access/TLS, native home, predecessor and activity holds; it
+does not prove the default account launcher, live wake, sleep or billing.
+
+Same existing hehebot Sprite: bounded preflight observed8GiB RAM and
+1,385,435,136 root-used bytes, not configured caps or billable storage quantities.
+Prior generation7 journal plus both real locks provided direct-child retirement
+observation at07:44:12.050Z. Persistent listener imports initially lacked generated
+contracts; staging was corrected and import passed without native launch.
+Supported Service registration at07:48Z returned HTTP200 started/complete for
+`hehebot-listener`, port8080. Registration starts the service; monitoring completion
+is not readiness or sleep proof. Provider control-plane GET at07:54:08Z reported
+cold; process loss is not inferred. Bootstrap Worker deployment and five-secret
+activation then completed successfully, fixed trial expiry08:10:39.410Z,
+session180s/task120s, conservative prior allowance$1/reservation$1/total$10.
+Authenticated manager read returned null before admission. No new model session yet;
+passive navigation check precedes one message. New combined verifier is running.
+Credentials remain private; task-signing key was not shipped to the guest.
+Evidence: `.local/bootstrap-{sprite-preflight,guest-import}.log` and
+`.local/bootstrap-service-registration.ndjson`, `.local/bootstrap-idle-inventory.json`,
+`.local/message-bootstrap-{deploy,secret-activation}.log`.
+
+Budget interpretation correction: the existing$10 cumulative in-scope approval
+permits conservatively estimated bounded work. All-project billing and an enforceable
+provider cap were not owner-imposed prerequisites. Keep estimates distinct from
+lagged billing, retain prior costs, and escalate credible overrun risk. Neither
+reservations nor the observed8GiB establish a future provider cost ceiling.
+
 Message-bound bootstrap integration (2026-09-18, local/default-off): accepted direct
 owner messages can receive one immutable run/session assignment in the same SQLite
 transaction. Reads never assign or renew it. Expired current-generation settlement,
