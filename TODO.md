@@ -4,6 +4,13 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
+**Scheduled continuation paused11:02Z:** the prepared live path requires the Mac
+executor owning authenticated Chrome. Only the unrelated devbox is currently listed.
+The existing browser worker must reconcile passive PID33132, confirm termination if
+hung, then report bounded readiness; it has no send authority. No additional trial
+is issued while blocked. Resume the schedule when executor recovery permits this
+work, rather than repeating status checks or expanding peripheral scope.
+
 **Owner architecture clarification integrated (2026-09-18):** Hehebot remains a
 custom assistant independent of Amp accounts/runtime/SDK. Amp is a documented
 architecture reference, not a coding UX or per-thread-machine design to adopt.

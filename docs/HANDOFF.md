@@ -4,6 +4,12 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+Schedule paused11:02Z under its external-blocker condition; resume with
+update_schedule(enabled:true) after actual Mac executor recovery. Existing browser
+worker still owns reconciliation/termination of passive PID33132 and one bounded
+readiness check, not sends. No replacement sender or v3 issuance. Runner inventory
+only lists recursal-devbox, which has no demonstrated access to that Chrome session.
+
 Owner clarification integrated in SPEC21.1, PRODUCT_UX_SPEC and PROJECT_INTENT:
 Amp is architecture reference only, not an operational dependency or coding UI.
 No always-on model orchestrator; reachable deterministic control plane is distinct
