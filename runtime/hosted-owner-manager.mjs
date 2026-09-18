@@ -33,7 +33,15 @@ async function writeExclusive(path, bytes) {
 }
 
 /** Called only by authenticated wake admission. No timer, renewal or replay. */
-export async function runHostedOwnerManager(config, request, { readSecret, launch, control, now = Date.now, signal } = {}) {
+export async function runHostedOwnerManager(config, request, dependencies = {}) {
+  const resume = await prepareHostedOwnerManager(config, request, dependencies);
+  return resume ? resume() : 'NO_ASSIGNMENT';
+}
+
+/** Capture one authenticated assignment. The returned continuation cannot refetch,
+ * renew or replay it. Optional Tasks preparation must finish before HTTP acceptance. */
+export async function prepareHostedOwnerManager(config, request, { readSecret, launch, control, tasks, now = Date.now, signal } = {}) {
+  config = structuredClone(config);
   const required = ['kind', 'portalOrigin', 'installationId', 'hostedOwnerBindingSha256', 'managerTokenFile', 'templatePath', 'templateSha256', 'sessionsDirectory'];
   if (!config || required.some(key => !Object.hasOwn(config, key)) ||
       Object.keys(config).some(key => ![...required, 'accessClientIdFile', 'accessClientSecretFile'].includes(key)) ||
@@ -57,10 +65,13 @@ export async function runHostedOwnerManager(config, request, { readSecret, launc
     const token = await readSecret(config.managerTokenFile);
     const access = config.accessClientIdFile ? { accessClientId: await readSecret(config.accessClientIdFile),
       accessClientSecret: await readSecret(config.accessClientSecretFile) } : {};
-    control = new ControlClient({ origin: config.portalOrigin, token, principal: 'manager', ...access });
+    control = new ControlClient({ origin: config.portalOrigin, token, principal: 'manager',
+      ...(tasks ? { timeoutMs: 3000 } : {}), ...access });
   }
-  const assignment = await control.request('manifest', {});
-  if (assignment === null) return 'NO_ASSIGNMENT';
+  if (signal?.aborted) fail();
+  const assignment = structuredClone(await control.request('manifest', {}));
+  if (signal?.aborted) fail();
+  if (assignment === null) return null;
   if (!assignment || Object.keys(assignment).sort().join(',') !== 'grant,policy,runtime_token') fail();
   const { grant, policy: rawPolicy, runtime_token: token } = assignment;
   const policy = ownerAlphaPolicy(rawPolicy);
@@ -81,25 +92,42 @@ export async function runHostedOwnerManager(config, request, { readSecret, launc
   await mkdir(directory, { mode: 0o700 });
   await syncDirectory(config.sessionsDirectory);
   const generation = { epoch: grant.epoch, boot_id: grant.boot_id, transition_id: grant.transition_id };
-  const child = { ...template, stateDirectory: directory, runtimeTokenFile: join(directory, 'runtime-token'),
-    ownerAlpha: policy, ownerAlphaGeneration: generation };
-  const path = join(directory, 'runtime.json');
-  const bytes = JSON.stringify(child);
-  const sha256 = createHash('sha256').update(bytes).digest('hex');
-  await writeExclusive(child.runtimeTokenFile, token);
-  await writeExclusive(path, bytes);
-  await writeExclusive(join(directory, 'hosted-owner-launch-intent.json'), JSON.stringify({ phase: 'unknown',
-    config_sha256: sha256, owner_alpha_generation: generation, manifest_sha256: grant.manifest_sha256 }));
-  await syncDirectory(directory);
-  if (Date.parse(policy.expires_at) <= now() || signal?.aborted) fail();
-  await launch(path, { expectedSha256: sha256, signal });
-  // Acquire, rather than inspect PID files. Read proof while both locks are held.
-  // Failure (including still-held locks) retains UNKNOWN and never retries.
-  const { stdout } = await promisify(execFile)('bash', [lockScript, child.nativeHome, 'bash', lockScript,
-    directory, process.execPath, self, '--inspect-locked', path, sha256], { timeout: 10000, maxBuffer: 16384 });
-  const report = JSON.parse(stdout);
-  await control.request('retirement', report);
-  return 'RETIREMENT_REPORTED';
+  if (tasks) {
+    // This durable UNKNOWN precedes the first potentially effective PUT. Neither
+    // interrupted preparation nor a failed readback may acquire another hold.
+    await writeExclusive(join(directory, 'hosted-owner-bootstrap-intent.json'), JSON.stringify({ phase: 'unknown',
+      owner_alpha_generation: generation, run_id: grant.run_id, manifest_sha256: grant.manifest_sha256,
+      task_id: `hehe-bootstrap-${grant.transition_id}`, expires_at: grant.expires_at }));
+    await syncDirectory(directory);
+    if (signal?.aborted || Date.parse(policy.expires_at) <= now()) fail();
+    await tasks.hold({ id: `hehe-bootstrap-${grant.transition_id}`, expiresAt: Date.parse(grant.expires_at) });
+    if (signal?.aborted || Date.parse(policy.expires_at) <= now()) fail();
+  }
+  let consumed = false;
+  return async () => {
+    if (consumed) fail();
+    consumed = true;
+    if (signal?.aborted || Date.parse(policy.expires_at) <= now()) fail();
+    const child = { ...template, stateDirectory: directory, runtimeTokenFile: join(directory, 'runtime-token'),
+      ownerAlpha: policy, ownerAlphaGeneration: generation };
+    const path = join(directory, 'runtime.json');
+    const bytes = JSON.stringify(child);
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    await writeExclusive(child.runtimeTokenFile, token);
+    await writeExclusive(path, bytes);
+    await writeExclusive(join(directory, 'hosted-owner-launch-intent.json'), JSON.stringify({ phase: 'unknown',
+      config_sha256: sha256, owner_alpha_generation: generation, manifest_sha256: grant.manifest_sha256 }));
+    await syncDirectory(directory);
+    if (Date.parse(policy.expires_at) <= now() || signal?.aborted) fail();
+    await launch(path, { expectedSha256: sha256, signal });
+    // Acquire, rather than inspect PID files. Read proof while both locks are held.
+    // Failure (including still-held locks) retains UNKNOWN and never retries.
+    const { stdout } = await promisify(execFile)('bash', [lockScript, child.nativeHome, 'bash', lockScript,
+      directory, process.execPath, self, '--inspect-locked', path, sha256], { timeout: 10000, maxBuffer: 16384 });
+    const report = JSON.parse(stdout);
+    await control.request('retirement', report);
+    return 'RETIREMENT_REPORTED';
+  };
 }
 
 async function inspectLocked(path, sha256) {

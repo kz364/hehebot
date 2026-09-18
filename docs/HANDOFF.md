@@ -4,6 +4,29 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+Hold-before202 patch integrated locally. Host runtime505/505 and strengthened
+existing HTTP→manager→pinned native composition pass; two distinct Task PUT/GET
+pairs, one native/model request, canonical reply and retirement. Hold-only combined
+verifier exited0 (`.local/bootstrap-hold-combined.log`); desktop16 pass.
+Both unused-recovery patches are now integrated locally after checksum/applicability
+checks: core strict optional unused_recovery disposition and new operator-only
+runtime/hosted-owner-unused.mjs plus tests. Host typecheck,186 focused core and6
+producer tests pass. Fresh full combined verifier exited0:1669 backend/511 runtime
+plus Worker/browser/native/service/build in `.local/unused-recovery-combined.log`.
+No verifier process remains running. Desktop16 pass separately.
+No guest runtime update/deployment. Recovery binds exact predecessor manifest/run,
+source/evidence hash, one successor policy revision and expiry; ordinary zero-attempt
+rollover still rejects. Producer consumes the same exclusive transition directory
+under both locks, refusing preexisting/partial state. Legacy fixture guard is applied.
+Deployed old manager/launcher/lock source hashes match reviewed source; canonical
+sessions/native roots private and session root empty, recorded in
+`.local/bootstrap-77-provenance-review.log`. Hashes do not prove historical custody;
+review that separately before operator assertion. No live unused attestation yet.
+Private08:55 selection `.local/bootstrap-77-custody-selection.json` confirms zero
+attempts/queued epoch8 and$1 reservation. Canonical hash reconstructed with selected
+policy.text_only matches; this is not independent historical ledger verification.
+No browser sender has authority. No new push approval; prior approval was consumed.
+
 Latest live77 FAILED: browser recovered and passive checks confirmed expired v1,
 epoch7/old five runs unchanged, only portal GETs. Same Sprite cold08:19:50; only then
 new v2 activated, expiry08:29:50.104Z with same prior$1/reservation$1/total$10.

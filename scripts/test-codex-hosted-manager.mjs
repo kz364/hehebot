@@ -3,7 +3,7 @@
 // -> pinned Codex -> scripted loopback text -> Worker canonical completion.
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { EventEmitter } from 'node:events';
+import { EventEmitter, once } from 'node:events';
 import { createServer } from 'node:http';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,6 +11,7 @@ import { join, resolve } from 'node:path';
 import { startHostedControlFixture } from '../tests/fixtures/hosted-control.mjs';
 import { ControlClient } from '../runtime/control-client.mjs';
 import { runHostedOwnerManager } from '../runtime/hosted-owner-manager.mjs';
+import { createHostedOwnerWakeService } from '../runtime/hosted-owner-wake.mjs';
 import { readOwnerAlphaConfig } from '../runtime/owner-alpha-entry.mjs';
 import { createSpriteCodexService } from '../runtime/sprites-codex-service.mjs';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
@@ -22,7 +23,7 @@ const pause = ms => new Promise(ok => setTimeout(ok, ms));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const directory = await mkdtemp(join(tmpdir(), 'hehe-hosted-manager-'));
 const report = { status: 'failed', nativeStarts: 0, modelRequests: 0, spriteRequests: [] };
-let fixture, model, service, modelError;
+let fixture, model, service, modelError, listener, wakeDeadline;
 try {
   const home = join(directory, 'native-home'), sessionsDirectory = join(directory, 'sessions');
   await mkdir(home, { mode: 0o700 }); await mkdir(sessionsDirectory, { mode: 0o700 });
@@ -102,20 +103,32 @@ try {
     } catch (error) { modelError = error; response.destroy(); }
   });
   await new Promise(ok => model.listen(0, '127.0.0.1', ok));
-  let held;
+  const held = new Map(), taskNames = [];
   const spriteRequest = (options, callback) => {
     assert.equal(options.socketPath, '/.sprite/api.sock'); report.spriteRequests.push(options.method);
     const request = new EventEmitter(); request.setTimeout = () => {}; request.destroy = () => {};
     request.end = data => {
-      if (options.method === 'PUT') held = { name: options.path.split('/').at(-1), expires_at: new Date(Date.now() + JSON.parse(data).expire * 1000).toISOString() };
+      const name = options.path.split('/').at(-1);
+      if (options.method === 'PUT') {
+        taskNames.push(name);
+        held.set(name, { name, expires_at: new Date(Date.now() + JSON.parse(data).expire * 1000).toISOString() });
+      }
       else assert.equal(options.method, 'GET');
       const response = new EventEmitter(); response.statusCode = 200; callback(response);
-      response.emit('data', Buffer.from(JSON.stringify(options.method === 'GET' ? held : {}))); response.emit('end');
+      response.emit('data', Buffer.from(JSON.stringify(options.method === 'GET' ? held.get(name) : {}))); response.emit('end');
     };
     return request;
   };
-  const result = await runHostedOwnerManager(manager, { epoch: assignment.grant.epoch, operationId: assignment.grant.transition_id }, {
-    control, launch: async (path, { expectedSha256 }) => {
+  const configPath = join(directory, 'manager.json'), wakeTokenFile = join(directory, 'wake-token');
+  const wakeToken = randomBytes(32).toString('hex');
+  await writeFile(configPath, JSON.stringify(manager), { mode: 0o600 });
+  await writeFile(wakeTokenFile, wakeToken, { mode: 0o600 });
+  let finishWake;
+  const wakeFinished = new Promise(resolve => { finishWake = resolve; });
+  listener = createHostedOwnerWakeService({ configPath, wakeTokenFile, port: 8080 }, {
+    control, spriteRequest, report: value => finishWake(value.code), launch: async (path, { expectedSha256 }) => {
+      assert.deepEqual(report.spriteRequests, ['PUT', 'GET'], 'bootstrap hold must be confirmed before launch');
+      assert.deepEqual(taskNames, [`hehe-bootstrap-${assignment.grant.transition_id}`]);
       const { config } = await readOwnerAlphaConfig(path, expectedSha256);
       assert.deepEqual(config.ownerAlpha, assignment.policy);
       assert.equal(await readFile(config.runtimeTokenFile, 'utf8'), assignment.runtime_token);
@@ -153,17 +166,30 @@ try {
       await pause(Math.max(0, Date.parse(assignment.policy.expires_at) - Date.now()));
       return { code: 0, signal: null };
     } });
+  listener.listen(0, '127.0.0.1'); await once(listener, 'listening');
+  const wakeResponse = await fetch(`http://127.0.0.1:${listener.address().port}/wake`, { method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-hehe-wake-token': wakeToken },
+    body: JSON.stringify({ epoch: assignment.grant.epoch, operationId: assignment.grant.transition_id }),
+    signal: AbortSignal.timeout(15000) });
+  assert.equal(wakeResponse.status, 202);
+  assert.deepEqual(await wakeResponse.json(), { accepted: true, epoch: assignment.grant.epoch, duplicate: false });
+  const result = await Promise.race([wakeFinished, new Promise((_, reject) => {
+    wakeDeadline = setTimeout(() => reject(new Error('Wake callback did not settle')), 70000);
+  })]);
+  clearTimeout(wakeDeadline);
   assert.equal(result, 'RETIREMENT_REPORTED'); assert.equal(report.nativeStarts, 1); assert.equal(report.modelRequests, 1);
-  assert.deepEqual(report.spriteRequests, ['PUT', 'GET']);
+  assert.deepEqual(report.spriteRequests, ['PUT', 'GET', 'PUT', 'GET']);
+  assert.deepEqual(taskNames, [`hehe-bootstrap-${assignment.grant.transition_id}`, `hehe-${assignment.grant.epoch}-${assignment.grant.boot_id}`]);
   assert.ok(fixture.outboundRequests.every(request => request.method === 'GET' && request.url.endsWith('/cdn-cgi/access/certs')));
   Object.assign(report, { status: 'passed', canonicalReply: reply, immutableAssignment: true, noNativeBeforeAssignment: true,
-    productionEnabled: false, providerOrAccountVerified: false });
+    bootstrapHoldBeforeLaunch: true, httpWakeVerified: true, productionEnabled: false, providerOrAccountVerified: false });
 } catch (error) {
   report.error = error.code ?? error.name;
   report.frames = error.stack?.split('\n').filter(line => line.trimStart().startsWith('at '));
   process.exitCode = 1;
 }
 finally {
+  clearTimeout(wakeDeadline); listener?.stop();
   await service?.stop().catch(() => {}); await fixture?.close().catch(() => {});
   if (model) { model.closeAllConnections(); await new Promise(ok => model.close(ok)); }
   if (report.status === 'passed') await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

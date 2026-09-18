@@ -6,8 +6,8 @@ import type { ContextSnapshot, Operation, Run } from './types';
 import type { RuntimeProvider, RuntimeRef, RuntimeObservation } from '../providers';
 import {createHash} from 'node:crypto';
 import type {TextOnlyReceipt} from './runtime-types';
-import {ownerAlphaSuccessorSha256,parseOwnerAlphaSuccessor,type OwnerAlphaGeneration} from './owner-alpha';
-import type {MessageBoundAuthority} from './owner-alpha-bootstrap';
+import {ownerAlphaSuccessorSha256,parseOwnerAlphaSuccessor,type OwnerAlphaGeneration,type OwnerAlphaSuccessor} from './owner-alpha';
+import {assertUnusedRecoveryCustody,type MessageBoundAuthority,type UnusedMessageBoundAuthority} from './owner-alpha-bootstrap';
 import type {Command} from './types';
 export type Phase='STOPPED'|'START_REQUESTED'|'BOOTING'|'READY'|'DRAINING'|'STOP_COMMITTED'|'STOPPING'|'RECOVERY_REQUIRED'|'IDLE_PERMITTED';
 export type Lifecycle={singleton:number;provider_ref_json:string;boot_id:string|null;epoch:number;phase:Phase;desired_state:'RUN'|'STOP';lease_until:string|null;last_heartbeat:string|null;queue_sequence:number;stop_token:string|null;provider_operation_id:string|null;wake_after_stop:number};
@@ -32,6 +32,35 @@ export class LifecycleCore {
  assignOwnerMessage(authority:MessageBoundAuthority,ownerId:string,ownerCommandId:string):void {
   const {kind:_,manifest:__,...envelope}=authority;
   this.activateGeneration({schema_version:1,type:'owner-alpha.activate',payload:{transition_id:envelope.transition_id,envelope_sha256:ownerAlphaSuccessorSha256(envelope)}},ownerId,ownerCommandId,authority);
+ }
+ /** Separate owner-configured unused disposition; never a native retirement claim. */
+ assignUnusedOwnerMessage(authority:UnusedMessageBoundAuthority,ownerId:string,commandId:string):void {
+  const c=this.core.bootstrap.config!,grant=c.unused_recovery,prior=this.core.ownerAlpha.activeGeneration(),state=this.get(),now=this.core.now(),m=authority.manifest;
+  requireThat(grant&&prior&&'kind' in prior.authority&&state.phase==='RECOVERY_REQUIRED'&&state.epoch===grant.predecessor.epoch&&state.boot_id===grant.predecessor.boot_id&&
+   state.provider_ref_json==='{}'&&state.provider_operation_id===null&&state.lease_until!==null&&state.lease_until<=now&&prior.policy.expires_at<=now&&
+   m.epoch===state.epoch+1&&m.command_id===commandId&&m.policy_revision===grant.successor_policy_revision&&m.policy_revision===c.policy_revision&&m.expires_at<=grant.expires_at&&m.expires_at<=c.expires_at&&ownerId===c.owner_id&&
+   !this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',`owner_alpha_unused_disposition:${state.epoch}`).length,
+   'CAPABILITY_UNAVAILABLE','Unused recovery requires its unconsumed owner-configured authority.');
+  assertUnusedRecoveryCustody(this.store,grant,prior.authority.manifest,now);
+  const command=this.store.db.all<{body_hash:string}>("SELECT body_hash FROM commands WHERE id=? AND owner_id=? AND status='accepted' AND type='message.send'",commandId,ownerId)[0];
+  requireThat(command&&command.body_hash===m.command_sha256,'FORBIDDEN','Unused successor requires its new owner message.',403);
+  const policy={session_id:m.session_id,persona_id:m.persona_id,expires_at:m.expires_at,max_runs:1,max_task_seconds:c.max_task_seconds,text_only:c.text_only};
+  this.assertFreshOwnerAlphaGeneration({transition_id:m.transition_id,successor:{boot_id:m.boot_id,policy}},commandId);
+  const generation:OwnerAlphaGeneration={epoch:m.epoch,boot_id:m.boot_id,transition_id:m.transition_id,policy,authority,
+   predecessor:{epoch:state.epoch,boot_id:state.boot_id!,session_id:prior.policy.session_id,phase:state.phase,lease_until:state.lease_until},
+   activation_command_id:commandId,activation_command_sha256:command.body_hash,activation_event_sequence:m.event_sequence};
+  this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',`owner_alpha_generation:${m.epoch}`,JSON.stringify(generation));
+  const lease=new Date(Math.min(Date.parse(m.expires_at),Date.parse(now)+90000)).toISOString();
+  this.store.db.exec("UPDATE lifecycle SET epoch=?,boot_id=?,phase='BOOTING',desired_state='RUN',lease_until=?,last_heartbeat=NULL,stop_token=NULL,wake_after_stop=0 WHERE singleton=1",m.epoch,m.boot_id,lease);
+ }
+ private assertFreshOwnerAlphaGeneration(envelope:Pick<OwnerAlphaSuccessor,'transition_id'|'successor'>,ownerCommandId:string):void {
+  const state=this.get(),now=this.core.now(),freshIds=[envelope.transition_id,envelope.successor.boot_id,envelope.successor.policy.session_id].map(value=>value.toLowerCase());
+  requireThat(new Set(freshIds).size===3&&envelope.successor.policy.expires_at>now&&Date.parse(envelope.successor.policy.expires_at)<=Date.parse(now)+300000&&
+   !this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',`owner_alpha_generation:${state.epoch+1}`).length&&
+   !this.store.db.all("SELECT key FROM runtime_metadata WHERE key GLOB 'owner_alpha_generation:*' AND (lower(json_extract(value_json,'$.transition_id')) IN (?,?,?) OR lower(json_extract(value_json,'$.boot_id')) IN (?,?,?) OR lower(json_extract(value_json,'$.policy.session_id')) IN (?,?,?) OR lower(json_extract(value_json,'$.predecessor.boot_id')) IN (?,?,?) OR lower(json_extract(value_json,'$.predecessor.session_id')) IN (?,?,?)) LIMIT 1",
+    ...Array(5).fill(freshIds).flat()).length&&
+   !this.store.db.all('SELECT run_id FROM attempts WHERE boot_id=? LIMIT 1',envelope.successor.boot_id).length&&
+   !this.store.db.all('SELECT id FROM commands WHERE id=? AND id<>?',envelope.transition_id,ownerCommandId).length,'INVALID_CONFIGURATION','Successor identities or expiry are not fresh.',503);
  }
  /** Read-only settlement checks shared by issuance and bootstrap availability. */
  assertOwnerAlphaSettlement(automatic=false):void {
@@ -81,13 +110,7 @@ export class LifecycleCore {
    requireThat(this.core.ownerAlpha.policy?.session_id===envelope.predecessor.session_id&&this.core.ownerAlpha.policy.expires_at<=now&&state.lease_until!==null&&state.lease_until<=now,
     'CAPABILITY_UNAVAILABLE','Owner-alpha predecessor policy and lease must be expired.');
    this.assertOwnerAlphaSettlement(!!message);
-   const freshIds=[envelope.transition_id,envelope.successor.boot_id,envelope.successor.policy.session_id].map(value=>value.toLowerCase());
-   requireThat(new Set(freshIds).size===3&&envelope.successor.policy.expires_at>now&&Date.parse(envelope.successor.policy.expires_at)<=Date.parse(now)+300000&&
-    !this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',`owner_alpha_generation:${state.epoch+1}`).length&&
-    !this.store.db.all("SELECT key FROM runtime_metadata WHERE key GLOB 'owner_alpha_generation:*' AND (lower(json_extract(value_json,'$.transition_id')) IN (?,?,?) OR lower(json_extract(value_json,'$.boot_id')) IN (?,?,?) OR lower(json_extract(value_json,'$.policy.session_id')) IN (?,?,?) OR lower(json_extract(value_json,'$.predecessor.boot_id')) IN (?,?,?) OR lower(json_extract(value_json,'$.predecessor.session_id')) IN (?,?,?)) LIMIT 1",
-     ...Array(5).fill(freshIds).flat()).length&&
-    !this.store.db.all('SELECT run_id FROM attempts WHERE boot_id=? LIMIT 1',envelope.successor.boot_id).length&&
-    !this.store.db.all('SELECT id FROM commands WHERE id=? AND id<>?',envelope.transition_id,ownerCommandId).length,'INVALID_CONFIGURATION','Successor identities or expiry are not fresh.',503);
+   this.assertFreshOwnerAlphaGeneration(envelope,ownerCommandId);
    const persona=this.store.get<{archived:boolean}>(envelope.successor.policy.persona_id,'persona');requireThat(!persona.body.archived,'CAPABILITY_UNAVAILABLE','This bot is archived.');
    const epoch=state.epoch+1,lease=new Date(Math.min(Date.parse(envelope.successor.policy.expires_at),Date.parse(now)+90000)).toISOString();
    const cutoff=message?.manifest.event_sequence??this.store.event(ownerCommandId,null,'owner-alpha.activated',ownerId,ownerCommandId,{epoch},now);

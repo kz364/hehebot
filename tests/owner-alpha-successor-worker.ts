@@ -114,6 +114,7 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
   if(url.pathname==='/continue'&&request.method==='POST'){
    this.clock='2026-09-17T00:07:00.000Z';
    const prior=core.ownerAlpha.activeGeneration()!;
+   if('kind' in prior.authority)throw Error('Legacy continuation fixture requires operator authority');
    const successor={...prior.authority,transition_id:randomUUID(),
     predecessor:{session_id:prior.policy.session_id,epoch:prior.epoch,boot_id:prior.boot_id},
     successor:{policy:{...prior.policy,session_id:randomUUID(),expires_at:'2026-09-17T00:11:00.000Z'},boot_id:randomUUID()}};

@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import { requireThat } from './errors';
 import type { Store } from './store';
 import type { Run } from './types';
-import {ownerAlphaManifestSha256,type MessageBoundAuthority,type OwnerAlphaManifest,type OwnerAlphaBootstrapConfig} from './owner-alpha-bootstrap';
+import {ownerAlphaManifestSha256,parseOwnerAlphaUnusedRecovery,assertUnusedRecoveryCustody,type UnusedMessageBoundAuthority,type OwnerAlphaUnusedDisposition,type MessageBoundAuthority,type OwnerAlphaManifest,type OwnerAlphaBootstrapConfig} from './owner-alpha-bootstrap';
 
 export type TextOnlyProfile={profile_version:'codex-text-only-v1';profile_sha256:string};
 export type OwnerAlphaPolicy = { session_id:string; persona_id:string; expires_at:string; max_runs:number; max_task_seconds:number; background_first_root?:true;text_only?:TextOnlyProfile };
@@ -98,7 +98,7 @@ type Custody={policy:OwnerAlphaPolicy;admitted_run_ids:string[];binding?:OwnerAl
 export type OwnerAlphaGeneration={
  epoch:number;boot_id:string;transition_id:string;policy:OwnerAlphaPolicy&{text_only:TextOnlyProfile};
  predecessor:{epoch:number;boot_id:string;session_id:string;phase:string;lease_until:string|null};
- authority:OwnerAlphaSuccessor|MessageBoundAuthority;activation_command_id:string;activation_command_sha256:string;activation_event_sequence:number;
+ authority:OwnerAlphaSuccessor|MessageBoundAuthority|UnusedMessageBoundAuthority;activation_command_id:string;activation_command_sha256:string;activation_event_sequence:number;
 };
 /** Immutable local-session policy; each durable admitted ID consumes one run forever. */
 export class OwnerAlpha {
@@ -112,14 +112,14 @@ export class OwnerAlpha {
     'INVALID_CONFIGURATION','Invalid owner-alpha generation record.',503);
    const command=this.store.db.all<{payload_json:string;body_hash:string;type:string;owner_id:string;status:string;resource_id:string;accepted_at:string}>('SELECT payload_json,body_hash,type,owner_id,status,resource_id,accepted_at FROM commands WHERE id=?',generation.activation_command_id)[0];
    if('kind' in generation.authority){
-    const {manifest:m,kind:_,...envelope}=generation.authority;
+    const m=generation.authority.manifest;
     const run=this.store.db.all<Run>('SELECT * FROM runs WHERE id=?',m.run_id)[0];
     const policyRow=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_bootstrap_policy:${m.policy_revision}`)[0];
     const config=policyRow?JSON.parse(policyRow.value_json) as OwnerAlphaBootstrapConfig:undefined;
     const reservation=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_reservation:${generation.epoch}`)[0];
     const retirement=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_retirement:${generation.predecessor.epoch}`)[0];
-    requireThat(generation.authority.kind==='owner-message'&&config&&command?.type==='message.send'&&command.status==='applied'&&command.owner_id===config.owner_id&&
-     command.resource_id===m.run_id&&command.accepted_at<=m.issued_at&&retirement&&createHash('sha256').update(retirement.value_json).digest('hex')===envelope.retirement_receipt_sha256&&
+    requireThat(config&&command?.type==='message.send'&&command.status==='applied'&&command.owner_id===config.owner_id&&
+     command.resource_id===m.run_id&&command.accepted_at<=m.issued_at&&
      m.manifest_sha256===ownerAlphaManifestSha256(m)&&m.command_id===generation.activation_command_id&&m.command_sha256===command.body_hash&&command.body_hash===generation.activation_command_sha256&&
      m.event_sequence===generation.activation_event_sequence&&m.epoch===generation.epoch&&m.boot_id===generation.boot_id&&m.transition_id===generation.transition_id&&m.session_id===generation.policy.session_id&&
      m.installation_id===config.installation_id&&m.owner_binding_sha256===config.owner_binding_sha256&&m.policy_revision===config.policy_revision&&m.persona_id===config.persona_id&&
@@ -128,10 +128,25 @@ export class OwnerAlpha {
      m.expires_at===generation.policy.expires_at&&m.expires_at<=config.expires_at&&m.expires_at>m.issued_at&&Date.parse(m.expires_at)<=Date.parse(m.issued_at)+config.session_seconds*1000&&
      run&&run.command_id===m.command_id&&run.persona_id===m.persona_id&&run.role==='coordinator'&&run.parent_run_id===null&&run.routine_id===null&&run.occurrence_id===null&&JSON.parse(run.context_json).room_id===null&&
      this.store.db.all("SELECT sequence FROM events WHERE id=? AND type='message.user' AND actor_id=? AND conversation_id=? AND sequence=? AND created_at<=?",m.command_id,command.owner_id,m.persona_id,m.event_sequence,m.issued_at).length===1&&
-     this.directMessage(m.persona_id,m.command_id,null,null,null,m.event_sequence-1,m.persona_id)&&
-     envelope.transition_id===generation.transition_id&&envelope.predecessor.epoch===generation.predecessor.epoch&&envelope.predecessor.session_id===generation.predecessor.session_id&&envelope.predecessor.boot_id===generation.predecessor.boot_id&&
-     envelope.successor.boot_id===generation.boot_id&&JSON.stringify(parseOwnerAlphaSuccessor(JSON.stringify(envelope))?.successor.policy)===JSON.stringify(generation.policy),
+     this.directMessage(m.persona_id,m.command_id,null,null,null,m.event_sequence-1,m.persona_id),
      'INVALID_CONFIGURATION','Message-bound generation differs from its admission binding.',503);
+    if(generation.authority.kind==='owner-message'){
+     const {manifest:_,kind:__,...envelope}=generation.authority;
+     requireThat(retirement&&createHash('sha256').update(retirement.value_json).digest('hex')===envelope.retirement_receipt_sha256&&
+      envelope.transition_id===generation.transition_id&&envelope.predecessor.epoch===generation.predecessor.epoch&&envelope.predecessor.session_id===generation.predecessor.session_id&&envelope.predecessor.boot_id===generation.predecessor.boot_id&&
+      envelope.successor.boot_id===generation.boot_id&&JSON.stringify(parseOwnerAlphaSuccessor(JSON.stringify(envelope))?.successor.policy)===JSON.stringify(generation.policy),'INVALID_CONFIGURATION','Invalid retired message authority.',503);
+    }else{
+     const row=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_unused_disposition:${generation.predecessor.epoch}`)[0];
+     const priorRow=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_generation:${generation.predecessor.epoch}`)[0];
+     requireThat(generation.authority.kind==='owner-message-unused-recovery'&&row&&priorRow&&createHash('sha256').update(row.value_json).digest('hex')===generation.authority.disposition_sha256,'INVALID_CONFIGURATION','Unused disposition binding is missing.',503);
+     const disposition=JSON.parse(row.value_json) as OwnerAlphaUnusedDisposition,grant=parseOwnerAlphaUnusedRecovery(disposition.grant),prior=JSON.parse(priorRow.value_json) as OwnerAlphaGeneration;
+     requireThat(Object.keys(disposition).sort().join(',')==='grant,successor_epoch,successor_manifest_sha256,successor_run_id'&&JSON.stringify(grant)===JSON.stringify(disposition.grant)&&
+      'kind' in prior.authority&&disposition.successor_epoch===m.epoch&&disposition.successor_run_id===m.run_id&&disposition.successor_manifest_sha256===m.manifest_sha256&&
+      grant.predecessor.epoch===generation.predecessor.epoch&&grant.predecessor.boot_id===generation.predecessor.boot_id&&grant.predecessor.session_id===generation.predecessor.session_id&&
+      grant.successor_policy_revision===m.policy_revision&&grant.installation_id===m.installation_id&&grant.owner_binding_sha256===m.owner_binding_sha256&&m.expires_at<=grant.expires_at&&
+      generation.predecessor.lease_until!==null&&generation.predecessor.lease_until<=m.issued_at,'INVALID_CONFIGURATION','Unused disposition differs from its successor.',503);
+     assertUnusedRecoveryCustody(this.store,grant,prior.authority.manifest,m.issued_at);
+    }
     return generation;
    }
    requireThat(command?.type==='owner-alpha.activate'&&command.status==='applied'&&!/^(runtime|trigger):/.test(command.owner_id),

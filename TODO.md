@@ -17,18 +17,34 @@ status queued proves strict202 receipt, not runtime start. No manual wake/activa
 retry/cancel or replay. Listener had zero staged sessions; its first callback log
 was NO_ASSIGNMENT08:24:10 after diagnostic guest exec, beyond the boot lease.
 An unprotected202-to-bootstrap activity gap exists in code; pause is a strong live
-hypothesis, not a proved trace. Runtime worker owns bounded pre-202 manifest/Task
-hold fix. Host extended existing actual-workerd fixture: authenticated manifest
+hypothesis, not a proved trace. Bounded pre-202 manifest/Task hold fix is integrated
+locally:505 runtime tests pass; real HTTP listener through bootstrap/native holds,
+one pinned native start/scripted response/canonical completion and retirement passes.
+Hold-only full combined verifier exited0, including build; desktop16 also pass.
+Host extended
+existing actual-workerd fixture: authenticated manifest
 callback to the same DO completes before wake acknowledgement; typecheck and fixture
 pass. At08:36:30 native Tasks list was empty; no hold deletion. V2 expired unchanged.
 Preserve epoch8 and its reservation; automatic rollover intentionally rejects this
-unclaimed launch. Next integrate/verify the hold fix and establish explicit unused-
-generation recovery evidence before another live trial. Production gates remain false.
+unclaimed launch. Strict default-off one-use unused-before-staging core disposition
+and operator-only permanent staging-fence producer are now integrated locally.
+Host typecheck,186 focused core tests and6 real-lock producer tests pass. Fresh full
+combined verifier exited0:1669 backend/511 runtime plus Worker/browser/native/service
+and build (`.local/unused-recovery-combined.log`). Desktop16 pass separately.
+Read-only08:55 custody selection confirms zero attempts and retained$1 reservation;
+reconstructed canonical manifest hash matches. This does not prove historical ledger
+unchangedness or native non-staging. Host verified
+deployed epoch8 manager/launcher/lock-script hashes match the reviewed old source;
+this is not by itself historical custody proof. Next: complete deployed-root custody
+review before live recovery attestation, then deploy and confirm browser readiness
+before one new bounded trial. No replay of message77 or false retirement claim.
+No new deployment, send or push. Production gates remain false.
 
 **Publication (2026-09-18):** integrated source through
-[`83806a7`](https://github.com/kz364/hehebot/commit/83806a77d30c4658acb52c77dfb2a132a12c5729)
+[`656432f`](https://github.com/kz364/hehebot/commit/656432fad486814479f92510f59674908081c104)
 is pushed to `origin/main`, with remote HEAD verified and the remote agent-model
-documentation preserved. Earlier “unpushed” notes are historical. This publication
+documentation preserved. Current hold/unused-recovery integration is local only.
+Earlier “unpushed” notes are historical. This publication
 does not deploy or enable the default-off bootstrap, connectors or production gates.
 
 **Current local follow-up:** activation, portal state/history reads and alarms now

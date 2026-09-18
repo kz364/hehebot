@@ -4,15 +4,16 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ControlClient } from './control-client.mjs';
 import { launchHostedOwnerAlpha } from './hosted-owner-launcher.mjs';
-import { runHostedOwnerManager } from './hosted-owner-manager.mjs';
+import { prepareHostedOwnerManager } from './hosted-owner-manager.mjs';
 import { readOwnerAlphaConfig } from './owner-alpha-entry.mjs';
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 import { createSpritesWakeHandler } from './sprites-wake-service.mjs';
+import { createSpritesTaskTransport } from './sprites-task-transport.mjs';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const digest = /^[0-9a-f]{64}$/;
 const intentName = 'hosted-owner-launch-intent.json';
-const allowedDependencies = new Set(['control', 'launch', 'now', 'report', 'readConfig', 'readSecret']);
+const allowedDependencies = new Set(['control', 'launch', 'now', 'report', 'readConfig', 'readSecret', 'spriteRequest']);
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 
 async function privateSecret(path) {
@@ -75,6 +76,7 @@ function exactStatus(status, policy, staged, binding) {
 /**
  * Default-off endpoint for immutable, already-staged generations. A quiet
  * listener may outlive a session; it never creates or renews a grant itself.
+ * Manager mode confirms a bounded bootstrap Task before acknowledgement.
  * Its HTTP 202 response means only that the callback was queued; it never means
  * that the runtime launched or became ready. The durable intent forbids retries.
  */
@@ -92,18 +94,27 @@ export function createHostedOwnerWakeService({ configPath, wakeTokenFile, port }
   const getHandler = async () => {
     if (!handlerPromise) handlerPromise = (async () => {
       const token = await readSecret(wakeTokenFile);
-      return createSpritesWakeHandler({ token, onWake: async request => {
-        try {
-          // Read the operator's current config only after authenticated work.
-          // Warm listeners must not retain a preceding generation's config.
-          const initial = await readConfig(configPath);
-          const config = initial.config;
-          if (config?.kind === 'owner-alpha-manager-v1') {
-            const code = await runHostedOwnerManager(config, request, { readSecret, launch,
-              control: deps.control, now, signal: controller.signal });
+      return createSpritesWakeHandler({ token, prepareWake: async (request, { signal }) => {
+        // Read the operator's current config only after authenticated work.
+        // Warm listeners must not retain a preceding generation's config.
+        let initial;
+        try { initial = await readConfig(configPath); }
+        catch { return async () => { fail('HOSTED_WAKE_REFUSED'); }; }
+        const config = initial.config;
+        if (config?.kind === 'owner-alpha-manager-v1') {
+          const { SpritesTasksClient } = await import('../.local/codex-service/sprites.mjs');
+          const tasks = new SpritesTasksClient(createSpritesTaskTransport({ request: deps.spriteRequest, timeoutMs: 3000 }), now);
+          const resume = await prepareHostedOwnerManager(config, request, { readSecret, launch, tasks,
+            control: deps.control, now, signal: AbortSignal.any([signal, controller.signal]) });
+          if (!resume) fail('HOSTED_WAKE_NO_ASSIGNMENT');
+          return async () => {
+            const code = await resume();
             report({ event: 'hosted-owner-wake', code, ready: false });
-            return;
-          }
+          };
+        }
+        // Legacy staged launch still runs after acknowledgement, without a
+        // bootstrap Task. Only the explicit manager variant changes admission.
+        return async () => {
           const policy = ownerAlphaPolicy(config?.ownerAlpha);
           const staged = generation(config?.ownerAlphaGeneration);
           if (!policy.text_only || typeof config.hostedOwnerBindingSha256 !== 'string' ||
@@ -130,10 +141,13 @@ export function createHostedOwnerWakeService({ configPath, wakeTokenFile, port }
           const result = await launch(configPath, { expectedSha256: initial.sha256, signal: controller.signal });
           if (result?.code !== 0 || result?.signal != null) fail('HOSTED_WAKE_LAUNCH_UNKNOWN');
           report({ event: 'hosted-owner-wake', code: 'LAUNCH_EXITED', ready: false });
-        } catch {
+        };
+      }, onWake: async (_request, resume) => {
+        try { await resume(); } catch {
           report({ event: 'hosted-owner-wake', code: 'LAUNCH_REFUSED_OR_UNKNOWN', ready: false });
         }
-      }, onFailure: () => report({ event: 'hosted-owner-wake', code: 'CALLBACK_FAILED', ready: false }) });
+      }, onFailure: code => report({ event: 'hosted-owner-wake',
+        code: code === 'WAKE_PREPARATION_FAILED' ? 'PREPARATION_REFUSED_OR_UNKNOWN' : 'CALLBACK_FAILED', ready: false }) });
     })();
     return handlerPromise;
   };
@@ -162,7 +176,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     server.listen(port, '0.0.0.0');
     const stop = () => server.stop();
     // --serve is one supervised window and must not auto-restart. --listen is
-    // a quiet provider-managed HTTP service: no polling, hold or native startup.
+    // a quiet provider-managed HTTP service: no polling, startup hold or native startup.
     // Each authenticated launch still enforces its independent bounded policy.
     const deadline = process.argv[2] === '--serve' ? setTimeout(stop, 330000) : undefined;
     server.once('close', () => { clearTimeout(deadline); process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop); });

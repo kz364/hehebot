@@ -18,8 +18,14 @@ owner/modes/port matched expected configuration. Code has an activity gap after2
 before manager/native Task hold. Timing strongly suggests idle pause; no direct
 provider pause trace establishes causality. Expired grant/custody stays untouched.
 
-Runtime worker is implementing manifest-validated, durable-fenced, bounded bootstrap
-hold before202; no listener-lifetime heartbeat or uncertain replay. Host extended
+Manifest-validated, durable-fenced, bounded bootstrap hold before202 is integrated
+locally; no listener-lifetime heartbeat or uncertain replay. Host runtime regression
+passes505/505. The strengthened existing HTTP-listener/native composition passes:
+bootstrap Task PUT/GET before202, separate native Task PUT/GET, one pinned native
+start and scripted response, canonical completion and expiry-gated retirement.
+This is synthetic provider/account evidence, not live cold-wake recovery. Hold-only
+combined verification exited0 in `.local/bootstrap-hold-combined.log`; desktop16 pass.
+Host extended
 the existing actual-workerd fixture to prove authenticated manifest callback into
 the same DO while its sending alarm awaits acknowledgement; exact grant returned
 with wake status unknown, then queued after return. Typecheck and fixture pass in
@@ -29,6 +35,36 @@ Logs: `.local/bootstrap-77-{listener-final,listener-identity,service-inspect}.lo
 private Tasks response `.local/bootstrap-77-tasks-private.json`. V2 expired08:29:50.104Z.
 Automatic rollover intentionally rejects unclaimed/uncertain generation8, so further
 live work requires explicit recovery evidence, not a fabricated retirement journal.
+
+Read-only browser custody selection08:55:24.966Z confirms epoch8 RECOVERY_REQUIRED,
+run77 queued/current_attempt0 and zero attempt rows for that run across all epochs.
+The retained reservation is$1. Its manifest hash matches the selected manifest
+reconstructed with policy.text_only; that profile and reservation match the activated
+v2 configuration. The worker omitted manifest.text_only from its projection, so this
+is reconstruction, not a second full-manifest read. There is no independent earlier
+ledger snapshot proving historical reservation unchangedness. No native staging or
+retirement conclusion follows from this control-plane evidence. Private selection:
+`.local/bootstrap-77-custody-selection.json`. No mutation or new send performed.
+
+Unused recovery integration (local/default-off): core consumes a strict explicit
+one-use grant only inside a fresh direct-message transaction. Its separate immutable
+disposition binds predecessor and successor manifests without retirement/nativeStopped
+claims. Exact expired zero-attempt custody and absence of contradictory activity are
+rechecked; original run/events/wake/reservation remain retained and unclaimable.
+Trial/session/recovery deadlines and lifetime allowance all constrain the successor.
+The new operator-only producer pins the reviewed deployed sources/config/template
+and private root identities, takes both real flocks, and exclusively creates/fsyncs
+the same transition directory before writing a digest-bound immutable marker.
+Preexisting or partial directories fail closed; delayed manager staging loses the
+same exclusive mkdir. Linux /proc verifies inherited locks. An explicit operator
+historical-root-custody assertion is still required; hashes cannot establish it.
+No network, Tasks, model, retirement or successor authorization is produced.
+Host typecheck,186 focused core tests and6 real-lock producer tests pass. Fresh
+host combined verifier exited0 in `.local/unused-recovery-combined.log`:1669 backend,
+511 runtime, Worker/browser/native/service fixtures and dry-run build. Its final
+status is passed with assistantOperational/productionAdmission/modelJudgmentVerified
+all false. Desktop16 pass in `.local/bootstrap-hold-desktop.log`. No live marker,
+recovery config, guest update or new composer message has been issued.
 
 Expired trial reconciliation (2026-09-18T08:12:18Z): fixed expiry08:10:39.410Z
 passed unchanged; authenticated manager manifest null, same Sprite provider status

@@ -3,9 +3,10 @@ import {timingSafeEqual} from 'node:crypto';
 /** Compose with a supervisor on the Sprite HTTP Service port. The native runtime
  * stays loopback-only. This handler only queues a wake; it never submits a model.
  * Private Sprite URL auth is a separate edge layer from this application token. */
-export function createSpritesWakeHandler({token,onWake,onFailure=()=>{}}){
- if(typeof token!=='string'||token.length<32||typeof onWake!=='function')throw new Error('Wake service configuration required');
- const expected=Buffer.from(token);let latestEpoch=0,latestOperation=null;
+export function createSpritesWakeHandler({token,onWake,onFailure=()=>{},prepareWake,prepareTimeoutMs=10000}){
+ if(typeof token!=='string'||token.length<32||typeof onWake!=='function'||
+  prepareWake!==undefined&&typeof prepareWake!=='function'||!Number.isInteger(prepareTimeoutMs)||prepareTimeoutMs<1||prepareTimeoutMs>10000)throw new Error('Wake service configuration required');
+ const expected=Buffer.from(token);let latestEpoch=0,latestOperation=null,preparation;
  return async(req,res)=>{
   const reply=(status,body)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(body));};
   if(req.method!=='POST'||req.url!=='/wake'){reply(404,{error:'NOT_FOUND'});return;}
@@ -15,8 +16,45 @@ export function createSpritesWakeHandler({token,onWake,onFailure=()=>{}}){
   let body;
   try{let size=0;const chunks=[];for await(const chunk of req){size+=chunk.length;if(size>1024){reply(413,{error:'BODY_TOO_LARGE'});return;}chunks.push(chunk);}body=JSON.parse(Buffer.concat(chunks).toString('utf8'));}
   catch{reply(422,{error:'INVALID_INPUT'});return;}
+  if(res.destroyed)return;
   if(!body||Object.keys(body).sort().join(',')!=='epoch,operationId'||!Number.isSafeInteger(body.epoch)||body.epoch<1||typeof body.operationId!=='string'||!/^[0-9a-f-]{36}$/i.test(body.operationId)){reply(422,{error:'INVALID_INPUT'});return;}
   if(body.epoch<latestEpoch||body.epoch===latestEpoch&&body.operationId!==latestOperation){reply(409,{error:'STALE_EPOCH'});return;}
+  if(prepareWake){
+   const duplicate=body.epoch===latestEpoch;
+   if(!duplicate){
+    if(preparation?.pending){reply(409,{error:'PREPARATION_PENDING'});return;}
+    latestEpoch=body.epoch;latestOperation=body.operationId;
+    const controller=new AbortController(),deadline=Date.now()+prepareTimeoutMs;
+    const current={controller,deadline,pending:true,started:false};preparation=current;
+    const aborted=new Promise((_,reject)=>controller.signal.addEventListener('abort',()=>reject(new Error('WAKE_PREPARATION_FAILED')),{once:true}));
+    const timer=setTimeout(()=>controller.abort(),prepareTimeoutMs);
+    current.promise=Promise.race([aborted,Promise.resolve().then(()=>prepareWake(Object.freeze({...body}),{signal:controller.signal}))])
+     .then(value=>{if(controller.signal.aborted||Date.now()>=deadline||typeof value!=='function')throw new Error('WAKE_PREPARATION_FAILED');return value;})
+     .catch(()=>{controller.abort();onFailure('WAKE_PREPARATION_FAILED');throw new Error('WAKE_PREPARATION_FAILED');})
+     .finally(()=>{clearTimeout(timer);current.pending=false;});
+   }
+   const current=preparation;
+   // Any preaccept disconnect makes the shared outcome uncertain. Later duplicate
+   // requests cannot revive it, even if the provider completes its PUT/GET late.
+   const disconnected=()=>{if(!res.writableFinished&&!current.started)current.controller.abort();};
+   res.once('close',disconnected);
+   try{
+    const prepared=await current.promise;
+    if(current.controller.signal.aborted||res.destroyed||!current.started&&Date.now()>=current.deadline)throw new Error('WAKE_PREPARATION_FAILED');
+    res.once('finish',()=>{
+     res.removeListener('close',disconnected);
+     if(current.started||current.controller.signal.aborted)return;
+     if(Date.now()>=current.deadline){current.controller.abort();return;}
+     current.started=true;
+     Promise.resolve().then(()=>onWake(Object.freeze({...body}),prepared)).catch(()=>onFailure('WAKE_RECONCILIATION_REQUIRED'));
+    });
+    reply(202,{accepted:true,epoch:body.epoch,duplicate});
+   }catch{
+    res.removeListener('close',disconnected);
+    if(!res.destroyed)reply(503,{error:'WAKE_PREPARATION_FAILED'});
+   }
+   return;
+  }
   if(body.epoch===latestEpoch){reply(202,{accepted:true,epoch:body.epoch,duplicate:true});return;}
   latestEpoch=body.epoch;latestOperation=body.operationId;
   // Respond before bootstrap: the control plane closes START_REQUESTED on the

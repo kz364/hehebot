@@ -4,13 +4,18 @@ import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
-import { runHostedOwnerManager } from '../runtime/hosted-owner-manager.mjs';
+import { spawn, execFileSync } from 'node:child_process';
+import { once, EventEmitter } from 'node:events';
+import { readFileSync } from 'node:fs';
+import { runHostedOwnerManager, prepareHostedOwnerManager } from '../runtime/hosted-owner-manager.mjs';
 import { createHostedOwnerWakeService } from '../runtime/hosted-owner-wake.mjs';
 import { readOwnerAlphaConfig } from '../runtime/owner-alpha-entry.mjs';
 import { createCodexTextOnlyProfile, codexTextOnlyProfileSha256 } from '../runtime/codex-text-only.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
+
+// The real client is the existing first-party TS bundle, not a copied mock.
+// Build it here so credential-free runtime tests also work in a fresh checkout.
+execFileSync('bash', [new URL('../scripts/build-codex-service.sh', import.meta.url).pathname], { stdio: 'pipe' });
 
 const id = n => `${String(n).padStart(8, '0')}-1111-4111-8111-111111111111`;
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -176,31 +181,155 @@ test('either held kernel lock prevents retirement despite matching native-stop j
   }
 });
 
-test('manager listener does no config/manifest/staging work on passive or unauthorized requests; reconstruction refuses replay', async t => {
-  const f = await fixture(t), token = 'w'.repeat(40), reports = []; let reads = 0, launches = 0;
+function heldTaskTransport(f) {
+  const requests = []; let finishGet, gotReadback;
+  const pending = new Promise(ok => { gotReadback = ok; });
+  const request = (options, callback) => {
+    requests.push(options.method);
+    assert.equal(options.socketPath, '/.sprite/api.sock');
+    assert.equal(options.path, `/v1/tasks/hehe-bootstrap-${f.request.operationId}`);
+    const req = new EventEmitter(); req.destroy = () => {};
+    const respond = (status, body) => {
+      const res = new EventEmitter(); res.statusCode = status; callback(res);
+      res.emit('data', Buffer.from(JSON.stringify(body))); res.emit('end');
+    };
+    req.end = data => {
+      if (options.method === 'PUT') {
+        const intent = JSON.parse(readFileSync(join(f.config.sessionsDirectory, f.request.operationId, 'hosted-owner-bootstrap-intent.json')));
+        assert.equal(intent.phase, 'unknown'); assert.equal(intent.manifest_sha256, f.assignment.grant.manifest_sha256);
+        assert.equal(intent.expires_at, f.assignment.policy.expires_at);
+        assert.ok(JSON.parse(data).expire > 0 && JSON.parse(data).expire <= 62);
+        respond(200, {});
+      } else {
+        assert.equal(options.method, 'GET', 'never delete or renew bootstrap hold');
+        finishGet = (status = 200) => respond(status, { name: `hehe-bootstrap-${f.request.operationId}`, expires_at: f.assignment.policy.expires_at });
+        gotReadback();
+      }
+    };
+    return req;
+  };
+  return { request, requests, pending, finish: status => finishGet(status) };
+}
+
+async function listenerFixture(t, f, spriteRequest) {
+  const token = 'w'.repeat(40), reports = [], counts = { reads: 0, launches: 0 };
   const configPath = join(f.root, 'manager.json'), wakeTokenFile = join(f.root, 'wake-token');
   await writeFile(configPath, JSON.stringify(f.config), { mode: 0o600 });
   await writeFile(wakeTokenFile, token, { mode: 0o600 });
   const start = async () => {
     const service = createHostedOwnerWakeService({ configPath, wakeTokenFile, port: 8080 }, {
-      control: f.control, readConfig: async (...args) => { reads++; return readOwnerAlphaConfig(...args); },
-      launch: async () => { launches++; throw new Error('secret must not escape'); }, report: report => reports.push(report) });
+      spriteRequest, control: f.control, readConfig: async (...args) => { counts.reads++; return readOwnerAlphaConfig(...args); },
+      launch: async () => { counts.launches++; throw new Error('secret must not escape'); }, report: report => reports.push(report) });
     service.listen(0, '127.0.0.1'); await once(service, 'listening'); t.after(() => service.stop());
     return { service, origin: `http://127.0.0.1:${service.address().port}` };
   };
+  const wake = (origin, signal) => fetch(`${origin}/wake`, { method: 'POST', signal, headers: { 'content-type': 'application/json',
+    'x-hehe-wake-token': token }, body: JSON.stringify(f.request) });
+  return { start, wake, counts, reports };
+}
+
+test('real Tasks client waits for GET before 202; concurrent duplicates share one hold and captured launch', async t => {
+  const f = await fixture(t), tasks = heldTaskTransport(f);
+  const { start, wake, counts, reports } = await listenerFixture(t, f, tasks.request);
   let { service, origin } = await start();
   assert.equal((await fetch(origin)).status, 404);
   assert.equal((await fetch(`${origin}/wake`, { method: 'POST' })).status, 401);
-  assert.equal(reads, 0); assert.deepEqual(f.calls, []); assert.deepEqual(await readdir(f.config.sessionsDirectory), []);
-  const wake = async origin => {
-    assert.equal((await fetch(`${origin}/wake`, { method: 'POST', headers: { 'content-type': 'application/json',
-      'x-hehe-wake-token': token }, body: JSON.stringify(f.request) })).status, 202);
-  };
-  await wake(origin);
-  for (let n = 0; n < 100 && reports.length < 1; n++) await new Promise(ok => setTimeout(ok, 10));
-  service.stop(); ({ service, origin } = await start()); await wake(origin);
-  for (let n = 0; n < 100 && reports.length < 2; n++) await new Promise(ok => setTimeout(ok, 10));
-  assert.equal(launches, 1); assert.equal(reports.length, 2);
-  assert.ok(reports.every(report => report.code === 'LAUNCH_REFUSED_OR_UNKNOWN'));
+  assert.equal(counts.reads, 0); assert.deepEqual(f.calls, []); assert.deepEqual(tasks.requests, []);
+  let replies = 0;
+  const first = wake(origin).then(res => { replies++; return res; });
+  await tasks.pending;
+  const duplicate = wake(origin).then(res => { replies++; return res; });
+  await new Promise(ok => setTimeout(ok, 30));
+  assert.equal(replies, 0); assert.equal(counts.launches, 0);
+  assert.deepEqual(await readdir(join(f.config.sessionsDirectory, f.request.operationId)), ['hosted-owner-bootstrap-intent.json']);
+  assert.deepEqual(tasks.requests, ['PUT', 'GET']); assert.equal(f.calls.length, 1);
+  tasks.finish();
+  const responses = await Promise.all([first, duplicate]);
+  assert.deepEqual(responses.map(res => res.status), [202, 202]);
+  assert.deepEqual((await Promise.all(responses.map(res => res.json()))).map(body => body.duplicate), [false, true]);
+  for (let n = 0; n < 100 && counts.launches < 1; n++) await new Promise(ok => setTimeout(ok, 10));
+  assert.equal(counts.launches, 1); assert.equal(f.calls.length, 1);
+  assert.equal((await wake(origin)).status, 202);
+  service.stop(); ({ service, origin } = await start());
+  assert.equal((await wake(origin)).status, 503);
+  assert.equal(counts.launches, 1); assert.deepEqual(tasks.requests, ['PUT', 'GET']);
   assert.ok(!JSON.stringify(reports).includes('secret'));
+});
+
+test('failed GET leaves UNKNOWN and forbids 202, staging, DELETE and retry across reconstruction', async t => {
+  const f = await fixture(t), tasks = heldTaskTransport(f);
+  const { start, wake, counts } = await listenerFixture(t, f, tasks.request);
+  let { service, origin } = await start();
+  const first = wake(origin); await tasks.pending;
+  const duplicate = wake(origin); tasks.finish(500);
+  assert.deepEqual((await Promise.all([first, duplicate])).map(res => res.status), [503, 503]);
+  service.stop(); ({ service, origin } = await start());
+  assert.equal((await wake(origin)).status, 503);
+  assert.deepEqual(tasks.requests, ['PUT', 'GET']); assert.equal(counts.launches, 0);
+  assert.deepEqual(await readdir(join(f.config.sessionsDirectory, f.request.operationId)), ['hosted-owner-bootstrap-intent.json']);
+});
+
+test('preaccept disconnect and late readback cannot launch or retry', async t => {
+  const f = await fixture(t), tasks = heldTaskTransport(f);
+  const { start, wake, counts, reports } = await listenerFixture(t, f, tasks.request);
+  const { origin } = await start(), controller = new AbortController();
+  const first = wake(origin, controller.signal); const rejected = assert.rejects(first);
+  await tasks.pending; controller.abort(); await rejected;
+  for (let n = 0; n < 100 && reports.length < 1; n++) await new Promise(ok => setTimeout(ok, 10));
+  tasks.finish();
+  assert.equal((await wake(origin)).status, 503); assert.equal(counts.launches, 0);
+  assert.deepEqual(tasks.requests, ['PUT', 'GET']);
+});
+
+test('bounded Unix GET timeout rejects late readback and keeps the durable bootstrap fence', async t => {
+  const f = await fixture(t), tasks = heldTaskTransport(f);
+  const { start, wake, counts } = await listenerFixture(t, f, tasks.request);
+  let { service, origin } = await start();
+  const started = Date.now(), first = wake(origin); await tasks.pending;
+  assert.equal((await first).status, 503);
+  assert.ok(Date.now() - started < 10000, 'request deadline stays below Worker timeout');
+  tasks.finish();
+  service.stop(); ({ service, origin } = await start());
+  assert.equal((await wake(origin)).status, 503);
+  assert.equal(counts.launches, 0); assert.deepEqual(tasks.requests, ['PUT', 'GET']);
+});
+
+test('aggregate hosted preparation timeout fences a manifest that completes after the HTTP refusal', async t => {
+  const f = await fixture(t); let finish, manifestStarted;
+  const pending = new Promise(ok => { manifestStarted = ok; });
+  f.control = { request: () => { manifestStarted(); return new Promise(ok => { finish = ok; }); } };
+  const { start, wake, counts } = await listenerFixture(t, f, () => assert.fail('late Task'));
+  const { origin } = await start();
+  const started = Date.now(), first = wake(origin); await pending;
+  assert.equal((await first).status, 503);
+  assert.ok(Date.now() - started < 14000, 'aggregate preparation must expire before Worker15s');
+  finish(f.assignment); await new Promise(ok => setTimeout(ok, 20));
+  assert.deepEqual(await readdir(f.config.sessionsDirectory), []);
+  assert.equal(counts.launches, 0); assert.equal((await wake(origin)).status, 503);
+});
+
+test('null, invalid and expired manifests never issue a bootstrap Task', async t => {
+  for (const kind of ['null', 'identity', 'expired']) {
+    const f = await fixture(t);
+    if (kind === 'null') f.control = { request: async () => null };
+    if (kind === 'identity') f.assignment.grant.owner_binding_sha256 = 'ef'.repeat(32);
+    if (kind === 'expired') expiredForInspection(f);
+    const { start, wake, counts } = await listenerFixture(t, f, () => assert.fail('Task requested'));
+    const { origin } = await start(); assert.equal((await wake(origin)).status, 503);
+    assert.equal(counts.launches, 0); assert.deepEqual(await readdir(f.config.sessionsDirectory), []);
+  }
+});
+
+test('prepared assignment is captured once and continuation is single-use', async t => {
+  const f = await fixture(t); let launches = 0;
+  const resume = await prepareHostedOwnerManager(f.config, f.request, { control: f.control, launch: async path => {
+    launches++;
+    const { config } = await readOwnerAlphaConfig(path);
+    assert.equal(config.ownerAlpha.session_id, id(1));
+    assert.equal(config.ownerAlphaGeneration.boot_id, id(5));
+    throw new Error('synthetic launch stop');
+  } });
+  f.assignment.policy.session_id = id(20); f.assignment.grant.boot_id = id(21);
+  await assert.rejects(resume()); await assert.rejects(resume());
+  assert.equal(launches, 1); assert.equal(f.calls.length, 1);
 });

@@ -220,3 +220,72 @@ it('publishes only a read-only overall-trial summary and does not persist seed e
   f.reopen();f.setNow(f.config.expires_at);expect(f.core.bootstrap.summary()?.message_admission_available).toBe(false);
  }finally{f.close();}
 });
+
+async function unused(){
+ const f=setup();f.retire();const key=randomUUID(),receipt=f.send(bot,key),prior=f.core.bootstrap.assignedManifest()!;
+ await f.lifecycle.deliverOwnerAlphaWake(prior.transition_id,async()=>{}); // Accepted 202, not proof of staging.
+ f.setNow(prior.expires_at);f.lifecycle.watchdog();
+ const config:OwnerAlphaBootstrapConfig={...f.config,policy_revision:'recovery-v2',unused_recovery:{kind:'unused-before-staging-v1',installation_id:prior.installation_id,owner_binding_sha256:prior.owner_binding_sha256,
+  predecessor:{manifest_sha256:prior.manifest_sha256,epoch:prior.epoch,boot_id:prior.boot_id,transition_id:prior.transition_id,session_id:prior.session_id,run_id:prior.run_id},
+  evidence:{sha256:'d'.repeat(64),observed_at:prior.expires_at,source:'exclusive-fsynced-transition-marker'},successor_policy_revision:'recovery-v2',expires_at:'2026-09-10T00:05:43.000Z'}};
+ return {f,key,receipt,prior,config};
+}
+it('consumes explicit unused authority only on a fresh message, preserving queued202 custody and reservations',async()=>{
+ const {f,key:oldKey,receipt,prior,config}=await unused();try{
+  expect(()=>f.lifecycle.assertOwnerAlphaSettlement(true)).toThrow(/unclaimed/);
+  const old=()=>JSON.stringify({run:f.store.run(prior.run_id),command:f.db.all('SELECT * FROM commands WHERE id=?',receipt.id),events:f.db.all('SELECT * FROM events WHERE cause_id=? OR id=?',receipt.id,receipt.id),
+   metadata:f.db.all("SELECT * FROM runtime_metadata WHERE key IN ('owner_alpha_generation:2','owner_alpha_reservation:2','owner_alpha_cost_baseline') OR key LIKE 'owner_alpha_wake:%' ORDER BY key"),retained:f.retained()});
+  const before=old();f.reopen(config);
+  const snapshot=()=>JSON.stringify(f.db.sqlite.prepare('SELECT * FROM runtime_metadata ORDER BY key').all());
+  const passive=snapshot();expect(f.core.bootstrap.summary()?.message_admission_available).toBe(true);expect(f.core.bootstrap.assignedManifest()).toEqual(prior);f.core.state();expect(snapshot()).toBe(passive);
+  expect(f.send(bot,oldKey)).toEqual(receipt);expect(snapshot()).toBe(passive);
+  const key=randomUUID(),fresh=f.send(bot,key),m=f.core.bootstrap.assignedManifest()!;
+  expect(m).toMatchObject({epoch:3,run_id:fresh.resource_id,expires_at:config.unused_recovery!.expires_at,policy_revision:'recovery-v2'});
+  expect(f.lifecycle.nextClaimableRun()?.id).toBe(m.run_id);expect(f.core.ownerAlpha.eligible(f.store.run(prior.run_id))).toBe(false);expect(old()).toBe(before);
+  expect(f.send(bot,key)).toEqual(fresh);expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'")).toHaveLength(2);
+  const {unused_recovery:_,...without}=config;f.reopen(without);expect(f.core.bootstrap.assignedManifest()).toEqual(m);expect(old()).toBe(before);
+  f.setNow(m.expires_at);f.lifecycle.watchdog();expect(f.core.bootstrap.summary()?.message_admission_available).toBe(false);expect(f.store.run(f.send().resource_id!).status).toBe('waiting');
+  expect(()=>f.reopen({...config,unused_recovery:{...config.unused_recovery!,evidence:{...config.unused_recovery!.evidence,sha256:'e'.repeat(64)}}})).toThrow(/immutable/);
+ }finally{f.close();}
+});
+it.each(['missing','installation','owner','hash','epoch','boot','transition','session','run','revision','expired','future evidence','too early evidence','budget','baseline','question','controller','attempt','child','native link','effect','lock'] as const)('refuses unused recovery with %s',async mode=>{
+ const {f,prior,config}=await unused();try{
+  const g=config.unused_recovery!;
+  if(mode==='missing')delete config.unused_recovery;
+  else if(mode==='installation')g.installation_id='other';else if(mode==='owner')g.owner_binding_sha256='e'.repeat(64);
+  else if(mode==='hash')g.predecessor.manifest_sha256='e'.repeat(64);else if(mode==='epoch')g.predecessor.epoch++;
+  else if(mode==='boot')g.predecessor.boot_id=randomUUID();else if(mode==='transition')g.predecessor.transition_id=randomUUID();else if(mode==='session')g.predecessor.session_id=randomUUID();else if(mode==='run')g.predecessor.run_id=f.waiting.resource_id!;
+  else if(mode==='revision')g.successor_policy_revision='trial-v1';else if(mode==='expired'){f.setNow(g.expires_at);}
+  else if(mode==='future evidence')g.evidence.observed_at='2026-09-10T00:05:01.000Z';else if(mode==='too early evidence')g.evidence.observed_at='2026-09-10T00:04:59.999Z';
+  else if(mode==='budget')config.reservation_micro_usd=7000000;else if(mode==='baseline')config.prior_cost_source='different';
+  f.reopen(config);
+  if(mode==='question')f.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)','native-question:contradiction',JSON.stringify({run_id:prior.run_id,status:'resolved'}));
+  if(mode==='controller')f.db.exec("INSERT INTO controller_operations(id,kind,epoch,status,created_at) VALUES(?,'hold',?,'confirmed',?)",randomUUID(),prior.epoch,f.core.now());
+  if(mode==='attempt')f.db.exec('INSERT INTO attempts(run_id,attempt,epoch,boot_id,status,submission_key,started_at,deadline_at) SELECT ?,1,epoch,boot_id,status,?,started_at,deadline_at FROM attempts LIMIT 1',prior.run_id,`${prior.run_id}:1`);
+  if(mode==='child')f.db.exec('UPDATE runs SET parent_run_id=? WHERE id=?',prior.run_id,f.waiting.resource_id!);
+  if(mode==='native link')f.db.exec('INSERT INTO native_task_links VALUES(?,?,1,?,?)',f.waiting.resource_id!,prior.run_id,'unexpected-native','unexpected-session');
+  if(mode==='effect')f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','confirmed','authority','digest',?)",randomUUID(),prior.run_id,randomUUID(),f.core.now());
+  if(mode==='lock')f.db.exec('INSERT INTO resource_locks VALUES(?,?,1,?)','resource',prior.run_id,f.core.now());
+  expect(f.core.bootstrap.summary()?.message_admission_available).toBe(false);
+  const fresh=f.send();expect(f.store.run(fresh.resource_id!).status).toBe('waiting');expect(f.lifecycle.nextClaimableRun()).toBeUndefined();
+  expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_unused_disposition:*'")).toHaveLength(0);
+  expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'")).toHaveLength(1);
+ }finally{f.close();}
+});
+it('fails reconstruction and selector closed on persisted unused disposition tampering',async()=>{
+ const {f,config}=await unused();try{
+  f.reopen(config);f.send();
+  f.db.exec("UPDATE runtime_metadata SET value_json=json_set(value_json,'$.grant.evidence.sha256',?) WHERE key='owner_alpha_unused_disposition:2'",'e'.repeat(64));
+  expect(()=>f.lifecycle.nextClaimableRun()).toThrow();expect(()=>f.reopen(config)).toThrow();
+ }finally{f.close();}
+});
+it('allows ordinary completed-and-retired rollover after unused recovery without retaining its config grant',async()=>{
+ const {f,config}=await unused();try{
+  f.reopen(config);f.send();const report=complete(f);
+  const {unused_recovery:_,...without}=config;f.reopen(without);f.core.bootstrap.recordRetirement(report);
+  const fresh=f.send();expect(f.core.bootstrap.assignedManifest()?.epoch).toBe(4);expect(f.lifecycle.nextClaimableRun()?.id).toBe(fresh.resource_id);
+  expect(f.core.ownerAlpha.activeGeneration()?.authority).toMatchObject({kind:'owner-message'});
+  expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'")).toHaveLength(3);
+  f.reopen(without);expect(f.lifecycle.nextClaimableRun()?.id).toBe(fresh.resource_id);
+ }finally{f.close();}
+});
