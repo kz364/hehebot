@@ -4,6 +4,21 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
+**Current live checkpoint09:25Z:** epoch8 permanent unused-before-staging marker
+created09:21:55.474Z under both real flocks after explicit deployed-source/root
+custody review. No retirement claim or replay. Hold-before202 listener files are
+installed, supported Service stop/start completed, and Worker recovery source
+deployment succeeded.09:25 authenticated manager returns null; same Sprite warm.
+Provider-only09:31:22 observation reports same Sprite cold, not zero-billing proof.
+V3 recovery config is NOT issued. Browser passive readiness is blocked on unresolved
+Mac executor PID33132; only navigation/GETs may be pending, no submission was in the
+command. Worker owns same-PID reconciliation. Only recursal-devbox appears in live
+runner inventory, not the Mac owning authenticated Chrome; do not transfer cookies
+or infer browser readiness. Next: reconnect that Mac executor, reconcile PID33132,
+confirm readiness, then issue one fixed trial and authorize one normal composer send.
+Prior$1 allowance/reservation and$10 total remain unchanged; actual billing unverified.
+No new message, reservation, Git push or production-gate change.
+
 **Latest live attempt FAILED before readiness:** browser readiness confirmed08:18:57Z through existing SSO,
 normal history/bot switching and control-plane-only GETs; expired v1 unavailable,
 epoch7 and old runs unchanged. Host provider check08:19:50Z reports same Sprite cold.
@@ -35,15 +50,15 @@ Read-only08:55 custody selection confirms zero attempts and retained$1 reservati
 reconstructed canonical manifest hash matches. This does not prove historical ledger
 unchangedness or native non-staging. Host verified
 deployed epoch8 manager/launcher/lock-script hashes match the reviewed old source;
-this is not by itself historical custody proof. Next: complete deployed-root custody
-review before live recovery attestation, then deploy and confirm browser readiness
-before one new bounded trial. No replay of message77 or false retirement claim.
-No new deployment, send or push. Production gates remain false.
+this is not by itself historical custody proof. Subsequent operator review, marker
+and deployment are recorded above. No replay of message77 or false retirement claim.
+Production gates remain false.
 
 **Publication (2026-09-18):** integrated source through
 [`656432f`](https://github.com/kz364/hehebot/commit/656432fad486814479f92510f59674908081c104)
 is pushed to `origin/main`, with remote HEAD verified and the remote agent-model
-documentation preserved. Current hold/unused-recovery integration is local only.
+documentation preserved. Current hold/unused-recovery integration is committed
+locally and deployed within the authorized trial scope, but not pushed to GitHub.
 Earlier “unpushed” notes are historical. This publication
 does not deploy or enable the default-off bootstrap, connectors or production gates.
 

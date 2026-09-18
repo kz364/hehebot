@@ -4,6 +4,25 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+Live follow-through09:21–09:25Z: same Sprite, operator-reviewed old exclusive staging
+source and persistent root custody; native/session roots remain dev48/ino164 and440.
+Producer executed ONCE successfully, immutable marker at sessions/
+b148cde5-f25b-41c9-988d-24171e1abc97/unused-before-staging.json,
+digest049cb4035a5a3d7305a7cff50a6c826752d91ec178060400448cfc082ddf87bb.
+Do not rerun producer or delete the fence. Private request/evidence are
+`.local/unused-live-{request,evidence}.json`. Supported listener stop/start completed
+around hold-file replacement; matching installed hashes/import check in
+`.local/hold-listener-{installed,start,stop}.log`. Worker deploy succeeded, version
+e3541c58-7602-4c21-8f5b-457dcf796123.09:25:54 manager manifest null, same Sprite warm.
+Provider-only09:31:22 reports same Sprite cold (`.local/unused-final-provider.json`).
+No new recovery config or send. `.local/prepare-bootstrap-v3.mjs` is prepared but
+NOT executed: run only after actual browser readiness; it preserves cost baseline
+and creates one fixed10-minute config with the real unused evidence, without seed
+retirement. Browser worker passive PID33132 unresolved after executor connection
+failure; no submission in pending command. It owns reconciliation, not send authority.
+Live runner inventory shows only recursal-devbox, not /Users/kaspar Mac with CDP.
+Need reconnect that executor and resolve PID before any new trial. No cookies copied.
+
 Hold-before202 patch integrated locally. Host runtime505/505 and strengthened
 existing HTTP→manager→pinned native composition pass; two distinct Task PUT/GET
 pairs, one native/model request, canonical reply and retirement. Hold-only combined
@@ -14,14 +33,14 @@ runtime/hosted-owner-unused.mjs plus tests. Host typecheck,186 focused core and6
 producer tests pass. Fresh full combined verifier exited0:1669 backend/511 runtime
 plus Worker/browser/native/service/build in `.local/unused-recovery-combined.log`.
 No verifier process remains running. Desktop16 pass separately.
-No guest runtime update/deployment. Recovery binds exact predecessor manifest/run,
+Recovery binds exact predecessor manifest/run,
 source/evidence hash, one successor policy revision and expiry; ordinary zero-attempt
 rollover still rejects. Producer consumes the same exclusive transition directory
 under both locks, refusing preexisting/partial state. Legacy fixture guard is applied.
 Deployed old manager/launcher/lock source hashes match reviewed source; canonical
 sessions/native roots private and session root empty, recorded in
 `.local/bootstrap-77-provenance-review.log`. Hashes do not prove historical custody;
-review that separately before operator assertion. No live unused attestation yet.
+subsequent explicit operator review/marker is recorded above, not inferred from hashes.
 Private08:55 selection `.local/bootstrap-77-custody-selection.json` confirms zero
 attempts/queued epoch8 and$1 reservation. Canonical hash reconstructed with selected
 policy.text_only matches; this is not independent historical ledger verification.

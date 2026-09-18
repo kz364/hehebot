@@ -4,6 +4,32 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Live unused evidence/deployment (2026-09-18):09:20:24 preflight reconfirmed exact
+reviewed old manager/launcher/lock source hashes, manager config digest and private
+native/session root device/inode identities, with no staged session directories.
+Operator reviewed the original private-stage creation, exclusive mkdir before
+native launch and absence of a deletion path; current hashes alone are not proof
+of historical custody. Producer executed once at09:21:55.474 under both real locks,
+creating the permanent epoch8 transition fence and0400 fsynced evidence marker.
+Digest049cb4035a5a3d7305a7cff50a6c826752d91ec178060400448cfc082ddf87bb
+was independently read back after runtime installation. No nativeStopped or
+retirement claim. Request/evidence and preflight are private `.local/unused-live-*`.
+
+Supported listener Service stop returned stopped/exit0/complete; installed three
+hold-before202 files match local hashes, import check started no native process,
+and Service start returned started/complete. Worker deploy exited0 with version
+e3541c58-7602-4c21-8f5b-457dcf796123. Logs `.local/hold-listener-*.log` and
+`.local/unused-recovery-worker-deploy.log`. Authenticated09:25:54 manager manifest
+null and provider same Sprite warm. This is installation evidence, not message wake
+or sleep acceptance. Provider-only09:31:22 reports same Sprite cold, recorded in
+`.local/unused-final-provider.json`; no zero-billing or process-loss claim follows.
+No new trial config/reservation/message, no Git push.
+Browser passive readiness is unverified: Mac PID33132 remains unresolved following
+an executor acknowledgment failure. Its command contained only navigation/GETs.
+Worker owns same-PID reconciliation; only recursal-devbox is currently listed, not
+the Mac with authenticated Chrome/CDP. V3 remains unissued until browser readiness.
+Actual billing remains unverified; unchanged cumulative$10 allowance is not reset.
+
 Live message-bootstrap77 failed (2026-09-18): authenticated browser readiness and
 passive control-plane-only navigation preceded new fixed v2 policy. Same Sprite
 provider status cold08:19:50 and08:21:42, manager null before message. Single normal
