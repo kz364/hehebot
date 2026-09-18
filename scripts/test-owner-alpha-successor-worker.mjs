@@ -36,9 +36,18 @@ try{
  const afterRestart=await request(reopened,'/alarm'+query,{now:'2026-09-17T00:05:00.000Z'});
  assert.deepEqual(afterRestart.retained,before);assert.equal(afterRestart.alarm,null);assert.deepEqual(afterRestart.lifecycle,second.lifecycle);
  assert.deepEqual((await request(reopened,'/status')).value.owner_alpha_generation,prepared.generation);
+ const continuation=await request(reopened,'/continue'+query,{});
+ assert.equal(continuation.result.ok,true);assert.equal(continuation.result.value.status,'applied');assert.deepEqual(continuation.retained,before);
+ assert.deepEqual((await request(reopened,'/status')).value.owner_alpha_generation,continuation.generation);
+ await stop();
+ const thirdOpen=await start();
+ assert.deepEqual((await request(thirdOpen,'/status')).value.owner_alpha_generation,continuation.generation);
+ const thirdAlarm=await request(thirdOpen,'/alarm'+query,{now:'2026-09-17T00:12:00.000Z'});
+ assert.equal(thirdAlarm.lifecycle.epoch,3);assert.equal(thirdAlarm.lifecycle.phase,'RECOVERY_REQUIRED');assert.deepEqual(thirdAlarm.retained,before);
  assert.ok(!logs.includes('control.alarm_failed'));
  console.log('PASS real workerd SQLite: actual PersonalControl.accept owner-alpha activation and canonical same-key retry preserve predecessor run, attempt, unknown effect, overdue retry, queued context, command and alpha bytes.');
  console.log('PASS generation watchdog: epoch 2 lease expiry transitions to RECOVERY_REQUIRED, deletes alarm, and retired due timestamps do not spin; status exposes exact three-field descriptor.');
  console.log('PASS persisted Worker reopen: exact predecessor custody, successor lifecycle/descriptor and absent alarm retained without replay.');
+ console.log('PASS epoch 3 continuation of unused expired epoch 2: activation, second reopen and watchdog retain epoch 1 unknown custody unchanged.');
  console.log('LIMIT successor grant and retirement-receipt digest are synthetic loopback fixture inputs, not real retirement evidence; no public activation/config, inference, provider, auth account, or credential call.');
 }catch(error){console.error(logs.slice(-6000));throw error;}finally{await stop();await rm(directory,{recursive:true,force:true});}

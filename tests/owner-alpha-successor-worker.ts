@@ -71,6 +71,17 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
    const generation=core.ownerAlpha.activeGeneration();
    return Response.json(await this.runtime({type:'status',payload:{}},generation&&{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}));
   }
+  if(url.pathname==='/continue'&&request.method==='POST'){
+   this.clock='2026-09-17T00:07:00.000Z';
+   const prior=core.ownerAlpha.activeGeneration()!;
+   const successor={...prior.authority,transition_id:randomUUID(),
+    predecessor:{session_id:prior.policy.session_id,epoch:prior.epoch,boot_id:prior.boot_id},
+    successor:{policy:{...prior.policy,session_id:randomUUID(),expires_at:'2026-09-17T00:11:00.000Z'},boot_id:randomUUID()}};
+   core.options.ownerAlphaSuccessor=successor;core.options.ownerBindingSha256=successor.owner_binding_sha256;
+   const command={schema_version:1 as const,type:'owner-alpha.activate' as const,payload:{transition_id:successor.transition_id,envelope_sha256:ownerAlphaSuccessorSha256(successor)}};
+   const result=await this.accept('fixture-owner',randomUUID(),await digest(command),command);
+   return Response.json({result,retained:this.retained(ids.runId,ids.queuedId),generation:{epoch:3,boot_id:successor.successor.boot_id,transition_id:successor.transition_id}});
+  }
   if(url.pathname==='/alarm'&&request.method==='POST'){
    this.clock=(await request.json() as {now:string}).now;await super.alarm();
    return Response.json({lifecycle:lifecycle.get(),retained:this.retained(ids.runId,ids.queuedId),alarm:await this.ctx.storage.getAlarm()});

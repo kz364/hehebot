@@ -11,7 +11,9 @@ export type OwnerAlphaSuccessor = {
  owner_binding_sha256:string;
  predecessor:{session_id:string;epoch:number;boot_id:string};
  // Operator recovery-disposition evidence: credential revocation, absent/disabled
- // autostart and an observed same-Sprite restart. This digest is not proof of
+ // autostart and process retirement (observed restart for the legacy profile).
+ // Later completed text-only sessions still need operator stop evidence, not
+ // merely the database settlement gate below. This digest is not proof of
  // historical settlement or universal containment; old custody remains unknown
  // and replay forbidden. The server binds the receipt, not physical evidence.
  retirement_receipt_sha256:string;
@@ -102,10 +104,10 @@ export class OwnerAlpha {
  constructor(private store:Store,readonly configuredPolicy:OwnerAlphaPolicy|undefined,private now:()=>string){}
  get policy():OwnerAlphaPolicy|undefined{return this.activeGeneration()?.policy??this.configuredPolicy;}
  private generations():OwnerAlphaGeneration[]{
-  return this.store.db.all<{key:string;value_json:string}>("SELECT key,value_json FROM runtime_metadata WHERE key GLOB 'owner_alpha_generation:*'").map(row=>{
+  const rows=this.store.db.all<{key:string;value_json:string}>("SELECT key,value_json FROM runtime_metadata WHERE key GLOB 'owner_alpha_generation:*' ORDER BY CAST(substr(key,24) AS INTEGER)").map(row=>{
    const generation=JSON.parse(row.value_json) as OwnerAlphaGeneration;
-   requireThat(row.key==='owner_alpha_generation:2'&&generation?.epoch===2&&Number.isSafeInteger(generation.activation_event_sequence)&&generation.activation_event_sequence>=0&&
-    generation.predecessor?.epoch===1&&generation.predecessor.phase==='RECOVERY_REQUIRED'&&uuid.test(generation.activation_command_id),
+   requireThat(row.key===`owner_alpha_generation:${generation?.epoch}`&&Number.isSafeInteger(generation?.epoch)&&generation.epoch>=2&&Number.isSafeInteger(generation.activation_event_sequence)&&generation.activation_event_sequence>=0&&
+    generation.predecessor?.epoch===generation.epoch-1&&generation.predecessor.phase==='RECOVERY_REQUIRED'&&uuid.test(generation.activation_command_id),
     'INVALID_CONFIGURATION','Invalid owner-alpha generation record.',503);
    const command=this.store.db.all<{payload_json:string;body_hash:string;type:string;owner_id:string;status:string}>('SELECT payload_json,body_hash,type,owner_id,status FROM commands WHERE id=?',generation.activation_command_id)[0];
    requireThat(command?.type==='owner-alpha.activate'&&command.status==='applied'&&!/^(runtime|trigger):/.test(command.owner_id),
@@ -122,6 +124,14 @@ export class OwnerAlpha {
     'INVALID_CONFIGURATION','Owner-alpha generation differs from its activation receipt.',503);
    return generation;
   });
+  for(let i=0;i<rows.length;i++){
+   const generation=rows[i],prior=rows[i-1];
+   requireThat(generation.epoch===i+2&&(!prior||generation.predecessor.boot_id===prior.boot_id&&generation.predecessor.session_id===prior.policy.session_id&&generation.activation_event_sequence>prior.activation_event_sequence),
+    'INVALID_CONFIGURATION','Owner-alpha generation chain is not contiguous.',503);
+  }
+  const identities=rows.flatMap(g=>[g.boot_id,g.transition_id,g.policy.session_id]);
+  requireThat(new Set(identities.map(value=>value.toLowerCase())).size===identities.length,'INVALID_CONFIGURATION','Owner-alpha generation identities are not unique.',503);
+  return rows;
  }
  private generationCustody(generation:OwnerAlphaGeneration):Custody {
   return {policy:generation.policy,admitted_run_ids:this.store.db.all<{run_id:string}>(
@@ -159,8 +169,9 @@ export class OwnerAlpha {
      })&&
      this.store.db.all<{run_id:string}>('SELECT run_id FROM native_task_links').every(link=>attempts.some(a=>a.run_id===link.run_id)&&!custody.admitted_run_ids.includes(link.run_id)),
      'INVALID_CONFIGURATION','Owner-alpha attempt custody is inconsistent.',503);
-    requireThat(generations.length<=1&&(generations.length===0?state.epoch<=1:!!this.activeGeneration()),'INVALID_CONFIGURATION','Owner-alpha generation history is inconsistent.',503);
-    for(const generation of generations)requireThat(generation.epoch===2&&uuid.test(generation.boot_id)&&uuid.test(generation.transition_id)&&generation.policy.text_only&&generation.predecessor.epoch===1&&generation.predecessor.session_id===custody.policy.session_id&&
+    requireThat(generations.length===0?state.epoch<=1:!!this.activeGeneration(),'INVALID_CONFIGURATION','Owner-alpha generation history is inconsistent.',503);
+    for(const generation of generations)requireThat(uuid.test(generation.boot_id)&&uuid.test(generation.transition_id)&&generation.policy.text_only&&
+     (generation.epoch===2?generation.predecessor.session_id===custody.policy.session_id:true)&&
      this.generationCustody(generation).admitted_run_ids.length<=generation.policy.max_runs&&attempts.filter(a=>a.epoch===generation.epoch).every(a=>this.validAttempt(a.run_id,a.attempt,this.generationCustody(generation),a.epoch,a.boot_id,generation.activation_event_sequence)),
      'INVALID_CONFIGURATION','Owner-alpha generation custody is inconsistent.',503);
     return;

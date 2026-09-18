@@ -4,7 +4,18 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current P0 checkpoint:** after the owner's fix direction, a focused oracle review
+**Current P0 checkpoint:** settled-session continuation is implemented locally:
+fresh grants can advance past epoch2 without renewing old policies or replaying work.
+Exact stored text-only result/receipt and absent unsettled activity are required;
+all historical epochs and pre-cutoff messages remain untouched. Focused116, final41,
+typecheck and desktop16 pass; extended real Worker epoch3/reopen passes in verifier
+environment. Full combined check exits0 (1605 backend/473 runtime plus native,
+Worker/browser/build checks). Three isolated Worker invocations lost
+connections; retained logs distinguish those failures from passing runs. No hosted
+activation/deployment/spend in this stage. Next is operational continuation with
+operator stop evidence and generation-bound credentials, not historical replay.
+
+**Verified hosted checkpoint:** after the owner's fix direction, a focused oracle review
 approved one additional bounded restart while authority was revoked and no successor
 ran. The request returned202; changed kernel identity remained stable122s, same Sprite
 and disk nonce, services absent. Historical first502 outcome stays unknown; a delayed

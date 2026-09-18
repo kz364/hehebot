@@ -4,6 +4,35 @@ Hehebot has demonstrated one canonically completed hosted text-only successor re
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Settled-session continuation (2026-09-18, local): a fresh owner-alpha.activate grant
+can append epoch3+ after the current text-only generation's policy and lease expire.
+Every prior-generation attempt must be completed with an exact stored profile/turn/
+output receipt and completed coordinator release. Unsettled operations/effects/locks,
+questions or controller activity reject. A never-used expired generation may advance.
+The original epoch1 unknown-retirement path is unchanged. No policy/quota is renewed
+in place, historical result promoted, or prior journal replayed.
+
+Reconstruction validates numeric contiguous generation order, exact predecessor
+session/boot, increasing event cutoffs, unique identities and immutable activation
+command/event digests. Later claim/watchdog SQL is current-generation-only, preserving
+all earlier attempts/effects rather than excluding only the immediate predecessor.
+Core epoch1→2→3 fixture preserves original dispatched effect and intermediate queued
+message, refuses unfinished/failed/recovery statuses, changed receipt digest and held
+lock, and rejects identity reuse/missing middle generation. Real workerd fixture
+advances unused epoch2, reopens SQLite again and expires epoch3 with retained epoch1
+custody unchanged. Runtime already accepts exact descriptors with epoch>=2.
+
+Focused116 and final41/typecheck pass; desktop16 pass. The full verifier exits0 with
+1605 backend/473 runtime plus native/Worker/browser/build checks in
+.local/alpha-continuation-combined.log. Its extended Worker fixture passed, as did
+an explicit WRANGLER_SEND_METRICS=false run. Three isolated direct invocations lost
+a local connection during same-key readback; cause remains unproved. Evidence logs
+.local/alpha-continuation-worker{,-rerun,-final,-metrics-off}.log preserve both failures
+and success; no fixture retry hides these outcomes. No live/provider/model/deployment
+or credential change. Operator process-retirement evidence and new server-bound
+credentials remain necessary before any later hosted activation; database settlement
+is not universal descendant retirement or safe-sleep proof.
+
 Bounded restart follow-up (2026-09-18): owner said fix/continue. Current official
 sprites-js0.2.3 at390eb6353576f5da57ef7ec4b7f1eec5223de5f3 confirms the initial empty
 POST was correct; no version/body/idempotency/completion endpoint was missing.

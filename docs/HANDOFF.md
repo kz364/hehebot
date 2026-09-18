@@ -4,6 +4,26 @@ Hehebot uses direct Codex app-server **0.154.0** only. The protected hosted succ
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+Local continuation implementation now extends activation beyond epoch2 with a NEW
+grant/identity/cutoff for each expired session, never an in-place quota/expiry reset.
+Later predecessors must have only completed attempts with matching stored profile,
+turn/output receipt and coordinator release, no unsettled operations/effects/locks/
+questions/controller activity. Empty unused expired sessions may advance. Generation
+history is numeric/contiguous, identity-unique and receipt-bound; missing middle rows
+refuse reconstruction. Claim/watchdog now scope to current epoch/boot, retaining ALL
+historical epochs and pre-cutoff messages, not merely the immediate predecessor.
+Focused116 and final41/typecheck pass; real Worker epoch3 activation/second reopen
+passes in combined and explicit WRANGLER_SEND_METRICS=false invocation. Three direct
+isolated invocations lost a local connection during receipt readback; cause unproved,
+logs retained, not a diagnosed application defect. Combined verifier exits0:
+1605 backend/473 runtime plus native/Worker/browser/build, recorded in
+.local/alpha-continuation-combined.log; desktop16 pass. No live calls/deployment,
+credentials or model activity in this stage. Both assigned workers and all checks finished.
+Runtime already accepts exact epoch>=2 descriptors. Later live activation still
+requires operator process-stop/disposition evidence and rotated server-bound runtime
+authority; completed task and nativeStopped:true direct-child exit are different
+claims. No universal descendant/safe-sleep claim or credential-cache copying.
+
 Newest result supersedes the restart blocker below: owner said fix; source research
 and focused oracle justified one additional bounded restart before successor work.
 Second request202, changed kernel stable122s, same Sprite/nonce/services empty.

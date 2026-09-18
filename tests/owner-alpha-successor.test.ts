@@ -84,15 +84,57 @@ it('activates one exact successor while retaining predecessor custody and enforc
   const nativeRef='native:successor';lifecycle.submitted({epoch:2,boot_id:next.successor.boot_id},claim.run.id,1,nativeRef);lifecycle.coordinatorRelease({epoch:2,boot_id:next.successor.boot_id},claim.run.id,1,nativeRef,'completed');
   const result={status:'completed' as const,text:'successor result'},receipt={...next.successor.policy.text_only,thread_id:'thread',turn_id:nativeRef,output_sha256:createHash('sha256').update(result.text).digest('hex')};
   lifecycle.complete({epoch:2,boot_id:next.successor.boot_id},claim.run.id,1,result,receipt);
+  const intermediate=core.accept('owner',randomUUID(),randomUUID(),{schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'before epoch 3 cutoff'}});
+  f.setNow('2026-09-10T00:07:00.000Z');lifecycle.watchdog();
+  const third={schema_version:1 as const,transition_id:randomUUID(),owner_binding_sha256:next.owner_binding_sha256,
+   predecessor:{session_id:next.successor.policy.session_id,epoch:2,boot_id:next.successor.boot_id},retirement_receipt_sha256:'d'.repeat(64),
+   successor:{policy:{...next.successor.policy,session_id:randomUUID(),expires_at:'2026-09-10T00:11:00.000Z'},boot_id:randomUUID()}};
+  const thirdCommand={schema_version:1 as const,type:'owner-alpha.activate' as const,payload:{transition_id:third.transition_id,envelope_sha256:ownerAlphaSuccessorSha256(third)}};
+  core=new ControlCore(f.store,{...f.core.options,ownerAlpha:original,ownerAlphaSuccessor:third,ownerBindingSha256:third.owner_binding_sha256});
+  const thirdHash=createHash('sha256').update(JSON.stringify(thirdCommand)).digest('hex');
+  const lifecycleBefore=f.db.all('SELECT * FROM lifecycle');
+  for(const status of ['running','failed','recovery_required']){
+   f.db.exec('UPDATE runs SET status=? WHERE id=?',status,claim.run.id);
+   expect(core.accept(owner,randomUUID(),thirdHash,thirdCommand).error?.code).toBe('CAPABILITY_UNAVAILABLE');
+   expect(f.db.all('SELECT * FROM lifecycle')).toEqual(lifecycleBefore);
+   expect(retained()).toBe(before);
+  }
+  f.db.exec("UPDATE runs SET status='completed' WHERE id=?",claim.run.id);
+  const proofKey=`text_only_receipt:${claim.run.id}:1`,proof=f.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',proofKey)[0].value_json;
+  f.db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=?',JSON.stringify({...JSON.parse(proof),output_sha256:'0'.repeat(64)}),proofKey);
+  expect(core.accept(owner,randomUUID(),thirdHash,thirdCommand).error?.code).toBe('CAPABILITY_UNAVAILABLE');
+  f.db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=?',proof,proofKey);
+  f.db.exec("INSERT INTO resource_locks(resource_id,run_id,attempt,acquired_at) VALUES('successor-lock',?,1,?)",claim.run.id,core.now());
+  expect(core.accept(owner,randomUUID(),thirdHash,thirdCommand).error?.code).toBe('RESOURCE_BUSY');
+  f.db.exec("DELETE FROM resource_locks WHERE resource_id='successor-lock'");
+  expect(f.db.all('SELECT * FROM lifecycle')).toEqual(lifecycleBefore);
+  for(const boot_id of [third.transition_id,next.transition_id.toUpperCase()]){
+   const changed={...third,successor:{...third.successor,boot_id}};
+   core.options.ownerAlphaSuccessor=changed;
+   const changedCommand={...thirdCommand,payload:{...thirdCommand.payload,envelope_sha256:ownerAlphaSuccessorSha256(changed)}};
+   expect(core.accept(owner,randomUUID(),createHash('sha256').update(JSON.stringify(changedCommand)).digest('hex'),changedCommand).status).toBe('rejected');
+   expect(f.db.all('SELECT * FROM lifecycle')).toEqual(lifecycleBefore);
+  }
+  core.options.ownerAlphaSuccessor=third;
+  const thirdKey=randomUUID();expect(core.accept(owner,thirdKey,createHash('sha256').update(JSON.stringify(thirdCommand)).digest('hex'),thirdCommand).status).toBe('applied');
+  const lifecycle3=new LifecycleCore(f.store,core);lifecycle3.registerBoot(third.successor.boot_id);lifecycle3.ready({epoch:3,boot_id:third.successor.boot_id});
+  const epoch3Message=core.accept('owner',randomUUID(),randomUUID(),{schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'epoch 3'}});
+  expect(lifecycle3.claim({epoch:3,boot_id:third.successor.boot_id})?.run.id).toBe(epoch3Message.resource_id);
+  expect(f.store.run(intermediate.resource_id!).status).toBe('waiting');
   core=new ControlCore(f.store,{...f.core.options,ownerAlpha:original});core.ownerAlpha.initialize();
-  expect(core.ownerAlpha.policy).toEqual(next.successor.policy);expect(core.state().summary).toMatchObject({owner_alpha_session:{admitted_runs:1,persona_id:bot}});
+  expect(core.ownerAlpha.policy).toEqual(third.successor.policy);expect(core.state().summary).toMatchObject({owner_alpha_session:{admitted_runs:1,persona_id:bot}});
   expect(generationBytes()).toEqual(immutableGeneration);
   expect(()=>lifecycle.claim(oldIdentity)).toThrow();
   expect(()=>lifecycle.authorizeAttempt({epoch:2,boot_id:next.successor.boot_id},oldClaim.run.id,1)).toThrow();
-  f.setNow('2026-09-10T00:07:00.000Z');lifecycle.watchdog();
   expect(retained()).toBe(before);
   expect(generationBytes()).toEqual(immutableGeneration);
   expect(f.db.all<{id:string;status:string}>('SELECT id,status FROM runs WHERE id IN (?,?) ORDER BY id',oldClaim.run.id,claim.run.id).map(x=>x.status).sort()).toEqual(['claimed','completed']);
+  f.setNow('2026-09-10T00:12:00.000Z');lifecycle3.watchdog();
+  expect(retained()).toBe(before);
+  expect(f.store.run(claim.run.id).status).toBe('completed');
+  expect(f.store.run(epoch3Message.resource_id!).status).toBe('recovery_required');
+  f.db.exec("DELETE FROM runtime_metadata WHERE key='owner_alpha_generation:2'");
+  expect(()=>core.ownerAlpha.initialize()).toThrow();
  }finally{f.close();}
 });
 
