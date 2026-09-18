@@ -4,15 +4,32 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
-Schedule paused12:28Z after bounded browser diagnostics completed. Mac shell responds;
-PID33132 terminated and subsequent timed-out CLI processes killed/reaped. Diagnostic
-PID33279 exited0; none remain active. /json/version HTTP404 is inconclusive (prior
-working consent mode also returned404). CDP handshake5s and both owned session-info
-queries10s time out; agent-browser0.38.1 version/help work. No safe daemon-only reset
-found: doctor auto-cleans sidecars and close may close browser; neither executed.
-Ask owner to inspect existing Chrome for a debugging consent prompt, whose presence
-is unknown. No further navigation, reset, Chrome restart, cookie copy or send.
-Resume schedule after concrete browser recovery permits work; V3 remains unissued.
+Live78 FAILED: ONE normal send accepted15:15:30.593Z command
+b934fd98-c3f1-435a-8a28-dec36a7a376b, run da2fd086-4da0-4a9a-af82-a84367263fda,
+idempotency ca45c30b-06e8-4f37-be9d-ed4cfd6ae64d. BOOTING→READY/claimed→
+RECOVERY_REQUIRED/STALE_EPOCH attempt1, zero result. Old six unchanged. Reload UI
+became nonportal/origin null; persistence not verified. Browser worker STOPPED,
+no send authority. V3 expired15:22:07.073Z unchanged; no retries/manual wake during trial.
+Post-failure guest inspection15:18:39 onward wakes guest diagnostically, not trial
+wake evidence. Session ea68177f-469d-43df-8ee5-f77560c76ce0, epoch9,
+boot fb618624-0cfb-40a7-a310-c6dfd2ac50b2. Locked recovery inspection:
+dispatch submission_unknown, native thread/turn null, NATIVE_ACKNOWLEDGEMENT_UNKNOWN;
+service nativeStopped:true. No settlement/replay/unused-recovery authority follows.
+Listener failed SERVICE_RECOVERY_REQUIRED15:15:44, policyExpired:false, before lease
+watchdog. Tasks GET empty15:24:59; no DELETE. Private evidence .local/bootstrap-78-*.
+Sanitized submit-stage/code diagnostics patch integrated locally after SHA256 and
+applicability checks; host focused55/55, runtime514/514, typecheck and actual pinned
+native HTTP-manager composition pass. Logs `.local/native-submit-host-{focused,
+runtime,composition}.log`. Combined verifier stopped on backup fs.watch EMFILE:
+1668/1669 backend pass; isolated recheck reproduces.126 visible inotify instances,
+max_user_instances128. No unrelated processes killed; full verifier not green.
+Log `.local/native-submit-host-combined.log`. No diagnostic deployment or replay change.
+Supported native thread/list under both locks15:29:15 returned zero exact-workspace
+threads/no next page, and diagnostic native exited; absence is not settlement.
+Evidence `.local/bootstrap-78-native-list.jsonl`. Temporary guest helper remains
+`.local/inspect-78-native-list.mjs`; remove on next necessary guest access rather than
+waking solely for cleanup. Runtime worker T-01a0b2ce-eb38-7314-b3a3-452bb15e12ad now
+owns read-only comparison of hosted startup with working composition, not live calls.
 
 Owner clarification integrated in SPEC21.1, PRODUCT_UX_SPEC and PROJECT_INTENT:
 Amp is architecture reference only, not an operational dependency or coding UI.
@@ -31,11 +48,10 @@ around hold-file replacement; matching installed hashes/import check in
 `.local/hold-listener-{installed,start,stop}.log`. Worker deploy succeeded, version
 e3541c58-7602-4c21-8f5b-457dcf796123.09:25:54 manager manifest null, same Sprite warm.
 Provider-only09:31:22 reports same Sprite cold (`.local/unused-final-provider.json`).
-No new recovery config or send. `.local/prepare-bootstrap-v3.mjs` is prepared but
-NOT executed: run only after actual browser readiness; it preserves cost baseline
-and creates one fixed10-minute config with the real unused evidence, without seed
-retirement. Mac shell is now verified reachable; runner inventory was incomplete.
-Chrome/CDP automation readiness remains unverified as described above. No cookies copied.
+`.local/prepare-bootstrap-v3.mjs` has now executed ONCE after browser readiness;
+`.local/bootstrap-v3-activation.json` is the fixed live config. Do not rerun/extend it.
+It preserves cost baseline and uses real unused evidence without seed retirement.
+Mac shell/browser are now verified reachable; runner inventory was incomplete.
 
 Hold-before202 patch integrated locally. Host runtime505/505 and strengthened
 existing HTTP→manager→pinned native composition pass; two distinct Task PUT/GET

@@ -41,6 +41,28 @@ async function snapshot(directory) {
   }));
 }
 
+test('submission failure projection keeps only validated diagnostics without granting recovery authority', async t => {
+  const f = await fixture(t);
+  await f.journal.update(f.cursor, { phase: 'submission_unknown', nativeRunId: null });
+  for (const [diagnostic, expected] of [
+    [{ stage: 'thread_start', code: 'CODEX_RPC_ERROR', rpcCode: -32602, message: canary, params: canary },
+      { stage: 'thread_start', code: 'CODEX_RPC_ERROR', rpcCode: -32602 }],
+    [{ stage: 'turn_ack', code: canary, rpcCode: -32602 }, { stage: 'turn_ack', code: 'UNKNOWN_ERROR' }],
+    [{ stage: 'turn_start', code: 'CODEX_RPC_ERROR', rpcCode: canary }, { stage: 'turn_start', code: 'CODEX_RPC_ERROR' }],
+    [{ stage: 'turn_start', code: 'CODEX_RPC_ERROR', rpcCode: 2147483648 }, { stage: 'turn_start', code: 'CODEX_RPC_ERROR' }],
+    [{ stage: canary, code: 'CODEX_TIMEOUT' }, undefined],
+  ]) {
+    await f.journal.write(attemptId, { attemptId, status: 'recovery_required', threadId: null, nativeRunId: null,
+      rootSettled: false, submissionFailure: diagnostic });
+    const before = await snapshot(f.directory), report = await inspectCodexRecovery(f.directory);
+    assert.deepEqual(report.native.root.submissionFailure, expected);
+    assert.ok(report.issues.includes('NATIVE_ACKNOWLEDGEMENT_UNKNOWN'));
+    assert.equal(report.resumeAllowed, false); assert.equal(report.sleepAllowed, false); assert.equal(report.recoveryRequired, true);
+    assert.ok(!JSON.stringify(report).includes(canary));
+    assert.deepEqual(await snapshot(f.directory), before);
+  }
+});
+
 test('private real journal projects asymmetric identities and obligations without mutation or secret disclosure', async t => {
   const f = await fixture(t), before = await snapshot(f.directory);
   const report = await inspectCodexRecovery(f.directory);

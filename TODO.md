@@ -4,14 +4,26 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Browser diagnostics complete; schedule paused12:28Z:** Mac shell responds and
-all tracked diagnostic processes are terminated/reaped. Loopback HTTP responds404
-as it did during prior working consent-mode access; this alone is not Chrome failure.
-CDP handshake times out at5s; both owned agent-browser session queries time out at10s.
-No safe daemon-only reset was established: doctor may clean other sidecars and close
-may close the browser, so neither ran. Owner must inspect existing Mac Chrome for a
-pending remote-debugging consent prompt (presence unknown) before further recovery.
-No navigation retry, Chrome restart, credential copy or send. V3 remains unissued.
+**Live78 failed after claim, not chat success:** recovered browser/passive reads and
+host15:14:15Z manager-null/same-Sprite-cold preceded ONE normal composer send.
+Accepted15:15:30.593Z, run da2fd086; BOOTING→READY/attempt1→RECOVERY_REQUIRED/STALE_EPOCH,
+zero canonical results. Six old runs unchanged, including77 queued/attempt0. Reload
+returned but subsequent browser state check failed; reload persistence unverified.
+After failure/session expiry, locked guest inspection found epoch9 dispatch
+submission_unknown, no acknowledged native thread/turn, direct child nativeStopped.
+Listener had already failed SERVICE_RECOVERY_REQUIRED15:15:44 before expiry; original
+RPC error was discarded by adapter. Stage/code-only diagnostics are now integrated
+locally; host focused tests55/55, runtime514/514, typecheck and credential-free
+HTTP→hosted manager→native canonical completion pass. Combined verifier stopped at
+backup watcher EMFILE (1668/1669 backend pass); isolated recheck also fails at watch.
+Orb has126 visible inotify instances against limit128; no unrelated processes killed.
+No raw errors or replay-policy change. Native ack uncertainty remains parked;
+do NOT apply unused-before-staging recovery to78. Tasks list empty15:24:59, no DELETE.
+V3 expired unchanged15:22:07.073Z; preserve both reservations and lifetime baseline.
+Supported native thread/list under both locks15:29:15 returned zero matching threads
+and no next page; diagnostic native exited. This does not prove absence of prior
+effects. Next: compare hosted startup with the known
+working path; no new trial until exact custody is reconciled. Diagnostics not deployed.
 
 **Owner architecture clarification integrated (2026-09-18):** Hehebot remains a
 custom assistant independent of Amp accounts/runtime/SDK. Amp is a documented
@@ -27,10 +39,9 @@ custody review. No retirement claim or replay. Hold-before202 listener files are
 installed, supported Service stop/start completed, and Worker recovery source
 deployment succeeded.09:25 authenticated manager returns null; same Sprite warm.
 Provider-only09:31:22 observation reports same Sprite cold, not zero-billing proof.
-V3 recovery config is NOT issued. Current Chrome/CDP automation blocker and ownership
-are above. Runner inventory alone did not establish Mac executor unavailability.
-Next: restore responsive browser automation, confirm readiness, then issue one fixed
-trial and authorize one normal composer send. Do not transfer browser credentials.
+Subsequent v3 activation and recovered browser readiness are recorded above.
+Runner inventory alone did not establish Mac executor unavailability. Next: verify
+v3 passive availability and authorize one normal composer send, without replay.
 Prior$1 allowance/reservation and$10 total remain unchanged; actual billing unverified.
 No new message, reservation, Git push or production-gate change.
 

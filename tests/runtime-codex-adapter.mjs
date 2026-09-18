@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FileJournal } from '../runtime/file-journal.mjs';
@@ -25,6 +25,62 @@ async function fixture(t, rpc) {
   } });
   return { adapter, calls, journal, cwd };
 }
+
+test('submission diagnostics distinguish RPC from post-ack failure and survive reopen without replay', async t => {
+  const canary = 'SECRET_SUBMISSION_DIAGNOSTIC_CANARY';
+  for (const stage of ['thread_start', 'thread_ack', 'turn_start', 'turn_ack']) {
+    const f = await fixture(t, method => {
+      if (stage === (method === 'thread/start' ? 'thread_start' : 'turn_start')) {
+        throw Object.assign(new Error(canary), { code: 'CODEX_RPC_ERROR', rpcCode: -32602, data: canary });
+      }
+      return method === 'thread/start' ? { thread: { id: 'thread-a' } } : { turn: { id: 'turn-b' } };
+    });
+    const update = f.journal.update.bind(f.journal);
+    f.journal.update = (key, patch) => {
+      if (stage === 'thread_ack' && patch.status === 'submission_unknown' || stage === 'turn_ack' && patch.status === 'running') {
+        throw Object.assign(new Error(canary), { code: canary, rpcCode: -32602 });
+      }
+      return update(key, patch);
+    };
+    const row = await f.adapter.submit(input);
+    assert.deepEqual(row.submissionFailure, { stage, code: stage.endsWith('_ack') ? 'UNKNOWN_ERROR' : 'CODEX_RPC_ERROR',
+      ...(stage.endsWith('_ack') ? {} : { rpcCode: -32602 }) });
+    assert.equal(row.error, 'SUBMISSION_OUTCOME_UNKNOWN'); assert.equal(row.status, 'recovery_required');
+    assert.equal(row.rootSettled, false); assert.equal(row.nativeRunId, null);
+    assert.equal(row.threadId, stage.startsWith('turn') ? 'thread-a' : null);
+    const persisted = await readFile(join(f.cwd, `${input.attemptId}.json`), 'utf8');
+    assert.ok(!persisted.includes(canary));
+    const reopened = new CodexAdapter({ cwd: f.cwd, journal: new FileJournal(f.cwd), testMode: true,
+      rpc: () => assert.fail('unknown submission must not replay') });
+    assert.deepEqual((await reopened.submit(input)).submissionFailure, row.submissionFailure);
+    assert.equal(f.calls.length, stage.startsWith('turn') ? 2 : 1);
+  }
+});
+
+test('submission diagnostics redact hostile errors and bound RPC codes without coercion or getters', async t => {
+  const canary = 'SECRET_SUBMISSION_DIAGNOSTIC_CANARY';
+  let unsafeReads = 0;
+  const errors = [null, canary, new Error(canary), { code: canary },
+    { get code() { unsafeReads++; throw new Error(canary); } },
+    new Proxy({}, { getOwnPropertyDescriptor() { throw new Error(canary); } }),
+    { code: 'CODEX_TIMEOUT', rpcCode: -32602 },
+    ...[-2147483648, 2147483647, -2147483649, 2147483648, 1.5, NaN, Infinity, canary,
+      { toString() { unsafeReads++; throw new Error(canary); } }].map(rpcCode => ({ code: 'CODEX_RPC_ERROR', rpcCode, message: canary }))];
+  for (const [index, error] of errors.entries()) {
+    const f = await fixture(t, () => { throw error; });
+    const row = await f.adapter.submit(input);
+    assert.deepEqual(row.submissionFailure, { stage: 'thread_start', code: index < 6 ? 'UNKNOWN_ERROR'
+      : index === 6 ? 'CODEX_TIMEOUT' : 'CODEX_RPC_ERROR',
+    ...(index === 7 ? { rpcCode: -2147483648 } : index === 8 ? { rpcCode: 2147483647 } : {}) });
+    assert.ok(!(await readFile(join(f.cwd, `${input.attemptId}.json`), 'utf8')).includes(canary));
+  }
+  assert.equal(unsafeReads, 0);
+  for (const method of ['thread/start', 'turn/start']) {
+    const f = await fixture(t, called => called === method ? { secret: canary } : { thread: { id: 'thread-a' } });
+    assert.deepEqual((await f.adapter.submit(input)).submissionFailure, {
+      stage: method === 'thread/start' ? 'thread_ack' : 'turn_ack', code: 'CODEX_PROTOCOL_ERROR' });
+  }
+});
 
 test('production cannot be enabled by successful mock submission', async t => {
   const { adapter } = await fixture(t);

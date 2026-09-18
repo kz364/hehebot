@@ -9,6 +9,19 @@ export const RESTRICTED_CODEX_FEATURES = Object.freeze({ apps: false, plugins: f
 export const OBSERVED_COLLAB_TOOLS = Object.freeze(['sendInput', 'resumeAgent', 'wait', 'closeAgent', 'sendMessage', 'followupTask', 'interruptAgent', 'listAgents']);
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = code => { throw Object.assign(new Error(code), { code }); };
+/** Diagnostic only: never inspect messages, coerce values or invoke error getters.
+ * Ack stages mean the RPC returned, not that its reply or persistence succeeded. */
+export function projectSubmissionFailure(stage, error) {
+  if (!['admission', 'thread_start', 'thread_ack', 'turn_start', 'turn_ack'].includes(stage)) return null;
+  let code, rpcCode;
+  try {
+    code = Object.getOwnPropertyDescriptor(error, 'code')?.value;
+    rpcCode = Object.getOwnPropertyDescriptor(error, 'rpcCode')?.value;
+  } catch { /* Unknown thrown values remain fully redacted. */ }
+  if (!['CODEX_RPC_ERROR', 'CODEX_TIMEOUT', 'CODEX_PROTOCOL_ERROR', 'OWNER_ALPHA_ADMISSION_DENIED'].includes(code)) code = 'UNKNOWN_ERROR';
+  return { stage, code, ...(code === 'CODEX_RPC_ERROR' && Number.isInteger(rpcCode) &&
+    rpcCode >= -2147483648 && rpcCode <= 2147483647 ? { rpcCode } : {}) };
+}
 const observationOwners = row => [row, ...Object.values(row.childObligations ?? {})];
 const hasReceiver = (row, threadId) => observationOwners(row).some(owner => Object.values(owner.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(threadId)));
 const spawnOrigin = (row, threadId) => observationOwners(row).filter(owner =>
@@ -114,31 +127,36 @@ export class CodexAdapter {
       if (prior.fingerprint !== fingerprint) fail('IDEMPOTENCY_CONFLICT');
       return { ...prior, recoveryRequired: prior.status !== 'running' };
     }
+    let submissionStage = 'admission';
     try {
       if (this.#ownerAlpha && this.#now() >= Date.parse(this.#ownerAlpha.expires_at)) fail('OWNER_ALPHA_ADMISSION_DENIED');
+      submissionStage = 'thread_start';
       const started = await this.rpc('thread/start', {
         cwd: this.cwd, model: input.model, approvalPolicy: 'untrusted', ephemeral: false,
         ...(this.#permissionsProfile === undefined ? { sandbox: 'read-only' } : { permissions: this.#permissionsProfile }),
         ...(this.textOnlyProfile ? { dynamicTools: [] } : this.dynamicTools.length ? { dynamicTools: this.dynamicTools } : {}),
         ...(Object.keys(config).length ? { config } : {}),
       });
+      submissionStage = 'thread_ack';
       if (typeof started?.thread?.id !== 'string' || !started.thread.id) fail('CODEX_PROTOCOL_ERROR');
       // Persist the native thread before turn/start; even a successful thread start is not inference.
       await this.journal.update(input.attemptId, { threadId: started.thread.id, status: 'submission_unknown',
         ...(this.textOnlyProfile ? { textOnlySubmission: { threadStart: { model: input.model, dynamicTools: [] }, threadIdAck: started.thread.id } } : {}) });
       if (this.#ownerAlpha && this.#now() >= Date.parse(this.#ownerAlpha.expires_at)) fail('OWNER_ALPHA_ADMISSION_DENIED');
+      submissionStage = 'turn_start';
       const reply = await this.rpc('turn/start', { threadId: started.thread.id,
         input: [{ type: 'text', text: input.message }], clientUserMessageId: input.attemptId,
         ...(this.textOnlyProfile ? { environments: [] } : {}) });
+      submissionStage = 'turn_ack';
       if (typeof reply?.turn?.id !== 'string' || !reply.turn.id) fail('CODEX_PROTOCOL_ERROR');
       return await this.journal.update(input.attemptId, {
         nativeRunId: reply.turn.id, status: 'running', initialInference: 'inProgress',
         ...(this.textOnlyProfile ? { textOnlySubmission: { threadStart: { model: input.model, dynamicTools: [] },
           threadIdAck: started.thread.id, turnStart: { threadId: started.thread.id, environments: [] }, turnIdAck: reply.turn.id } } : {}),
       });
-    } catch {
+    } catch (error) {
       return this.journal.update(input.attemptId, { status: 'recovery_required', recoveryRequired: true,
-        error: 'SUBMISSION_OUTCOME_UNKNOWN' });
+        error: 'SUBMISSION_OUTCOME_UNKNOWN', submissionFailure: projectSubmissionFailure(submissionStage, error) });
     }
   }
   async requireRun(attemptId) {

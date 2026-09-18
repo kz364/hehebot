@@ -3,7 +3,7 @@ import { lstat, open, opendir, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { OBSERVED_COLLAB_TOOLS, projectTokenUsage } from './codex-adapter.mjs';
+import { OBSERVED_COLLAB_TOOLS, projectTokenUsage, projectSubmissionFailure } from './codex-adapter.mjs';
 import { readQuietPhases } from './codex-quiet-phases.mjs';
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -172,6 +172,11 @@ export async function inspectCodexRecovery(directory, attemptId = undefined) {
     const root = { threadId: native.threadId ?? null, turnId: native.nativeRunId ?? null,
       status: native.status, observedTerminal: native.rootSettled,
       ...(native.initialInference === undefined ? {} : { initialInference: native.initialInference }) };
+    if (native.submissionFailure !== undefined) {
+      const diagnostic = projectSubmissionFailure(native.submissionFailure?.stage, native.submissionFailure);
+      if (diagnostic) root.submissionFailure = diagnostic;
+      else issue('SUBMISSION_DIAGNOSTIC_INVALID');
+    }
     if (native.tokenUsage !== undefined) root.tokenUsage = projectTokenUsage(native.tokenUsage);
     const children = [], obligations = [], origins = new Map();
     const items = (owner, threadId, turnId) => {

@@ -4,6 +4,52 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+V3 live staging (2026-09-18): owner returned home/requested retry; existing Mac
+Chrome/CDP and SSO passive readiness succeeded15:11:28Z with six runs unchanged.
+Only then activated fixed v3 expiry15:22:07.073Z,180s session/120s task, same cost
+baseline/reservation/cap and exact unused8 evidence.15:13:27 browser confirms admission
+available, empty composer and no old-run change.15:14:15 authenticated manager null
+and provider same Sprite cold corroborate passive control-plane-only behavior.
+One normal composer message78 applied15:15:30.593Z, commandb934fd98, runda2fd086.
+BOOTING→READY/attempt1 then RECOVERY_REQUIRED/STALE_EPOCH by15:17:48.912; zero
+canonical result. Six prior runs unchanged. Reload returned15:18:17 but subsequent
+state evaluation failed;15:18:44 origin null/no composer, so persistence unverified.
+No host guest exec/manual wake before failure, no duplicate send. Private evidence:
+`.local/bootstrap-v3-{activation.log,activation.json,before-message.json}`.
+
+First post-failure diagnostic guest exec15:18:39 wakes guest explicitly; it is not
+part of the message-wake demonstration. Listener timestamps show native service
+failure SERVICE_RECOVERY_REQUIRED15:15:44.383, policyExpired:false/operatorStopped:false,
+then stop and LAUNCH_REFUSED_OR_UNKNOWN. Under both actual directory flocks, offline
+inspector shows epoch9 dispatch submission_unknown, exact run78/attempt1, native
+thread/turn null and NATIVE_ACKNOWLEDGEMENT_UNKNOWN; service journal nativeStopped:true.
+No observed native acknowledgment is not proof that thread/start had no effect.
+Original RPC cause was discarded by adapter catch; source tracing suggests later
+STALE_EPOCH is lease-watchdog fallout, not an established initial identity mismatch.
+Sanitized stage/code-only durable diagnostics and existing inspector projection are
+integrated locally. The checked patch SHA256 is
+1a0a2ac587d6cae80c30a93bf851a7d064d983c7d8543024fde8667f9f2b0ebd.
+Host `node --test tests/runtime-codex-adapter.mjs tests/runtime-codex-recovery-inspect.mjs`
+passes55/55; `npm run test:runtime` passes514/514. Typecheck and
+`node scripts/test-codex-hosted-manager.mjs` pass with one native/scripted completion,
+HTTP wake and prelaunch bootstrap hold, not real model/provider acceptance.
+Full verifier stopped on encrypted-backup fs.watch EMFILE:1668/1669 backend pass;
+isolated recheck reproduces. Orb showed126 visible inotify instances against128
+max_user_instances; no unrelated processes terminated or test weakened. Logs
+`.local/native-submit-host-{focused,runtime,composition,combined}.log` and
+`.local/native-submit-backup-recheck.log`. Full combined check is not green.
+Diagnostics allowlist stages/error codes and
+signed32-bit RPC codes, omit raw error messages, and preserve UNKNOWN/no replay.
+They cannot recover78's discarded original error. No diagnostic deployment yet.
+Supported native thread/list under both locks15:29:15.644Z returned zero matching
+exact-workspace threads/no further page; diagnostic native exited. No thread/start,
+resume or inference was requested; absence is not proof of no prior native effect.
+Private evidence `.local/bootstrap-78-native-list.jsonl`. No replay or
+unused-before-staging recovery for78.
+V3 expired unchanged15:22:07.073Z. Native Tasks GET empty15:24:59, no DELETE or refund.
+Evidence `.local/bootstrap-78-{listener-private.log,journal-selection.jsonl,
+locked-inspection.json,tasks-private.json}` stays private. Production gates false.
+
 Owner architecture alignment (2026-09-18, docs only): imported the reviewed
 three-file clarification without replacing current live-status documents. Amp is
 a documented reference, not a wrapper/dependency/coding UX; deterministic ingress
