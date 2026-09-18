@@ -4,6 +4,19 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Expired trial reconciliation (2026-09-18T08:12:18Z): fixed expiry08:10:39.410Z
+passed unchanged; authenticated manager manifest null, same Sprite provider status
+cold. One subsequent bounded guest exec observed the registered listener running
+with its original07:48 start time and zero staged session directories. The inspection
+itself wakes the guest; neither observation proves fresh-process recovery or live
+passive navigation. No new trial or model submission. Evidence:
+`.local/bootstrap-expired-{reconciliation.json,listener-inspection.log}`.
+Browser execution diagnosis: no connected live runners; latest pending Mac tool is
+read-only Cloudflare billing navigation with no recorded PID/result. Later host
+messages have not been recorded as executed. Recovery/no-send instructions sent;
+reconnect and reconcile the existing runner before assigning a new live attempt.
+No credentials transferred and no new fixtures created for this execution blocker.
+
 Manager/native composition and service staging (2026-09-18): host applied the
 four-file fixture patch against the published baseline after verifying its digest.
 `node scripts/test-codex-hosted-manager.mjs` passes: one actual pinned native start,

@@ -41,9 +41,16 @@ Authenticated manager readback returns null before admission. The existing Sprit
 `hehebot-listener` HTTP Service registered at07:48Z; startup monitoring completed,
 and provider inventory reported cold at07:54:08Z. That does not prove process loss
 or cold-start readiness. At08:08:20Z manager manifest was still null and Sprite cold.
-The browser worker is stalled in its earlier tool call (state unchanged since07:37Z),
-so live passive navigation/message acceptance remains blocked. No message authorized
-to that worker; let the fixed trial expire rather than extend or race a submission.
+Execution diagnosis: `list_runners` reports no live runners. The Mac browser
+worker's pending action is a read-only Cloudflare billing navigation; no PID/result
+or later submission is recorded. Recovery instructions revoke any pending test
+ownership until it reports back; do not duplicate or retry the pending action.
+The fixed trial expired unchanged08:10:39.410Z. At08:12:18Z manager manifest was
+null and provider status cold. A subsequent bounded guest inspection found the
+listener running with its original07:48 start time and zero staged sessions.
+That inspection wakes the guest; it is not passive portal or fresh-process recovery
+evidence. No new trial or fixture. Exact unblock: reconnect the Mac Amp runner,
+reconcile its pending tool, and confirm authenticated browser readiness FIRST.
 Persistent imports pass after including generated contracts.
 Earlier combined runs failed missing mock getAlarm and unconsumed fixture POST
 bodies. Both regressions are fixed; `.local/bootstrap-combined.log` is the fresh

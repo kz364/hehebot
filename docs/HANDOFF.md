@@ -4,6 +4,20 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+Execution recovery diagnosis08:12Z: no live runners connected (`list_runners`).
+Browser thread's pending tool is Cloudflare billing navigation in `/Users/kaspar`,
+session `hehebot-cf-billing`; no PID/result or later message submission is recorded.
+Do not infer that queued host messages executed. Sent recovery/no-send instructions;
+wait for connection outcome and exact pending-command reconciliation before any
+ownership transfer or retry. Orb has no authenticated replacement browser; do not
+copy cookies. Reconnect the Mac runner and prove readiness before staging a new trial.
+Existing trial expired08:10:39.410Z unchanged;08:12:18Z manager manifest null and
+same Sprite cold. Subsequent bounded guest inspection observed listener running
+with original07:48 start time, zero staged session directories. That exec wakes the
+guest and does not prove passive-visit behavior or fresh-process cold recovery.
+Evidence: `.local/bootstrap-expired-reconciliation.json` and
+`.local/bootstrap-expired-listener-inspection.log`. No new fixture/trial/message.
+
 Latest host integration: manager/native positive composition and legacy hosted-owner
 regression pass; typecheck passes after `npm run types`. Four fixture/verifier files
 are integrated locally, not published. One actual native start/one scripted response
