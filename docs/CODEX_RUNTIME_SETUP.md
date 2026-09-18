@@ -63,6 +63,13 @@ portal binding. Do not copy its account cache. Every assigned transition receive
 its own exclusive directory, task token and journal. Existing or partial directories
 are refusal evidence, not disposable retry state.
 
+Hosted launch requires Linux `flock` and `setpriv` (util-linux). After acquiring
+the native-home and session locks, the shared launcher drops bounding, inheritable
+and ambient capabilities and sets no-new-privileges before the native entrypoint.
+Missing/failed capability drop refuses launch without an unrestricted fallback.
+This is required for the selected Sprite's Codex sandbox; do not disable the
+sandbox to bypass a startup failure. It is not descendant-settlement evidence.
+
 Control-plane opt-in requires `HEHEBOT_OWNER_ALPHA_BOOTSTRAP` (strict config in
 `src/core/owner-alpha-bootstrap.ts`), distinct strong manager/signing secrets and
 the original hosted owner binding. `HEHEBOT_OWNER_ALPHA_WAKE` becomes `{ "url":

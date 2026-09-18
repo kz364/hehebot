@@ -4,6 +4,27 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
+**Hosted startup defect reproduced and fixed (2026-09-18):** the automatic listener
+omitted the capability-drop wrapper required by earlier manual Sprite launches.
+Live listener had nonzero inherited/permitted/effective/bounding/ambient caps and
+NoNewPrivs0. Fresh credential-free pinned native thread/start failed -32603 under
+those caps and acknowledged under all-zero caps/NoNewPrivs1; no turn/account used.
+Shared hosted launcher now executes setpriv after both locks, refusing failure
+without fallback. Focused6 and runtime515/515 pass. Exact launcher plus sanitized
+diagnostics installed after supported Service stop; hashes/imports verified and
+Service start completed. Fresh full combined recheck exits0:1669 backend/515 runtime
+plus Worker/browser/native/service/build.16:25 authenticated manager assignment null.
+No new policy/message, replay or settlement.
+Next: explicit claimed-pre-turn quarantine design, preserving startup UNKNOWN and
+reservations. Tagged Codex thread/start can persist metadata and send generate:false
+prewarm/auth/catalog requests before turn/start; no-turn is not no-effects/zero-cost.
+Core default-off preparation is active in an isolated worker; runtime producer is
+not implemented. Supported prospective fence is managed allow_remote_control=false
+and [features] memories=false on the dedicated Sprite. This changes shared native
+access controls and awaits explicit approval; no managed file has been changed.
+Historical ingress/custody still needs operator review. No quarantine authority or
+new live trial has been issued.
+
 **Live78 failed after claim, not chat success:** recovered browser/passive reads and
 host15:14:15Z manager-null/same-Sprite-cold preceded ONE normal composer send.
 Accepted15:15:30.593Z, run da2fd086; BOOTING→READY/attempt1→RECOVERY_REQUIRED/STALE_EPOCH,
@@ -27,8 +48,8 @@ effects. Locked15:48 config/read reconstructs original profile/hash and confirms
 permissions match, network disabled, disjoint canonical roots and no reviewed
 ancestor instruction/config candidates. This does not establish the original error.
 Current successor requires completed receipts; child-stop cannot unblock claimed
-UNKNOWN. Next: establish what pinned native thread/start can do before turn/start;
-no new trial until exact custody is reconciled. Diagnostics not deployed.
+UNKNOWN. Startup audit and subsequent launcher/diagnostic deployment are above;
+no new trial until exact custody is reconciled.
 
 **Owner architecture clarification integrated (2026-09-18):** Hehebot remains a
 custom assistant independent of Amp accounts/runtime/SDK. Amp is a documented

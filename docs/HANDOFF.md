@@ -4,6 +4,41 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+New startup defect confirmed synthetically on same Sprite: deployed listener
+PID20242 inherited CapInh/Prm/Eff/Bnd/Amb=a82435fb, NoNewPrivs0. Saved Service config
+starts Node directly, omitting the manual setpriv wrapper documented below.
+Fresh private synthetic homes and loopback-only no-auth provider: default caps
+thread/start returns -32603; all-zero caps/NoNewPrivs1 acknowledges thread. No
+turn/start or account used, both native diagnostics exited and homes removed.
+Evidence `.local/bootstrap-78-{listener-capabilities,caps-reproduction}.jsonl`.
+Host now places setpriv after both locks in shared hosted launcher; focused6 and
+runtime515 pass. Three runtime files (launcher, adapter, recovery inspector) installed
+only after supported Service stop; old deployed hashes matched host27088 baseline,
+new hashes and import-only check match. Supported Service start complete;16:25:11Z
+authenticated manager manifest null. Logs `.local/cap-drop-*`; no Worker/policy
+mutation or trial/replay. Full verifier PID3051673 finished exit0:1669 backend/515
+runtime plus Worker/browser/native/service/build, `.local/hosted-cap-drop-combined.log`.
+
+Quarantine preparation: oracle recommends explicit default-off one-use authority,
+not weakening settlement/unused guards. Core worker T-01a0b33f-5891-754d-b68d-b88db176da33
+has exact host local-main archive SHA25632037cee07ed5e2ff2d44a03d0103b1c695253b74a856378a92d5bfdaaee3071
+and owns four core/test files for claimed_pre_turn_quarantine. Host owns runtime/docs.
+Keep old run recovery-required, all reservations/unknown startup effects and no-sleep;
+new explicit operator evidence/authority must bind exact attempt1, literal null native
+IDs, historical canonical custody, persistent fence and fresh successor. No live
+quarantine issued. Corrected core worker instruction: run recovery_required but
+attempt exactly claimed (watchdog does not mutate attempt); no status normalization.
+Runtime worker finished supported fence research: managed /etc/codex/requirements.toml
+allow_remote_control=false and [features] memories=false act at startup. Changing
+shared native access controls awaits explicit owner approval; do not install yet.
+No read-only RPC exposes persisted ingress preference, and status can race startup;
+do not launch shared-home diagnostics before managed fence. Historical custody/ingress
+review remains necessary; prospective config does not prove past conditions.
+Do not assume legacy features.remote_control=false works. Native thread/start can
+persist metadata and send generate:false prewarm/auth/catalog requests pre-turn;
+null threadId under intact journal custody means no client turn/start, not no effects
+or billing. Historical branches remain unknown. Do not resume old native sessions.
+
 Live78 FAILED: ONE normal send accepted15:15:30.593Z command
 b934fd98-c3f1-435a-8a28-dec36a7a376b, run da2fd086-4da0-4a9a-af82-a84367263fda,
 idempotency ca45c30b-06e8-4f37-be9d-ed4cfd6ae64d. BOOTING→READY/claimed→
@@ -25,7 +60,8 @@ runtime,composition}.log`. Combined verifier stopped on backup fs.watch EMFILE:
 max_user_instances128. Orb-only sysctl128→256 resolves unchanged watcher test11/11.
 Fresh full verifier exits0:1669 backend/514 runtime plus Worker/browser/native/service/
 build, `.local/native-submit-host-combined-recheck.log`. Earlier failure retained in
-`.local/native-submit-host-combined.log`. No diagnostic deployment or replay change.
+`.local/native-submit-host-combined.log`. Diagnostic deployment subsequently completed
+above; no replay change.
 Supported native thread/list under both locks15:29:15 returned zero exact-workspace
 threads/no next page, and diagnostic native exited; absence is not settlement.
 Evidence `.local/bootstrap-78-native-list.jsonl`. Temporary helpers removed locally
@@ -36,9 +72,8 @@ no thread/start/turn/account/model request, diagnostic native exited. First guar
 refused before native launch (persisted restrictedPermissions is intentionally absent;
 service sets it in memory); corrected raw-contract inspection succeeded.
 Core read-only review confirms no current claimed-UNKNOWN successor path; stop/locks
-and empty thread/list cannot replace completed receipts. Runtime worker
-T-01a0b2ce-eb38-7314-b3a3-452bb15e12ad now checks pinned thread/start side effects
-before turn/start. Host source audit found fsynced threadId precedes turn/start and
+and empty thread/list cannot replace completed receipts. Tagged startup audit is
+summarized above. Host source audit found fsynced threadId precedes turn/start and
 no supported caller clears it. This is not authority to settle/replay78.
 
 Owner clarification integrated in SPEC21.1, PRODUCT_UX_SPEC and PROJECT_INTENT:

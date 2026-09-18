@@ -72,10 +72,11 @@ function injectedFixture(f, fixture, extra = [], inspect = () => {}) {
       const digest = createHash('sha256').update(f.bytes).digest('hex');
       assert.equal(command, 'bash');
       assert.deepEqual(argv, [lockScript, f.nativeHome, 'bash', lockScript, f.stateDirectory,
+        'setpriv', '--bounding-set=-all', '--inh-caps=-all', '--ambient-caps=-all', '--no-new-privs', '--',
         process.execPath, entry, '--run-hosted-locked', f.path, digest]);
       assert.deepEqual(options, { stdio: 'inherit' });
       inspect(argv);
-      return f.trackedSpawn(command, argv.slice(0, 5).concat(process.execPath, fixture,
+      return f.trackedSpawn(command, argv.slice(0, argv.indexOf(process.execPath)).concat(process.execPath, fixture,
         f.nativeHome, f.stateDirectory, ...extra), options);
     },
     get calls() { return calls; },
@@ -91,7 +92,7 @@ test('native-home first and session second locks exclude fixture entry; release 
     await writeFile(fixture, `
       import { spawn } from 'node:child_process';
       import { once } from 'node:events';
-      import { writeFile } from 'node:fs/promises';
+      import { writeFile, readFile } from 'node:fs/promises';
       const [home, state, marker, report, script] = process.argv.slice(2);
       await writeFile(marker, 'entered');
       const results = [];
@@ -99,7 +100,8 @@ test('native-home first and session second locks exclude fixture entry; release 
         const child = spawn('bash', [script, directory, process.execPath, '-e', 'process.exit(0)']);
         results.push((await once(child, 'exit'))[0]);
       }
-      await writeFile(report, JSON.stringify(results));
+      const status = await readFile('/proc/self/status', 'utf8');
+      await writeFile(report, JSON.stringify({ results, status }));
     `, { mode: 0o600 });
     const injected = injectedFixture(f, fixture, [marker, report, lockScript]);
 
@@ -114,7 +116,10 @@ test('native-home first and session second locks exclude fixture entry; release 
     assert.deepEqual(await launchHostedOwnerAlpha(f.path, { spawnImpl: injected.spawnImpl.bind(injected) }),
       { code: 0, signal: null });
     assert.equal(await readFile(marker, 'utf8'), 'entered');
-    assert.deepEqual(JSON.parse(await readFile(report, 'utf8')), [73, 73]);
+    const observed = JSON.parse(await readFile(report, 'utf8'));
+    assert.deepEqual(observed.results, [73, 73]);
+    for (const field of ['CapInh', 'CapPrm', 'CapEff', 'CapAmb']) assert.match(observed.status, new RegExp(`^${field}:\\s+0+$`, 'm'));
+    assert.match(observed.status, /^NoNewPrivs:\s+1$/m);
     assert.equal(injected.calls, 3);
     for (const directory of [f.nativeHome, f.stateDirectory]) {
       const contender = spawn('bash', [lockScript, directory, process.execPath, '-e', 'process.exit(0)']);
@@ -123,6 +128,22 @@ test('native-home first and session second locks exclude fixture entry; release 
     await assert.rejects(lstat(join(f.stateDirectory, 'journal')), { code: 'ENOENT' });
     await assert.rejects(lstat(join(f.stateDirectory, 'workspace')), { code: 'ENOENT' });
   });
+
+test('capability-drop refusal preserves custody and never falls back or retries entry', async t => {
+  const f = await setupConfig(t), refusal = join(f.root, 'refuse-setpriv');
+  await writeFile(refusal, '#!/bin/sh\nexit 77\n', { mode: 0o700 });
+  let calls = 0;
+  const result = await launchHostedOwnerAlpha(f.path, { spawnImpl(command, argv, options) {
+    calls++;
+    assert.equal(argv[5], 'setpriv');
+    return f.trackedSpawn(command, [...argv.slice(0, 5), refusal, ...argv.slice(6)], options);
+  } });
+  assert.deepEqual(result, { code: 77, signal: null });
+  assert.equal(calls, 1);
+  assert.equal(await readFile(f.path, 'utf8'), f.bytes);
+  await assert.rejects(lstat(join(f.stateDirectory, 'journal')), { code: 'ENOENT' });
+  await assert.rejects(lstat(join(f.stateDirectory, 'workspace')), { code: 'ENOENT' });
+});
 
 test('abort is forwarded once to the exact exec-preserved child and is not retried', { timeout: 15000 }, async t => {
   const f = await setupConfig(t), fixture = join(f.root, 'abort.mjs');

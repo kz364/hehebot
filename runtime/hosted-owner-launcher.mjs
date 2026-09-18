@@ -26,8 +26,13 @@ export async function launchHostedOwnerAlpha(path, { signal, expectedSha256, spa
   // Fixed lock order: native home first, then session. Both survive shell exec.
   // Child re-reads only bytes matching this digest before any account work, so
   // an owner config edit cannot silently substitute a directory after locking.
+  // Sprite's inherited capabilities break the native sandbox. Drop them at the
+  // shared hosted boundary, not only in an operator's manual launch command.
+  // setpriv failure must stop launch; never fall back to an unrestricted child.
   const child = spawnImpl('bash', [lockScript, config.nativeHome, 'bash', lockScript,
-    config.stateDirectory, process.execPath, entry, '--run-hosted-locked', path, sha256], { stdio: 'inherit' });
+    config.stateDirectory, 'setpriv', '--bounding-set=-all', '--inh-caps=-all',
+    '--ambient-caps=-all', '--no-new-privs', '--', process.execPath, entry,
+    '--run-hosted-locked', path, sha256], { stdio: 'inherit' });
   return new Promise((resolveExit, reject) => {
     const stop = () => { child.kill('SIGTERM'); };
     const cleanup = () => signal?.removeEventListener('abort', stop);

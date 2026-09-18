@@ -4,6 +4,50 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Hosted capability-drop defect (2026-09-18): earlier successful manual Sprite
+launches used setpriv, but the automatic listener Service registered Node directly.
+Live listener PID20242 showed CapInh/Prm/Eff/Bnd/Amb=a82435fb and NoNewPrivs0.
+Two fresh private synthetic homes, actual pinned Codex, fake no-auth loopback-only
+provider, initialize/config/read/thread/start only: default caps returned -32603;
+setpriv all-dropped/NoNewPrivs1 acknowledged. Both native diagnostics exited and
+homes/helpers were removed. No real account or turn used. Evidence
+`.local/bootstrap-78-{listener-capabilities,caps-reproduction}.jsonl`.
+This reproduces a concrete startup defect, not the discarded exact error of78.
+
+Shared hosted launcher now invokes supported setpriv after both locks and before
+the native entrypoint. No fallback, retry, manifest or retirement change. Focused6
+tests verify real locks and signal PID through exec, effective/permitted/inheritable/
+ambient caps0, NoNewPrivs1, exact bounding-drop invocation, and refusal without
+entry. Orb bounding mask remains nonzero despite setpriv; guest reproduction
+independently verifies all five masks0. Runtime515/515 pass; full combined recheck
+exited0:1669 backend/515 runtime plus Worker/browser/native/service/build in
+`.local/hosted-cap-drop-combined.log`. Desktop16 passed at preceding checkpoint;
+desktop source is unchanged by this launcher edit.
+
+Supported Service stop completed exit0; deployed originals matched host baseline
+hashes. Installed launcher/adapter/inspector exactly match new local SHA256 values,
+import-only check started no native process, supported Service start completed.
+Authenticated manager16:25:11.484Z returned null; no policy/Worker changes/new message.
+Logs `.local/cap-drop-{deployed-before,installed,listener-stop,listener-start}.log`
+and `.local/cap-drop-manager-readback.jsonl`. All historical custody remains retained.
+
+Pinned startup audit: thread/start can persist native identity and perform auth,
+catalog and generate:false WebSocket prewarm before turn/start. See tagged
+[startup prewarm](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/core/src/session_startup_prewarm.rs#L185-L327).
+Null durable threadId under reviewed intact single-writer custody supports no
+first-party turn/start, not no startup effects or billing. Oracle's scoped design
+review supports preparing a distinct explicit one-use claimed-pre-turn quarantine
+authority, preserving UNKNOWN and reservations, not reusing unused/settlement guards.
+Core implementation is assigned in an isolated exact host snapshot; no live grant.
+Shared-home memory/alternate-ingress fences remain prerequisites. Tagged source
+supports managed `/etc/codex/requirements.toml` allow_remote_control=false plus
+[features] memories=false; legacy features.remote_control is ignored. No supported
+read-only RPC exposes persisted remote-control preference; status can race startup.
+Current readback does not prove historical disablement. Do not restart shared-home
+app-server just to inspect status before a managed startup fence is established.
+No managed requirements/access-control mutation has been performed; installing the
+prospective managed fence awaits explicit owner approval for shared native controls.
+
 V3 live staging (2026-09-18): owner returned home/requested retry; existing Mac
 Chrome/CDP and SSO passive readiness succeeded15:11:28Z with six runs unchanged.
 Only then activated fixed v3 expiry15:22:07.073Z,180s session/120s task, same cost
@@ -46,7 +90,7 @@ log `.local/native-submit-host-desktop.log`.
 Earlier failed check remains recorded; no test skips or application changes.
 Diagnostics allowlist stages/error codes and
 signed32-bit RPC codes, omit raw error messages, and preserve UNKNOWN/no replay.
-They cannot recover78's discarded original error. No diagnostic deployment yet.
+They cannot recover78's discarded original error. Subsequent deployment is above.
 Supported native thread/list under both locks15:29:15.644Z returned zero matching
 exact-workspace threads/no further page; diagnostic native exited. No thread/start,
 resume or inference was requested; absence is not proof of no prior native effect.
@@ -73,8 +117,8 @@ of nested-home denial is not this live layout. Current core successor requires
 completed text-only receipts/settlement; retirement merely records child-stop/locks,
 and unused recovery categorically excludes attempt1. Adapter fsyncs threadId before
 turn/start and supported runtime writers preserve it; this narrows the boundary
-under intact journal custody, but native thread/start side effects remain under
-tagged-upstream investigation. No new recovery authority or settlement claim.
+under intact journal custody; tagged-upstream startup effects are recorded above.
+No live recovery authority or settlement claim.
 
 Owner architecture alignment (2026-09-18, docs only): imported the reviewed
 three-file clarification without replacing current live-status documents. Amp is
