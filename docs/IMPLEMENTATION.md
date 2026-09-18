@@ -4,6 +4,35 @@ Hehebot has demonstrated one canonically completed hosted text-only successor re
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Staged wake delivery (2026-09-18, local): optional HEHEBOT_OWNER_ALPHA_WAKE contains
+exact transition_id and root HTTPS sprites.app URL, using existing PROVIDER_TOKEN
+plus HEHEBOT_OWNER_ALPHA_WAKE_TOKEN. It is accepted only in hosted alpha mode. Alarm
+delivery records owner_alpha_wake:<epoch> UNKNOWN atomically before the first await,
+requires exact live BOOTING generation/boot/lease/policy and empty provider reference,
+and never changes epoch or controller operations. Any existing delivery record prevents
+retry, including reconstruction after unknown transport outcome. An exact202 receipt
+marks only delivery queued. The normal lease watchdog cadence remains active after
+failure. HTTPS dispatch forbids redirects, caps receipt4096 bytes and elapsed15s,
+and exposes only fixed errors. No service start, policy renewal or credentials in DB.
+
+Verification:23 focused tests/typecheck; actual workerd alarm with fixture transport
+made one notification across two alarms, retained queued intent and watchdog cadence,
+and preserved predecessor rows/reopen/epoch3 continuation. Combined check passed1609
+backend/485 runtime tests then failed with500 Network connection lost in the initial
+global-fetch-interception Worker fixture. Cause unproved; final fixture uses a narrow
+transport override and passed separately. Build and16 desktop tests pass. Logs:
+.local/alpha-wake-delivery-{focused,combined,worker,build,desktop}.log.
+No deployment/live wake/model activity. Official Services API lists no restart-policy
+field; safe bounded listener/service lifetime remains to be verified before enabling.
+
+Read-only provider audit:2026-09-18T04:40:59.092Z GET /v1/sprites?max_results=50 returned
+200, sprites=[hehebot:cold], has_more=false,next_continuation_token=null.
+04:40:59.425Z GET /v1/sprites/hehebot returned200/name hehebot/status cold. CLI selected
+org kaspar-hidayat; provider org/count/nested pagination/data were not retained and
+cannot be inferred from that selection. No guest/service/session calls or mutations.
+Sanitized evidence .local/sprites-readonly-inventory-20260918.json. Retained resource,
+not abandoned; old UNKNOWN custody remains. Actual billing still unverified.
+
 One-shot hosted wake preparation (2026-09-18, local only): a default-off HTTP
 composition reuses the authenticated /wake queue parser. Its callback requires the
 staged epoch/transition ID, authenticated BOOTING status, exact policy, generation,

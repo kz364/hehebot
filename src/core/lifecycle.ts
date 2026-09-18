@@ -81,6 +81,26 @@ export class LifecycleCore {
    return {owner_alpha_generation:{epoch,boot_id:envelope.successor.boot_id,transition_id:envelope.transition_id}};
   });
  }
+ async deliverOwnerAlphaWake(transitionId:string,send:(command:{epoch:number;operationId:string})=>Promise<void>):Promise<void> {
+  const intent=this.store.db.transaction(()=>{
+   const generation=this.core.ownerAlpha.activeGeneration();
+   const state=this.get(),now=this.core.now();
+   if(!generation||generation.transition_id!==transitionId||this.core.options.executionEnabled||state.phase!=='BOOTING'||
+    state.epoch!==generation.epoch||state.boot_id!==generation.boot_id||state.provider_ref_json!=='{}'||state.provider_operation_id!==null||
+    generation.policy.expires_at<=now||state.lease_until===null||state.lease_until<=now)return undefined;
+   const key=`owner_alpha_wake:${generation.epoch}`;
+   if(this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',key).length)return undefined;
+   const value={epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id,status:'unknown' as const};
+   const valueJson=JSON.stringify(value);
+   this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',key,valueJson);
+   return {key,value,valueJson};
+  });
+  if(!intent)return;
+  await send({epoch:intent.value.epoch,operationId:intent.value.transition_id});
+  this.store.db.transaction(()=>{
+   this.store.db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=? AND value_json=?',JSON.stringify({...intent.value,status:'queued'}),intent.key,intent.valueJson);
+  });
+ }
  private active():boolean{
   const budget=this.core.budget.admissionPredicate();
   // Expiry and answer handoff do not settle the native request. Even stale

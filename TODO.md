@@ -4,18 +4,18 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current local work:** one-shot hosted wake endpoint implemented, not deployed.
-It authenticates an exact pre-staged generation against Worker status, binds config
-bytes through the locked launcher, and fsyncs an exclusive retained UNKNOWN intent
-before launch. Concurrent/reconstructed listeners cannot replay that intent. HTTP202
-means queued, not ready. No policy renewal, provider autostart or historical replay.
-Thirty focused tests, 1605 backend/485 runtime tests, native hosted fixture, build and
-16 desktop tests pass. Combined verification stopped at a local Worker fixture with
-500 Network connection lost; isolated rerun passed, cause unproved. Runtime failures now
-report allowlisted codes and separate expiry observations without exposing arbitrary
-error text or changing nonzero exits. Next: integrate the supervised staged endpoint
-with provider/control wake delivery and verify a bounded real launch; automatic
-generation staging/credential rotation is not implemented. No new live calls/spend.
+**Current local work:** Worker alarm now optionally delivers an exact staged generation
+to the one-shot hosted listener. It durably records UNKNOWN before dispatch; repeated
+alarms/reconstruction never resend. HTTP202 changes only that delivery to queued,
+not runtime ready. Existing epoch/boot identity, lease supervision and old custody
+remain unchanged. Configuration is default-off and transition/destination-pinned;
+no deployment or live wake. Twenty-three focused tests/typecheck, final actual Worker
+alarm fixture, build and16 desktop tests pass. Full verifier failed in the initial
+global-fetch fixture after1609 backend/485 runtime passes; no full-green claim.
+Next: verify bounded Sprite listener deployment without automatic service restart,
+then one real staged launch. No automatic staging/renewal/credential rotation yet.
+Read-only inventory at04:40:59Z returned one cold hehebot, top-level terminal pagination
+and matching detail. Raw nested pagination/data were not retained; billing unverified.
 
 **Current P0 checkpoint:** settled-session continuation is deployed and live-verified.
 Epoch2 recorded nativeStopped:true; both locks were free and no matching executor was

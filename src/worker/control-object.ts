@@ -27,6 +27,7 @@ import type { RoutinePut } from '../core/types';
 import {AgentCommandBoundary} from '../core/agent-commands';
 import {parseWhatsAppReadPolicies,WhatsAppReadAccess} from '../core/whatsapp-access';
 import {parseHostedOwnerAlpha,parseOwnerAlpha,parseOwnerAlphaSuccessor} from '../core/owner-alpha';
+import {parseHostedOwnerWake,sendHostedOwnerWake,type HostedOwnerWake} from './hosted-owner-wake';
 export type TriggerPolicy={routine_id:string;event_types:string[]};
 function stringList(value:string):string[]{const parsed:unknown=JSON.parse(value);if(!Array.isArray(parsed)||!parsed.every(x=>typeof x==='string'))throw new Error('Invalid policy configuration');return parsed;}
 function delegationMap(value:string):Record<string,string[]>{
@@ -43,6 +44,7 @@ export class PersonalControl extends DurableObject<Env> {
  private resultRetention:ResultRetention;
  private ownerBindingSha256:string|undefined;
  private hostedOwnerAlpha:boolean;
+ private hostedWake:HostedOwnerWake|undefined;
  constructor(ctx:DurableObjectState,env:Env){
   super(ctx,env);
   const db:Database={
@@ -55,6 +57,7 @@ export class PersonalControl extends DurableObject<Env> {
   const successor=parseOwnerAlphaSuccessor(env.HEHEBOT_OWNER_ALPHA_SUCCESSOR);
   requireThat(!successor||!!hosted,'INVALID_CONFIGURATION','Owner-alpha successor requires the original hosted owner-alpha configuration.',503);
   this.hostedOwnerAlpha=!!hosted;
+  this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN);
   this.core=new ControlCore(this.store,{ownerAlpha:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
@@ -294,10 +297,18 @@ export class PersonalControl extends DurableObject<Env> {
   if(times.length)await this.ctx.storage.setAlarm(Math.max(Date.now()+Math.max(100,delayMs),Math.min(...times)));
   else await this.ctx.storage.deleteAlarm();
  }
+ protected sendHostedWake(command:{epoch:number;operationId:string}):Promise<void>{
+  return sendHostedOwnerWake(this.hostedWake!,command,this.env.PROVIDER_TOKEN!,this.env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN!);
+ }
  async alarm():Promise<void>{
   let failed=false;
   try{
    this.reconcile();
+   if(this.hostedWake){
+    try{await this.lifecycle.deliverOwnerAlphaWake(this.hostedWake.transition_id,command=>this.sendHostedWake(command));}
+    // Delivery is already non-replayable. Keep the normal lease watchdog cadence.
+    catch(error){console.error(JSON.stringify({event:'control.owner_alpha_wake_unknown',code:safeError(error).code}));}
+   }
    if(this.core.options.executionEnabled){const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);await this.lifecycle.drive(provider);}
   }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code}));}
   finally{await this.arm(failed?300000:0);}

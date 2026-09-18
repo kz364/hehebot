@@ -21,6 +21,11 @@ try{
  assert.equal(prepared.rejected.ok,true);assert.equal(prepared.rejected.value.status,'rejected');assert.equal(prepared.rejected.value.error.code,'FORBIDDEN');
  assert.deepEqual(prepared.afterRejected,{...prepared.beforeRejected,retained:before});
  assert.equal(prepared.activation.ok,true);assert.equal(prepared.activation.value.status,'applied');assert.equal(prepared.activation.value.resource_id,prepared.generation.transition_id);assert.deepEqual(prepared.retained,before);
+ const wake=await request(base,'/hosted-wake'+query,{});
+ assert.deepEqual(wake.before,wake.after);assert.deepEqual(wake.before.retained,before);
+ assert.deepEqual(wake.deliveries,[{url:'https://hehebot-fixture.sprites.app/wake',body:JSON.stringify({epoch:2,operationId:prepared.generation.transition_id})}]);
+ assert.deepEqual(wake.intent,{epoch:2,boot_id:prepared.generation.boot_id,transition_id:prepared.generation.transition_id,status:'queued'});
+ assert.ok(wake.alarm>Date.now());assert.ok(wake.alarm<=Date.now()+7000);
  const p=prepared.command.payload,reordered=` { "payload" : { "envelope_sha256" : "${p.envelope_sha256}", "transition_id" : "${p.transition_id}" }, "type" : "owner-alpha.activate", "schema_version" : 1 } `;
  const retryResponse=await fetch(base+'/retry-activation'+query,{method:'POST',headers:{'content-type':'application/json','idempotency-key':prepared.key},body:reordered,signal:AbortSignal.timeout(15000)});
  const retryText=await retryResponse.text();assert.equal(retryResponse.status,200,retryText);const retry=JSON.parse(retryText);
@@ -46,6 +51,7 @@ try{
  assert.equal(thirdAlarm.lifecycle.epoch,3);assert.equal(thirdAlarm.lifecycle.phase,'RECOVERY_REQUIRED');assert.deepEqual(thirdAlarm.retained,before);
  assert.ok(!logs.includes('control.alarm_failed'));
  console.log('PASS real workerd SQLite: actual PersonalControl.accept owner-alpha activation and canonical same-key retry preserve predecessor run, attempt, unknown effect, overdue retry, queued context, command and alpha bytes.');
+ console.log('PASS actual PersonalControl.alarm hosted wake: two alarms make one exact captured notification through a fixture transport, record the queued intent, preserve lifecycle/predecessor custody, and retain watchdog cadence.');
  console.log('PASS generation watchdog: epoch 2 lease expiry transitions to RECOVERY_REQUIRED, deletes alarm, and retired due timestamps do not spin; status exposes exact three-field descriptor.');
  console.log('PASS persisted Worker reopen: exact predecessor custody, successor lifecycle/descriptor and absent alarm retained without replay.');
  console.log('PASS epoch 3 continuation of unused expired epoch 2: activation, second reopen and watchdog retain epoch 1 unknown custody unchanged.');

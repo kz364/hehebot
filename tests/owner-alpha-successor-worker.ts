@@ -5,12 +5,18 @@ import type {ControlCore} from '../src/core/control';
 import type {LifecycleCore} from '../src/core/lifecycle';
 import type {Store} from '../src/core/store';
 import {ownerAlphaSuccessorSha256} from '../src/core/owner-alpha';
+import type {HostedOwnerWake} from '../src/worker/hosted-owner-wake';
 
 type FixtureEnv=Env&{FIXTURE_NOW:string;DB:DurableObjectNamespace};
-type Internals={core:ControlCore;lifecycle:LifecycleCore;store:Store};
+type Internals={core:ControlCore;lifecycle:LifecycleCore;store:Store;hostedWake:HostedOwnerWake|undefined};
 
 export class OwnerAlphaSuccessorWorker extends PersonalControl {
  private clock:string;
+ private wakeDeliveries:{url:string;body:string}[]|undefined;
+ protected async sendHostedWake(command:{epoch:number;operationId:string}):Promise<void>{
+  if(!this.wakeDeliveries)throw Error('Fixture refuses live wake');
+  this.wakeDeliveries.push({url:'https://hehebot-fixture.sprites.app/wake',body:JSON.stringify(command)});
+ }
  constructor(ctx:DurableObjectState,env:FixtureEnv){
   if(env.EXECUTION_ENABLED!=='false'||env.NATIVE_VERIFIED!=='false'||env.AUTH_MODE!=='local')throw Error('Unsafe fixture configuration');
   super(ctx,env);this.clock=env.FIXTURE_NOW;this.internals().core.options.now=()=>new Date(this.clock);
@@ -61,6 +67,21 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
    const text=await request.text(),input=JSON.parse(text);
    const result=await this.accept('fixture-owner',request.headers.get('idempotency-key')!,await digest(input),input);
    return Response.json({result,retained:this.retained(ids.runId,ids.queuedId),alarm:await this.ctx.storage.getAlarm()});
+  }
+  if(url.pathname==='/hosted-wake'&&request.method==='POST'){
+   const internals=this.internals(),active=core.ownerAlpha.activeGeneration()!;
+   const hostedWake={transition_id:active.transition_id,url:'https://hehebot-fixture.sprites.app'};
+   const original=internals.hostedWake;
+   const deliveries:{url:string;body:string}[]=[];
+   try{
+    internals.hostedWake=hostedWake;this.wakeDeliveries=deliveries;
+    const before={lifecycle:lifecycle.get(),retained:this.retained(ids.runId,ids.queuedId)};
+    await super.alarm();await super.alarm();
+    const intent=store.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key=?",`owner_alpha_wake:${active.epoch}`);
+    return Response.json({before,after:{lifecycle:lifecycle.get(),retained:this.retained(ids.runId,ids.queuedId)},deliveries,intent:intent.length?JSON.parse(intent[0].value_json):null,alarm:await this.ctx.storage.getAlarm()});
+   }finally{
+    internals.hostedWake=original;this.wakeDeliveries=undefined;
+   }
   }
   if(url.pathname==='/accept'&&request.method==='POST'){
    const text=await request.text();const result=await this.accept('fixture-owner',randomUUID(),createHash('sha256').update(text).digest('hex'),JSON.parse(text));

@@ -4,6 +4,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. The protected hosted succ
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+Worker alarm delivery is now integrated locally/default-off. Configure private
+HEHEBOT_OWNER_ALPHA_WAKE={transition_id,url} only for the already staged session,
+PROVIDER_TOKEN and HEHEBOT_OWNER_ALPHA_WAKE_TOKEN. No production settings changed.
+Lifecycle persists UNKNOWN before dispatch and never retries an existing record;
+HTTP202 means queued only. Existing generation/lease/custody stays unchanged.
+Twenty-three focused/typecheck pass. Actual workerd alarm fixture passes via narrow
+transport override (not global fetch); two alarms deliver once, preserve all custody
+and maintain watchdog cadence. Full verifier failed in the initial global interception
+fixture after1609 backend/485 runtime tests; no full-green claim. Build/desktop16 pass.
+All subagents done. Next verify bounded Sprite listener lifetime before enabling;
+do not install330s CLI under automatic restart or replace provider_ref={}.
+Read-only audit GETs at04:40:59Z report one cold hehebot and top-level terminal page;
+nested pagination/data/provider org counts not retained. No guest calls/live wake.
+Resource remains intentionally retained, not abandoned. See IMPLEMENTATION evidence.
+
 Local one-shot wake composition added in runtime/hosted-owner-wake.mjs. Explicit
 CLI: node runtime/hosted-owner-wake.mjs --serve ABS_CONFIG ABS_WAKE_TOKEN PORT.
 Listener is bounded330s, no automatic restart installation. Exact staged transition
