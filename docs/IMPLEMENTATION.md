@@ -20,7 +20,7 @@ nativeStopped plus actual dual-flock acquisition after expiry, not root completi
 Host verification:78 tests across auth, owner binding and bootstrap passed, including
 real Worker handler/DO calls over the SQLite test adapter. These are not workerd
 or live-provider evidence. Existing UI fixture passed and all eligible/unavailable/
-expired screenshots were inspected. Full combined rerun is in progress at
+expired screenshots were inspected. Full combined rerun exited0 at
 `.local/bootstrap-combined.log`; earlier failed runs remain failed. Core and runtime
 patches and the actual-workerd fixture extension are integrated. Host rerun passed
 in `.local/bootstrap-workerd-host.log`: zero passive wake intents/reservations,
@@ -28,7 +28,8 @@ one persisted message/one wake, fixed token/policy across process reopen, separa
 credentials and exact run/epoch/expiry rejection with old UNKNOWN custody unchanged.
 The extended fixture arrived after that stage of the combined run, so this host
 rerun is separate supplementary evidence. Typecheck and desktop16 passed. All workers
-finished; full verifier has passed1644 backend/497 runtime and is still running.
+finished; full verifier passed1644 backend/497 runtime plus browser/native/service
+fixtures and build dry-run, ending with status passed and productionAdmission false.
 No deployment, Sprite Service registration,
 live model call or automatic trial enablement in this checkpoint.
 

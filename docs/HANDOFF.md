@@ -9,9 +9,9 @@ before wake intent/dispatch. Actual workerd proves no wake from activation/passi
 reads/alarms, then exactly one from a persisted admitted message. `--listen` starts
 without session config; only authenticated work reads current private staging.
 It does not create/renew a grant. Typecheck,41 core/auth,19 runtime tests and actual
-transport/reopen fixtures pass. Full verifier remains failed: first missing mock
-getAlarm fixed, then request-stream failure fixed by draining fixture POST bodies.
-Two targeted workerd runs pass after that fix; do not claim full combined green.
+transport/reopen fixtures pass. Earlier full verifiers failed: missing mock getAlarm,
+then request-stream failure fixed by draining fixture POST bodies. Fresh full
+`.local/bootstrap-combined.log` now exits0; earlier failures remain recorded.
 No new deployment, Sprite Service or model session for these local changes.
 
 Oracle's selected next design is separate manager principal with DO-owned issuance:
@@ -30,8 +30,9 @@ tests in `.local/bootstrap-host-auth.log`. The core worker's actual-workerd fixt
 patch was integrated from the exact unpublished baseline; host rerun passes in
 `.local/bootstrap-workerd-host.log`, including passive no-wake, one admitted message,
 fixed issuance/process reopen and credential/expiry fences. All workers finished.
-Full verifier is running in `.local/bootstrap-combined.log` (1644 backend/497 runtime
-passed); no full-green claim until it exits successfully. Desktop16/typecheck pass.
+Full verifier exited0 in `.local/bootstrap-combined.log`:1644 backend/497 runtime,
+browser/native/service fixtures and build dry-run. Desktop16/typecheck pass. The
+extended workerd fixture arrived after its combined stage and passed separately.
 Owner requested local checkpoint/sync. Selective policy comparison found SwiftUI,
 wappmcp/exact patch and owner priorities already present; deferred 1Password was
 missing and is now added without implementing it. README/client wording now matches

@@ -14,23 +14,25 @@ Worker route/DO credential separation, exact assignment binding, fixed issuance,
 read-only access and expiry pass78 focused tests. The real-workerd bootstrap fixture
 is integrated and passes on the host: zero passive wake/reservation, one persisted
 message/one wake, separate credentials, expiry and fixed grants after process reopen.
-All workers finished. Typecheck and desktop16 pass. A fresh full combined verifier
-is running (1644 backend/497 runtime passed); no full-green claim yet. Automatic
+All workers finished. Typecheck and desktop16 pass. The full combined verifier
+exited0 (1644 backend/497 runtime plus browser/native/service/build). Automatic
 hosted trial remains incomplete and default-off.
 One admitted message produces one notification; real workerd SQLite/reopen and
 HTTP transport checks pass, as do typecheck,41 focused core/auth tests and19
 listener/launcher tests. Quiet `--listen` boots without session config and reads
 fresh immutable staging only on authenticated work; it does not mint/renew grants.
 These changes are local, not deployed; no Service installed or fresh model session.
-The combined rerun failed in the fixture's unconsumed POST-body stream; the fixture
-now consumes it and two targeted workerd runs pass. The remaining verifier scripts
-through build also exited0; this is segmented evidence, not one full-green rerun.
+Earlier combined runs failed missing mock getAlarm and unconsumed fixture POST
+bodies. Both regressions are fixed; `.local/bootstrap-combined.log` is the fresh
+full-green run, not a relabeling of those failures. The extended bootstrap workerd
+fixture arrived after its stage and passed separately in `.local/bootstrap-workerd-host.log`.
 Billing readback at2026-09-18T06:32:06Z: Fly Cost Explorer and upcoming invoice show
 $0.03, credit balance$0.00, Sprite cold. This is rounded, potentially lagged Fly
 usage, not all-project spend or proof of$9.97 remaining. Keep the existing$10 TOTAL.
-Next: message-bound fresh-session issuance with separate manager/task authority,
-trusted retirement and cumulative budget reservation; then same-Sprite quiet
-service cold bootstrap. Portal visits must remain control-plane-only throughout.
+Next: establish an all-project prior-cost baseline and defensible whole-awake
+budget, then enable and verify same-Sprite quiet service cold bootstrap. Local
+reservation accounting is not a provider spend cap. Portal visits must remain
+control-plane-only throughout; no generic renewal of the existing approval is needed.
 
 **Last deployed P0 wake checkpoint:** Worker-triggered generation7 wake → native ready →
 one canonical completed portal reply passed, including full reload, attempt1 and
