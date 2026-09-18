@@ -9,10 +9,10 @@ const fail = () => { throw new Error('HOSTED_OWNER_LAUNCH_REFUSED'); };
 const lockScript = fileURLToPath(new URL('../scripts/with-executor-lock.sh', import.meta.url));
 const entry = fileURLToPath(new URL('./owner-alpha-entry.mjs', import.meta.url));
 
-/** Explicit manual launch. Locks exclude cooperating launchers, not arbitrary
- * native descendants after wrapper failure. No retry, wake service or deployment. */
-export async function launchHostedOwnerAlpha(path, { signal, spawnImpl = spawn } = {}) {
-  const { config, sha256 } = await readOwnerAlphaConfig(path);
+/** Explicit locked launch. Locks exclude cooperating launchers, not arbitrary
+ * native descendants after wrapper failure. No retry or deployment; callers own wake authorization. */
+export async function launchHostedOwnerAlpha(path, { signal, expectedSha256, spawnImpl = spawn } = {}) {
+  const { config, sha256 } = await readOwnerAlphaConfig(path, expectedSha256);
   if (typeof config?.hostedOwnerBindingSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(config.hostedOwnerBindingSha256)) fail();
   ownerAlphaPolicy(config.ownerAlpha);
   const directories = [];

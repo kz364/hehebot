@@ -4,6 +4,42 @@ Hehebot uses direct Codex app-server **0.154.0** only. The protected hosted succ
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+Local one-shot wake composition added in runtime/hosted-owner-wake.mjs. Explicit
+CLI: node runtime/hosted-owner-wake.mjs --serve ABS_CONFIG ABS_WAKE_TOKEN PORT.
+Listener is bounded330s, no automatic restart installation. Exact staged transition
+ID is the /wake operationId. This is not wired to core provider wake yet; the alpha
+control provider_ref remains empty and normal automatic wake remains disabled.
+The authenticated status must match policy/generation/binding and BOOTING before an
+exclusive fsynced UNKNOWN intent permits one digest-bound dual-lock launch. Intent
+stays UNKNOWN even after exit; never remove it to retry. Closing listener forwards
+abort to the exact launcher. Thirty focused tests pass; combined check passed1605
+backend/485 runtime tests then failed at successor Worker with500 Network connection
+lost. Isolated rerun passed; no full-green claim. Native hosted fixture, build and
+desktop16 pass separately. Evidence .local/alpha-hosted-wake-{combined,focused,
+worker-rerun,native,build,desktop}.log. No deployment/live calls this checkpoint.
+New entrypoint failure events report allowlisted code plus expiry observation,
+not inferred expiry cause; nonzero failure and stop-failure semantics preserved.
+All subagents finished; host integrated source and tests in this checkout.
+
+Hosted continuation completed: verified epoch2 service.phase=recovery/nativeStopped:true,
+exact generation2 descriptor, zero matching Codex/workspace executors and zero census
+errors; acquired both predecessor locks with a no-op. These are restricted non-hostile
+operator observations, not universal descendant proof. No Sprite restart performed.
+Deployed continuation code; atomically rotated Worker bearer/generation pin. Old bearer
+401 UNAUTHORIZED and fresh bearer409 STALE_EPOCH before activation independently verified.
+Fresh session3/credentials3 paths preserve all old journals/native home in place.
+Owner activation673418aa-e370-4cbf-a364-104bb62f792f applied03:30:53.819Z for
+transition4ba41ba1-c0d9-4239-af4c-97c568b1148b. One new75 message completed in5.483s
+with canonical result and full-reload readback; host verified native textOnlyReceipt.
+Browser worker finished, screenshot inspected at .amp/in/artifacts/continued-chat-75-completed.png.
+Policy expired03:35:06.382Z. Launcher PID2848387 finished with exit1 after emitting
+stopped/stateRetained:true/replayAllowed:false and a generic refusal/stop message.
+Independent service readback confirms recovery/nativeStopped:true; specific CLI
+exception remains unidentified. Do not restart the consumed session or infer universal
+settlement/safe sleep. Next is usable session/wake flow, not another identical canary.
+Evidence: .local/alpha-continuation-{stop-evidence,authority-check,receipt}.json,
+.local/alpha-generation3-{launch.log,stop-evidence.json} and .local/hosted-generation3-operator.json.
+
 Local continuation implementation now extends activation beyond epoch2 with a NEW
 grant/identity/cutoff for each expired session, never an in-place quota/expiry reset.
 Later predecessors must have only completed attempts with matching stored profile,

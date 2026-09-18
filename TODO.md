@@ -4,7 +4,33 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current P0 checkpoint:** settled-session continuation is implemented locally:
+**Current local work:** one-shot hosted wake endpoint implemented, not deployed.
+It authenticates an exact pre-staged generation against Worker status, binds config
+bytes through the locked launcher, and fsyncs an exclusive retained UNKNOWN intent
+before launch. Concurrent/reconstructed listeners cannot replay that intent. HTTP202
+means queued, not ready. No policy renewal, provider autostart or historical replay.
+Thirty focused tests, 1605 backend/485 runtime tests, native hosted fixture, build and
+16 desktop tests pass. Combined verification stopped at a local Worker fixture with
+500 Network connection lost; isolated rerun passed, cause unproved. Runtime failures now
+report allowlisted codes and separate expiry observations without exposing arbitrary
+error text or changing nonzero exits. Next: integrate the supervised staged endpoint
+with provider/control wake delivery and verify a bounded real launch; automatic
+generation staging/credential rotation is not implemented. No new live calls/spend.
+
+**Current P0 checkpoint:** settled-session continuation is deployed and live-verified.
+Epoch2 recorded nativeStopped:true; both locks were free and no matching executor was
+observed. Fresh generation3 bearer/pin, journal and authenticated activation produced
+one canonical completed reply in5.483s, retained after reload. Prior completed74 and
+both historical unknown/waiting tasks are unchanged. No Sprite reboot or replay.
+This remains an operator-managed short session, not always-available chat. Next is a
+usable session/wake path rather than more identical demonstration messages. Production
+gates remain false; incremental billing unverified. One new text-only task, no new
+resource/upgrade/connector. Generation3 expired03:35:06.382Z; launcher emitted stopped
+and exited1 with a generic refusal/stop message. Independent retained service readback
+confirms recovery/nativeStopped:true. This is direct-child stop evidence, not universal
+settlement or safe sleep. No consumed session restart.
+
+**Local continuation verification:**
 fresh grants can advance past epoch2 without renewing old policies or replaying work.
 Exact stored text-only result/receipt and absent unsettled activity are required;
 all historical epochs and pre-cutoff messages remain untouched. Focused116, final41,

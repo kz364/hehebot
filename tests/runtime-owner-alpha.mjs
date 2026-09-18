@@ -165,3 +165,30 @@ for (const hosted of [false, true]) test(`session watchdog hosted=${hosted} stop
   t.mock.timers.tick(1); await rejected;
   assert.equal(stops, 2); // Timed stop plus idempotent final cleanup.
 });
+
+test('hosted failures report only bounded codes and expiry observations without masking rejection', async t => {
+  for (const [stage, code, clock, expected] of [
+    ['run', 'EXECUTOR_FENCED', at + 59999, 'EXECUTOR_FENCED'],
+    ['run', 'OWNER_ALPHA_ADMISSION_DENIED', at + 60000, 'OWNER_ALPHA_ADMISSION_DENIED'],
+    ['run', 'private-token-in-code', at + 60000, 'OWNER_ALPHA_FAILURE'],
+    ['stop', 'NATIVE_STOP_UNCONFIRMED', at, 'NATIVE_STOP_UNCONFIRMED'],
+  ]) {
+    const stateDirectory = await directory(t), reports = [];
+    let now = at;
+    const error = Object.assign(new Error('private-token-in-message'), { code });
+    await assert.rejects(runHostedOwnerAlpha({ stateDirectory, ownerAlpha: policy,
+      hostedOwnerBindingSha256: '19'.repeat(32), personas: { [policy.persona_id]: { model: 'chosen' } } }, {
+      now: () => now, report: value => reports.push(value),
+      createService: () => ({ phase: stage === 'run' ? 'running' : 'recovery', start: async () => {},
+        maintain: async () => { now = clock; throw error; },
+        stop: async () => { if (stage === 'stop') throw error; },
+      }),
+    }), thrown => thrown === error);
+    assert.deepEqual(reports.find(value => value.event === 'owner-alpha.failed'), {
+      event: 'owner-alpha.failed', stage, code: expected, policyExpired: clock >= at + 60000,
+      operatorStopped: false, replayAllowed: false,
+    });
+    assert.equal(reports.some(value => value.event === 'owner-alpha.stopped'), stage !== 'stop');
+    assert.equal(JSON.stringify(reports).includes('private-token'), false);
+  }
+});

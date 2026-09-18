@@ -4,6 +4,56 @@ Hehebot has demonstrated one canonically completed hosted text-only successor re
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+One-shot hosted wake preparation (2026-09-18, local only): a default-off HTTP
+composition reuses the authenticated /wake queue parser. Its callback requires the
+staged epoch/transition ID, authenticated BOOTING status, exact policy, generation,
+owner binding, hosted marker and disabled production execution. Config bytes are
+rechecked after status and pinned through the dual-lock launcher. An exclusive wx
+mode0600 intent is fsynced with its directory before launch and never reset, including
+launch errors. Independent listeners racing the same state launch at most once;
+reconstruction refuses existing intent. HTTP202 is only queued acknowledgment.
+CLI --serve takes absolute config/token paths and port, closes after330s and must
+not be installed with automatic restart. No autonomous generation staging, renewal,
+credential rotation or provider/control wake wiring is claimed. No live deployment.
+
+Entrypoint reports bounded allowlisted failure codes with run/stop stage and separate
+policy-expired/operator-aborted observations. Arbitrary exception code/message text
+is excluded, original rejection remains nonzero, and failed stop does not emit stopped.
+Thirty focused tests pass (including races, reconstruction, config TOCTOU, expiry
+boundary and redaction). Combined verifier passed1605 backend/485 runtime tests and
+local control checks, then exited1 when successor Worker returned500 Network connection
+lost at same-key receipt readback. One isolated rerun passed; cause remains unproved.
+Separate native hosted fixture, typecheck/build and16 desktop tests pass. This is not
+a full verifier pass. Evidence .local/alpha-hosted-wake-{focused,combined,worker-rerun,
+native,build,desktop}.log. No new provider/model calls or spend.
+
+Live settled-session continuation (2026-09-18): epoch2 service journal recorded
+recovery/nativeStopped:true and exact generation; bounded census found zero matching
+Codex/workspace processes and zero read errors. Both predecessor locks acquired with
+a no-op. No additional Sprite restart. These support restricted non-hostile alpha,
+not universal descendant termination. Prior native auth/config/journals stayed in place.
+Continuation Worker code deployed; bearer and epoch3 pin changed atomically. Independent
+checks returned401 UNAUTHORIZED for epoch2 and409 STALE_EPOCH for epoch3 before activation.
+Fresh credential/session directories were staged; same existing Access service scope.
+
+Authenticated activation673418aa-e370-4cbf-a364-104bb62f792f applied03:30:53.819Z.
+One UI commandda47d2ce-5f67-478b-b367-6ba50aacb626 at03:32:12.944Z admitted
+runa5dd9a1c-2af6-4391-b40a-9a8c63186722, attempt1. Canonical run.result
+49835173-2651-48be-872a-552dfda01a99 at03:32:18.427Z (5.483s) retained exact
+HEHEBOT_CONTINUED_CHAT_OK_75, completed/error null, correct Chief of Staff/cause/run.
+Full reload confirmed exactly one matching user event and completed result. Previous
+completed74, old recovery0639f8f7 and waiting7481a204 stayed unchanged. Host independently
+read one completed native textOnlyReceipt in session3 journal. No other model/task action.
+Evidence .local/alpha-continuation-{stop-evidence,authority-check,receipt}.json,
+.local/alpha-generation3-{launch.log,completion-receipt.jsonl,stop-evidence.json}.
+Policy expired03:35:06.382Z with max3 admitted roots. Launcher emitted stopped,
+stateRetained:true/replayAllowed:false, then exited1 with the generic refusal/stop
+message; the specific exception is not exposed by that CLI. Independent retained
+service readback confirms phase:recovery/nativeStopped:true. This verifies direct-child
+stop, not universal descendant termination, effect settlement or safe sleep. No retry.
+This is session rollover verification,
+not ongoing availability. No new resource, upgrade or connector; actual billing unverified.
+
 Settled-session continuation (2026-09-18, local): a fresh owner-alpha.activate grant
 can append epoch3+ after the current text-only generation's policy and lease expire.
 Every prior-generation attempt must be completed with an exact stored profile/turn/

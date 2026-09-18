@@ -50,8 +50,8 @@ export async function runOwnerAlpha(config, options = {}) {
 }
 
 /** Supervised hosted composition only. Caller must hold the kernel executor lock
- * for the complete native process tree. CLI uses the dual-lock launcher, never
- * the HTTP wake service. Locks are not proof of descendant termination. */
+ * for the complete native process tree. Manual and staged-wake callers use the
+ * dual-lock launcher. Locks are not proof of descendant termination. */
 export async function runHostedOwnerAlpha(config, options = {}) {
   config = structuredClone(config);
   if (typeof config.hostedOwnerBindingSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(config.hostedOwnerBindingSha256)) fail('INVALID_OWNER_ALPHA_CONFIGURATION');
@@ -82,6 +82,14 @@ async function runBoundedOwnerAlpha(config, { createService = createCodexService
   if (signal?.aborted) fail('OWNER_ALPHA_STOPPED');
   let service, deadline;
   let timedOut = false;
+  // Error messages, unknown codes and transport bodies may contain credentials.
+  // Expiry is an observation, not an inferred cause or a successful settlement.
+  const reportFailure = (error, stage) => report({ event: 'owner-alpha.failed', stage,
+    code: ['OWNER_ALPHA_ADMISSION_DENIED', 'OWNER_ALPHA_STOPPED', 'EXECUTOR_FENCED',
+      'SERVICE_RECOVERY_REQUIRED', 'NATIVE_STOP_UNCONFIRMED', 'CONTROL_HTTP_ERROR',
+      'CONTROL_TIMEOUT', 'CONTROL_TRANSPORT_FAILED'].includes(error?.code) ? error.code : 'OWNER_ALPHA_FAILURE',
+    policyExpired: now() >= Date.parse(policy.expires_at),
+    operatorStopped: signal?.aborted === true, replayAllowed: false });
   const stop = () => { void service?.stop().catch(() => {}); };
   signal?.addEventListener('abort', stop, { once: true });
   try {
@@ -111,10 +119,14 @@ async function runBoundedOwnerAlpha(config, { createService = createCodexService
       await service.maintain();
       await wait(1000);
     }
+  } catch (error) {
+    reportFailure(error, 'run');
+    throw error;
   } finally {
     clearTimeout(deadline);
     signal?.removeEventListener('abort', stop);
-    if (service) await service.stop();
+    try { if (service) await service.stop(); }
+    catch (error) { reportFailure(error, 'stop'); throw error; }
     report({ event: 'owner-alpha.stopped', stateRetained: true, settlementProved: false, replayAllowed: false });
   }
 }

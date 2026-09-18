@@ -157,6 +157,8 @@ test('pre-abort, private paths, symlinks and same-inode directories are rejected
     await writeFile(sentinel, 'custody', { mode: 0o600 });
     let spawns = 0;
     const noSpawn = () => { spawns++; assert.fail('must not spawn'); };
+    await assert.rejects(launchHostedOwnerAlpha(f.path, { expectedSha256: '00'.repeat(32), spawnImpl: noSpawn }),
+      { code: 'OWNER_ALPHA_CONFIG_CHANGED' });
     const controller = new AbortController(); controller.abort();
     await assert.rejects(launchHostedOwnerAlpha(f.path, { signal: controller.signal, spawnImpl: noSpawn }),
       /HOSTED_OWNER_LAUNCH_REFUSED/);
