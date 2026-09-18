@@ -1,8 +1,45 @@
 # Implementation status
 
-Hehebot has demonstrated authenticated chat, a scoped routine read and a persisted provisional reply, not production operation. Direct Codex app-server **0.154.0** is the only supported harness. The protected portal/control plane and authenticated SQLite reads work; the hosted trial produced provisional output but failed whole-task completion. Production execution and native-verification flags remain false.
+Hehebot has demonstrated one canonically completed hosted text-only successor reply with authenticated full-reload persistence, not production operation or ongoing availability. Direct Codex app-server **0.154.0** is the only supported harness. Historical failed trial custody remains recovery-required. Production execution and native-verification flags remain false.
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
+
+Bounded restart follow-up (2026-09-18): owner said fix/continue. Current official
+sprites-js0.2.3 at390eb6353576f5da57ef7ec4b7f1eec5223de5f3 confirms the initial empty
+POST was correct; no version/body/idempotency/completion endpoint was missing.
+Official Go error handling recognizes empty proxy502 and retains Fly-Request-Id.
+Owner-requested oracle approved one additional same-Sprite attempt while predecessor
+authority was revoked, no successor/autostart existed, with five-minute cap and
+120-second observed stability. This is operational convergence, not deduplication
+or a provider guarantee against delayed restart. The first unknown record is retained.
+
+Precheck /check returned healthy. Second POST returned202 with Fly-Request-Id saved
+privately; changed kernel identity observed at36s and stable122s at158s. Each read
+verified same Sprite ID, retained disk nonce and empty services. No third request.
+Evidence: .local/alpha-recovery-second-attempt.{json,log}. New disposition receipt
+retains late-restart interruption risk, historical unknown settlement and no replay.
+
+Generation-binding Worker code deployed; private pin configured and preactivation
+runtime status denied409 STALE_EPOCH. Authenticated owner activation returned202
+applied; runtime started fresh session/journal with one120s run and a five-minute
+policy. Exactly one new message accepted03:00:56.993Z completed03:01:04.009Z (7.016s).
+Receipt595cc42a-d77b-40fc-b27f-c30f2e7867b5/runaaeae25c-6b7b-473a-9f00-c61d70bd3fd7
+bind canonical run.result9521ef1d-8cc4-408f-97f8-56ac0d5215bf, exact
+HEHEBOT_HOSTED_SUCCESSOR_OK_74, Chief of Staff/coordinator/attempt1/error null.
+Full reload retained completed task and canonical event; no provisional-only claim.
+Host independently read native completed outcome plus textOnlyReceipt from first-party
+journal. Historical recovery/waiting tasks remained unchanged; no task replay/cancel.
+Inspected cropped .amp/in/artifacts/hosted-successor-74-completed.png shows recorded
+Completed reply only. The launcher exited0 after expiry, state retained/no replay.
+This proves bounded hosted completion, not persistent availability, historical effect
+settlement or all future recovery. Next is safe bounded session continuation.
+No old state or native auth cache copied, no new Sprite/connector/upgrade. Catalog
+comes from pinned supported `codex debug models` on the authenticated Sprite;
+selected genuine model metadata retains only deliberate direct-tool-mode and empty
+experimental-tool-list overrides. Source catalog stays private, not redistributed.
+The42KB config exposed a32KB launcher limit: raised to128KiB with exact-limit/+1 and
+genuine-sized cases plus launcher/owner tests18 passing. No new broad suite repeated.
+Production gates false; observed recovery is not production sleep/containment proof.
 
 Restricted-alpha recovery (2026-09-18): owner-requested oracle supersedes the
 universal retirement prerequisite below for this one supervised text-only trial.

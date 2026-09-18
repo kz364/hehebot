@@ -15,6 +15,17 @@ const persona = '11111111-1111-4111-8111-111111111111';
 const policy = { session_id: 'aaaaaaaa-1111-4111-8111-111111111111', persona_id: persona,
   expires_at: '2099-09-16T10:01:00.000Z', max_runs: 1, max_task_seconds: 30 };
 
+test('private configuration accepts a genuine-sized catalog and bounds bytes at 128 KiB', async t => {
+  const { root } = await sandbox(t), path = join(root, 'bounded.json');
+  for (const size of [42750, 128 * 1024, 128 * 1024 + 1]) {
+    const bytes = JSON.stringify({ catalog: 'x'.repeat(size - 14) });
+    assert.equal(Buffer.byteLength(bytes), size);
+    await writeFile(path, bytes, { mode: 0o600 });
+    if (size > 128 * 1024) await assert.rejects(readOwnerAlphaConfig(path), { code: 'PRIVATE_PATH_REQUIRED' });
+    else assert.equal((await readOwnerAlphaConfig(path)).config.catalog.length, size - 14);
+  }
+});
+
 async function sandbox(t) {
   const root = await mkdtemp(join(tmpdir(), 'hehe-hosted-launch-'));
   const children = new Set();

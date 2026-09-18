@@ -4,18 +4,24 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current P0 checkpoint:** owner-requested oracle narrowed recovery for one supervised
-text-only alpha to revoked predecessor authority plus an observed same-Sprite restart,
-not universal containment proof. Server-owned credential-generation binding is ready
-locally; combined1605 backend/472 runtime and desktop16 pass. Old Worker bearer is
-revoked (401 UNAUTHORIZED); old Access service token deleted (401), successor Access
-token passes only its existing internal scope. Fresh credentials stay orb-only.
-One supported restart request returned502; later kernel boot ID was unchanged and
-the inspector exited naturally. Record **restart_unconfirmed**, not Sprite failure.
-No second restart, successor activation, model call, code deployment or replay.
-P0.2 remains open. Next exact unblock: provider-supported observation of completion
-for that restart request. No public support post is authorized. Old unknown custody
-and production gates remain unchanged; actual incremental billing is unverified.
+**Current P0 checkpoint:** after the owner's fix direction, a focused oracle review
+approved one additional bounded restart while authority was revoked and no successor
+ran. The request returned202; changed kernel identity remained stable122s, same Sprite
+and disk nonce, services absent. Historical first502 outcome stays unknown; a delayed
+restart interruption risk is explicitly retained, not claimed impossible.
+Generation-bound credential checks are deployed; runtime before activation rejected409.
+Owner-authenticated successor activation applied and fresh one-run text-only launcher
+reported ready. One new message completed with a canonical assistant event in7.016s;
+full reload retains exact response, completed status/error null and attempt1 attribution.
+Both historical tasks are unchanged. P0.2's bounded hosted path is demonstrated.
+Genuine catalog obtained through supported Codex debug models; no auth-cache copy.
+Its42KB profile exposed a32KB config bound, raised to128KB with18 focused tests passing.
+Prior combined1605 backend/472 runtime and desktop16 remain valid for the generation
+binding. Launcher exited0 after its one-run policy expired; this is not ongoing chat
+availability. Next P0 deliverable is bounded session continuation without replay or
+silently renewing consumed immutable custody, then P0.3 responsive background work.
+Old unknown custody/no replay and production gates remain unchanged. No public post,
+new Sprite or upgrade; actual billing remains unverified. All assigned workers done.
 
 ## Owner priority: first usable chat and background task
 

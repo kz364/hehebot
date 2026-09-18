@@ -1,8 +1,37 @@
 # Hehebot agent handoff
 
-Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. The protected portal/control plane and authenticated SQLite state read work. A hosted model reply persisted only as provisional output; task completion failed and custody remains recovery-required. Production execution/native gates remain false.
+Hehebot uses direct Codex app-server **0.154.0** only. The protected hosted successor trial now has one canonically completed assistant reply with full-reload persistence. Historical failed work remains recovery-required. The one-run successor policy expired and launcher stopped; this is not ongoing chat availability or production readiness. Production execution/native gates remain false.
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
+
+Newest result supersedes the restart blocker below: owner said fix; source research
+and focused oracle justified one additional bounded restart before successor work.
+Second request202, changed kernel stable122s, same Sprite/nonce/services empty.
+The first502 is still unknown; quiet interval does not prove no delayed restart.
+Generation-fenced Worker deployed, new secrets installed after observation, private
+pin verified409 before owner activation. Epoch2 activation applied; fresh native
+thread/journal, genuine catalog via supported `codex debug models`, no cache copy.
+The42KB profile needed a128KiB config cap (formerly32KiB);18 targeted tests pass.
+
+Exactly one new UI command595cc42a-d77b-40fc-b27f-c30f2e7867b5 admitted run
+aaeae25c-6b7b-473a-9f00-c61d70bd3fd7, attempt1. At03:01:04.009Z canonical run.result
+9521ef1d-8cc4-408f-97f8-56ac0d5215bf persisted exact HEHEBOT_HOSTED_SUCCESSOR_OK_74,
+completed/error null, Chief of Staff, correct cause/run. Full reload retains it;
+host journal independently has completed native outcome and textOnlyReceipt.
+Old0639f8f7 remains recovery_required/CANCEL_UNCONFIRMED attempt1;7481a204 remains
+waiting/CAPABILITY_UNAVAILABLE attempt0. No historical task action or replay.
+Inspected .amp/in/artifacts/hosted-successor-74-completed.png shows only recorded
+Completed reply, no private old messages/credentials. Browser worker done.
+Launcher exited0 after bounded expiry with stateRetained/replayAllowed:false.
+No ongoing runtime or test remains. Logs .local/alpha-successor-launch.log,
+.local/alpha-recovery-second-attempt.{json,log}, .local/alpha-successor-config-limit.log.
+Billing unverified; no new resource/upgrade/connector/public post. Next P0 work is
+usable bounded session continuation after this successful one-run trial, retaining
+old uncertainty; do not relaunch the consumed journal or silently renew the immutable
+policy. Current generation implementation permits only epoch1→2. No blanket restart
+or new inference is necessary merely to verify this already-persisted result.
+
+Historical preceding checkpoint:
 
 Owner-requested oracle supersedes the universal-retirement prerequisite below for
 one supervised text-only alpha. Preserve historical unknown custody/no replay;

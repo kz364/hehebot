@@ -9,18 +9,20 @@ import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 // Do not force login/store settings: that can log out an existing account.
 const authOverrides = { model_provider: 'openai' };
+// A genuine single-model catalog includes model instructions as well as metadata.
+const maxConfigBytes = 128 * 1024;
 
 async function privatePath(path, directory = false) {
   if (!isAbsolute(path)) fail('PRIVATE_PATH_REQUIRED');
   const stat = await lstat(path);
   if (!(directory ? stat.isDirectory() : stat.isFile()) || stat.isSymbolicLink() ||
-      stat.uid !== process.getuid() || stat.mode & 0o077 || !directory && stat.size > 32768) fail('PRIVATE_PATH_REQUIRED');
+      stat.uid !== process.getuid() || stat.mode & 0o077 || !directory && stat.size > maxConfigBytes) fail('PRIVATE_PATH_REQUIRED');
 }
 
 export async function readOwnerAlphaConfig(path, expectedSha256) {
   await privatePath(path);
   const bytes = await readFile(path);
-  if (bytes.length > 32768) fail('INVALID_OWNER_ALPHA_CONFIGURATION');
+  if (bytes.length > maxConfigBytes) fail('INVALID_OWNER_ALPHA_CONFIGURATION');
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   if (expectedSha256 !== undefined && expectedSha256 !== sha256) fail('OWNER_ALPHA_CONFIG_CHANGED');
   return { config: JSON.parse(bytes.toString('utf8')), sha256 };
