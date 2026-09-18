@@ -27,8 +27,13 @@ is not readiness or sleep proof. Provider control-plane GET at07:54:08Z reported
 cold; process loss is not inferred. Bootstrap Worker deployment and five-secret
 activation then completed successfully, fixed trial expiry08:10:39.410Z,
 session180s/task120s, conservative prior allowance$1/reservation$1/total$10.
-Authenticated manager read returned null before admission. No new model session yet;
-passive navigation check precedes one message. New combined verifier is running.
+Authenticated manager read returned null before admission and again at08:08:20Z,
+when provider inventory was cold. Browser worker's earlier tool call remains stalled
+(execution state unchanged since07:37Z); live navigation/message proof is pending,
+and no message submission was authorized. Fixed expiry is not extended.
+Fresh combined verifier exits0:1644 backend/497 runtime plus Worker/browser/native/
+service/build including manager composition. Desktop16 pass. Logs:
+`.local/manager-combined.log`, `.local/manager-desktop.log`.
 Credentials remain private; task-signing key was not shipped to the guest.
 Evidence: `.local/bootstrap-{sprite-preflight,guest-import}.log` and
 `.local/bootstrap-service-registration.ndjson`, `.local/bootstrap-idle-inventory.json`,

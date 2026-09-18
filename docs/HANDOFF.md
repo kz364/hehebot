@@ -21,9 +21,14 @@ session yet. Private `.local/cloudflare-message-bootstrap.json` contains the fix
 trial expiring08:10:39.410Z; its bootstrap/wake values were activated as secrets,
 NOT deployed as conflicting plain vars. Base deploy config remains
 `.local/cloudflare-hosted-chat.json`. Conservative prior allowance$1/reservation$1,
-total$10; session180s/task120s. Browser worker is checking passive navigation before
-a separately specified single message. New combined verifier runs in
-`.local/manager-combined.log`. Generation7 exact
+total$10; session180s/task120s. Browser worker was assigned passive navigation only,
+but its tool state has not advanced since07:37Z. No message submission authorized;
+let the trial expire unused rather than silently renew or race it. At08:08:20Z
+authenticated manager manifest remained null and provider inventory was cold
+(`.local/bootstrap-final-passive-check.json`). Live acceptance remains blocked on
+browser execution. New combined verifier exits0 in `.local/manager-combined.log`:
+1644 backend/497 runtime, Worker/browser/native/service/build including composition;
+desktop16 pass in `.local/manager-desktop.log`. Generation7 exact
 retirement was observed under both locks at07:44:12.050Z. Registration monitoring
 completion is not readiness. Provider control-plane inventory reported cold at
 07:54:08Z; this is not proof of process loss. A later bounded permissions check

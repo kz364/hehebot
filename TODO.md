@@ -15,8 +15,10 @@ produce zero Sprite notifications until a persisted message passes admission.
 Host-integrated manager/native composition now passes: one actual pinned Codex
 start, one scripted loopback response, canonical result, unchanged retained manifest
 and expiry-gated retirement. Legacy hosted regression and regenerated-Env typecheck
-also pass. These new fixture changes are local and not yet published; the previous
-full combined result below predates them.
+also pass. These new fixture changes are committed locally and not yet published.
+Fresh full verifier `.local/manager-combined.log` exits0:1644 backend/497 runtime
+plus Worker/browser/native/service/build, including the new composition. Desktop16
+also pass. Earlier failures remain historical failures, not relabeled successes.
 Fresh-session implementation is underway: host task-token/manager transport and
 runtime staging integration pass30 auth/wake and39 runtime checks. Existing browser
 fixture passes message-triggered eligible/unavailable/expired states, with all three
@@ -25,9 +27,9 @@ Worker route/DO credential separation, exact assignment binding, fixed issuance,
 read-only access and expiry pass78 focused tests. The real-workerd bootstrap fixture
 is integrated and passes on the host: zero passive wake/reservation, one persisted
 message/one wake, separate credentials, expiry and fixed grants after process reopen.
-All workers finished. Typecheck and desktop16 pass. The full combined verifier
+Prior implementation workers finished. Typecheck and desktop16 pass. The prior full combined verifier
 exited0 (1644 backend/497 runtime plus browser/native/service/build). Automatic
-hosted trial remains incomplete and default-off.
+hosted acceptance remains incomplete; repository defaults remain off.
 One admitted message produces one notification; real workerd SQLite/reopen and
 HTTP transport checks pass, as do typecheck,41 focused core/auth tests and19
 listener/launcher tests. Quiet `--listen` boots without session config and reads
@@ -38,8 +40,11 @@ within the unchanged$10 cumulative limit. These allowances are not actual charge
 Authenticated manager readback returns null before admission. The existing Sprite has one supported
 `hehebot-listener` HTTP Service registered at07:48Z; startup monitoring completed,
 and provider inventory reported cold at07:54:08Z. That does not prove process loss
-or cold-start readiness. No fresh model session yet; passive browser checks precede
-the single message test. Persistent imports pass after including generated contracts.
+or cold-start readiness. At08:08:20Z manager manifest was still null and Sprite cold.
+The browser worker is stalled in its earlier tool call (state unchanged since07:37Z),
+so live passive navigation/message acceptance remains blocked. No message authorized
+to that worker; let the fixed trial expire rather than extend or race a submission.
+Persistent imports pass after including generated contracts.
 Earlier combined runs failed missing mock getAlarm and unconsumed fixture POST
 bodies. Both regressions are fixed; `.local/bootstrap-combined.log` is the fresh
 full-green run, not a relabeling of those failures. The extended bootstrap workerd
@@ -47,8 +52,9 @@ fixture arrived after its stage and passed separately in `.local/bootstrap-worke
 Billing readback at2026-09-18T06:32:06Z: Fly Cost Explorer and upcoming invoice show
 $0.03, credit balance$0.00, Sprite cold. This is rounded, potentially lagged Fly
 usage, not all-project spend or proof of$9.97 remaining. Keep the existing$10 TOTAL.
-Next: verify passive no-wake followed by same-Sprite message bootstrap under the
-fixed trial. The new combined verifier is running; only targeted new checks have passed.
+Next: when browser execution recovers, verify passive no-wake followed by one
+same-Sprite message bootstrap under a separately prepared fixed trial if needed.
+Do not silently renew this policy or replay an uncertain assignment.
 The owner did not require all-project billing or a provider-enforced cap as a
 prerequisite. Keep cumulative in-scope estimates and actual observations distinct;
 escalate credible overrun risk, not absent hard-cap support. Local reservations are
