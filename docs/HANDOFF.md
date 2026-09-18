@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+Owner-authorized publication completed: integrated source through
+[`83806a7`](https://github.com/kz364/hehebot/commit/83806a77d30c4658acb52c77dfb2a132a12c5729)
+was pushed without force and remote HEAD verified. The sole remote-only agent-model
+documentation commit was preserved by local reconciliation. Outgoing history audit
+checked1898 blobs: no private-state paths or existing-secret matches; the one key
+pattern was a deliberately invalid test header. No deployment was performed.
+
 Local message-only wake/quiet listener checkpoint: require `nextClaimableRun()`
 before wake intent/dispatch. Actual workerd proves no wake from activation/passive
 reads/alarms, then exactly one from a persisted admitted message. `--listen` starts

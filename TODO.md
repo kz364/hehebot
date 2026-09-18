@@ -4,6 +4,12 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
+**Publication (2026-09-18):** integrated source through
+[`83806a7`](https://github.com/kz364/hehebot/commit/83806a77d30c4658acb52c77dfb2a132a12c5729)
+is pushed to `origin/main`, with remote HEAD verified and the remote agent-model
+documentation preserved. Earlier “unpushed” notes are historical. This publication
+does not deploy or enable the default-off bootstrap, connectors or production gates.
+
 **Current local follow-up:** activation, portal state/history reads and alarms now
 produce zero Sprite notifications until a persisted message passes admission.
 Fresh-session implementation is underway: host task-token/manager transport and
