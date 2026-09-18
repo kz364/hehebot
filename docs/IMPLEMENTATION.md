@@ -37,7 +37,13 @@ Full verifier stopped on encrypted-backup fs.watch EMFILE:1668/1669 backend pass
 isolated recheck reproduces. Orb showed126 visible inotify instances against128
 max_user_instances; no unrelated processes terminated or test weakened. Logs
 `.local/native-submit-host-{focused,runtime,composition,combined}.log` and
-`.local/native-submit-backup-recheck.log`. Full combined check is not green.
+`.local/native-submit-backup-recheck.log`. Subsequent orb-only sysctl increase
+fs.inotify.max_user_instances128→256 unblocked unchanged watcher test11/11;
+fresh `bash scripts/verify-codex.sh` exited0 with1669 backend/514 runtime plus
+Worker/browser/native/service/build. Log `.local/native-submit-host-combined-recheck.log`.
+`npm ci --prefix desktop && npm test --prefix desktop` passes16/16;
+log `.local/native-submit-host-desktop.log`.
+Earlier failed check remains recorded; no test skips or application changes.
 Diagnostics allowlist stages/error codes and
 signed32-bit RPC codes, omit raw error messages, and preserve UNKNOWN/no replay.
 They cannot recover78's discarded original error. No diagnostic deployment yet.
@@ -49,6 +55,26 @@ unused-before-staging recovery for78.
 V3 expired unchanged15:22:07.073Z. Native Tasks GET empty15:24:59, no DELETE or refund.
 Evidence `.local/bootstrap-78-{listener-private.log,journal-selection.jsonl,
 locked-inspection.json,tasks-private.json}` stays private. Production gates false.
+
+Read-only follow-up15:48:04Z: original service permissions name and base-config
+digest reconstructed exactly under both kernel locks. Supported initialize/config/read
+confirms default profile/filesystem match and disabled network; project maxbytes32768,
+markers[.git], fallbackCount0, no reviewed trust entries, three system/user/session
+layers without marker overrides. Fixed ancestor/native-home metadata found no
+.git/AGENTS.override.md/AGENTS.md/.codex/config.toml candidates; canonical roots
+are disjoint and not symlinked. No thread/start/turn/account/model request; diagnostic
+native exited and temporary guest/local helpers removed. First inspection refused
+before native launch because its guard incorrectly expected persisted
+restrictedPermissions:true; service sets that only in memory. Corrected inspection
+requires the actual raw config contract plus exact original profile digest.
+Evidence `.local/bootstrap-78-config-selection-v2.jsonl`; metadata/config read is not
+proof of sandbox readability or original error. Worker pinned0.154.0 reproduction
+of nested-home denial is not this live layout. Current core successor requires
+completed text-only receipts/settlement; retirement merely records child-stop/locks,
+and unused recovery categorically excludes attempt1. Adapter fsyncs threadId before
+turn/start and supported runtime writers preserve it; this narrows the boundary
+under intact journal custody, but native thread/start side effects remain under
+tagged-upstream investigation. No new recovery authority or settlement claim.
 
 Owner architecture alignment (2026-09-18, docs only): imported the reviewed
 three-file clarification without replacing current live-status documents. Amp is

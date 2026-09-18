@@ -22,14 +22,24 @@ applicability checks; host focused55/55, runtime514/514, typecheck and actual pi
 native HTTP-manager composition pass. Logs `.local/native-submit-host-{focused,
 runtime,composition}.log`. Combined verifier stopped on backup fs.watch EMFILE:
 1668/1669 backend pass; isolated recheck reproduces.126 visible inotify instances,
-max_user_instances128. No unrelated processes killed; full verifier not green.
-Log `.local/native-submit-host-combined.log`. No diagnostic deployment or replay change.
+max_user_instances128. Orb-only sysctl128→256 resolves unchanged watcher test11/11.
+Fresh full verifier exits0:1669 backend/514 runtime plus Worker/browser/native/service/
+build, `.local/native-submit-host-combined-recheck.log`. Earlier failure retained in
+`.local/native-submit-host-combined.log`. No diagnostic deployment or replay change.
 Supported native thread/list under both locks15:29:15 returned zero exact-workspace
 threads/no next page, and diagnostic native exited; absence is not settlement.
-Evidence `.local/bootstrap-78-native-list.jsonl`. Temporary guest helper remains
-`.local/inspect-78-native-list.mjs`; remove on next necessary guest access rather than
-waking solely for cleanup. Runtime worker T-01a0b2ce-eb38-7314-b3a3-452bb15e12ad now
-owns read-only comparison of hosted startup with working composition, not live calls.
+Evidence `.local/bootstrap-78-native-list.jsonl`. Temporary helpers removed locally
+and from guest during bounded15:48 config inspection. Exact original profile/hash
+matches, network disabled, canonical roots disjoint/no symlinks, no reviewed
+ancestor instructions/project configs. Evidence `.local/bootstrap-78-config-selection-v2.jsonl`;
+no thread/start/turn/account/model request, diagnostic native exited. First guard
+refused before native launch (persisted restrictedPermissions is intentionally absent;
+service sets it in memory); corrected raw-contract inspection succeeded.
+Core read-only review confirms no current claimed-UNKNOWN successor path; stop/locks
+and empty thread/list cannot replace completed receipts. Runtime worker
+T-01a0b2ce-eb38-7314-b3a3-452bb15e12ad now checks pinned thread/start side effects
+before turn/start. Host source audit found fsynced threadId precedes turn/start and
+no supported caller clears it. This is not authority to settle/replay78.
 
 Owner clarification integrated in SPEC21.1, PRODUCT_UX_SPEC and PROJECT_INTENT:
 Amp is architecture reference only, not an operational dependency or coding UI.

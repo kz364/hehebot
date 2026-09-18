@@ -14,16 +14,21 @@ submission_unknown, no acknowledged native thread/turn, direct child nativeStopp
 Listener had already failed SERVICE_RECOVERY_REQUIRED15:15:44 before expiry; original
 RPC error was discarded by adapter. Stage/code-only diagnostics are now integrated
 locally; host focused tests55/55, runtime514/514, typecheck and credential-free
-HTTP→hosted manager→native canonical completion pass. Combined verifier stopped at
-backup watcher EMFILE (1668/1669 backend pass); isolated recheck also fails at watch.
-Orb has126 visible inotify instances against limit128; no unrelated processes killed.
+HTTP→hosted manager→native canonical completion pass. Fresh full combined verifier
+now exits0:1669 backend/514 runtime plus Worker/browser/native/service/build; desktop16/16.
+Earlier backup watcher EMFILE reproduced in isolation, then passed11/11 after
+orb-only inotify limit128→256; no unrelated processes killed or tests weakened.
 No raw errors or replay-policy change. Native ack uncertainty remains parked;
 do NOT apply unused-before-staging recovery to78. Tasks list empty15:24:59, no DELETE.
 V3 expired unchanged15:22:07.073Z; preserve both reservations and lifetime baseline.
 Supported native thread/list under both locks15:29:15 returned zero matching threads
 and no next page; diagnostic native exited. This does not prove absence of prior
-effects. Next: compare hosted startup with the known
-working path; no new trial until exact custody is reconciled. Diagnostics not deployed.
+effects. Locked15:48 config/read reconstructs original profile/hash and confirms
+permissions match, network disabled, disjoint canonical roots and no reviewed
+ancestor instruction/config candidates. This does not establish the original error.
+Current successor requires completed receipts; child-stop cannot unblock claimed
+UNKNOWN. Next: establish what pinned native thread/start can do before turn/start;
+no new trial until exact custody is reconciled. Diagnostics not deployed.
 
 **Owner architecture clarification integrated (2026-09-18):** Hehebot remains a
 custom assistant independent of Amp accounts/runtime/SDK. Amp is a documented
