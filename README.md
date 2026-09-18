@@ -9,6 +9,7 @@ The only supported execution harness is **Codex app-server 0.154.0**. Fly Sprite
 ## Start here
 
 - **[Progress and TODO](TODO.md)** — completed local work, remaining tasks, next priority, verification and owner/account/device blockers; updated at implementation checkpoints.
+- [Agent model: personas, background tasks, and shared accounts](docs/AGENT_MODEL.md) — diagram and explanation of who controls what
 - [Implementation status](docs/IMPLEMENTATION.md)
 - [Agent handoff](docs/HANDOFF.md)
 - [Product specification](SPEC.md), [UX requirements](PRODUCT_UX_SPEC.md), and [project intent](docs/PROJECT_INTENT.md)
