@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import { requireThat } from './errors';
 import type { Store } from './store';
 import type { Run } from './types';
-import {ownerAlphaManifestSha256,parseOwnerAlphaUnusedRecovery,assertUnusedRecoveryCustody,type UnusedMessageBoundAuthority,type OwnerAlphaUnusedDisposition,type MessageBoundAuthority,type OwnerAlphaManifest,type OwnerAlphaBootstrapConfig} from './owner-alpha-bootstrap';
+import {ownerAlphaManifestSha256,parseOwnerAlphaUnusedRecovery,assertUnusedRecoveryCustody,parseOwnerAlphaClaimedPreTurnQuarantine,assertClaimedPreTurnQuarantineCustody,type ClaimedPreTurnMessageBoundAuthority,type OwnerAlphaClaimedPreTurnDisposition,type UnusedMessageBoundAuthority,type OwnerAlphaUnusedDisposition,type MessageBoundAuthority,type OwnerAlphaManifest,type OwnerAlphaBootstrapConfig} from './owner-alpha-bootstrap';
 
 export type TextOnlyProfile={profile_version:'codex-text-only-v1';profile_sha256:string};
 export type OwnerAlphaPolicy = { session_id:string; persona_id:string; expires_at:string; max_runs:number; max_task_seconds:number; background_first_root?:true;text_only?:TextOnlyProfile };
@@ -98,7 +98,7 @@ type Custody={policy:OwnerAlphaPolicy;admitted_run_ids:string[];binding?:OwnerAl
 export type OwnerAlphaGeneration={
  epoch:number;boot_id:string;transition_id:string;policy:OwnerAlphaPolicy&{text_only:TextOnlyProfile};
  predecessor:{epoch:number;boot_id:string;session_id:string;phase:string;lease_until:string|null};
- authority:OwnerAlphaSuccessor|MessageBoundAuthority|UnusedMessageBoundAuthority;activation_command_id:string;activation_command_sha256:string;activation_event_sequence:number;
+ authority:OwnerAlphaSuccessor|MessageBoundAuthority|UnusedMessageBoundAuthority|ClaimedPreTurnMessageBoundAuthority;activation_command_id:string;activation_command_sha256:string;activation_event_sequence:number;
 };
 /** Immutable local-session policy; each durable admitted ID consumes one run forever. */
 export class OwnerAlpha {
@@ -136,16 +136,18 @@ export class OwnerAlpha {
       envelope.transition_id===generation.transition_id&&envelope.predecessor.epoch===generation.predecessor.epoch&&envelope.predecessor.session_id===generation.predecessor.session_id&&envelope.predecessor.boot_id===generation.predecessor.boot_id&&
       envelope.successor.boot_id===generation.boot_id&&JSON.stringify(parseOwnerAlphaSuccessor(JSON.stringify(envelope))?.successor.policy)===JSON.stringify(generation.policy),'INVALID_CONFIGURATION','Invalid retired message authority.',503);
     }else{
-     const row=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_unused_disposition:${generation.predecessor.epoch}`)[0];
+     const quarantine=generation.authority.kind==='owner-message-claimed-pre-turn-quarantine';
+     const row=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`${quarantine?'owner_alpha_claimed_pre_turn_disposition':'owner_alpha_unused_disposition'}:${generation.predecessor.epoch}`)[0];
      const priorRow=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_generation:${generation.predecessor.epoch}`)[0];
-     requireThat(generation.authority.kind==='owner-message-unused-recovery'&&row&&priorRow&&createHash('sha256').update(row.value_json).digest('hex')===generation.authority.disposition_sha256,'INVALID_CONFIGURATION','Unused disposition binding is missing.',503);
-     const disposition=JSON.parse(row.value_json) as OwnerAlphaUnusedDisposition,grant=parseOwnerAlphaUnusedRecovery(disposition.grant),prior=JSON.parse(priorRow.value_json) as OwnerAlphaGeneration;
+     requireThat((quarantine||generation.authority.kind==='owner-message-unused-recovery')&&row&&priorRow&&createHash('sha256').update(row.value_json).digest('hex')===generation.authority.disposition_sha256,'INVALID_CONFIGURATION','Disposition binding is missing.',503);
+     const disposition=JSON.parse(row.value_json) as OwnerAlphaUnusedDisposition|OwnerAlphaClaimedPreTurnDisposition,grant=quarantine?parseOwnerAlphaClaimedPreTurnQuarantine(disposition.grant):parseOwnerAlphaUnusedRecovery(disposition.grant),prior=JSON.parse(priorRow.value_json) as OwnerAlphaGeneration;
      requireThat(Object.keys(disposition).sort().join(',')==='grant,successor_epoch,successor_manifest_sha256,successor_run_id'&&JSON.stringify(grant)===JSON.stringify(disposition.grant)&&
       'kind' in prior.authority&&disposition.successor_epoch===m.epoch&&disposition.successor_run_id===m.run_id&&disposition.successor_manifest_sha256===m.manifest_sha256&&
       grant.predecessor.epoch===generation.predecessor.epoch&&grant.predecessor.boot_id===generation.predecessor.boot_id&&grant.predecessor.session_id===generation.predecessor.session_id&&
       grant.successor_policy_revision===m.policy_revision&&grant.installation_id===m.installation_id&&grant.owner_binding_sha256===m.owner_binding_sha256&&m.expires_at<=grant.expires_at&&
-      generation.predecessor.lease_until!==null&&generation.predecessor.lease_until<=m.issued_at,'INVALID_CONFIGURATION','Unused disposition differs from its successor.',503);
-     assertUnusedRecoveryCustody(this.store,grant,prior.authority.manifest,m.issued_at);
+      generation.predecessor.lease_until!==null&&generation.predecessor.lease_until<=m.issued_at,'INVALID_CONFIGURATION','Disposition differs from its successor.',503);
+     if(grant.kind==='claimed-pre-turn-quarantine-v1')assertClaimedPreTurnQuarantineCustody(this.store,grant,prior.authority.manifest,m.issued_at);
+     else assertUnusedRecoveryCustody(this.store,grant,prior.authority.manifest,m.issued_at);
     }
     return generation;
    }

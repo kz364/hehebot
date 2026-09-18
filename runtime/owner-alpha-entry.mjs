@@ -75,7 +75,9 @@ async function runBoundedOwnerAlpha(config, { createService = createCodexService
   if (!config.nativeHome) await mkdir(home, { recursive: true, mode: 0o700 });
   await privatePath(home, true);
   // Do not overwrite an existing user config or retry used session custody.
-  for (const path of [...(config.nativeHome ? [] : [join(home, 'config.toml')]), join(config.stateDirectory, 'journal'), join(config.stateDirectory, 'workspace')]) {
+  // Any quarantine marker, even partial or a dangling symlink, consumes this session.
+  for (const path of [join(config.stateDirectory, 'claimed-pre-turn-quarantine.json'),
+    ...(config.nativeHome ? [] : [join(home, 'config.toml')]), join(config.stateDirectory, 'journal'), join(config.stateDirectory, 'workspace')]) {
     try { await lstat(path); } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
     fail('OWNER_ALPHA_FRESH_STATE_REQUIRED');
   }

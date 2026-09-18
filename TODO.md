@@ -15,11 +15,19 @@ diagnostics installed after supported Service stop; hashes/imports verified and
 Service start completed. Fresh full combined recheck exits0:1669 backend/515 runtime
 plus Worker/browser/native/service/build.16:25 authenticated manager assignment null.
 No new policy/message, replay or settlement.
-Next: explicit claimed-pre-turn quarantine design, preserving startup UNKNOWN and
-reservations. Tagged Codex thread/start can persist metadata and send generate:false
-prewarm/auth/catalog requests before turn/start; no-turn is not no-effects/zero-cost.
-Core default-off preparation is active in an isolated worker; runtime producer is
-not implemented. Supported prospective fence is managed allow_remote_control=false
+Next: review historical custody and obtain approval for the prospective managed
+fence before any claimed-pre-turn quarantine issuance. Core and runtime evidence
+producer are integrated locally, default-off, preserving UNKNOWN and reservations:
+exact expired claimed attempt, fresh-message-only consumption, immutable disposition,
+reopen validation after config removal, real dual locks and permanent entry refusal.
+Host combined core check passes1710 backend/515 runtime plus Worker/browser/native/
+service/build after fixing a fresh-DO schema-order regression. Integrated runtime
+recheck passes520/520, focused19/19 and pinned hosted-manager composition; desktop16/16.
+No quarantine deployment, live marker or grant. Tagged Codex thread/start can persist
+metadata and send generate:false prewarm/auth/catalog requests before turn/start;
+no-turn is not no-effects/zero-cost. Evidence producer refuses missing historical
+review assertions; hashes/current settings do not prove them. Supported prospective
+fence is managed allow_remote_control=false
 and [features] memories=false on the dedicated Sprite. This changes shared native
 access controls and awaits explicit approval; no managed file has been changed.
 Historical ingress/custody still needs operator review. No quarantine authority or

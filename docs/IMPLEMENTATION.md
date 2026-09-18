@@ -38,7 +38,31 @@ Null durable threadId under reviewed intact single-writer custody supports no
 first-party turn/start, not no startup effects or billing. Oracle's scoped design
 review supports preparing a distinct explicit one-use claimed-pre-turn quarantine
 authority, preserving UNKNOWN and reservations, not reusing unused/settlement guards.
-Core implementation is assigned in an isolated exact host snapshot; no live grant.
+Core implementation is integrated locally after exact patch checksum verification
+and host review. `claimed_pre_turn_quarantine` defaults absent, requires a new policy
+revision and fresh owner message, binds exact expired claimed attempt1 with literal
+null native/result/release/settlement fields, rejects contradictory activity, and
+retains an immutable disposition through config removal/reopen. Old custody and cost
+reservations are unchanged. Host typecheck and focused216/216 pass; combined verifier
+first passed1710 backend but failed six hosted-control runtime cases: the new
+constructor query ran before a fresh Durable Object installed its SQLite schema.
+Host added a schema-presence guard without bypassing existing custody validation;
+the same hosted-control tests pass8/8. Original failure remains in
+`.local/claimed-pre-turn-host-combined.log`; full recheck exits0 with1710 backend,
+515 runtime and Worker/browser/native/service/build in
+`.local/claimed-pre-turn-host-combined-recheck.log`.
+Runtime evidence producer subsequently integrated after checksum and host review:
+pinned original/current sources and configs, canonical root inode/device identities,
+exact bridge/adapter fingerprint using claim deadline, literal null native IDs and
+strict three-record journal inventory. Both real flocks are inherited and verified;
+exclusive0400 marker write fsyncs file/directory and permanently blocks old entry,
+including partial/dangling markers. Retained records stay unchanged. Historical
+review assertions are mandatory trusted evidence, not conclusions established by
+hashes, current settings or null IDs. Output contains no successor grant/expiry or
+settlement/refund assertion. Host focused19/19, runtime520/520 and pinned hosted-manager
+composition pass after integration; desktop16/16 also passes. Logs
+`.local/claimed-pre-turn-host-{runtime-focused,runtime,composition}.log`.
+No quarantine deployment, live evidence marker or authority issuance.
 Shared-home memory/alternate-ingress fences remain prerequisites. Tagged source
 supports managed `/etc/codex/requirements.toml` allow_remote_control=false plus
 [features] memories=false; legacy features.remote_control is ignored. No supported

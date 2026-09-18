@@ -20,9 +20,25 @@ mutation or trial/replay. Full verifier PID3051673 finished exit0:1669 backend/5
 runtime plus Worker/browser/native/service/build, `.local/hosted-cap-drop-combined.log`.
 
 Quarantine preparation: oracle recommends explicit default-off one-use authority,
-not weakening settlement/unused guards. Core worker T-01a0b33f-5891-754d-b68d-b88db176da33
-has exact host local-main archive SHA25632037cee07ed5e2ff2d44a03d0103b1c695253b74a856378a92d5bfdaaee3071
-and owns four core/test files for claimed_pre_turn_quarantine. Host owns runtime/docs.
+not weakening settlement/unused guards. Core patch from T-01a0b33f-5891-754d-b68d-b88db176da33
+is integrated in this checkout after checksum/applicability and host review. Patch
+SHA2566e79fc847628873b98ff3ce00d5f2da56ab54050f171c67518d813e9b737d9ff;
+four core/test files, host typecheck and focused216/216 pass. Full host run exposed
+a fresh-DO constructor query before schema installation; host fixed with a schema
+presence guard. Hosted-control8/8 and full recheck pass1710 backend/515 runtime plus
+Worker/browser/native/service/build, `.local/claimed-pre-turn-host-combined-recheck.log`.
+Original failing log remains `.local/claimed-pre-turn-host-combined.log`.
+Runtime worker T-01a0b2ce-eb38-7314-b3a3-452bb15e12ad delivered the evidence producer,
+permanent entry refusal and tests on exact local-main snapshot
+SHA256022167c2808ec38a190516bf36c637372694b41e898d6e9a902828144dd476ca.
+Patch SHA2565099b4c15a4cf3bd9569d8134c01b95b1598d430bc0fe1a9f82c76a296ee23fc
+is reviewed and integrated. Exact ten predecessor fields, pinned files/roots/current
+and original sources, explicit historical ingress/memory and single-writer assertions;
+unknown assertions refuse issuance. Current settings/hashes do not prove history.
+Real dual-lock writer emits only evidence and a permanent marker, no successor grant
+or expiry. Host focused19/19, runtime520/520, hosted-manager native composition and
+desktop16/16 pass. Logs `.local/claimed-pre-turn-host-{runtime-focused,runtime,composition}.log`.
+No verification processes remain. No quarantine deployment, live marker or authority.
 Keep old run recovery-required, all reservations/unknown startup effects and no-sleep;
 new explicit operator evidence/authority must bind exact attempt1, literal null native
 IDs, historical canonical custody, persistent fence and fresh successor. No live

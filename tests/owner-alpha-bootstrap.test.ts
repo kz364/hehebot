@@ -9,7 +9,7 @@ import {ControlCore} from '../src/core/control';
 import {LifecycleCore} from '../src/core/lifecycle';
 import {Store,type Database} from '../src/core/store';
 import type {OwnerAlphaPolicy} from '../src/core/owner-alpha';
-import {ownerAlphaManifestSha256,parseOwnerAlphaBootstrap,type OwnerAlphaBootstrapConfig,type OwnerAlphaRetirement} from '../src/core/owner-alpha-bootstrap';
+import {ownerAlphaManifestSha256,parseOwnerAlphaBootstrap,parseOwnerAlphaClaimedPreTurnQuarantine,type OwnerAlphaBootstrapConfig,type OwnerAlphaRetirement} from '../src/core/owner-alpha-bootstrap';
 
 function setup(overrides:Partial<OwnerAlphaBootstrapConfig>={}){
  const f=fixture(),original:OwnerAlphaPolicy={session_id:randomUUID(),persona_id:bot,expires_at:'2026-09-10T00:01:00.000Z',max_runs:1,max_task_seconds:45};
@@ -287,5 +287,101 @@ it('allows ordinary completed-and-retired rollover after unused recovery without
   expect(f.core.ownerAlpha.activeGeneration()?.authority).toMatchObject({kind:'owner-message'});
   expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'")).toHaveLength(3);
   f.reopen(without);expect(f.lifecycle.nextClaimableRun()?.id).toBe(fresh.resource_id);
+ }finally{f.close();}
+});
+
+function quarantined(){
+ const f=setup();f.retire();const key=randomUUID(),receipt=f.send(bot,key),prior=f.core.bootstrap.assignedManifest()!;
+ const identity={epoch:prior.epoch,boot_id:prior.boot_id};f.lifecycle.registerBoot(prior.boot_id);f.lifecycle.ready(identity);
+ expect(f.lifecycle.claim(identity)?.run.id).toBe(prior.run_id);
+ f.setNow(prior.expires_at);f.lifecycle.watchdog();
+ expect(f.db.all('SELECT status FROM attempts WHERE run_id=?',prior.run_id)).toEqual([{status:'claimed'}]);
+ const submission_key=`${prior.run_id}:1`,config:OwnerAlphaBootstrapConfig={...f.config,policy_revision:'quarantine-v2',claimed_pre_turn_quarantine:{
+  kind:'claimed-pre-turn-quarantine-v1',installation_id:prior.installation_id,owner_binding_sha256:prior.owner_binding_sha256,
+  predecessor:{manifest_sha256:prior.manifest_sha256,epoch:prior.epoch,boot_id:prior.boot_id,transition_id:prior.transition_id,session_id:prior.session_id,run_id:prior.run_id,
+   attempt:1,submission_key,native_attempt_id:createHash('sha256').update(JSON.stringify([prior.installation_id,submission_key])).digest('hex'),native_fingerprint:'e'.repeat(64)},
+  evidence:{sha256:'d'.repeat(64),observed_at:prior.expires_at,source:'trusted-runtime-quarantine-marker'},successor_policy_revision:'quarantine-v2',expires_at:'2026-09-10T00:05:43.000Z'}};
+ const retained=()=>JSON.stringify({old:f.retained(),run:f.store.run(prior.run_id),attempts:f.db.all('SELECT * FROM attempts WHERE run_id=?',prior.run_id),
+  command:f.db.all('SELECT * FROM commands WHERE id=?',receipt.id),events:f.db.all('SELECT * FROM events WHERE id=? OR cause_id=?',receipt.id,receipt.id),
+  metadata:f.db.all("SELECT * FROM runtime_metadata WHERE key IN ('owner_alpha_generation:2','owner_alpha_reservation:2','owner_alpha_cost_baseline','owner_alpha_wake:2') ORDER BY key")});
+ return {f,key,receipt,prior,config,retained};
+}
+it('quarantines exact claimed uncertainty without settlement and admits only a fresh independently claimable message',()=>{
+ const {f,key,receipt,prior,config,retained}=quarantined();try{
+  expect(()=>f.lifecycle.assertOwnerAlphaSettlement(true)).toThrow();const before=retained();
+  expect(f.core.bootstrap.summary()?.message_admission_available).toBe(false);f.reopen(config);
+  const snapshot=()=>JSON.stringify(['runtime_metadata','lifecycle','runs','attempts','events'].map(table=>f.db.all(`SELECT * FROM ${table}`))),passive=snapshot();
+  expect(f.core.bootstrap.summary()?.message_admission_available).toBe(true);f.core.state();expect(f.core.bootstrap.assignedManifest()).toEqual(prior);expect(snapshot()).toBe(passive);
+  expect(f.send(bot,key)).toEqual(receipt);expect(snapshot()).toBe(passive);
+  const freshKey=randomUUID(),fresh=f.send(bot,freshKey),m=f.core.bootstrap.assignedManifest()!;
+  expect(m).toMatchObject({epoch:3,run_id:fresh.resource_id,policy_revision:'quarantine-v2',expires_at:config.claimed_pre_turn_quarantine!.expires_at});
+  expect(f.core.ownerAlpha.activeGeneration()?.authority).toMatchObject({kind:'owner-message-claimed-pre-turn-quarantine'});
+  expect(f.lifecycle.nextClaimableRun()?.id).toBe(m.run_id);expect(f.core.ownerAlpha.eligible(f.store.run(prior.run_id))).toBe(false);expect(f.send(bot,freshKey)).toEqual(fresh);
+  expect(retained()).toBe(before);expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'")).toHaveLength(2);
+  const {claimed_pre_turn_quarantine:_,...without}=config;f.reopen(without);expect(f.core.bootstrap.assignedManifest()).toEqual(m);
+  const report=complete(f);expect(retained()).toBe(before);f.core.bootstrap.recordRetirement(report);const next=f.send();
+  expect(f.core.bootstrap.assignedManifest()?.epoch).toBe(4);expect(f.lifecycle.nextClaimableRun()?.id).toBe(next.resource_id);f.reopen(without);expect(retained()).toBe(before);
+  expect(()=>f.reopen({...config,claimed_pre_turn_quarantine:{...config.claimed_pre_turn_quarantine!,evidence:{...config.claimed_pre_turn_quarantine!.evidence,sha256:'f'.repeat(64)}}})).toThrow(/immutable/);
+ }finally{f.close();}
+});
+it.each(['missing','manifest','owner','boot','revision','expired','early evidence','future evidence','budget','baseline','second attempt','other epoch','native empty','native id','result','release','settled','checkpoint','running','terminated','completed','recovery_required','deadline','lease','run status','child','link','operation','effect','lock','question','retry','controller','proof'] as const)('blocks claimed quarantine with %s',mode=>{
+ const {f,prior,config,retained}=quarantined();try{
+  const q=config.claimed_pre_turn_quarantine!;
+  if(mode==='missing')delete config.claimed_pre_turn_quarantine;
+  else if(mode==='manifest')q.predecessor.manifest_sha256='f'.repeat(64);else if(mode==='owner')q.owner_binding_sha256='f'.repeat(64);else if(mode==='boot')q.predecessor.boot_id=randomUUID();
+  else if(mode==='revision')q.successor_policy_revision='trial-v1';else if(mode==='expired')f.setNow(q.expires_at);
+  else if(mode==='early evidence')q.evidence.observed_at='2026-09-10T00:04:59.999Z';else if(mode==='future evidence')q.evidence.observed_at='2026-09-10T00:05:01.000Z';
+  else if(mode==='budget')config.reservation_micro_usd=7000000;else if(mode==='baseline')config.prior_cost_micro_usd++;
+  f.reopen(config);
+  if(mode==='second attempt')f.db.exec('INSERT INTO attempts(run_id,attempt,epoch,boot_id,status,submission_key,started_at,deadline_at) SELECT run_id,2,999,?,status,?,started_at,deadline_at FROM attempts WHERE run_id=?',randomUUID(),`${prior.run_id}:2`,prior.run_id);
+  if(mode==='other epoch')f.db.exec('UPDATE attempts SET epoch=999 WHERE run_id=?',prior.run_id);
+  if(mode==='native empty'||mode==='native id')f.db.exec('UPDATE attempts SET native_run_ref=? WHERE run_id=?',mode==='native empty'?'':'native',prior.run_id);
+  if(mode==='result'||mode==='release')f.db.exec(`UPDATE attempts SET ${mode==='result'?'result_json':'coordinator_release_json'}='{}' WHERE run_id=?`,prior.run_id);
+  if(mode==='settled')f.db.exec('UPDATE attempts SET settled_at=? WHERE run_id=?',f.core.now(),prior.run_id);
+  if(mode==='checkpoint')f.db.exec("UPDATE runs SET checkpoint_json='{}' WHERE id=?",prior.run_id);
+  if(['running','terminated','completed','recovery_required'].includes(mode))f.db.exec('UPDATE attempts SET status=? WHERE run_id=?',mode,prior.run_id);
+  if(mode==='deadline')f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?','2026-09-10T00:05:00.001Z',prior.run_id);
+  if(mode==='lease')f.db.exec('UPDATE lifecycle SET lease_until=?','2026-09-10T00:05:00.001Z');
+  if(mode==='run status')f.db.exec("UPDATE runs SET status='running' WHERE id=?",prior.run_id);
+  if(mode==='child')f.db.exec('UPDATE runs SET parent_run_id=? WHERE id=?',prior.run_id,f.waiting.resource_id!);
+  if(mode==='link')f.db.exec('INSERT INTO native_task_links VALUES(?,?,1,?,?)',f.waiting.resource_id!,prior.run_id,'native','session');
+  if(mode==='operation')f.db.exec("INSERT INTO operations VALUES(?,?,1,'inference','settled',?,?,?)",randomUUID(),prior.run_id,f.core.now(),f.core.now(),f.core.now());
+  if(mode==='effect')f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','confirmed','authority','digest',?)",randomUUID(),prior.run_id,randomUUID(),f.core.now());
+  if(mode==='lock')f.db.exec('INSERT INTO resource_locks VALUES(?,?,1,?)','resource',prior.run_id,f.core.now());
+  if(mode==='question'||mode==='proof')f.db.exec('INSERT INTO runtime_metadata VALUES(?,?)',mode==='question'?'native-question:contradiction':`text_only_receipt:${prior.run_id}:1`,JSON.stringify({run_id:prior.run_id}));
+  if(mode==='retry')f.db.exec('INSERT INTO retry_queue VALUES(?,?,?)',prior.run_id,f.core.now(),'unexpected');
+  if(mode==='controller')f.db.exec("INSERT INTO controller_operations(id,kind,epoch,status,created_at) VALUES(?,'hold',?,'confirmed',?)",randomUUID(),prior.epoch,f.core.now());
+  const before=retained();expect(f.core.bootstrap.summary()?.message_admission_available).toBe(false);
+  expect(f.store.run(f.send().resource_id!).status).toBe('waiting');expect(f.lifecycle.nextClaimableRun()).toBeUndefined();expect(retained()).toBe(before);
+  expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_claimed_pre_turn_disposition:*'")).toHaveLength(0);
+ }finally{f.close();}
+});
+it('strictly parses quarantine identity and refuses simultaneous unused authority',async()=>{
+ const {f,config}=quarantined();try{
+  const q=config.claimed_pre_turn_quarantine!;expect(parseOwnerAlphaClaimedPreTurnQuarantine(q)).toEqual(q);
+  for(const bad of [null,{}, {...q,extra:true},{...q,predecessor:{...q.predecessor,attempt:2}},{...q,predecessor:{...q.predecessor,submission_key:'wrong'}},{...q,predecessor:{...q.predecessor,native_attempt_id:'f'.repeat(64)}},{...q,predecessor:{...q.predecessor,native_fingerprint:''}}])expect(()=>parseOwnerAlphaClaimedPreTurnQuarantine(bad)).toThrow();
+  const {attempt:_,submission_key:__,native_attempt_id:___,native_fingerprint:____,...predecessor}=q.predecessor;
+  expect(()=>f.reopen({...config,unused_recovery:{...q,kind:'unused-before-staging-v1',predecessor}})).toThrow(/mutually exclusive/);
+ }finally{f.close();}
+});
+it.each(['evidence','successor','predecessor'] as const)('rejects persisted quarantine %s tampering at selector and reopen',mode=>{
+ const {f,prior,config}=quarantined();try{
+  f.reopen(config);f.send();
+  if(mode==='predecessor')f.db.exec("UPDATE attempts SET native_run_ref='unexpected' WHERE run_id=?",prior.run_id);
+  else f.db.exec('UPDATE runtime_metadata SET value_json=json_set(value_json,?,?) WHERE key=?',mode==='evidence'?'$.grant.evidence.sha256':'$.successor_run_id',mode==='evidence'?'f'.repeat(64):randomUUID(),'owner_alpha_claimed_pre_turn_disposition:2');
+  expect(()=>f.lifecycle.nextClaimableRun()).toThrow();const {claimed_pre_turn_quarantine:_,...without}=config;expect(()=>f.reopen(without)).toThrow();
+  expect(()=>new ControlCore(f.store,{...f.core.options,ownerAlphaBootstrap:undefined})).toThrow();
+ }finally{f.close();}
+});
+it.each([999,1000])('bounds quarantine lifetime at %ims without consuming insufficient grants',remaining=>{
+ const {f,config}=quarantined();try{
+  config.claimed_pre_turn_quarantine!.expires_at=new Date(Date.parse(f.core.now())+remaining).toISOString();f.reopen(config);
+  const fresh=f.send();expect(f.store.run(fresh.resource_id!).status).toBe(remaining===1000?'queued':'waiting');
+  expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'")).toHaveLength(remaining===1000?2:1);
+  if(remaining===1000){
+   const m=f.core.bootstrap.assignedManifest()!,identity={epoch:m.epoch,boot_id:m.boot_id};f.lifecycle.registerBoot(m.boot_id);f.lifecycle.ready(identity);expect(f.lifecycle.claim(identity)?.run.id).toBe(fresh.resource_id);
+   f.setNow(config.claimed_pre_turn_quarantine!.expires_at);f.lifecycle.watchdog();expect(f.core.bootstrap.summary()?.message_admission_available).toBe(false);expect(f.store.run(f.send().resource_id!).status).toBe('waiting');
+   expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'")).toHaveLength(2);
+  }
  }finally{f.close();}
 });
