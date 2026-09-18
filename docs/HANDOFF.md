@@ -2,7 +2,32 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. It has a durable external control plane and a sleeping single-runtime design. The protected portal/control plane and authenticated SQLite state read work. A hosted model reply persisted only as provisional output; task completion failed and custody remains recovery-required. Production execution/native gates remain false.
 
-## Active follow-up (2026-09-17 Asia/Jakarta)
+## Active follow-up (2026-09-18 Asia/Jakarta)
+
+Owner-requested oracle supersedes the universal-retirement prerequisite below for
+one supervised text-only alpha. Preserve historical unknown custody/no replay;
+revoke predecessor authority, observe one supported same-Sprite restart, then use
+a fresh generation/profile/native thread. No production/sleep/containment claim.
+Worker credential generation binding is implemented locally: private
+HEHEBOT_RUNTIME_GENERATION pins epoch/boot_id/transition_id after bearer validation
+and before any runtime reconciliation. Rotated predecessor bearer was verified
+401 UNAUTHORIZED against the live Worker; successor secret remains orb-only.
+Runtime Access rotation completed: predecessor token deleted, existing internal
+policy now binds only successor; parent owner policy unchanged. Host independently
+checked predecessor401/successor404 from Worker. Fresh files are0600, orb-only.
+One POST restart was sent and returned502; outcome is UNKNOWN, not accepted or
+completed. Intent is .local/alpha-recovery-restart-request.json; NEVER retry it
+blindly. Pre-restart live inspector and disk nonce evidence is in
+.local/alpha-recovery-restart-before.log. First post-request exec reported service
+temporarily unavailable; two later bounded observations found unchanged kernel
+boot ID and retained nonce, same Sprite ID. Inspector exited naturally at180s.
+Disposition .local/alpha-recovery-disposition.json is restart_unconfirmed and
+explicitly denies activation/replay. No further restart or polling; ask exactly how
+to observe completion of this request. No model call, successor activation or code
+deployment. Combined verifier exits0:1605 backend/472 runtime plus all native,
+Worker/browser/build checks; desktop16 and later focused63/typecheck pass. Logs
+.local/alpha-recovery-{combined,focused,desktop}.log. No active workers/tests remain.
+Actual incremental billing unverified. Public support posting remains unauthorized.
 
 E11 read-only UI now integrated locally: shared helper in public/app.js validates
 unique current-attempt snapshots, six safe counters per group and nullable window;

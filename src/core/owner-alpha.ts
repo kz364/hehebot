@@ -10,6 +10,10 @@ export type OwnerAlphaSuccessor = {
  transition_id:string;
  owner_binding_sha256:string;
  predecessor:{session_id:string;epoch:number;boot_id:string};
+ // Operator recovery-disposition evidence: credential revocation, absent/disabled
+ // autostart and an observed same-Sprite restart. This digest is not proof of
+ // historical settlement or universal containment; old custody remains unknown
+ // and replay forbidden. The server binds the receipt, not physical evidence.
  retirement_receipt_sha256:string;
  successor:{policy:OwnerAlphaPolicy&{text_only:TextOnlyProfile};boot_id:string};
 };

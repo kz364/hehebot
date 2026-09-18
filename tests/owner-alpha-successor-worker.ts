@@ -67,7 +67,10 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
    return Response.json({result,retained:this.retained(ids.runId,ids.queuedId),alarm:await this.ctx.storage.getAlarm()});
   }
   if(url.pathname==='/read')return Response.json({result:await this.getState('fixture-owner'),retained:this.retained(ids.runId,ids.queuedId),alarm:await this.ctx.storage.getAlarm()});
-  if(url.pathname==='/status')return Response.json(await this.runtime({type:'status',payload:{}}));
+  if(url.pathname==='/status'){
+   const generation=core.ownerAlpha.activeGeneration();
+   return Response.json(await this.runtime({type:'status',payload:{}},generation&&{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}));
+  }
   if(url.pathname==='/alarm'&&request.method==='POST'){
    this.clock=(await request.json() as {now:string}).now;await super.alarm();
    return Response.json({lifecycle:lifecycle.get(),retained:this.retained(ids.runId,ids.queuedId),alarm:await this.ctx.storage.getAlarm()});

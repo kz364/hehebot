@@ -11,7 +11,7 @@ import { exportControl } from '../src/core/control-export';
 import { importControlExport } from '../scripts/import-control-export.mjs';
 import { TestDatabase } from './helpers';
 import { bot, routine } from './helpers';
-import type { OwnerAlphaPolicy } from '../src/core/owner-alpha';
+import { ownerAlphaSuccessorSha256, type OwnerAlphaPolicy } from '../src/core/owner-alpha';
 
 vi.mock('cloudflare:workers', () => ({ DurableObject: class {
   constructor(public ctx: unknown, public env: unknown) {}
@@ -249,6 +249,60 @@ it('runs the hosted owner alpha through Worker runtime HTTP, persists its previe
     vi.useRealTimers();
     vi.unstubAllGlobals();
   }
+});
+
+it('binds a rotated runtime credential to the active successor and cannot mutate predecessor custody', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-16T00:00:00.000Z'));
+  try {
+    const db=database(),config=access(),policy=hostedPolicy(),oldBoot=randomUUID(),nextBoot=randomUUID(),transitionId=randomUUID();
+    const successor={schema_version:1 as const,transition_id:transitionId,owner_binding_sha256:hostedDigest,
+      predecessor:{session_id:policy.session_id,epoch:1,boot_id:oldBoot},retirement_receipt_sha256:'a'.repeat(64),
+      successor:{policy:{session_id:randomUUID(),persona_id:policy.persona_id,expires_at:'2026-09-16T00:03:00.000Z',max_runs:1,max_task_seconds:45,
+        text_only:{profile_version:'codex-text-only-v1' as const,profile_sha256:'b'.repeat(64)}},boot_id:nextBoot}};
+    let host=construct(db,config,{HEHEBOT_HOSTED_OWNER_ALPHA:hostedConfig(policy),HEHEBOT_OWNER_ALPHA_SUCCESSOR:JSON.stringify(successor)});
+    await host.initialized;
+    const predecessor=(await host.control.runtime({type:'boot',payload:{boot_id:oldBoot}}) as any).value;
+    vi.setSystemTime(new Date('2026-09-16T00:01:01.000Z'));
+    db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',desired_state='STOP',lease_until=?",policy.expires_at);
+    const activation={schema_version:1 as const,type:'owner-alpha.activate' as const,payload:{transition_id:transitionId,envelope_sha256:ownerAlphaSuccessorSha256(successor)}};
+    expect(await host.control.accept(config.OWNER_SUB,randomUUID(),await import('../src/worker/http').then(m=>m.digest(activation)),activation)).toMatchObject({ok:true,value:{status:'applied'}});
+
+    // Reconstruction no longer depends on retaining the pending successor grant.
+    host=construct(db,config,{HEHEBOT_HOSTED_OWNER_ALPHA:hostedConfig(policy)});await host.initialized;
+    const authority=JSON.stringify({epoch:2,boot_id:nextBoot,transition_id:transitionId});
+    const currentToken='successor-runtime-token',oldToken='predecessor-runtime-token';
+    const env={...config,RUNTIME_TOKEN:currentToken,HEHEBOT_RUNTIME_GENERATION:authority,CONTROL:{getByName:()=>host.control}} as unknown as Env;
+    const call=(token:string,type:string,payload:unknown)=>worker.fetch(new Request(`https://portal.example/internal/${type}`,{
+      method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify(payload)}),env);
+    const before=custodyTables(db);
+    for(const [type,payload] of [
+      ['claim',{identity:predecessor}],
+      ['submitted',{identity:predecessor,run_id:randomUUID(),attempt:1,native_ref:'predecessor-turn'}],
+      ['complete',{identity:predecessor,run_id:randomUUID(),attempt:1,result:{status:'completed',text:'predecessor'}}],
+    ] as const)expect((await call(oldToken,type,payload)).status,type).toBe(401);
+    expect(custodyTables(db)).toEqual(before);
+
+    for(const [type,payload] of [
+      ['claim',{identity:predecessor}],
+      ['submitted',{identity:predecessor,run_id:randomUUID(),attempt:1,native_ref:'predecessor-turn'}],
+      ['complete',{identity:predecessor,run_id:randomUUID(),attempt:1,result:{status:'completed',text:'predecessor'}}],
+    ] as const)expect((await call(currentToken,type,payload)).status,type).toBe(409);
+    expect(custodyTables(db)).toEqual(before);
+    expect((await call(currentToken,'status',{})).status).toBe(200);
+    expect((await call(currentToken,'boot',{boot_id:oldBoot})).status).toBe(409);
+    expect(custodyTables(db)).toEqual(before);
+    for(const pin of [undefined,JSON.stringify({epoch:2,boot_id:nextBoot,transition_id:randomUUID()})]){
+      env.HEHEBOT_RUNTIME_GENERATION=pin;
+      expect((await call(currentToken,'status',{})).status).toBe(409);
+      expect((await call(currentToken,'boot',{boot_id:nextBoot})).status).toBe(409);
+      expect(custodyTables(db)).toEqual(before);
+    }
+    env.HEHEBOT_RUNTIME_GENERATION=JSON.stringify({epoch:2,boot_id:nextBoot,transition_id:transitionId,extra:true});
+    expect((await call(currentToken,'status',{})).status).toBe(503);
+    expect((await call(oldToken,'status',{})).status).toBe(401);
+    expect(custodyTables(db)).toEqual(before);
+  } finally { vi.useRealTimers(); }
 });
 
 it('denies hosted owner-alpha mutation, effects, completion and sleep without provider calls', async () => {

@@ -1,6 +1,6 @@
 import { unwrap } from './rpc';
 import { PersonalControl } from './control-object';
-import { authenticateOwner, assertSameOrigin, verifyRuntimeToken, verifyWebhook } from './auth';
+import { authenticateOwner, assertSameOrigin, runtimeGenerationAuthority, verifyRuntimeToken, verifyWebhook } from './auth';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { digest, json, parseJson, readBounded } from './http';
 export { PersonalControl };
@@ -12,7 +12,8 @@ export default {
    const control=env.CONTROL.getByName(env.INSTALLATION_ID);
    if(path.startsWith('/internal/')){
     requireThat(request.method==='POST','NOT_FOUND','Route unavailable.',404);verifyRuntimeToken(request,env.RUNTIME_TOKEN);
-    const payload=parseJson(await readBounded(request));return json(unwrap(await control.runtime({type:path.slice('/internal/'.length),payload})));
+    const authority=runtimeGenerationAuthority(env.HEHEBOT_RUNTIME_GENERATION);
+    const payload=parseJson(await readBounded(request));return json(unwrap(await control.runtime({type:path.slice('/internal/'.length),payload},authority)));
    }
    if(path.startsWith('/v1/triggers/')){
     requireThat(request.method==='POST','NOT_FOUND','Route unavailable.',404);

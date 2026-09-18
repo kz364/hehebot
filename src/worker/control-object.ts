@@ -1,7 +1,7 @@
 import {FlightRestoreIntegration} from '../core/flight-integration';
 import connectorCatalog from '../../config/connector-catalog.json';
 import { DurableObject } from 'cloudflare:workers';
-import {bindOwnerAuth} from './auth';
+import {bindOwnerAuth,type RuntimeGenerationAuthority} from './auth';
 import {migrateApplication} from '../core/migrations';
 import {NativeTaskLedger} from '../core/native-tasks';
 import {ResourceLedger} from '../core/resources';
@@ -158,11 +158,23 @@ export class PersonalControl extends DurableObject<Env> {
   });
   await this.arm();return result;
  });}
- async runtime(input:unknown){return rpcResult(async()=>{
+ async runtime(input:unknown,authority?:RuntimeGenerationAuthority){return rpcResult(async()=>{
   requireThat(validateRuntime(input),'INVALID_INPUT','Invalid runtime envelope.',422);
   const command=input as RuntimeCommand;
+  const generation=this.core.ownerAlpha.activeGeneration();
+  if(this.hostedOwnerAlpha&&(generation||authority)){
+   requireThat(!!generation&&!!authority&&authority.epoch===generation.epoch&&authority.boot_id===generation.boot_id.toLowerCase()&&authority.transition_id===generation.transition_id.toLowerCase(),
+    'STALE_EPOCH','Runtime credential is not bound to the active generation.',409);
+   const state=this.lifecycle.get();
+   requireThat(state.epoch===generation.epoch&&(!state.boot_id||state.boot_id.toLowerCase()===generation.boot_id.toLowerCase()),'STALE_EPOCH','Runtime generation is no longer active.',409);
+   if(command.type==='boot')requireThat(command.payload.boot_id.toLowerCase()===generation.boot_id.toLowerCase(),'STALE_EPOCH','Runtime boot identity is not authorized.',409);
+   else if(command.type!=='status'){
+    const identity=(command.payload as {identity?:{epoch?:number;boot_id?:string}}).identity;
+    requireThat(identity?.epoch===generation.epoch&&identity.boot_id?.toLowerCase()===generation.boot_id.toLowerCase(),'STALE_EPOCH','Runtime payload is not bound to the active generation.',409);
+   }
+  }
   const alpha=this.core.ownerAlpha.policy;
-  if(command.type==='status'){const state=this.lifecycle.get(),generation=this.core.ownerAlpha.activeGeneration();return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{}),...(generation?{owner_alpha_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{}),...(this.hostedOwnerAlpha?{owner_alpha_hosted:true}:{}),...(this.ownerBindingSha256?{owner_binding_sha256:this.ownerBindingSha256}:{})};}
+  if(command.type==='status'){const state=this.lifecycle.get();return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{}),...(generation?{owner_alpha_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{}),...(this.hostedOwnerAlpha?{owner_alpha_hosted:true}:{}),...(this.ownerBindingSha256?{owner_binding_sha256:this.ownerBindingSha256}:{})};}
   requireThat(this.core.options.executionEnabled||alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','token-usage','steer-pending','agent-routines','agent-skill'].includes(command.type)||alpha.text_only&&command.type==='complete'||alpha.background_first_root&&command.type==='native-child'),'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified for this operation.');
   if(command.type==='whatsapp-read-authorize')return new WhatsAppReadAccess(this.core,this.lifecycle).authorize(command.payload);
   let result:unknown={ok:true};

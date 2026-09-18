@@ -11,6 +11,7 @@ export interface AuthConfig {
   OWNER_SUB: string;
 }
 export interface AuthVerificationOptions { jwks?: JWTVerifyGetKey; now?: Date }
+export interface RuntimeGenerationAuthority { epoch:number;boot_id:string;transition_id:string }
 const resolvers = new Map<string, JWTVerifyGetKey>();
 const unauthorized = () => new ControlError('UNAUTHORIZED', 'Authentication is required.', 401);
 const configurationError = () => new ControlError('AUTH_CONFIGURATION_REQUIRED', 'Authentication is not configured.', 503);
@@ -89,6 +90,20 @@ export function verifyRuntimeToken(request: Request, expectedToken?: string): vo
   const left = new TextEncoder().encode(candidate);
   const right = new TextEncoder().encode(expectedToken);
   if (left.length !== right.length || !timingSafeEqual(left, right)) throw unauthorized();
+}
+
+/** Deployment-owned generation pin. It is parsed only after bearer authentication
+ * and passed over the private Worker-to-Durable-Object RPC boundary. */
+export function runtimeGenerationAuthority(value?:string):RuntimeGenerationAuthority|undefined {
+  if(value===undefined||value==='')return undefined;
+  let parsed:unknown;
+  try{parsed=JSON.parse(value);}catch{throw configurationError();}
+  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw configurationError();
+  const authority=parsed as Record<string,unknown>;
+  if(Object.keys(authority).sort().join(',')!=='boot_id,epoch,transition_id'||!Number.isSafeInteger(authority.epoch)||Number(authority.epoch)<1||
+    typeof authority.boot_id!=='string'||!uuid.test(authority.boot_id)||typeof authority.transition_id!=='string'||!uuid.test(authority.transition_id))throw configurationError();
+  return {epoch:Number(authority.epoch),boot_id:authority.boot_id.toLowerCase(),transition_id:authority.transition_id.toLowerCase()};
 }
 
 /** HMAC authentication only. The control-store transaction MUST separately dedupe

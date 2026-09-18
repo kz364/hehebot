@@ -1,8 +1,21 @@
 # Hehebot progress and TODO
 
-**Last reviewed: 2026-09-17 (Asia/Jakarta). Not operational; production gates remain false.**
+**Last reviewed: 2026-09-18 (Asia/Jakarta). Not operational; production gates remain false.**
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
+
+**Current P0 checkpoint:** owner-requested oracle narrowed recovery for one supervised
+text-only alpha to revoked predecessor authority plus an observed same-Sprite restart,
+not universal containment proof. Server-owned credential-generation binding is ready
+locally; combined1605 backend/472 runtime and desktop16 pass. Old Worker bearer is
+revoked (401 UNAUTHORIZED); old Access service token deleted (401), successor Access
+token passes only its existing internal scope. Fresh credentials stay orb-only.
+One supported restart request returned502; later kernel boot ID was unchanged and
+the inspector exited naturally. Record **restart_unconfirmed**, not Sprite failure.
+No second restart, successor activation, model call, code deployment or replay.
+P0.2 remains open. Next exact unblock: provider-supported observation of completion
+for that restart request. No public support post is authorized. Old unknown custody
+and production gates remain unchanged; actual incremental billing is unverified.
 
 ## Owner priority: first usable chat and background task
 

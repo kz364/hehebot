@@ -4,6 +4,47 @@ Hehebot has demonstrated authenticated chat, a scoped routine read and a persist
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Restricted-alpha recovery (2026-09-18): owner-requested oracle supersedes the
+universal retirement prerequisite below for this one supervised text-only trial.
+The operator receipt means execution-authority retirement with observed restart
+evidence, not historical settlement or hostile-workload containment. The server
+binds its digest; it cannot independently attest physical evidence. Preserve old
+unknown records and forbid replay. No production/native/sleep gate is relaxed.
+
+Local Worker binding: after RUNTIME_TOKEN verification, private
+HEHEBOT_RUNTIME_GENERATION parses exactly {epoch,boot_id,transition_id}. The trusted
+RPC argument must match the persisted hosted successor generation and lifecycle
+before any runtime reconciliation/mutation, including status and boot. Payload
+identity must match; the credential cannot simply assert predecessor authority.
+Reconstruction does not require the consumed successor grant. Missing/mismatched
+pins deny; malformed pins return503 after authentication. Legacy local behavior
+is retained. Full verifier exits0 (1605 backend/472 runtime plus native, browser,
+Worker and build checks); desktop16 pass. Later focused63/typecheck also verify
+missing/wrong-transition/malformed pins and authentication-first rejection.
+Logs: .local/alpha-recovery-{combined,focused,desktop}.log. Code remains local,
+not pushed or deployed; only the live secret was rotated.
+
+Live authority cutover: predecessor runtime bearer returned Worker401 UNAUTHORIZED
+after rotation. Browser worker deleted predecessor Access service token, changed
+only the existing internal policy's token binding and read back after reload;
+parent owner app/policy unchanged. Host independently confirmed predecessor401 and
+successor404 JSON from Worker at internal/access-scope-probe. Fresh credentials
+are0600 in this orb only, never placed in Sprite. No activation/model call occurred.
+
+Exactly one supported POST /v1/sprites/{name}/restart returned502 with empty body.
+First observation could not exec (temporarily unavailable); two later bounded
+observations succeeded with UNCHANGED kernel boot identity. Same immutable Sprite
+ID and disk nonce hash were preserved. The live inspector exited naturally at180s,
+not because verified reboot terminated it. Disposition is restart_unconfirmed;
+no second restart or claim that Sprite malfunctioned. Private intent/evidence:
+.local/alpha-recovery-restart-request.json, restart-before.log, restart-after*.log,
+restart-final.log, identity-before/after.json and alpha-recovery-disposition.json.
+The disposition explicitly forbids successor activation and old replay; never use
+its digest as a successful-restart grant. Next provider question: how do we observe
+completion of this restart request, given502 and unchanged kernel identity?
+No public post/contact authorized or performed. Incremental billing unverified;
+same resource only, no paid upgrade, new Sprite, inference or connector activation.
+
 E11 read-only token display (2026-09-17, local): expanded conversation/current-task
 and routine-history cards share strict unique-current-attempt validation. Native
 cumulative and last snapshots retain six separate counters plus nullable context
