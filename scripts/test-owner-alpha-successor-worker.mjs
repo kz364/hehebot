@@ -24,7 +24,15 @@ try{
  const wake=await request(base,'/hosted-wake'+query,{});
  assert.equal(wake.alarmAfterReads,wake.earliestAlarm,'owner reads must not postpone the staged wake/watchdog alarm');
  assert.deepEqual(wake.before,wake.after);assert.deepEqual(wake.before.retained,before);
+ assert.deepEqual(wake.passive.deliveries,[],'activation, state/timeline reads, and alarms must not wake a Sprite without admitted work');
+ assert.equal(wake.passive.intent,null,'passive activity must not create a wake intent');
+ assert.deepEqual(wake.passive.callbackEvidence,[],'passive activity must not reach the wake transport callback');
+ assert.equal(wake.accepted.ok,true);assert.equal(wake.accepted.value.status,'applied');
+ assert.equal(wake.queued.length,1);assert.equal(wake.queued[0].id,wake.accepted.value.resource_id);assert.equal(wake.queued[0].status,'queued');
+ assert.equal(wake.queuedEvent.length,1);assert.equal(wake.queuedEvent[0].type,'message.user');assert.equal(JSON.parse(wake.queuedEvent[0].payload_json).text,'fresh successor input');
  assert.deepEqual(wake.deliveries,[{url:'https://hehebot-fixture.sprites.app/wake',body:JSON.stringify({epoch:2,operationId:prepared.generation.transition_id})}]);
+ assert.equal(wake.callbackEvidence.length,1);assert.equal(wake.callbackEvidence[0].claimableRunId,wake.accepted.value.resource_id);
+ assert.equal(wake.callbackEvidence[0].messageEvent.type,'message.user');assert.equal(JSON.parse(wake.callbackEvidence[0].messageEvent.payload_json).text,'fresh successor input');
  assert.deepEqual(wake.intent,{epoch:2,boot_id:prepared.generation.boot_id,transition_id:prepared.generation.transition_id,status:'queued'});
  assert.ok(wake.alarm>Date.now());assert.ok(wake.alarm<=Date.now()+7000);
  const p=prepared.command.payload,reordered=` { "payload" : { "envelope_sha256" : "${p.envelope_sha256}", "transition_id" : "${p.transition_id}" }, "type" : "owner-alpha.activate", "schema_version" : 1 } `;
@@ -32,8 +40,6 @@ try{
  const retryText=await retryResponse.text();assert.equal(retryResponse.status,200,retryText);const retry=JSON.parse(retryText);
  assert.deepEqual(retry.result,prepared.activation);assert.deepEqual(retry.retained,before);
  const read=await request(base,'/read'+query);assert.deepEqual(read.retained,before);assert.equal(read.result.ok,true);assert.ok(read.alarm>Date.now());assert.ok(read.alarm<=Date.now()+7000);
- const fresh={schema_version:1,type:'message.send',payload:{conversation_id:prepared.persona,text:'fresh successor input'}};
- const accepted=await request(base,'/accept'+query,fresh);assert.equal(accepted.result.ok,true);assert.equal(accepted.result.value.status,'applied');assert.deepEqual(accepted.retained,before);
  const status=await request(base,'/status');assert.equal(status.ok,true);assert.deepEqual(status.value.owner_alpha_generation,prepared.generation);assert.deepEqual(Object.keys(status.value.owner_alpha_generation).sort(),['boot_id','epoch','transition_id']);
  const alarm=await request(base,'/alarm'+query,{now:'2026-09-17T00:04:00.000Z'});assert.equal(alarm.lifecycle.phase,'RECOVERY_REQUIRED');assert.equal(alarm.lifecycle.epoch,2);assert.equal(alarm.lifecycle.boot_id,prepared.generation.boot_id);assert.deepEqual(alarm.retained,before);assert.equal(alarm.alarm,null);
  const second=await request(base,'/alarm'+query,{now:'2026-09-17T00:05:00.000Z'});assert.deepEqual(second.retained,before);assert.equal(second.alarm,null);assert.equal(second.lifecycle.phase,'RECOVERY_REQUIRED');
@@ -52,7 +58,7 @@ try{
  assert.equal(thirdAlarm.lifecycle.epoch,3);assert.equal(thirdAlarm.lifecycle.phase,'RECOVERY_REQUIRED');assert.deepEqual(thirdAlarm.retained,before);
  assert.ok(!logs.includes('control.alarm_failed'));
  console.log('PASS real workerd SQLite: actual PersonalControl.accept owner-alpha activation and canonical same-key retry preserve predecessor run, attempt, unknown effect, overdue retry, queued context, command and alpha bytes.');
- console.log('PASS actual PersonalControl.alarm hosted wake: two alarms make one exact captured notification through a fixture transport, record the queued intent, preserve lifecycle/predecessor custody, and retain watchdog cadence.');
+ console.log('PASS actual PersonalControl.alarm hosted wake: activation and passive state/timeline reads plus two alarms make zero notifications and no wake intent; one admitted direct message is queued at the callback, and two alarms make one exact captured notification while preserving lifecycle/predecessor custody and watchdog cadence.');
  console.log('PASS generation watchdog: epoch 2 lease expiry transitions to RECOVERY_REQUIRED, deletes alarm, and retired due timestamps do not spin; status exposes exact three-field descriptor.');
  console.log('PASS persisted Worker reopen: exact predecessor custody, successor lifecycle/descriptor and absent alarm retained without replay.');
  console.log('PASS epoch 3 continuation of unused expired epoch 2: activation, second reopen and watchdog retain epoch 1 unknown custody unchanged.');

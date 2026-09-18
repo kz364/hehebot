@@ -82,9 +82,19 @@ it('activates one exact successor, delivers one-shot wakes, and retains predeces
   await lifecycle.deliverOwnerAlphaWake(next.transition_id,async()=>{refused.push('expired');});
   f.setNow('2026-09-10T00:02:00.000Z');
   expect(refused).toEqual([]);expect(retained()).toBe(before);
+  core.state();core.state();
+  const passiveSends:{epoch:number;operationId:string}[]=[];
+  await lifecycle.deliverOwnerAlphaWake(next.transition_id,async command=>{passiveSends.push(command);});
+  expect(passiveSends).toEqual([]);
+  expect(f.db.all("SELECT * FROM runtime_metadata WHERE key='owner_alpha_wake:2'")).toEqual([]);
+  const fresh=core.accept('owner',randomUUID(),randomUUID(),{schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'after cutoff'}});
   let release!:()=>void;
   const held=new Promise<void>(resolve=>{release=resolve;}),sent:{epoch:number;operationId:string}[]=[];
-  const delivery=lifecycle.deliverOwnerAlphaWake(next.transition_id,async command=>{sent.push(command);await held;});
+  const delivery=lifecycle.deliverOwnerAlphaWake(next.transition_id,async command=>{
+   expect(f.store.run(fresh.resource_id!)).toMatchObject({id:fresh.resource_id,status:'queued',command_id:fresh.id});
+   expect(f.db.all('SELECT id,resource_id FROM commands WHERE id=?',fresh.id)).toEqual([{id:fresh.id,resource_id:fresh.resource_id}]);
+   sent.push(command);await held;
+  });
   await Promise.resolve();
   expect(sent).toEqual([{epoch:2,operationId:next.transition_id}]);
   expect(JSON.parse((f.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key='owner_alpha_wake:2'")[0]).value_json)).toEqual({epoch:2,boot_id:next.successor.boot_id,transition_id:next.transition_id,status:'unknown'});
@@ -96,8 +106,7 @@ it('activates one exact successor, delivers one-shot wakes, and retains predeces
   await reconstructed.deliverOwnerAlphaWake(next.transition_id,async()=>{sent.push({epoch:-1,operationId:'reconstructed'});});
   expect(sent).toHaveLength(1);expect(retained()).toBe(before);
   expect(f.db.all('SELECT run_id,epoch,boot_id,status FROM attempts')).toEqual([{run_id:oldClaim.run.id,epoch:1,boot_id:oldBoot,status:'claimed'}]);
-  expect(lifecycle.nextClaimableRun()).toBeUndefined();
-  const fresh=core.accept('owner',randomUUID(),randomUUID(),{schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'after cutoff'}});
+  expect(lifecycle.nextClaimableRun()?.id).toBe(fresh.resource_id);
   lifecycle.registerBoot(next.successor.boot_id);lifecycle.ready({epoch:2,boot_id:next.successor.boot_id});
   const claim=lifecycle.claim({epoch:2,boot_id:next.successor.boot_id})!;expect(claim.run.id).toBe(fresh.resource_id);expect(claim.run.id).not.toBe(stale.resource_id);
   const nativeRef='native:successor';lifecycle.submitted({epoch:2,boot_id:next.successor.boot_id},claim.run.id,1,nativeRef);lifecycle.coordinatorRelease({epoch:2,boot_id:next.successor.boot_id},claim.run.id,1,nativeRef,'completed');
@@ -136,6 +145,7 @@ it('activates one exact successor, delivers one-shot wakes, and retains predeces
   }
   core.options.ownerAlphaSuccessor=third;
   const thirdKey=randomUUID();expect(core.accept(owner,thirdKey,createHash('sha256').update(JSON.stringify(thirdCommand)).digest('hex'),thirdCommand).status).toBe('applied');
+  const epoch3Message=core.accept('owner',randomUUID(),randomUUID(),{schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'epoch 3'}});
   const wakeError=new Error('preserve original wake failure');let failedSends=0;
   await expect(new LifecycleCore(f.store,core).deliverOwnerAlphaWake(third.transition_id,async command=>{
    failedSends++;expect(command).toEqual({epoch:3,operationId:third.transition_id});throw wakeError;
@@ -145,7 +155,6 @@ it('activates one exact successor, delivers one-shot wakes, and retains predeces
   await lifecycle3.deliverOwnerAlphaWake(third.transition_id,async()=>{failedSends++;});expect(failedSends).toBe(1);
   expect(retained()).toBe(before);
   lifecycle3.registerBoot(third.successor.boot_id);lifecycle3.ready({epoch:3,boot_id:third.successor.boot_id});
-  const epoch3Message=core.accept('owner',randomUUID(),randomUUID(),{schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'epoch 3'}});
   expect(lifecycle3.claim({epoch:3,boot_id:third.successor.boot_id})?.run.id).toBe(epoch3Message.resource_id);
   expect(f.store.run(intermediate.resource_id!).status).toBe('waiting');
   core=new ControlCore(f.store,{...f.core.options,ownerAlpha:original});core.ownerAlpha.initialize();

@@ -90,6 +90,9 @@ export class LifecycleCore {
     generation.policy.expires_at<=now||state.lease_until===null||state.lease_until<=now)return undefined;
    const key=`owner_alpha_wake:${generation.epoch}`;
    if(this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',key).length)return undefined;
+   // Staging, portal reads and watchdog alarms do not authorize compute. Only
+   // already-persisted work that passes the existing admission gates may wake.
+   if(!this.nextClaimableRun())return undefined;
    const value={epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id,status:'unknown' as const};
    const valueJson=JSON.stringify(value);
    this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',key,valueJson);

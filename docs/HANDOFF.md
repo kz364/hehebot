@@ -4,6 +4,37 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+Local message-only wake/quiet listener checkpoint: require `nextClaimableRun()`
+before wake intent/dispatch. Actual workerd proves no wake from activation/passive
+reads/alarms, then exactly one from a persisted admitted message. `--listen` starts
+without session config; only authenticated work reads current private staging.
+It does not create/renew a grant. Typecheck,41 core/auth,19 runtime tests and actual
+transport/reopen fixtures pass. Full verifier remains failed: first missing mock
+getAlarm fixed, then request-stream failure fixed by draining fixture POST bodies.
+Two targeted workerd runs pass after that fix; do not claim full combined green.
+No new deployment, Sprite Service or model session for these local changes.
+
+Oracle's selected next design is separate manager principal with DO-owned issuance:
+bind each fresh assignment to the exact newly persisted owner message/run and
+immutable policy; never reopen historical waiting work or lower the cutoff broadly.
+Keep legacy operator authority intact. Manager fetches assigned manifest/reports
+retirement, never picks work or mints authority. Task capability binds installation,
+owner, run, epoch, boot, transition and fixed expiry; no manager/task/static fallback.
+Fresh generation requires current-generation settlement gates plus durable trusted
+direct-child-stop/both-locks-free observation; missing/unknown retirement blocks.
+No inference replay after uncertain launch. Preserve all historical UNKNOWN custody.
+Cumulative reservations must carry prior costs and never reset per session. This
+design is not implemented/enabled yet. Portal visit/history/bot switching/passive
+metadata must remain control-plane-only; only admitted model work authorizes wake.
+
+Billing browser worker completed a read-only existing-session check at06:32:06Z:
+Fly September Cost Explorer total and upcoming subtotal/amount each$0.03, credit
+balance$0.00, retained hehebot cold. No RAM/storage allocation, tax or lag bound;
+all-project spend/remaining$10 allowance still unverified. No usable$30 credit
+assumption. Do not ask for redundant generic spend approval or treat this as a
+new$10 allowance. Research worker found no documented Sprites-token billing API.
+Both browser/research workers are done; no live task is running for this checkpoint.
+
 Wake-path diagnosis (2026-09-18): default8080 foreground HTTP needs no registered
 Service. A120s expired-grant probe passed edge401/app401/queued202/duplicate202 and
 exited0 without native state. Shutdown now aborts launch before closing held sockets;

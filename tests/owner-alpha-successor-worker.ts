@@ -13,8 +13,12 @@ type Internals={core:ControlCore;lifecycle:LifecycleCore;store:Store;hostedWake:
 export class OwnerAlphaSuccessorWorker extends PersonalControl {
  private clock:string;
  private wakeDeliveries:{url:string;body:string}[]|undefined;
+ private wakeCallbackEvidence:{claimableRunId:string|null;messageEvent:{id:string;conversation_id:string|null;type:string;payload_json:string}|null}[]|undefined;
  protected async sendHostedWake(command:{epoch:number;operationId:string}):Promise<void>{
   if(!this.wakeDeliveries)throw Error('Fixture refuses live wake');
+  const {lifecycle,store}=this.internals(),claimable=lifecycle.nextClaimableRun();
+  const messageEvent=claimable?store.db.all<{id:string;conversation_id:string|null;type:string;payload_json:string}>('SELECT id,conversation_id,type,payload_json FROM events WHERE id=(SELECT command_id FROM runs WHERE id=?)',claimable.id)[0]??null:null;
+  this.wakeCallbackEvidence?.push({claimableRunId:claimable?.id??null,messageEvent});
   this.wakeDeliveries.push({url:'https://hehebot-fixture.sprites.app/wake',body:JSON.stringify(command)});
  }
  constructor(ctx:DurableObjectState,env:FixtureEnv){
@@ -34,6 +38,7 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
  }
  async fetch(request:Request){
   const url=new URL(request.url);if(url.hostname!=='127.0.0.1')return new Response('Loopback fixture only',{status:403});
+  const body=request.method==='POST'?await request.text():undefined;
   const {core,lifecycle,store}=this.internals();
   if(url.pathname==='/prepare'&&request.method==='POST'){
    const persona=store.db.all<{id:string}>("SELECT id FROM objects WHERE kind='persona' ORDER BY id LIMIT 1")[0].id;
@@ -64,7 +69,7 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
   }
   const ids={runId:url.searchParams.get('run')!,queuedId:url.searchParams.get('queued')!};
   if(url.pathname==='/retry-activation'&&request.method==='POST'){
-   const text=await request.text(),input=JSON.parse(text);
+   const input=JSON.parse(body!);
    const result=await this.accept('fixture-owner',request.headers.get('idempotency-key')!,await digest(input),input);
    return Response.json({result,retained:this.retained(ids.runId,ids.queuedId),alarm:await this.ctx.storage.getAlarm()});
   }
@@ -73,21 +78,31 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
    const hostedWake={transition_id:active.transition_id,url:'https://hehebot-fixture.sprites.app'};
    const original=internals.hostedWake;
    const deliveries:{url:string;body:string}[]=[];
+   const callbackEvidence:{claimableRunId:string|null;messageEvent:{id:string;conversation_id:string|null;type:string;payload_json:string}|null}[]=[];
    try{
-    internals.hostedWake=hostedWake;this.wakeDeliveries=deliveries;
+    internals.hostedWake=hostedWake;this.wakeDeliveries=deliveries;this.wakeCallbackEvidence=callbackEvidence;
     const before={lifecycle:lifecycle.get(),retained:this.retained(ids.runId,ids.queuedId)};
     const earliestAlarm=Date.now()+2000;await this.ctx.storage.setAlarm(earliestAlarm);
-    await this.getState('fixture-owner');await this.getState('fixture-owner');
+    await this.getState('fixture-owner');await this.getTimeline('fixture-owner',active.policy.persona_id);await this.getState('fixture-owner');
     const alarmAfterReads=await this.ctx.storage.getAlarm();
     await super.alarm();await super.alarm();
+    const passiveIntent=store.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key=?",`owner_alpha_wake:${active.epoch}`);
+    const passive={deliveries:[...deliveries],intent:passiveIntent.length?JSON.parse(passiveIntent[0].value_json):null,callbackEvidence:[...callbackEvidence]};
+    const after={lifecycle:lifecycle.get(),retained:this.retained(ids.runId,ids.queuedId)};
+    const message={schema_version:1 as const,type:'message.send' as const,payload:{conversation_id:active.policy.persona_id,text:'fresh successor input'}};
+    const accepted=await this.accept('fixture-owner',randomUUID(),await digest(message),message);
+    const acceptedRunId=accepted.ok?accepted.value.resource_id:null;
+    const queued=acceptedRunId?store.db.all('SELECT * FROM runs WHERE id=?',acceptedRunId):[];
+    const queuedEvent=acceptedRunId?store.db.all('SELECT * FROM events WHERE id=(SELECT command_id FROM runs WHERE id=?)',acceptedRunId):[];
+    await super.alarm();await super.alarm();
     const intent=store.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key=?",`owner_alpha_wake:${active.epoch}`);
-    return Response.json({before,after:{lifecycle:lifecycle.get(),retained:this.retained(ids.runId,ids.queuedId)},earliestAlarm,alarmAfterReads,deliveries,intent:intent.length?JSON.parse(intent[0].value_json):null,alarm:await this.ctx.storage.getAlarm()});
+    return Response.json({before,after,earliestAlarm,alarmAfterReads,passive,accepted,queued,queuedEvent,deliveries,callbackEvidence,intent:intent.length?JSON.parse(intent[0].value_json):null,alarm:await this.ctx.storage.getAlarm()});
    }finally{
-    internals.hostedWake=original;this.wakeDeliveries=undefined;
+    internals.hostedWake=original;this.wakeDeliveries=undefined;this.wakeCallbackEvidence=undefined;
    }
   }
   if(url.pathname==='/accept'&&request.method==='POST'){
-   const text=await request.text();const result=await this.accept('fixture-owner',randomUUID(),createHash('sha256').update(text).digest('hex'),JSON.parse(text));
+   const text=body!;const result=await this.accept('fixture-owner',randomUUID(),createHash('sha256').update(text).digest('hex'),JSON.parse(text));
    return Response.json({result,retained:this.retained(ids.runId,ids.queuedId),alarm:await this.ctx.storage.getAlarm()});
   }
   if(url.pathname==='/read')return Response.json({result:await this.getState('fixture-owner'),retained:this.retained(ids.runId,ids.queuedId),alarm:await this.ctx.storage.getAlarm()});
@@ -107,7 +122,7 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
    return Response.json({result,retained:this.retained(ids.runId,ids.queuedId),generation:{epoch:3,boot_id:successor.successor.boot_id,transition_id:successor.transition_id}});
   }
   if(url.pathname==='/alarm'&&request.method==='POST'){
-   this.clock=(await request.json() as {now:string}).now;await super.alarm();
+   this.clock=(JSON.parse(body!) as {now:string}).now;await super.alarm();
    return Response.json({lifecycle:lifecycle.get(),retained:this.retained(ids.runId,ids.queuedId),alarm:await this.ctx.storage.getAlarm()});
   }
   return new Response('Not found',{status:404});

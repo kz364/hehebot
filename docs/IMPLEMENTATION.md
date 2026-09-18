@@ -4,6 +4,38 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Message-triggered wake / quiet listener follow-up (2026-09-18, local only):
+`deliverOwnerAlphaWake` requires an existing claimable run before retaining UNKNOWN
+intent. The actual workerd fixture proves activation, state/timeline reads and
+alarms cause zero notifications/intent; an accepted, persisted message is present
+when the sole notification callback runs. Historical custody remains byte-identical
+through alarms/reopen. `--listen` permits a quiet service without a session timer;
+`--serve` retains330s. Neither mode creates grants. The warm listener reads current
+private immutable staging only after authenticated work and retains prior intents.
+The actual CLI boots without staged config, rejects unauthenticated wake and stops
+cleanly on SIGTERM. No Service installation or deployment performed for this change.
+
+Verification: typecheck;41 focused successor/auth tests;19 listener/launcher tests;
+`scripts/test-hosted-wake-transport.mjs`; two successful runs of
+`scripts/test-owner-alpha-successor-worker.mjs` after consuming fixture POST bodies.
+The full combined run first failed because an auth fixture lacked getAlarm;
+that mock now retains alarm state. The rerun reached local Worker integration but
+failed with workerd's unconsumed request-stream error. Both fixture regressions
+are fixed; targeted passes do not retroactively make that full run green.
+Logs: `.local/message-wake-{combined,combined-rerun,auth-fixture,worker-fixed}.log`.
+
+Read-only browser billing evidence, observed2026-09-18T06:32:06Z, org
+kaspar-hidayat: September1–18 Cost Explorer Total Spend$0.03; upcoming September1–
+October1 invoice subtotal/amount$0.03; credit balance$0.00. Rounded RAM$0.02,
+CPU$0.00 and hot-storage$0.00 do not sum to rounded total. Sprite hehebot was cold.
+No tax/credit line, metering-lag bound, RAM allocation or cold-storage quantity was
+shown. Advertised$30 credit is not usable-credit evidence. This excludes separately
+billed Cloudflare/inference and is not proof of$9.97 remaining in the$10 total.
+No billing/resource changes or credentials disclosed. Official current CPU rate
+$0.07/CPU-hour, RAM$0.04375/GB-hour, hot storage$0.000683/GB-hour, cold storage
+$0.000027/GB-hour; no documented RAM ceiling or Sprites-token cumulative-billing API.
+Actual all-in costs remain unverified; do not substitute CPU-only estimates.
+
 Hosted wake diagnosis (2026-09-18): the official working-with-sprites guide permits
 default8080 HTTP routing without a named Service. A bounded foreground120s probe on
 the retained Sprite observed private-edge401, app-token401 and exact queued202;

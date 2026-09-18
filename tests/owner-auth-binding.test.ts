@@ -39,6 +39,7 @@ const ownerRows = (db: TestDatabase) => db.all<{ value_json: string }>(
 
 function construct(db: TestDatabase, auth: AuthConfig, overrides: Partial<Env> = {}) {
   let initialized: Promise<unknown> = Promise.resolve();
+  let alarm: number | null = null;
   const ctx = {
     storage: {
       sql: { exec: (sql: string, ...values: (string | number | null)[]) => {
@@ -46,8 +47,9 @@ function construct(db: TestDatabase, auth: AuthConfig, overrides: Partial<Env> =
         return { toArray: () => rows };
       } },
       transactionSync: <T>(fn: () => T) => db.transaction(fn),
-      setAlarm: vi.fn(async () => {}),
-      deleteAlarm: vi.fn(async () => {}),
+      getAlarm: vi.fn(async () => alarm),
+      setAlarm: vi.fn(async (time: number) => { alarm = time; }),
+      deleteAlarm: vi.fn(async () => { alarm = null; }),
     },
     blockConcurrencyWhile: (fn: () => Promise<unknown>) => { initialized = fn(); },
   };

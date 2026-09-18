@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import http from 'node:http';
 import net from 'node:net';
 import { once } from 'node:events';
@@ -7,6 +8,7 @@ import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHostedOwnerWakeService } from '../runtime/hosted-owner-wake.mjs';
+import { readOwnerAlphaConfig } from '../runtime/owner-alpha-entry.mjs';
 
 const token = 'w'.repeat(40);
 const persona = '11111111-1111-4111-8111-111111111111';
@@ -79,6 +81,71 @@ test('valid staged text-only wake queues then invokes exactly one digest-bound l
   const intent = JSON.parse(await readFile(join(f.stateDirectory, 'hosted-owner-launch-intent.json')));
   assert.deepEqual(intent.owner_alpha_generation, f.generation); assert.equal(intent.phase, 'unknown');
   assert.equal((await stat(join(f.stateDirectory, 'hosted-owner-launch-intent.json'))).mode & 0o777, 0o600);
+});
+
+test('quiet listener reads fresh staging only for authenticated work and preserves prior intent', async t => {
+  const f = await fixture(t); let reads = 0, statusReads = 0, launches = 0;
+  const reports = [], hashes = [];
+  const service = createHostedOwnerWakeService({ ...f, port: 8080 }, {
+    readConfig: async (...args) => { reads++; return readOwnerAlphaConfig(...args); },
+    control: { request: async () => { statusReads++; return statusFor(f); } },
+    launch: async (path, { expectedSha256 }) => {
+      launches++; hashes.push(expectedSha256); return { code: 0, signal: null };
+    }, report: value => reports.push(value),
+  });
+  t.after(() => service.stop()); const port = await start(service);
+  assert.equal((await fetch(`http://127.0.0.1:${port}/`)).status, 404);
+  assert.equal((await fetch(`http://127.0.0.1:${port}/wake`, { method: 'POST' })).status, 401);
+  assert.deepEqual([reads, statusReads, launches], [0, 0, 0]);
+  assert.equal((await wake(port)).status, 202); await waitFor(() => reports.length === 1);
+  const oldPath = join(f.stateDirectory, 'hosted-owner-launch-intent.json');
+  const oldIntent = await readFile(oldPath, 'utf8');
+  const nextState = join(f.root, 'next-state'); await mkdir(nextState, { mode: 0o700 });
+  f.generation = { epoch: 5, boot_id: '44444444-4444-4444-8444-444444444444', transition_id: '55555555-5555-4555-8555-555555555555' };
+  f.policy = { ...f.policy, session_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
+  f.config = { ...f.config, stateDirectory: nextState, ownerAlpha: f.policy, ownerAlphaGeneration: f.generation };
+  await writeFile(f.configPath, JSON.stringify(f.config), { mode: 0o600 });
+  assert.equal((await wake(port, { epoch: 5, operationId: f.generation.transition_id })).status, 202);
+  await waitFor(() => reports.length === 2);
+  assert.deepEqual([reads, statusReads, launches], [4, 2, 2]);
+  assert.notEqual(hashes[0], hashes[1]);
+  assert.equal(await readFile(oldPath, 'utf8'), oldIntent);
+  assert.deepEqual(JSON.parse(await readFile(join(nextState, 'hosted-owner-launch-intent.json'), 'utf8')).owner_alpha_generation, f.generation);
+  assert.equal((await wake(port)).status, 409);
+  assert.equal((await wake(port, { epoch: 5, operationId: f.generation.transition_id })).body.duplicate, true);
+  assert.deepEqual([reads, statusReads, launches], [4, 2, 2]);
+});
+
+test('--listen boots quietly without staged config and stops cleanly on SIGTERM', async t => {
+  const f = await fixture(t);
+  const reservation = net.createServer();
+  reservation.listen(0, '127.0.0.1'); await once(reservation, 'listening');
+  const port = reservation.address().port;
+  await new Promise(resolve => reservation.close(resolve));
+  const configPath = join(f.root, 'not-staged.json');
+  const child = spawn(process.execPath,
+    ['runtime/hosted-owner-wake.mjs', '--listen', configPath, f.wakeTokenFile, String(port)],
+    { cwd: new URL('..', import.meta.url), stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
+  let stdout = '', stderr = '';
+  child.stdout.on('data', chunk => { stdout += chunk; });
+  child.stderr.on('data', chunk => { stderr += chunk; });
+  let response;
+  await waitFor(async () => {
+    if (child.exitCode !== null || child.signalCode !== null) return true;
+    try {
+      response = await fetch(`http://127.0.0.1:${port}/wake`, { method: 'POST' });
+      return true;
+    } catch { return false; }
+  });
+  assert.equal(child.exitCode, null, stderr);
+  assert.equal(response?.status, 401);
+  await assert.rejects(stat(configPath), { code: 'ENOENT' });
+  assert.deepEqual([stdout, stderr], ['', '']);
+  const exited = once(child, 'exit'); child.kill('SIGTERM');
+  const [code, signal] = await exited;
+  assert.deepEqual([code, signal], [0, null]);
+  assert.deepEqual([stdout, stderr], ['', '']);
 });
 
 test('changed policy, generation, binding, expired policy, and existing runtime state refuse launch', async t => {

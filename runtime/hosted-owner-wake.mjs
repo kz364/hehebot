@@ -72,7 +72,8 @@ function exactStatus(status, policy, staged, binding) {
 }
 
 /**
- * Default-off supervised endpoint for one immutable, already-staged generation.
+ * Default-off endpoint for immutable, already-staged generations. A quiet
+ * listener may outlive a session; it never creates or renews a grant itself.
  * Its HTTP 202 response means only that the callback was queued; it never means
  * that the runtime launched or became ready. The durable intent forbids retries.
  */
@@ -90,9 +91,11 @@ export function createHostedOwnerWakeService({ configPath, wakeTokenFile, port }
   const getHandler = async () => {
     if (!handlerPromise) handlerPromise = (async () => {
       const token = await readSecret(wakeTokenFile);
-      const initial = await readConfig(configPath);
       return createSpritesWakeHandler({ token, onWake: async request => {
         try {
+          // Read the operator's current config only after authenticated work.
+          // Warm listeners must not retain a preceding generation's config.
+          const initial = await readConfig(configPath);
           const config = initial.config;
           const policy = ownerAlphaPolicy(config?.ownerAlpha);
           const staged = generation(config?.ownerAlphaGeneration);
@@ -145,15 +148,16 @@ export function createHostedOwnerWakeService({ configPath, wakeTokenFile, port }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    if (process.argv.length !== 6 || process.argv[2] !== '--serve') fail('INVALID_HOSTED_WAKE_CONFIGURATION');
+    if (process.argv.length !== 6 || !['--serve', '--listen'].includes(process.argv[2])) fail('INVALID_HOSTED_WAKE_CONFIGURATION');
     const port = Number(process.argv[5]);
     const server = createHostedOwnerWakeService({ configPath: process.argv[3], wakeTokenFile: process.argv[4], port });
     server.on('error', () => { console.error('Hosted wake listener failed; no automatic retry.'); process.exitCode = 1; server.stop(); });
     server.listen(port, '0.0.0.0');
     const stop = () => server.stop();
-    // One supervised window only, including the existing cancellation grace.
-    // Do not install this command under an automatic restart policy.
-    const deadline = setTimeout(stop, 330000);
+    // --serve is one supervised window and must not auto-restart. --listen is
+    // a quiet provider-managed HTTP service: no polling, hold or native startup.
+    // Each authenticated launch still enforces its independent bounded policy.
+    const deadline = process.argv[2] === '--serve' ? setTimeout(stop, 330000) : undefined;
     server.once('close', () => { clearTimeout(deadline); process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop); });
     process.once('SIGINT', stop); process.once('SIGTERM', stop);
   } catch {
