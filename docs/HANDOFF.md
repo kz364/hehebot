@@ -4,6 +4,12 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
+Owner clarification integrated in SPEC21.1, PRODUCT_UX_SPEC and PROJECT_INTENT:
+Amp is architecture reference only, not an operational dependency or coding UI.
+No always-on model orchestrator; reachable deterministic control plane is distinct
+from admitted-work coordination on the shared sleeping Sprite. Preserve Codex and
+all cost/settlement gates. Documentation alignment does not change the live blocker.
+
 Live follow-through09:21–09:25Z: same Sprite, operator-reviewed old exclusive staging
 source and persistent root custody; native/session roots remain dev48/ino164 and440.
 Producer executed ONCE successfully, immutable marker at sessions/

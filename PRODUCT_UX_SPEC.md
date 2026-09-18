@@ -11,6 +11,8 @@ Extend the Hehebot portal and control plane with a small, coherent bot experienc
 
 The default product consists of conversations, tasks, routines, and an optional computer view. It must not require understanding native sessions, backend processes, peer gateways, or model-harness internals. One installation has one authoritative execution host; bots do not require individual VMs. A local device is an optional peripheral, not an additional authority.
 
+Owner clarification (2026-09-18): Amp is an architecture reference, not the product foundation or a coding UI to embed; users need no Amp account. Follow the [reference boundary in SPEC section 21.1](SPEC.md#211-scope-ownership-and-preserved-work). Bot history, retained task status and metadata remain accessible through the control plane while execution sleeps, without inference or wake. The persona orchestrator is not always on: admitted work wakes the shared runtime when needed, with truthful queued/waking states and accepted cold-start delay. This is not a promise of offline-device history availability or permission to keep a coordinator VM running.
+
 The target is the complete publicly documented Grok Bot capability and UX surface, not a preset family-office or coding assistant. The five-persona migration is one installation's configuration, not the product ontology. Optional UI means opt-in use, not permission to omit that capability from the parity backlog. Provider freedom and intent-aware interruption are deliberate differences. Public documentation cannot establish undocumented behavior or guarantee identical reliability; unknowns remain explicit acceptance gaps.
 
 Sources of inspiration, not dependency or compatibility promises:

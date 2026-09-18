@@ -4,6 +4,14 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner architecture alignment (2026-09-18, docs only): imported the reviewed
+three-file clarification without replacing current live-status documents. Amp is
+a documented reference, not a wrapper/dependency/coding UX; deterministic ingress
+remains reachable while model coordination sleeps with the shared runtime except
+for admitted work. Codex, one Sprite, cost and settlement gates are unchanged.
+Patch applicability and whitespace checks pass; no executable changes, test rerun,
+deployment, push or new acceptance claim accompany this clarification.
+
 Live unused evidence/deployment (2026-09-18):09:20:24 preflight reconfirmed exact
 reviewed old manager/launcher/lock source hashes, manager config digest and private
 native/session root device/inode identities, with no staged session directories.

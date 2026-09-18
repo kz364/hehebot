@@ -450,6 +450,16 @@ Deliver a work-domain-neutral, open Grok Bot-style assistant with a dedicated we
 
 Codex 0.154.0 is the sole harness. Keep the Mac-client decision separate. Do not introduce two execution/schedule authorities, patch the runtime, or promise threads can move between versions. Keep admitted work pinned until settled or explicitly recovered.
 
+#### Architecture reference: Amp, not an Amp wrapper
+
+Owner clarification (2026-09-18): continue building an independent assistant usable by people without an Amp account. Use Amp's publicly documented [thread/executor separation](https://ampcode.com/docs/threads) and [sleeping orbs](https://ampcode.com/docs/orbs) as architecture references, not as a product dependency, executor proxy, or coding-oriented UX to embed. Direct Codex, Cloudflare/SQLite and the single customer-owned Sprite remain selected. Amp may be used to develop Hehebot; operating Hehebot must not require Amp SDK, auth, subscriptions or hosted threads.
+
+Borrow durable conversation identity independent of compute, isolated task execution, platform-managed wake/sleep and cross-device access to committed application state. Do not copy Amp's per-thread orb allocation: personas and tasks still share one installation-owned runtime. Bots, conversations, routines and connected capabilities remain primary; repositories, native sessions and machines are not required user workflows. When using the reference to resolve a design question, record the documented behavior, the problem it solves here and any deliberate divergence; do not infer proprietary internals or treat reference behavior as our acceptance evidence.
+
+**No always-on orchestrator.** The model-based persona coordinators execute on the sleeping runtime only for admitted work, not on a separate resident service or continuously billed coordinator VM. The reachable Worker/SQLite control plane provides deterministic ingress, history/status, scheduling and wake handling without keeping agent compute alive. History viewing, bot switching, metadata reads and passive updates cause no inference or wake. “Always reachable” is not an always-running model, zero cold-start latency or guaranteed offline-device access. Preserve settlement-aware sleep, the existing idle grace and measured cost gates; cold-start latency is an accepted tradeoff.
+
+Verify this distinction through the existing S/O/UX/R contracts: read retained conversations and task state while compute sleeps with zero wake/inference; durably accept admitted work before wake; publish attributed results across reload/device changes; keep the runtime awake for live descendants/tools and release it only after settlement. This clarification adds no new deployment authority, always-on service, or production-readiness claim.
+
 ### 21.2 Complete experience inventory
 
 The following inventory incorporates the detailed behaviors and acceptance cases of UX01–UX15; it does not replace them with weaker summaries. Optional means optional to use, not omitted from the full parity target.

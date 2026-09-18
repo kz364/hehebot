@@ -4,6 +4,14 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
+**Owner architecture clarification integrated (2026-09-18):** Hehebot remains a
+custom assistant independent of Amp accounts/runtime/SDK. Amp is a documented
+architecture reference, not a coding UX or per-thread-machine design to adopt.
+No always-on model orchestrator: deterministic Worker/SQLite ingress stays reachable;
+model coordination runs only for admitted work on the one sleeping Sprite. Codex,
+passive zero-wake behavior, cost and settlement gates are unchanged. Docs-only change;
+no new live acceptance, deployment or push. Current live blocker remains below.
+
 **Current live checkpoint09:25Z:** epoch8 permanent unused-before-staging marker
 created09:21:55.474Z under both real flocks after explicit deployed-source/root
 custody review. No retirement claim or replay. Hold-before202 listener files are
