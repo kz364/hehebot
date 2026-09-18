@@ -4,13 +4,14 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Executor recovered; browser still blocked (schedule resumed12:11Z):** tracked
-PID33132 terminated via SIGTERM, exposing an agent-browser daemon read error.
-Mac shell responds despite incomplete runner inventory. One subsequent hard-bounded
-passive navigation timed out after25s; CLI killed/reaped, browser-side outcome unknown.
-No state/history check or send occurred. Existing worker now owns bounded direct CDP
-and daemon diagnostics only; no further navigation or Chrome restart is authorized.
-V3 remains unissued until actual authenticated browser readiness.
+**Browser diagnostics complete; schedule paused12:28Z:** Mac shell responds and
+all tracked diagnostic processes are terminated/reaped. Loopback HTTP responds404
+as it did during prior working consent-mode access; this alone is not Chrome failure.
+CDP handshake times out at5s; both owned agent-browser session queries time out at10s.
+No safe daemon-only reset was established: doctor may clean other sidecars and close
+may close the browser, so neither ran. Owner must inspect existing Mac Chrome for a
+pending remote-debugging consent prompt (presence unknown) before further recovery.
+No navigation retry, Chrome restart, credential copy or send. V3 remains unissued.
 
 **Owner architecture clarification integrated (2026-09-18):** Hehebot remains a
 custom assistant independent of Amp accounts/runtime/SDK. Amp is a documented

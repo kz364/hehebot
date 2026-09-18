@@ -36,9 +36,14 @@ Browser recovery update12:11Z: tracked PID33132 terminated (SIGTERM/exit-1), exp
 agent-browser daemon read error35. Verified Mac shell responds; runner inventory
 did not establish its unavailability. A single subsequent passive pinned navigation
 hit a hard25s timeout; CLI was killed/reaped, browser-side outcome remains unknown.
-State/history reads were not reached; no send or other mutation occurred. Worker
-now owns bounded direct CDP/daemon diagnostics, not navigation retries or Chrome
-restart. Schedule resumed; V3 remains unissued until actual browser readiness.
+State/history reads were not reached; no send or other mutation occurred. Subsequent
+no-navigation diagnostics completed: HTTP /json/version returned404 (also seen in
+prior working consent mode), CDP handshake timed out at5s, and both owned session
+info queries timed out at10s. agent-browser0.38.1 help/version respond. All subprocesses
+were reaped; tracked diagnostic PID33279 exited0. Chrome versus daemon/consent blockage
+remains unresolved. No documented safe daemon-only reset established; doctor/close
+were not executed. Schedule paused12:28Z pending owner inspection for a Chrome remote
+debugging consent prompt, whose presence is unknown. V3 remains unissued.
 Actual billing remains unverified; unchanged cumulative$10 allowance is not reset.
 
 Live message-bootstrap77 failed (2026-09-18): authenticated browser readiness and

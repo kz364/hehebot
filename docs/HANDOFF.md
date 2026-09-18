@@ -4,13 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
-Schedule resumed12:11Z after actual Mac shell recovery. PID33132 was terminated
-via supported tracked-process tool (SIGTERM/exit-1); daemon read failed os error35.
-One new passive pinned navigation timed out at25s, CLI killed/reaped, browser-side
-outcome unknown. No subsequent state/history checks or sends. Existing worker owns
-bounded direct GET /json/version and agent-browser version/daemon diagnostics only.
-No navigation retry, Chrome restart, credential copy or replacement sender. Report
-documented narrow automation reset effects before performing it. V3 remains unissued.
+Schedule paused12:28Z after bounded browser diagnostics completed. Mac shell responds;
+PID33132 terminated and subsequent timed-out CLI processes killed/reaped. Diagnostic
+PID33279 exited0; none remain active. /json/version HTTP404 is inconclusive (prior
+working consent mode also returned404). CDP handshake5s and both owned session-info
+queries10s time out; agent-browser0.38.1 version/help work. No safe daemon-only reset
+found: doctor auto-cleans sidecars and close may close browser; neither executed.
+Ask owner to inspect existing Chrome for a debugging consent prompt, whose presence
+is unknown. No further navigation, reset, Chrome restart, cookie copy or send.
+Resume schedule after concrete browser recovery permits work; V3 remains unissued.
 
 Owner clarification integrated in SPEC21.1, PRODUCT_UX_SPEC and PROJECT_INTENT:
 Amp is architecture reference only, not an operational dependency or coding UI.
