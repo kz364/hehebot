@@ -3,6 +3,13 @@ import {ControlError,requireThat} from '../core/errors';
 export type HostedOwnerWake={transition_id:string;url:string};
 const secret=(value:unknown):value is string=>typeof value==='string'&&value.length>=32&&value.length<=16384&&!/[\r\n\0]/.test(value);
 
+/** Only locally assigned stages and numeric status are safe to log, never upstream text. */
+export class HostedWakeDeliveryError extends ControlError {
+ constructor(public phase:'request'|'response'|'receipt'|'timeout',public upstreamStatus:number|null){
+  super('HOSTED_WAKE_OUTCOME_UNKNOWN','Hosted wake delivery is unconfirmed; it will not be retried.',503);
+ }
+}
+
 /** Operator-pinned destination for an already staged session, not provider provisioning. */
 export function parseHostedOwnerWake(raw:string|undefined,hosted:boolean,providerToken?:string,wakeToken?:string):HostedOwnerWake|undefined {
  if(!raw)return undefined;
@@ -21,11 +28,17 @@ export async function sendHostedOwnerWake(config:HostedOwnerWake,command:{epoch:
   'INVALID_CONFIGURATION','Invalid hosted wake notification.',503);
  const controller=new AbortController();let reader:ReadableStreamDefaultReader<Uint8Array>|undefined;
  let timer:ReturnType<typeof setTimeout>|undefined;
- const failure=()=>new ControlError('HOSTED_WAKE_OUTCOME_UNKNOWN','Hosted wake delivery is unconfirmed; it will not be retried.',503);
- const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{controller.abort();void reader?.cancel().catch(()=>{});reject(failure());},15000);});
+ let phase:HostedWakeDeliveryError['phase']='request',upstreamStatus:number|null=null;
+ const failure=()=>new HostedWakeDeliveryError(phase,upstreamStatus);
+ const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{phase='timeout';controller.abort();void reader?.cancel().catch(()=>{});reject(failure());},15000);});
  const request=(async()=>{
-  const response=await fetcher(new URL('/wake',config.url),{method:'POST',headers:{Authorization:`Bearer ${providerToken}`,'x-hehe-wake-token':wakeToken,'Content-Type':'application/json'},body:JSON.stringify(command),redirect:'error',signal:controller.signal});
+  // Workers rejects redirect:'error' before dispatch. Manual + exact202 rejects
+  // redirects without following them or forwarding credentials to another URL.
+  const response=await fetcher(new URL('/wake',config.url),{method:'POST',headers:{Authorization:`Bearer ${providerToken}`,'x-hehe-wake-token':wakeToken,'Content-Type':'application/json'},body:JSON.stringify(command),redirect:'manual',signal:controller.signal});
+  if(controller.signal.aborted)throw failure();
+  phase='response';upstreamStatus=response.status;
   if(response.status!==202||response.redirected||response.headers.get('content-type')?.split(';')[0].trim()!=='application/json'||!response.body){void response.body?.cancel().catch(()=>{});throw failure();}
+  phase='receipt';
   reader=response.body.getReader();let size=0,text='';const decoder=new TextDecoder('utf-8',{fatal:true});
   for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>4096)throw failure();text+=decoder.decode(value,{stream:true});}
   text+=decoder.decode();const receipt=JSON.parse(text);

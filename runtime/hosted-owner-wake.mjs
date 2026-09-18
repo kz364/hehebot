@@ -133,6 +133,13 @@ export function createHostedOwnerWakeService({ configPath, wakeTokenFile, port }
       catch { if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end('{"error":"SERVICE_UNAVAILABLE"}'); }
     });
   server.once('close', () => controller.abort());
+  // Stop admission and signal the launcher before waiting for slow HTTP bodies.
+  // This initiates shutdown; it is not proof of native descendant termination.
+  server.stop = () => {
+    controller.abort();
+    server.close();
+    server.closeAllConnections();
+  };
   return server;
 }
 
@@ -141,9 +148,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     if (process.argv.length !== 6 || process.argv[2] !== '--serve') fail('INVALID_HOSTED_WAKE_CONFIGURATION');
     const port = Number(process.argv[5]);
     const server = createHostedOwnerWakeService({ configPath: process.argv[3], wakeTokenFile: process.argv[4], port });
-    server.on('error', () => { console.error('Hosted wake listener failed; no automatic retry.'); process.exitCode = 1; server.close(); });
+    server.on('error', () => { console.error('Hosted wake listener failed; no automatic retry.'); process.exitCode = 1; server.stop(); });
     server.listen(port, '0.0.0.0');
-    const stop = () => server.close();
+    const stop = () => server.stop();
     // One supervised window only, including the existing cancellation grace.
     // Do not install this command under an automatic restart policy.
     const deadline = setTimeout(stop, 330000);

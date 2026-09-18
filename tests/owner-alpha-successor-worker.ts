@@ -76,9 +76,12 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
    try{
     internals.hostedWake=hostedWake;this.wakeDeliveries=deliveries;
     const before={lifecycle:lifecycle.get(),retained:this.retained(ids.runId,ids.queuedId)};
+    const earliestAlarm=Date.now()+2000;await this.ctx.storage.setAlarm(earliestAlarm);
+    await this.getState('fixture-owner');await this.getState('fixture-owner');
+    const alarmAfterReads=await this.ctx.storage.getAlarm();
     await super.alarm();await super.alarm();
     const intent=store.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key=?",`owner_alpha_wake:${active.epoch}`);
-    return Response.json({before,after:{lifecycle:lifecycle.get(),retained:this.retained(ids.runId,ids.queuedId)},deliveries,intent:intent.length?JSON.parse(intent[0].value_json):null,alarm:await this.ctx.storage.getAlarm()});
+    return Response.json({before,after:{lifecycle:lifecycle.get(),retained:this.retained(ids.runId,ids.queuedId)},earliestAlarm,alarmAfterReads,deliveries,intent:intent.length?JSON.parse(intent[0].value_json):null,alarm:await this.ctx.storage.getAlarm()});
    }finally{
     internals.hostedWake=original;this.wakeDeliveries=undefined;
    }

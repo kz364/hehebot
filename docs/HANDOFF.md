@@ -1,10 +1,35 @@
 # Hehebot agent handoff
 
-Hehebot uses direct Codex app-server **0.154.0** only. The protected hosted successor trial now has one canonically completed assistant reply with full-reload persistence. Historical failed work remains recovery-required. The one-run successor policy expired and launcher stopped; this is not ongoing chat availability or production readiness. Production execution/native gates remain false.
+Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies, including one Worker-triggered staged wake, have canonical completion and full-reload persistence. Historical failed work remains recovery-required. Bounded policies expired and launchers stopped; this is not ongoing chat availability or production readiness. Production execution/native gates remain false.
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
-Worker alarm delivery is now integrated locally/default-off. Configure private
+Wake-path diagnosis (2026-09-18): default8080 foreground HTTP needs no registered
+Service. A120s expired-grant probe passed edge401/app401/queued202/duplicate202 and
+exited0 without native state. Shutdown now aborts launch before closing held sockets;
+17 focused tests pass. Generation4 exposed alarm starvation from portal refreshes;
+the red/green real Worker regression and deployed fix preserve the earliest alarm.
+Generation5 retained UNKNOWN delivery/RECOVERY_REQUIRED despite that fix. Its listener
+exited0; session empty, private config valid. Historical log query403, no scope/root
+cause inferred. Generation6 with preattached tail logged request-phase/null HTTP status.
+Local actual workerd reproduced the exact defect: redirect:'error' is unsupported
+and throws before dispatch. Manual mode with the existing strict202 receipt gate
+passes actual HTTP202 and rejects302 without forwarding/retry. Default fetch binding
+was not the cause. The fixed sender is deployed; old UNKNOWN rows are never replayed.
+Generation6 listener exited0, session empty and both locks free. Fresh generation7
+authority rejected old bearer401/new bearer409 preactivation. Worker-triggered wake
+produced actual ready and one canonical HEHEBOT_WORKER_WAKE_OK_76 reply in5.834s.
+Run f8063115-21c9-45c8-b188-249854de0fef completed/attempt1/error null after full reload;
+old completed/recovery/waiting tasks unchanged. Grant expired05:51:05.490Z, listener
+PID2876154 exited0 and bounded tail PID2876007 exited124 normally. Retained readback
+05:53:04Z: nativeStopped:true/recovery, intent unknown, both locks free, zero matching
+executors/read errors. Do not renew/replay the consumed session. No automatic Service
+or restart installed. Browser worker done. Next is safe cold listener recreation and
+fresh bounded session staging, not another identical manual demonstration.
+Evidence: .local/wake-generation{4,5,6,7}-*, wake-real-transport-green.log,
+wake-bound-fetch-repro.log, wake-final-{unit,runtime,worker,build}.log. Production gates remain false.
+
+Earlier local-only checkpoint: Worker alarm delivery is integrated/default-off. Configure private
 HEHEBOT_OWNER_ALPHA_WAKE={transition_id,url} only for the already staged session,
 PROVIDER_TOKEN and HEHEBOT_OWNER_ALPHA_WAKE_TOKEN. No production settings changed.
 Lifecycle persists UNKNOWN before dispatch and never retries an existing record;

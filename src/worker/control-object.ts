@@ -27,7 +27,7 @@ import type { RoutinePut } from '../core/types';
 import {AgentCommandBoundary} from '../core/agent-commands';
 import {parseWhatsAppReadPolicies,WhatsAppReadAccess} from '../core/whatsapp-access';
 import {parseHostedOwnerAlpha,parseOwnerAlpha,parseOwnerAlphaSuccessor} from '../core/owner-alpha';
-import {parseHostedOwnerWake,sendHostedOwnerWake,type HostedOwnerWake} from './hosted-owner-wake';
+import {HostedWakeDeliveryError,parseHostedOwnerWake,sendHostedOwnerWake,type HostedOwnerWake} from './hosted-owner-wake';
 export type TriggerPolicy={routine_id:string;event_types:string[]};
 function stringList(value:string):string[]{const parsed:unknown=JSON.parse(value);if(!Array.isArray(parsed)||!parsed.every(x=>typeof x==='string'))throw new Error('Invalid policy configuration');return parsed;}
 function delegationMap(value:string):Record<string,string[]>{
@@ -270,7 +270,11 @@ export class PersonalControl extends DurableObject<Env> {
   const generation=this.core.ownerAlpha.activeGeneration();
   if(generation){
    const state=this.lifecycle.get();
-   if(!['STOPPED','RECOVERY_REQUIRED'].includes(state.phase))await this.ctx.storage.setAlarm(Date.now()+Math.max(delayMs,5000));
+   if(!['STOPPED','RECOVERY_REQUIRED'].includes(state.phase)){
+    const due=Date.now()+Math.max(delayMs,5000),existing=await this.ctx.storage.getAlarm();
+    // Portal refreshes must not continually postpone the wake/lease watchdog.
+    if(existing===null||existing>due)await this.ctx.storage.setAlarm(due);
+   }
    else await this.ctx.storage.deleteAlarm();
    return;
   }
@@ -307,7 +311,7 @@ export class PersonalControl extends DurableObject<Env> {
    if(this.hostedWake){
     try{await this.lifecycle.deliverOwnerAlphaWake(this.hostedWake.transition_id,command=>this.sendHostedWake(command));}
     // Delivery is already non-replayable. Keep the normal lease watchdog cadence.
-    catch(error){console.error(JSON.stringify({event:'control.owner_alpha_wake_unknown',code:safeError(error).code}));}
+    catch(error){console.error(JSON.stringify({event:'control.owner_alpha_wake_unknown',code:safeError(error).code,...(error instanceof HostedWakeDeliveryError?{phase:error.phase,upstream_status:error.upstreamStatus}:{})}));}
    }
    if(this.core.options.executionEnabled){const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);await this.lifecycle.drive(provider);}
   }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code}));}

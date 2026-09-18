@@ -1,8 +1,58 @@
 # Implementation status
 
-Hehebot has demonstrated one canonically completed hosted text-only successor reply with authenticated full-reload persistence, not production operation or ongoing availability. Direct Codex app-server **0.154.0** is the only supported harness. Historical failed trial custody remains recovery-required. Production execution and native-verification flags remain false.
+Hehebot has demonstrated canonically completed hosted text-only replies, including a Worker-triggered staged wake, with authenticated full-reload persistence. This is not production operation or ongoing availability. Direct Codex app-server **0.154.0** is the only supported harness. Historical failed trial custody remains recovery-required. Production execution and native-verification flags remain false.
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
+
+Hosted wake diagnosis (2026-09-18): the official working-with-sprites guide permits
+default8080 HTTP routing without a named Service. A bounded foreground120s probe on
+the retained Sprite observed private-edge401, app-token401 and exact queued202;
+duplicate delivery stayed queued, expired synthetic policy refused native launch,
+and exit0 left no native state. This does not recreate a listener after cold boot.
+The receiver now aborts launch before closing held connections;17 focused tests pass.
+
+Generation4 exposed an alarm starvation bug: each5s portal refresh postponed the
+5s generation alarm. Preserve an earlier stored alarm instead. Real workerd regression
+failed before and passed after; first green run later lost a Miniflare connection,
+isolated rerun passed. Fix deployed. Generation5 still retained UNKNOWN delivery and
+RECOVERY_REQUIRED, not missing wake metadata. Listener exit0 and empty state do not
+retroactively settle the delivery. Private config/modes passed readback. Historical
+observability query returned403/code10000; no token scope/root-cause inference.
+
+Generation6 attached tail before activation and logged request-phase failure with
+null upstream status. Actual local workerd, using the default fetch and a real HTTP
+receiver, reproduced: TypeError, invalid redirect value; only follow/manual supported.
+The receiver saw zero requests. A direct wrapper also failed, ruling out the proposed
+unbound-fetch explanation in this reproduction. Changed redirect:'error' to 'manual';
+existing strict202 receipt validation rejects3xx without following or forwarding
+credentials. The new credential-free scripts/test-hosted-wake-transport.mjs passes
+real202 and302/no-follow, and is included in verify-codex.sh. Sender diagnostics retain
+only controlled stage/numeric status, never response text, headers or thrown messages.
+Four unit checks/typecheck pass. Fix deployed; generation6 remains UNKNOWN and its
+listener exited0 with empty session and both locks available.
+
+Generation7 activation applied05:47:10.696Z, receipt7744f413-71ac-4501-9eed-6c45cf2ea0a5.
+The Worker-triggered listener emitted actual owner-alpha.ready, session
+df18567e-bba1-42fc-98a7-4927ba74ed3f, expires05:51:05.490Z/max1 run120s. No manual native
+launch or old-generation replay. One normal UI submission at05:48:46.952Z, receipt
+6abe74c6-a373-4b6c-a232-76d281e5044c/runf8063115-21c9-45c8-b188-249854de0fef, completed
+05:48:52.786Z (5.834s). Canonical run.result90fddf49-0ee0-458c-b38d-e8eb5b14e23e
+contains exact HEHEBOT_WORKER_WAKE_OK_76, coordinator/Chief of Staff, matching cause.
+Full reload confirms completed/attempt1/error null and one matching user event. Prior
+74/75 and the original recovery/waiting tasks remain unchanged. Inspected screenshot
+.amp/in/artifacts/worker-wake-76-completed.png shows recorded Completed/exact text;
+role attribution comes from canonical event readback, not the cropped image alone.
+Listener emitted stopped/LAUNCH_EXITED and exited0 after the grant expired. Readback
+05:53:04.617Z: service recovery/nativeStopped:true, intent still unknown, both locks
+acquired, zero matching executors and zero census read errors. No universal termination
+or old settlement claim. Production flags remain false. No new Sprite, registered Service,
+upgrade, connector or auth-cache copy. Billing remains unverified under the original
+$10 total ceiling. Private evidence: .local/wake-generation{4,5,6,7}-*,
+wake-{default,bound}-fetch-repro.log, wake-real-transport-green.log,
+wake-final-{unit,runtime,worker,build}.log and wake-redirect-fix-deploy.log. Final targeted
+real Worker/reopen, transport,4 unit/17 runtime, typecheck/build passed. No new combined
+full-green claim; its earlier fixture failure remains recorded below. Next is safe cold
+listener recreation and session staging, not renewal/replay of this consumed generation.
 
 Staged wake delivery (2026-09-18, local): optional HEHEBOT_OWNER_ALPHA_WAKE contains
 exact transition_id and root HTTPS sprites.app URL, using existing PROVIDER_TOKEN

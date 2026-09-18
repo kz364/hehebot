@@ -22,6 +22,7 @@ try{
  assert.deepEqual(prepared.afterRejected,{...prepared.beforeRejected,retained:before});
  assert.equal(prepared.activation.ok,true);assert.equal(prepared.activation.value.status,'applied');assert.equal(prepared.activation.value.resource_id,prepared.generation.transition_id);assert.deepEqual(prepared.retained,before);
  const wake=await request(base,'/hosted-wake'+query,{});
+ assert.equal(wake.alarmAfterReads,wake.earliestAlarm,'owner reads must not postpone the staged wake/watchdog alarm');
  assert.deepEqual(wake.before,wake.after);assert.deepEqual(wake.before.retained,before);
  assert.deepEqual(wake.deliveries,[{url:'https://hehebot-fixture.sprites.app/wake',body:JSON.stringify({epoch:2,operationId:prepared.generation.transition_id})}]);
  assert.deepEqual(wake.intent,{epoch:2,boot_id:prepared.generation.boot_id,transition_id:prepared.generation.transition_id,status:'queued'});

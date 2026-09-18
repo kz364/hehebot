@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import net from 'node:net';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -152,4 +153,25 @@ test('independent listeners race one durable intent; closing winner aborts only 
   await waitFor(() => reports === 2);
   assert.equal(calls, 1); assert.equal(launchSignal.aborted, true);
   assert.equal(JSON.parse(await readFile(join(f.stateDirectory, 'hosted-owner-launch-intent.json'))).phase, 'unknown');
+});
+
+test('stop aborts launch immediately despite an authenticated incomplete HTTP body', async t => {
+  const f = await fixture(t); let launchSignal;
+  const service = serviceFor(f, { launch: async (path, { signal }) => {
+    launchSignal = signal;
+    await new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }));
+    return { code: 1, signal: null };
+  }, report: () => {} });
+  t.after(() => service.stop());
+  const port = await start(service); await wake(port); await waitFor(() => launchSignal);
+  const socket = net.connect(port, '127.0.0.1'); socket.on('error', () => {});
+  t.after(() => socket.destroy()); await once(socket, 'connect');
+  const received = once(service, 'request');
+  socket.write(`POST /wake HTTP/1.1\r\nHost: localhost\r\nX-Hehe-Wake-Token: ${token}\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{`);
+  await received;
+  const closed = once(service, 'close');
+  service.stop();
+  assert.equal(launchSignal.aborted, true);
+  await closed;
+  assert.equal(service.listening, false);
 });

@@ -4,20 +4,21 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current local work:** Worker alarm now optionally delivers an exact staged generation
-to the one-shot hosted listener. It durably records UNKNOWN before dispatch; repeated
-alarms/reconstruction never resend. HTTP202 changes only that delivery to queued,
-not runtime ready. Existing epoch/boot identity, lease supervision and old custody
-remain unchanged. Configuration is default-off and transition/destination-pinned;
-no deployment or live wake. Twenty-three focused tests/typecheck, final actual Worker
-alarm fixture, build and16 desktop tests pass. Full verifier failed in the initial
-global-fetch fixture after1609 backend/485 runtime passes; no full-green claim.
-Next: verify bounded Sprite listener deployment without automatic service restart,
-then one real staged launch. No automatic staging/renewal/credential rotation yet.
-Read-only inventory at04:40:59Z returned one cold hehebot, top-level terminal pagination
-and matching detail. Raw nested pagination/data were not retained; billing unverified.
+**Current P0 wake checkpoint:** Worker-triggered generation7 wake → native ready →
+one canonical completed portal reply passed, including full reload, attempt1 and
+exact attribution (5.834s). Fixed portal-refresh alarm starvation and unsupported
+Workers redirect:'error'; manual mode still refuses all redirects. Both fixes deployed.
+Real workerd HTTP202/302-no-follow, alarm/reopen,4 unit/17 shutdown tests, typecheck
+and build pass. The listener exited0; retained service nativeStopped:true, both locks
+free and zero matching executors/read errors. Unknown wake intent and historical
+recovery/waiting custody remain unchanged, with no replay or universal termination
+claim. No new Sprite, restarting Service, connector or upgrade. Billing unverified
+under the existing $10 total cap; production gates false. Source remains unpushed.
+Next: safe cold-listener bootstrap and fresh bounded session staging, not more identical
+manual canaries. Current grant expired05:51:05.490Z; this is not ongoing chat availability.
+Prior full verifier failed after1609 backend/485 runtime passes; no new full-green claim.
 
-**Current P0 checkpoint:** settled-session continuation is deployed and live-verified.
+**Prior continuation checkpoint:** settled-session continuation is deployed and live-verified.
 Epoch2 recorded nativeStopped:true; both locks were free and no matching executor was
 observed. Fresh generation3 bearer/pin, journal and authenticated activation produced
 one canonical completed reply in5.483s, retained after reload. Prior completed74 and
