@@ -4,6 +4,32 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Live message-bootstrap77 failed (2026-09-18): authenticated browser readiness and
+passive control-plane-only navigation preceded new fixed v2 policy. Same Sprite
+provider status cold08:19:50 and08:21:42, manager null before message. Single normal
+composer submission accepted08:22:33.495Z, receiptcebc1bf7-0856-429e-af4c-0e364fe51d77,
+run743d4f08-f8dd-4f9f-8506-dea200381342, user event20. BOOTING observed, never READY;
+epoch8 RECOVERY_REQUIRED by08:24:07, run queued/attempt0/error null. Reload retained
+one user event, zero results, no preview, old five runs unchanged. No retry/manual
+wake/activation/cancel/replay. Wake8 metadata status queued proves strict HTTP202
+receipt only. Listener had zero staged sessions and no initial log; at08:24:10,
+immediately after diagnostic guest exec, it logged NO_ASSIGNMENT. Service process
+owner/modes/port matched expected configuration. Code has an activity gap after202
+before manager/native Task hold. Timing strongly suggests idle pause; no direct
+provider pause trace establishes causality. Expired grant/custody stays untouched.
+
+Runtime worker is implementing manifest-validated, durable-fenced, bounded bootstrap
+hold before202; no listener-lifetime heartbeat or uncertain replay. Host extended
+the existing actual-workerd fixture to prove authenticated manifest callback into
+the same DO while its sending alarm awaits acknowledgement; exact grant returned
+with wake status unknown, then queued after return. Typecheck and fixture pass in
+`.local/bootstrap-preack-workerd.log`. This tests the fix prerequisite, not live success.
+At08:36:30 native Tasks GET returned an empty list; no hold deletion performed.
+Logs: `.local/bootstrap-77-{listener-final,listener-identity,service-inspect}.log`;
+private Tasks response `.local/bootstrap-77-tasks-private.json`. V2 expired08:29:50.104Z.
+Automatic rollover intentionally rejects unclaimed/uncertain generation8, so further
+live work requires explicit recovery evidence, not a fabricated retirement journal.
+
 Expired trial reconciliation (2026-09-18T08:12:18Z): fixed expiry08:10:39.410Z
 passed unchanged; authenticated manager manifest null, same Sprite provider status
 cold. One subsequent bounded guest exec observed the registered listener running
@@ -11,10 +37,12 @@ with its original07:48 start time and zero staged session directories. The inspe
 itself wakes the guest; neither observation proves fresh-process recovery or live
 passive navigation. No new trial or model submission. Evidence:
 `.local/bootstrap-expired-{reconciliation.json,listener-inspection.log}`.
-Browser execution diagnosis: no connected live runners; latest pending Mac tool is
-read-only Cloudflare billing navigation with no recorded PID/result. Later host
-messages have not been recorded as executed. Recovery/no-send instructions sent;
-reconnect and reconcile the existing runner before assigning a new live attempt.
+Browser execution reconciliation: earlier runner list returned none and thread
+metadata stayed running_tools, but worker subsequently confirmed billing navigation
+completed exit0 with no running command/PID or app mutation. Those observations did
+not prove a hung command. No passive bootstrap checks had occurred. Same worker is
+now assigned passive-only current attachment/portal readiness; no new trial before
+its result and no composer submission authorized.
 No credentials transferred and no new fixtures created for this execution blocker.
 
 Manager/native composition and service staging (2026-09-18): host applied the

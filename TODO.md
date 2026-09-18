@@ -4,6 +4,27 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
+**Latest live attempt FAILED before readiness:** browser readiness confirmed08:18:57Z through existing SSO,
+normal history/bot switching and control-plane-only GETs; expired v1 unavailable,
+epoch7 and old runs unchanged. Host provider check08:19:50Z reports same Sprite cold.
+Only then activated new fixed v2 policy ending08:29:50.104Z, with unchanged cumulative
+allowances and180s session/120s task. V2 passive readiness confirmed08:20:30Z;
+host08:21:42Z confirms no manager assignment and same Sprite cold. Sole browser
+worker submitted exactly one message08:22:33.495Z, receiptcebc1bf7 and run743d4f08.
+Epoch8 entered BOOTING then RECOVERY_REQUIRED; run remains queued/attempt0, one user
+event and zero canonical results after reload. Old five runs unchanged. Wake metadata
+status queued proves strict202 receipt, not runtime start. No manual wake/activation,
+retry/cancel or replay. Listener had zero staged sessions; its first callback log
+was NO_ASSIGNMENT08:24:10 after diagnostic guest exec, beyond the boot lease.
+An unprotected202-to-bootstrap activity gap exists in code; pause is a strong live
+hypothesis, not a proved trace. Runtime worker owns bounded pre-202 manifest/Task
+hold fix. Host extended existing actual-workerd fixture: authenticated manifest
+callback to the same DO completes before wake acknowledgement; typecheck and fixture
+pass. At08:36:30 native Tasks list was empty; no hold deletion. V2 expired unchanged.
+Preserve epoch8 and its reservation; automatic rollover intentionally rejects this
+unclaimed launch. Next integrate/verify the hold fix and establish explicit unused-
+generation recovery evidence before another live trial. Production gates remain false.
+
 **Publication (2026-09-18):** integrated source through
 [`83806a7`](https://github.com/kz364/hehebot/commit/83806a77d30c4658acb52c77dfb2a132a12c5729)
 is pushed to `origin/main`, with remote HEAD verified and the remote agent-model
@@ -41,16 +62,17 @@ Authenticated manager readback returns null before admission. The existing Sprit
 `hehebot-listener` HTTP Service registered at07:48Z; startup monitoring completed,
 and provider inventory reported cold at07:54:08Z. That does not prove process loss
 or cold-start readiness. At08:08:20Z manager manifest was still null and Sprite cold.
-Execution diagnosis: `list_runners` reports no live runners. The Mac browser
-worker's pending action is a read-only Cloudflare billing navigation; no PID/result
-or later submission is recorded. Recovery instructions revoke any pending test
-ownership until it reports back; do not duplicate or retry the pending action.
+Execution reconciliation: earlier `list_runners` returned none, but the worker now
+reports its billing navigation completed exit0, with no tracked PID/running command
+or app mutation. Stale tool-state metadata did not prove a hung command. No passive
+bootstrap actions had occurred. The same worker now owns a new PASSIVE-ONLY browser
+readiness check; no other sender, trial staging or composer submission is authorized.
 The fixed trial expired unchanged08:10:39.410Z. At08:12:18Z manager manifest was
 null and provider status cold. A subsequent bounded guest inspection found the
 listener running with its original07:48 start time and zero staged sessions.
 That inspection wakes the guest; it is not passive portal or fresh-process recovery
-evidence. No new trial or fixture. Exact unblock: reconnect the Mac Amp runner,
-reconcile its pending tool, and confirm authenticated browser readiness FIRST.
+evidence. No new trial or fixture. Confirm current authenticated browser readiness
+FIRST; the historical successful attachment does not establish current availability.
 Persistent imports pass after including generated contracts.
 Earlier combined runs failed missing mock getAlarm and unconsumed fixture POST
 bodies. Both regressions are fixed; `.local/bootstrap-combined.log` is the fresh

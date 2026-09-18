@@ -133,6 +133,7 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
  * wake transport replaced. No public fixture can run off loopback. */
 export class OwnerAlphaBootstrapWorker extends PersonalControl {
  private clock:string;
+ private callbackOrigin:string|undefined;
  constructor(ctx:DurableObjectState,env:FixtureEnv){
   if(env.EXECUTION_ENABLED!=='false'||env.NATIVE_VERIFIED!=='false'||env.AUTH_MODE!=='access'||!env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP)throw Error('Unsafe bootstrap fixture configuration');
   super(ctx,env);this.clock=env.FIXTURE_NOW;this.internals().core.options.now=()=>new Date(this.clock);
@@ -143,13 +144,24 @@ export class OwnerAlphaBootstrapWorker extends PersonalControl {
   const receipt=run?store.db.all('SELECT id,status,resource_id,body_hash FROM commands WHERE id=?',run.command_id)[0]:null;
   const event=run?store.db.all("SELECT id,type,payload_json FROM events WHERE id=? AND type='message.user'",run.command_id)[0]:null;
   const prior=store.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key='fixture_bootstrap_deliveries'")[0];
-  const deliveries=prior?JSON.parse(prior.value_json):[];deliveries.push({command,run_id:run?.id??null,receipt,event});
+  // The real listener must authenticate back to this same DO before acknowledging
+  // wake. Exercise that round trip while the sending alarm is still awaiting us.
+  if(!this.callbackOrigin)throw Error('Missing loopback callback origin');
+  const response=await fetch(`${this.callbackOrigin}/internal/manager/manifest`,{method:'POST',
+   headers:{'content-type':'application/json',authorization:`Bearer ${this.env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN}`},
+   body:'{}',signal:AbortSignal.timeout(5000)});
+  if(response.status!==200)throw Error(`Manager callback status ${response.status}`);
+  const assignment=await response.json() as {grant:{run_id:string;epoch:number;transition_id:string;manifest_sha256:string}}|null;
+  const intent=store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_wake:${command.epoch}`)[0];
+  const callback={grant:assignment?.grant??null,wake_status:intent?JSON.parse(intent.value_json).status:null};
+  const deliveries=prior?JSON.parse(prior.value_json):[];deliveries.push({command,run_id:run?.id??null,receipt,event,callback});
   store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('fixture_bootstrap_deliveries',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(deliveries));
  }
  async fetch(request:Request){
   const url=new URL(request.url);if(url.hostname!=='127.0.0.1')return new Response('Loopback fixture only',{status:403});
   // Consume every POST, including inspection/alarms, before returning or forwarding.
   const body=request.method==='POST'?await request.text():undefined;
+  this.callbackOrigin=url.origin;
   const {core,lifecycle,store}=this.internals();
   if(url.pathname==='/bootstrap-prepare'){
    const policy=core.ownerAlpha.configuredPolicy!,identity=lifecycle.registerBoot(randomUUID());lifecycle.ready(identity);

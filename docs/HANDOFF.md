@@ -4,13 +4,33 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
-Execution recovery diagnosis08:12Z: no live runners connected (`list_runners`).
-Browser thread's pending tool is Cloudflare billing navigation in `/Users/kaspar`,
-session `hehebot-cf-billing`; no PID/result or later message submission is recorded.
-Do not infer that queued host messages executed. Sent recovery/no-send instructions;
-wait for connection outcome and exact pending-command reconciliation before any
-ownership transfer or retry. Orb has no authenticated replacement browser; do not
-copy cookies. Reconnect the Mac runner and prove readiness before staging a new trial.
+Latest live77 FAILED: browser recovered and passive checks confirmed expired v1,
+epoch7/old five runs unchanged, only portal GETs. Same Sprite cold08:19:50; only then
+new v2 activated, expiry08:29:50.104Z with same prior$1/reservation$1/total$10.
+V2 readiness08:20:30 and host no-assignment/cold08:21:42 preceded sole composer send.
+Receiptcebc1bf7-0856-429e-af4c-0e364fe51d77 applied08:22:33.495Z;
+run743d4f08-f8dd-4f9f-8506-dea200381342 remains queued/attempt0, zero results after
+reload. Epoch8 BOOTING expired to RECOVERY_REQUIRED. Wake8 status queued (strict202),
+boot8691bfe5-a630-41af-940c-ba1a9587ff9e,
+transitionb148cde5-f25b-41c9-988d-24171e1abc97. No retry/cancel/replay.
+Listener zero session directories; log first emitted NO_ASSIGNMENT08:24:10 after
+diagnostic guest exec08:24:09. Code responds202 before obtaining any Task hold:
+suspected pause gap, not directly traced. Runtime worker T-01a0b2ce-eb38-7314-b3a3-452bb15e12ad
+owns runtime handler/manager pre-202 bounded hold and focused tests, using transferred
+host source108ee24. Host owns tests/owner-alpha-successor-worker.ts and its script:
+real authenticated callback to same DO while alarm awaits acknowledgement passes,
+as does typecheck (.local/bootstrap-preack-workerd.log). At08:36:30 Tasks GET empty;
+no DELETE. Automatic rollover refuses unclaimed epoch8; do not forge nativeStopped
+or loosen that gate. Need explicit unused-generation recovery evidence after fix.
+No new live trial until integration; browser worker has finished with no send authority.
+
+Execution reconciliation08:17Z: worker now reports the Cloudflare billing navigation
+completed exit0, no tracked PID/running command and no subsequent passive portal
+actions or app mutations. Earlier no-runner/stale running_tools observations did
+not establish a hung shell. Same browser worker now owns a new PASSIVE-ONLY check
+of current CDP attachment, portal/history/bot switch and expired bootstrap state.
+No composer/model submission; host must receive readiness before staging another
+fixed trial. No other browser sender owns the attempt; never copy cookies.
 Existing trial expired08:10:39.410Z unchanged;08:12:18Z manager manifest null and
 same Sprite cold. Subsequent bounded guest inspection observed listener running
 with original07:48 start time, zero staged session directories. That exec wakes the

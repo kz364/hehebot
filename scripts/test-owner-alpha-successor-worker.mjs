@@ -106,6 +106,7 @@ try{
  assert.equal(assigned.wakeIntents.length,1);assert.deepEqual(JSON.parse(assigned.wakeIntents[0].value_json),{epoch:2,boot_id:manifest.grant.boot_id,transition_id:manifest.grant.transition_id,status:'queued'});
  assert.deepEqual(assigned.deliveries[0].command,{epoch:2,operationId:manifest.grant.transition_id});assert.equal(assigned.deliveries[0].run_id,receipt.resource_id);
  assert.equal(assigned.deliveries[0].receipt.status,'applied');assert.equal(assigned.deliveries[0].receipt.resource_id,receipt.resource_id);assert.equal(assigned.deliveries[0].event.type,'message.user');
+ assert.deepEqual(assigned.deliveries[0].callback,{grant:manifest.grant,wake_status:'unknown'},'authenticated manifest callback completes while wake acknowledgement is still pending');
  await stop();automatic=await start({...vars,FIXTURE_NOW:iso(now)});
  assert.deepEqual(await managerManifest(),manifest,'reopening does not renew grant, policy or token');
  const reopenedAssignment=await api('/bootstrap-inspect');assert.deepEqual(reopenedAssignment.reservations,assigned.reservations);assert.deepEqual(reopenedAssignment.retained,old);assert.deepEqual(reopenedAssignment.wakeIntents,assigned.wakeIntents);
@@ -130,5 +131,6 @@ try{
  assert.deepEqual(expired.wakeIntents,assigned.wakeIntents);assert.ok(!logs.includes('control.alarm_failed'));
  console.log('PASS bootstrap actual hosted PersonalControl constructor, Worker manager/task HTTP routes and SQLite: manifest null before message; reads/alarms reserve and wake nothing; one persisted exact message yields one wake and fixed signed grant/policy/token, unchanged across actual process reopen.');
  console.log('PASS separate manager/task/static authentication, exact run/boot/epoch fencing, signed wrong-run rejection, JWT expiry and DO policy expiry; original UNKNOWN custody and lifetime reservation remain unchanged.');
+ console.log('PASS pre-ack manifest callback: authenticated HTTP round trip to the same real DO completes while its sending alarm awaits acknowledgement; wake intent remains unknown until callback returns.');
  console.log('LIMIT owner login, clock, retirement observations and captured wake transport are synthetic loopback fixture boundaries; actual private route authentication and DO constructor/SQLite run unmodified. No Access network, provider, native process or model call.');
 }catch(error){console.error(logs.slice(-6000));throw error;}finally{await stop();await rm(directory,{recursive:true,force:true});}
