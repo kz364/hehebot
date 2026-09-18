@@ -4,12 +4,13 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Scheduled continuation paused11:02Z:** the prepared live path requires the Mac
-executor owning authenticated Chrome. Only the unrelated devbox is currently listed.
-The existing browser worker must reconcile passive PID33132, confirm termination if
-hung, then report bounded readiness; it has no send authority. No additional trial
-is issued while blocked. Resume the schedule when executor recovery permits this
-work, rather than repeating status checks or expanding peripheral scope.
+**Executor recovered; browser still blocked (schedule resumed12:11Z):** tracked
+PID33132 terminated via SIGTERM, exposing an agent-browser daemon read error.
+Mac shell responds despite incomplete runner inventory. One subsequent hard-bounded
+passive navigation timed out after25s; CLI killed/reaped, browser-side outcome unknown.
+No state/history check or send occurred. Existing worker now owns bounded direct CDP
+and daemon diagnostics only; no further navigation or Chrome restart is authorized.
+V3 remains unissued until actual authenticated browser readiness.
 
 **Owner architecture clarification integrated (2026-09-18):** Hehebot remains a
 custom assistant independent of Amp accounts/runtime/SDK. Amp is a documented
@@ -25,12 +26,10 @@ custody review. No retirement claim or replay. Hold-before202 listener files are
 installed, supported Service stop/start completed, and Worker recovery source
 deployment succeeded.09:25 authenticated manager returns null; same Sprite warm.
 Provider-only09:31:22 observation reports same Sprite cold, not zero-billing proof.
-V3 recovery config is NOT issued. Browser passive readiness is blocked on unresolved
-Mac executor PID33132; only navigation/GETs may be pending, no submission was in the
-command. Worker owns same-PID reconciliation. Only recursal-devbox appears in live
-runner inventory, not the Mac owning authenticated Chrome; do not transfer cookies
-or infer browser readiness. Next: reconnect that Mac executor, reconcile PID33132,
-confirm readiness, then issue one fixed trial and authorize one normal composer send.
+V3 recovery config is NOT issued. Current Chrome/CDP automation blocker and ownership
+are above. Runner inventory alone did not establish Mac executor unavailability.
+Next: restore responsive browser automation, confirm readiness, then issue one fixed
+trial and authorize one normal composer send. Do not transfer browser credentials.
 Prior$1 allowance/reservation and$10 total remain unchanged; actual billing unverified.
 No new message, reservation, Git push or production-gate change.
 

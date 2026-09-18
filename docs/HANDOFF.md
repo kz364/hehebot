@@ -4,11 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-18 Asia/Jakarta)
 
-Schedule paused11:02Z under its external-blocker condition; resume with
-update_schedule(enabled:true) after actual Mac executor recovery. Existing browser
-worker still owns reconciliation/termination of passive PID33132 and one bounded
-readiness check, not sends. No replacement sender or v3 issuance. Runner inventory
-only lists recursal-devbox, which has no demonstrated access to that Chrome session.
+Schedule resumed12:11Z after actual Mac shell recovery. PID33132 was terminated
+via supported tracked-process tool (SIGTERM/exit-1); daemon read failed os error35.
+One new passive pinned navigation timed out at25s, CLI killed/reaped, browser-side
+outcome unknown. No subsequent state/history checks or sends. Existing worker owns
+bounded direct GET /json/version and agent-browser version/daemon diagnostics only.
+No navigation retry, Chrome restart, credential copy or replacement sender. Report
+documented narrow automation reset effects before performing it. V3 remains unissued.
 
 Owner clarification integrated in SPEC21.1, PRODUCT_UX_SPEC and PROJECT_INTENT:
 Amp is architecture reference only, not an operational dependency or coding UI.
@@ -30,10 +32,8 @@ Provider-only09:31:22 reports same Sprite cold (`.local/unused-final-provider.js
 No new recovery config or send. `.local/prepare-bootstrap-v3.mjs` is prepared but
 NOT executed: run only after actual browser readiness; it preserves cost baseline
 and creates one fixed10-minute config with the real unused evidence, without seed
-retirement. Browser worker passive PID33132 unresolved after executor connection
-failure; no submission in pending command. It owns reconciliation, not send authority.
-Live runner inventory shows only recursal-devbox, not /Users/kaspar Mac with CDP.
-Need reconnect that executor and resolve PID before any new trial. No cookies copied.
+retirement. Mac shell is now verified reachable; runner inventory was incomplete.
+Chrome/CDP automation readiness remains unverified as described above. No cookies copied.
 
 Hold-before202 patch integrated locally. Host runtime505/505 and strengthened
 existing HTTP→manager→pinned native composition pass; two distinct Task PUT/GET

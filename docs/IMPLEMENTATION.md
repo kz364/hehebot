@@ -32,10 +32,13 @@ null and provider same Sprite warm. This is installation evidence, not message w
 or sleep acceptance. Provider-only09:31:22 reports same Sprite cold, recorded in
 `.local/unused-final-provider.json`; no zero-billing or process-loss claim follows.
 No new trial config/reservation/message, no Git push.
-Browser passive readiness is unverified: Mac PID33132 remains unresolved following
-an executor acknowledgment failure. Its command contained only navigation/GETs.
-Worker owns same-PID reconciliation; only recursal-devbox is currently listed, not
-the Mac with authenticated Chrome/CDP. V3 remains unissued until browser readiness.
+Browser recovery update12:11Z: tracked PID33132 terminated (SIGTERM/exit-1), exposing
+agent-browser daemon read error35. Verified Mac shell responds; runner inventory
+did not establish its unavailability. A single subsequent passive pinned navigation
+hit a hard25s timeout; CLI was killed/reaped, browser-side outcome remains unknown.
+State/history reads were not reached; no send or other mutation occurred. Worker
+now owns bounded direct CDP/daemon diagnostics, not navigation retries or Chrome
+restart. Schedule resumed; V3 remains unissued until actual browser readiness.
 Actual billing remains unverified; unchanged cumulative$10 allowance is not reset.
 
 Live message-bootstrap77 failed (2026-09-18): authenticated browser readiness and
