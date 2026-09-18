@@ -1,5 +1,7 @@
 # Hehebot Portal for macOS
 
+**Reference implementation only.** The selected release direction is SwiftUI + WKWebView in `macos/`, sharing the remote portal. Native Mac build/render/signing acceptance remains unverified; preserve the security contracts below during migration.
+
 This directory is an independently written, remote-only Electron shell around the authoritative Hehebot web portal. It has no local agent, server, scheduler, task database, wake loop, preload bridge, or renderer IPC. Closing the app does not cancel remote work; remote completion and history remain control-plane responsibilities.
 
 ## Install and run

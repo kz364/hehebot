@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTVerifyGetKey } from 'jose';
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { authenticateOwner, assertSameOrigin, verifyRuntimeToken, verifyWebhook, type AuthConfig } from '../src/worker/auth';
+import { authenticateOwner, assertSameOrigin, assertBootstrapSecrets, issueRuntimeTaskToken, verifyRuntimeTaskToken, verifyRuntimeToken, verifyWebhook, type AuthConfig } from '../src/worker/auth';
 const now = new Date('2026-09-10T00:00:00Z');
 const seconds = Math.floor(now.getTime() / 1000);
 const config: AuthConfig = { AUTH_MODE: 'access', INSTALLATION_ID: 'personal', ACCESS_ISSUER: 'https://test.cloudflareaccess.com', ACCESS_AUD: 'portal-audience', OWNER_SUB: 'owner-sub' };
@@ -17,6 +17,51 @@ async function token(overrides = {}) {
     .setProtectedHeader({ alg: 'RS256', kid: 'test-key' }).sign(key);
 }
 const request = (jwt: string) => new Request('https://portal.example/v1/state', { headers: { 'Cf-Access-Jwt-Assertion': jwt } });
+describe('fixed task runtime capability',()=>{
+  const secret='synthetic-task-signing-key-0123456789';
+  const manager='synthetic-manager-key-9876543210123456';
+  const grant={installation_id:'task-installation',owner_binding_sha256:'a'.repeat(64),
+    run_id:'11111111-1111-4111-8111-111111111111',epoch:8,
+    boot_id:'22222222-2222-4222-8222-222222222222',transition_id:'33333333-3333-4333-8333-333333333333',
+    manifest_sha256:'b'.repeat(64),issued_at:now.toISOString(),expires_at:'2026-09-10T00:05:00.000Z'};
+  const bound={installation_id:grant.installation_id,owner_binding_sha256:grant.owner_binding_sha256};
+  const bearer=(value:string)=>new Request('https://portal.example/internal/status',{headers:{Authorization:`Bearer ${value}`}});
+  it('reissues identical bytes without extending the exact validity boundary',async()=>{
+    const token=await issueRuntimeTaskToken(grant,secret);
+    expect(await issueRuntimeTaskToken({...grant},secret)).toBe(token);
+    await expect(verifyRuntimeTaskToken(bearer(token),secret,bound,new Date('2026-09-10T00:04:59.999Z'))).resolves.toEqual(grant);
+    for(const time of ['2026-09-09T23:59:59.999Z','2026-09-10T00:05:00.000Z']){
+      await expect(verifyRuntimeTaskToken(bearer(token),secret,bound,new Date(time))).rejects.toMatchObject({status:401});
+    }
+    await expect(issueRuntimeTaskToken({...grant,expires_at:'2026-09-10T00:05:00.001Z'},secret)).rejects.toMatchObject({status:503});
+  });
+  it('does not cross manager, signing-key, installation or owner boundaries',async()=>{
+    expect(()=>assertBootstrapSecrets(manager,secret,'legacy-runtime-token')).not.toThrow();
+    for(const legacy of [manager,secret])expect(()=>assertBootstrapSecrets(manager,secret,legacy)).toThrow();
+    expect(()=>assertBootstrapSecrets(secret,secret)).toThrow();
+    expect(()=>assertBootstrapSecrets(undefined,secret)).toThrow();
+    const token=await issueRuntimeTaskToken(grant,secret);
+    expect(()=>verifyRuntimeToken(bearer(token),manager)).toThrow();
+    for(const value of [manager,secret,'legacy-runtime-token']){
+      await expect(verifyRuntimeTaskToken(bearer(value),secret,bound,now)).rejects.toMatchObject({status:401});
+    }
+    await expect(verifyRuntimeTaskToken(bearer(token),manager,bound,now)).rejects.toMatchObject({status:401});
+    await expect(verifyRuntimeTaskToken(bearer(token),secret,{...bound,installation_id:'other-installation'},now)).rejects.toMatchObject({status:401});
+    await expect(verifyRuntimeTaskToken(bearer(token),secret,{...bound,owner_binding_sha256:'c'.repeat(64)},now)).rejects.toMatchObject({status:401});
+    await expect(verifyRuntimeTaskToken(bearer(token),'',bound,now)).rejects.toMatchObject({status:503});
+  });
+  it('rejects altered assignment bytes and independently signed inconsistent claims',async()=>{
+    const token=await issueRuntimeTaskToken(grant,secret),parts=token.split('.');
+    const claims=JSON.parse(Buffer.from(parts[1],'base64url').toString());
+    parts[1]=Buffer.from(JSON.stringify({...claims,grant:{...grant,epoch:9}})).toString('base64url');
+    await expect(verifyRuntimeTaskToken(bearer(parts.join('.')),secret,bound,now)).rejects.toMatchObject({status:401});
+    for(const patch of [{aud:'hehebot-manager'},{sub:'44444444-4444-4444-8444-444444444444'},
+      {exp:seconds+301},{grant:{...grant,expires_at:'2026-09-10T00:04:00.000Z'}},{grant:{...grant,unexpected:true}}]){
+      const other=await new SignJWT({...claims,...patch}).setProtectedHeader({alg:'HS256',typ:'hehebot-runtime-task+jwt'}).sign(new TextEncoder().encode(secret));
+      await expect(verifyRuntimeTaskToken(bearer(other),secret,bound,now)).rejects.toMatchObject({status:401});
+    }
+  });
+});
 describe('owner Access authentication', () => {
   it('verifies a signed allowlisted owner', async () => {
     await expect(authenticateOwner(request(await token()), config, { jwks, now })).resolves.toBe(config.OWNER_SUB);

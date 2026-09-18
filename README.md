@@ -2,9 +2,9 @@
 
 Hehebot is a personal-assistant control plane with a dedicated portal, durable Cloudflare Worker/SQLite state, scheduled work, scoped memory, task metadata, effect receipts, lifecycle fencing, and a replaceable execution boundary. One customer-owned cloud runtime hosts all personas; the runtime may sleep while the control plane continues accepting messages and schedules.
 
-The only supported execution harness is **Codex app-server 0.154.0**. Fly Sprites is the selected initial runtime provider. The optional Electron desktop shell displays the remote portal and does not run an agent locally.
+The only supported execution harness is **Codex app-server 0.154.0**. Fly Sprites is the selected initial runtime provider. The selected Mac client is **SwiftUI + WKWebView** around the shared remote portal, with source in `macos/` but native Mac acceptance still unverified. The existing Electron shell is reference-only. Neither client runs an agent locally.
 
-**Current status:** the protected cloud portal/control plane is deployed and authenticated state reads work. A hosted chat reply persisted as provisional output, but task completion failed and remains recovery-required. Local restricted-profile and integration fixtures are preparation, not completed hosted chat. Production execution gates remain false. A root Codex turn completing is not proof that tools, children, effects, output delivery, or persistence have settled.
+**Current status:** the protected cloud portal has demonstrated canonically completed bounded text-only replies, including a Worker-triggered wake and authenticated reload. Historical failed work remains recovery-required. Message-triggered fresh-session staging is local and default-off; this is not ongoing chat availability or production operation. Production execution gates remain false. A root Codex turn completing is not proof that tools, children, effects, output delivery, or persistence have settled. See TODO for current evidence and blockers.
 
 ## Start here
 

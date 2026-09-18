@@ -15,6 +15,23 @@ test('fixed origin, runtime bearer and optional Access service headers; payload 
   assert.deepEqual(JSON.parse(options.body), { boot_id: 'boot-1' });
   assert.equal(JSON.stringify(client), '{}');
 });
+test('manager transport has a disjoint fixed endpoint allowlist and no retries', async () => {
+  const calls = [];
+  const manager = new ControlClient({ ...settings, principal: 'manager', token: 'manager-secret',
+    fetchImpl: async (...args) => { calls.push(args); return response(null); } });
+  assert.equal(await manager.request('manifest', {}), null);
+  assert.equal(calls[0][0], 'https://portal.example/internal/manager/manifest');
+  assert.equal(calls[0][1].headers.Authorization, 'Bearer manager-secret');
+  for (const type of ['boot', 'claim', '../claim']) await assert.rejects(manager.request(type, {}), { code: 'UNSUPPORTED_RUNTIME_ENDPOINT' });
+  const runtime = new ControlClient({ ...settings, fetchImpl: async () => { assert.fail('must reject before dispatch'); } });
+  await assert.rejects(runtime.request('manifest', {}), { code: 'UNSUPPORTED_RUNTIME_ENDPOINT' });
+  let attempts = 0;
+  const uncertain = new ControlClient({ ...settings, principal: 'manager', fetchImpl: async () => {
+    attempts++; throw Error('private manager response');
+  } });
+  await assert.rejects(uncertain.request('retirement', {}), { code: 'CONTROL_TRANSPORT_FAILED', outcomeUnknown: true });
+  assert.equal(attempts, 1); assert.equal(calls.length, 1);
+});
 test('endpoint allowlist matches the TypeScript runtime type keys', async () => {
   const { readFile } = await import('node:fs/promises');
   const source = await readFile(new URL('../src/core/runtime-types.ts', import.meta.url), 'utf8');

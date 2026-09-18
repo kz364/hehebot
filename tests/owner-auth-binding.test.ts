@@ -1,10 +1,10 @@
 import { DatabaseSync } from 'node:sqlite';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { bindOwnerAuth, type AuthConfig } from '../src/worker/auth';
+import { bindOwnerAuth, issueRuntimeTaskToken, type AuthConfig } from '../src/worker/auth';
 import { PersonalControl } from '../src/worker/control-object';
 import worker from '../src/worker/index';
 import { exportControl } from '../src/core/control-export';
@@ -305,6 +305,73 @@ it('binds a rotated runtime credential to the active successor and cannot mutate
     expect((await call(oldToken,'status',{})).status).toBe(401);
     expect(custodyTables(db)).toEqual(before);
   } finally { vi.useRealTimers(); }
+});
+
+it('separates manager and message-bound task credentials through the Worker and durable object', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-09-16T00:00:00.000Z'));
+  const network=vi.fn(()=>{throw new Error('Unexpected provider call');});
+  vi.stubGlobal('fetch',network);
+  try {
+    const db=database(),config=access(),policy=hostedPolicy(),boot=randomUUID();
+    const initial=construct(db,config,{HEHEBOT_HOSTED_OWNER_ALPHA:hostedConfig(policy)});
+    await initial.initialized;
+    expect(await initial.control.runtime({type:'boot',payload:{boot_id:boot}})).toMatchObject({ok:true});
+    vi.setSystemTime(new Date('2026-09-16T00:02:00.000Z'));
+    await initial.control.getState(config.OWNER_SUB);
+    const secrets={RUNTIME_TOKEN:'legacy-test-token',HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN:'manager-test-'.repeat(4),HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY:'signing-test-'.repeat(4)};
+    const settings={...secrets,HEHEBOT_HOSTED_OWNER_ALPHA:hostedConfig(policy),
+      HEHEBOT_OWNER_ALPHA_BOOTSTRAP:JSON.stringify({installation_id:config.INSTALLATION_ID,owner_id:config.OWNER_SUB,owner_binding_sha256:hostedDigest,
+        policy_revision:'worker-trial',persona_id:bot,text_only:{profile_version:'codex-text-only-v1',profile_sha256:'c'.repeat(64)},
+        expires_at:'2026-09-16T00:10:00.000Z',session_seconds:120,max_task_seconds:37,prior_cost_micro_usd:137000,
+        prior_cost_source:'synthetic-test-only',total_cap_micro_usd:10000000,reservation_micro_usd:3000000}),
+      HEHEBOT_OWNER_ALPHA_WAKE:JSON.stringify({url:'https://fixture.sprites.app'}),PROVIDER_TOKEN:'provider-fixture-'.repeat(3),HEHEBOT_OWNER_ALPHA_WAKE_TOKEN:'wake-fixture-'.repeat(3)};
+    const host=construct(db,config,settings);await host.initialized;
+    const env={...config,...settings,CONTROL:{getByName:()=>host.control}} as unknown as Env;
+    const call=(token:string,type:string,payload:unknown={})=>worker.fetch(new Request(`https://portal.example/internal/${type}`,{
+      method:'POST',headers:{Authorization:`Bearer ${token}`},body:JSON.stringify(payload),
+    }),env);
+    const manager=secrets.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN;
+    expect(await (await call(manager,'manager/manifest')).json()).toBeNull();
+    expect((await call(secrets.RUNTIME_TOKEN,'manager/manifest')).status).toBe(401);
+    expect((await call(manager,'status')).status).toBe(401);
+    expect((await call(secrets.RUNTIME_TOKEN,'status')).status).toBe(401);
+    const report={epoch:1,boot_id:boot,session_id:policy.session_id,transition_id:null,observed_at:new Date().toISOString(),
+      direct_child_stopped:true,execution_lock_free:true,session_lock_free:true,source:'trusted-fixture'};
+    expect((await call(manager,'manager/retirement',report)).status).toBe(200);
+    const before=custodyTables(db);
+    await host.control.getState(config.OWNER_SUB);
+    await host.control.getTimeline(config.OWNER_SUB,bot);
+    expect(await (await call(manager,'manager/manifest')).json()).toBeNull();
+    expect(custodyTables(db)).toEqual(before);
+    const command={
+      schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'Only this newly persisted message'},
+    };
+    const accepted=await host.control.accept(config.OWNER_SUB,randomUUID(),createHash('sha256').update(JSON.stringify(command)).digest('hex'),command) as any;
+    expect(accepted).toMatchObject({ok:true,value:{status:'applied'}});
+    const response=await call(manager,'manager/manifest');expect(response.status).toBe(200);
+    const staged=await response.json() as any;
+    expect(staged.grant).toMatchObject({run_id:accepted.value.resource_id,epoch:2,issued_at:'2026-09-16T00:02:00.000Z',expires_at:'2026-09-16T00:04:00.000Z'});
+    expect(staged.policy).toMatchObject({persona_id:bot,max_runs:1,max_task_seconds:37,expires_at:staged.grant.expires_at});
+    expect(await (await call(manager,'manager/manifest')).json()).toEqual(staged);
+    expect((await call(staged.runtime_token,'manager/manifest')).status).toBe(401);
+    expect((await call(staged.runtime_token,'manager/retirement',report)).status).toBe(401);
+    expect((await call(staged.runtime_token,'status')).status).toBe(200);
+    for(const grant of [{...staged.grant,run_id:randomUUID()},{...staged.grant,manifest_sha256:'e'.repeat(64)}]){
+      const mismatched=await issueRuntimeTaskToken(grant,secrets.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY);
+      expect((await call(mismatched,'status')).status).toBe(409);
+    }
+    const identity={epoch:staged.grant.epoch,boot_id:staged.grant.boot_id};
+    expect((await call(staged.runtime_token,'submitted',{identity,run_id:randomUUID(),attempt:1,native_ref:'wrong-run'})).status).toBe(403);
+    expect((await call(staged.runtime_token,'boot',{boot_id:identity.boot_id})).status).toBe(200);
+    expect((await call(staged.runtime_token,'ready',{identity})).status).toBe(200);
+    const claimed=await (await call(staged.runtime_token,'claim',{identity})).json() as any;
+    expect(claimed.run.id).toBe(accepted.value.resource_id);
+    vi.setSystemTime(new Date(staged.grant.expires_at));
+    expect((await call(staged.runtime_token,'status')).status).toBe(401);
+    expect(await (await call(manager,'manager/manifest')).json()).toBeNull();
+    expect(network).not.toHaveBeenCalled();
+  } finally {vi.useRealTimers();vi.unstubAllGlobals();}
 });
 
 it('denies hosted owner-alpha mutation, effects, completion and sleep without provider calls', async () => {

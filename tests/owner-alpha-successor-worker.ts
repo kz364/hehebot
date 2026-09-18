@@ -6,6 +6,7 @@ import type {LifecycleCore} from '../src/core/lifecycle';
 import type {Store} from '../src/core/store';
 import {ownerAlphaSuccessorSha256} from '../src/core/owner-alpha';
 import type {HostedOwnerWake} from '../src/worker/hosted-owner-wake';
+import worker from '../src/worker/index';
 
 type FixtureEnv=Env&{FIXTURE_NOW:string;DB:DurableObjectNamespace};
 type Internals={core:ControlCore;lifecycle:LifecycleCore;store:Store;hostedWake:HostedOwnerWake|undefined};
@@ -128,7 +129,62 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
   return new Response('Not found',{status:404});
  }
 }
+/** Actual hosted constructor and private HTTP auth, with only clock/owner-login and
+ * wake transport replaced. No public fixture can run off loopback. */
+export class OwnerAlphaBootstrapWorker extends PersonalControl {
+ private clock:string;
+ constructor(ctx:DurableObjectState,env:FixtureEnv){
+  if(env.EXECUTION_ENABLED!=='false'||env.NATIVE_VERIFIED!=='false'||env.AUTH_MODE!=='access'||!env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP)throw Error('Unsafe bootstrap fixture configuration');
+  super(ctx,env);this.clock=env.FIXTURE_NOW;this.internals().core.options.now=()=>new Date(this.clock);
+ }
+ private internals(){return this as unknown as Internals;}
+ protected async sendHostedWake(command:{epoch:number;operationId:string}):Promise<void>{
+  const {store,lifecycle}=this.internals(),run=lifecycle.nextClaimableRun();
+  const receipt=run?store.db.all('SELECT id,status,resource_id,body_hash FROM commands WHERE id=?',run.command_id)[0]:null;
+  const event=run?store.db.all("SELECT id,type,payload_json FROM events WHERE id=? AND type='message.user'",run.command_id)[0]:null;
+  const prior=store.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key='fixture_bootstrap_deliveries'")[0];
+  const deliveries=prior?JSON.parse(prior.value_json):[];deliveries.push({command,run_id:run?.id??null,receipt,event});
+  store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('fixture_bootstrap_deliveries',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(deliveries));
+ }
+ async fetch(request:Request){
+  const url=new URL(request.url);if(url.hostname!=='127.0.0.1')return new Response('Loopback fixture only',{status:403});
+  // Consume every POST, including inspection/alarms, before returning or forwarding.
+  const body=request.method==='POST'?await request.text():undefined;
+  const {core,lifecycle,store}=this.internals();
+  if(url.pathname==='/bootstrap-prepare'){
+   const policy=core.ownerAlpha.configuredPolicy!,identity=lifecycle.registerBoot(randomUUID());lifecycle.ready(identity);
+   const message={schema_version:1 as const,type:'message.send' as const,payload:{conversation_id:policy.persona_id,text:'retained bootstrap predecessor'}};
+   const old=core.accept(this.env.OWNER_SUB,randomUUID(),await digest(message),message),claim=lifecycle.claim(identity)!;
+   lifecycle.submitted(identity,claim.run.id,1,'native:bootstrap-unknown');
+   store.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','dispatched','fixture-auth','fixture-request',?)",randomUUID(),claim.run.id,randomUUID(),core.now());
+   this.clock=(JSON.parse(body!) as {now:string}).now;lifecycle.watchdog();
+   const waiting=core.accept(this.env.OWNER_SUB,randomUUID(),await digest(message),message);
+   store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('fixture_bootstrap_ids',?)",JSON.stringify({old:old.resource_id,waiting:waiting.resource_id}));
+   return Response.json({retirement:{...identity,session_id:policy.session_id,transition_id:null,observed_at:core.now(),direct_child_stopped:true,execution_lock_free:true,session_lock_free:true,source:'credential-free-workerd-fixture'}});
+  }
+  if(url.pathname==='/bootstrap-alarm'){
+   const input=JSON.parse(body!);if(input.now)this.clock=input.now;
+   await super.alarm();return Response.json({phase:lifecycle.get().phase});
+  }
+  if(url.pathname==='/bootstrap-inspect'){
+   const ids=store.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key='fixture_bootstrap_ids'")[0];
+   const selected=ids?JSON.parse(ids.value_json):null;
+   const metadata=(key:string)=>{const r=store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',key)[0];return r?JSON.parse(r.value_json):null;};
+   return Response.json({lifecycle:lifecycle.get(),manifest:core.bootstrap.assignedManifest()??null,summary:core.bootstrap.summary(),
+    deliveries:metadata('fixture_bootstrap_deliveries')??[],reservations:store.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'"),
+    wakeIntents:store.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_wake:*'"),
+    retained:selected?{old:store.db.all('SELECT * FROM runs WHERE id=?',selected.old),waiting:store.db.all('SELECT * FROM runs WHERE id=?',selected.waiting),attempt:store.db.all('SELECT * FROM attempts WHERE epoch=1'),effects:store.db.all('SELECT * FROM effects WHERE run_id=?',selected.old),original:metadata('owner_alpha')}:null});
+  }
+  return new Response('Not found',{status:404});
+ }
+}
 export default {fetch(request:Request,env:FixtureEnv){
  if(new URL(request.url).hostname!=='127.0.0.1')return new Response('Loopback fixture only',{status:403});
+ if(env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP){
+  if(new URL(request.url).pathname.startsWith('/bootstrap-'))return env.CONTROL.getByName(env.INSTALLATION_ID).fetch(request);
+  // Synthetic loopback owner login only. The DO still receives real Access-mode
+  // constructor configuration/binding; private manager/task routes use it unchanged.
+  return worker.fetch(request,new URL(request.url).pathname.startsWith('/v1/')?{...env,AUTH_MODE:'local'}:env);
+ }
  return env.DB.get(env.DB.idFromName('owner-alpha-successor-fixture')).fetch(request);
 }};

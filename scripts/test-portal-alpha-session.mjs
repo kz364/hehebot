@@ -64,4 +64,24 @@ try{
  delete state.summary.owner_alpha_session;await open();await blocked();assert.match(await evaluate('document.querySelector("#runtime-banner").textContent'),/details changed or are unavailable/);
  assert.equal(commands.length,3);assert.deepEqual(commands.map(c=>c.type),['message.send','message.send','run.cancel']);assert.equal(deniedReads,0);
  console.log('PASS default/available send, wrong persona/room, exhausted/stale count, zero-fetch timer expiry/clock rollback/changed deadline, retained preview/history/recovery, exact cancel after expiry and blocked programmatic submit; no automatic writes.');
+ // Automatic trials have a fixed overall policy, independent of expired legacy
+ // session bounds. Only an explicit message submits a command; reads do not.
+ state.summary.owner_alpha_session={persona_id:bot,expires_at:'2026-01-01T00:00:00.000Z',max_runs:1,admitted_runs:1,max_task_seconds:43};
+ state.summary.owner_alpha_bootstrap={policy_revision:'synthetic-policy-1',persona_id:bot,expires_at:new Date(Date.now()+120000).toISOString(),max_task_seconds:43,message_admission_available:true};
+ await open();await refresh();
+ await evaluate(`document.querySelector('[data-persona-id="${other}"]').click()`);await blocked();
+ await evaluate(`document.querySelector('[data-persona-id="${bot}"]').click()`);await wait('!document.querySelector("#send").disabled');
+ assert.equal(commands.length,3);assert.match(await evaluate('document.querySelector("#runtime-banner").textContent'),/Portal visits and history do not start the runtime/);
+ await capture('bootstrap-available');
+ await browser('fill','#message','Start one new bounded session');await browser('click','#send');await wait('document.querySelector("#message").value===""');
+ assert.equal(commands.length,4);assert.deepEqual(commands[3].payload,{conversation_id:bot,text:'Start one new bounded session'});
+ state.summary.owner_alpha_bootstrap.message_admission_available=false;await refresh();await blocked();await capture('bootstrap-unavailable');
+ state.summary.owner_alpha_bootstrap.message_admission_available=true;await refresh();await wait('!document.querySelector("#send").disabled');
+ state.summary.owner_alpha_session.expires_at=new Date(Date.now()+300000).toISOString();await refresh();assert.equal(await evaluate('document.querySelector("#send").disabled'),false);
+ delete state.summary.owner_alpha_bootstrap;await refresh();await blocked();
+ state.summary.owner_alpha_bootstrap={policy_revision:'synthetic-policy-2',persona_id:bot,expires_at:new Date(Date.now()+2500).toISOString(),max_task_seconds:43,message_admission_available:true};
+ await open();const beforeTrialExpiry=reads;await wait('document.querySelector("#runtime-banner").textContent.includes("Trial expired")');
+ assert.equal(reads,beforeTrialExpiry);await blocked();await capture('bootstrap-expired');
+ assert.equal(commands.length,4);assert.equal(deniedReads,0);
+ console.log('PASS message-triggered trial: expired legacy session does not close eligible message admission; visits/refresh/bot switching make zero commands; one explicit Send; unavailable/missing metadata and local trial expiry close admission; generation changes do not renew the trial.');
 }finally{await browser('close').catch(()=>{});await new Promise(ok=>server.close(ok));}

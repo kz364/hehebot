@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import { requireThat } from './errors';
 import type { Store } from './store';
 import type { Run } from './types';
+import {ownerAlphaManifestSha256,type MessageBoundAuthority,type OwnerAlphaManifest,type OwnerAlphaBootstrapConfig} from './owner-alpha-bootstrap';
 
 export type TextOnlyProfile={profile_version:'codex-text-only-v1';profile_sha256:string};
 export type OwnerAlphaPolicy = { session_id:string; persona_id:string; expires_at:string; max_runs:number; max_task_seconds:number; background_first_root?:true;text_only?:TextOnlyProfile };
@@ -93,11 +94,11 @@ export function parseHostedOwnerAlpha(value:string|undefined,env:HostedOwnerAlph
   typeof envelope.owner_binding_sha256==='string'&&/^[0-9a-f]{64}$/.test(envelope.owner_binding_sha256),'INVALID_CONFIGURATION','Invalid hosted owner-alpha envelope.',503);
  return {policy:parsePolicy(envelope.policy),ownerBindingSha256:envelope.owner_binding_sha256};
 }
-type Custody={policy:OwnerAlphaPolicy;admitted_run_ids:string[]};
+type Custody={policy:OwnerAlphaPolicy;admitted_run_ids:string[];binding?:OwnerAlphaManifest};
 export type OwnerAlphaGeneration={
  epoch:number;boot_id:string;transition_id:string;policy:OwnerAlphaPolicy&{text_only:TextOnlyProfile};
  predecessor:{epoch:number;boot_id:string;session_id:string;phase:string;lease_until:string|null};
- authority:OwnerAlphaSuccessor;activation_command_id:string;activation_command_sha256:string;activation_event_sequence:number;
+ authority:OwnerAlphaSuccessor|MessageBoundAuthority;activation_command_id:string;activation_command_sha256:string;activation_event_sequence:number;
 };
 /** Immutable local-session policy; each durable admitted ID consumes one run forever. */
 export class OwnerAlpha {
@@ -109,7 +110,30 @@ export class OwnerAlpha {
    requireThat(row.key===`owner_alpha_generation:${generation?.epoch}`&&Number.isSafeInteger(generation?.epoch)&&generation.epoch>=2&&Number.isSafeInteger(generation.activation_event_sequence)&&generation.activation_event_sequence>=0&&
     generation.predecessor?.epoch===generation.epoch-1&&generation.predecessor.phase==='RECOVERY_REQUIRED'&&uuid.test(generation.activation_command_id),
     'INVALID_CONFIGURATION','Invalid owner-alpha generation record.',503);
-   const command=this.store.db.all<{payload_json:string;body_hash:string;type:string;owner_id:string;status:string}>('SELECT payload_json,body_hash,type,owner_id,status FROM commands WHERE id=?',generation.activation_command_id)[0];
+   const command=this.store.db.all<{payload_json:string;body_hash:string;type:string;owner_id:string;status:string;resource_id:string;accepted_at:string}>('SELECT payload_json,body_hash,type,owner_id,status,resource_id,accepted_at FROM commands WHERE id=?',generation.activation_command_id)[0];
+   if('kind' in generation.authority){
+    const {manifest:m,kind:_,...envelope}=generation.authority;
+    const run=this.store.db.all<Run>('SELECT * FROM runs WHERE id=?',m.run_id)[0];
+    const policyRow=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_bootstrap_policy:${m.policy_revision}`)[0];
+    const config=policyRow?JSON.parse(policyRow.value_json) as OwnerAlphaBootstrapConfig:undefined;
+    const reservation=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_reservation:${generation.epoch}`)[0];
+    const retirement=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_retirement:${generation.predecessor.epoch}`)[0];
+    requireThat(generation.authority.kind==='owner-message'&&config&&command?.type==='message.send'&&command.status==='applied'&&command.owner_id===config.owner_id&&
+     command.resource_id===m.run_id&&command.accepted_at<=m.issued_at&&retirement&&createHash('sha256').update(retirement.value_json).digest('hex')===envelope.retirement_receipt_sha256&&
+     m.manifest_sha256===ownerAlphaManifestSha256(m)&&m.command_id===generation.activation_command_id&&m.command_sha256===command.body_hash&&command.body_hash===generation.activation_command_sha256&&
+     m.event_sequence===generation.activation_event_sequence&&m.epoch===generation.epoch&&m.boot_id===generation.boot_id&&m.transition_id===generation.transition_id&&m.session_id===generation.policy.session_id&&
+     m.installation_id===config.installation_id&&m.owner_binding_sha256===config.owner_binding_sha256&&m.policy_revision===config.policy_revision&&m.persona_id===config.persona_id&&
+     m.reservation_micro_usd===config.reservation_micro_usd&&reservation&&JSON.parse(reservation.value_json).manifest_sha256===m.manifest_sha256&&JSON.parse(reservation.value_json).micro_usd===m.reservation_micro_usd&&
+     JSON.stringify(m.text_only)===JSON.stringify(config.text_only)&&JSON.stringify(generation.policy.text_only)===JSON.stringify(config.text_only)&&generation.policy.max_runs===1&&generation.policy.max_task_seconds===config.max_task_seconds&&
+     m.expires_at===generation.policy.expires_at&&m.expires_at<=config.expires_at&&m.expires_at>m.issued_at&&Date.parse(m.expires_at)<=Date.parse(m.issued_at)+config.session_seconds*1000&&
+     run&&run.command_id===m.command_id&&run.persona_id===m.persona_id&&run.role==='coordinator'&&run.parent_run_id===null&&run.routine_id===null&&run.occurrence_id===null&&JSON.parse(run.context_json).room_id===null&&
+     this.store.db.all("SELECT sequence FROM events WHERE id=? AND type='message.user' AND actor_id=? AND conversation_id=? AND sequence=? AND created_at<=?",m.command_id,command.owner_id,m.persona_id,m.event_sequence,m.issued_at).length===1&&
+     this.directMessage(m.persona_id,m.command_id,null,null,null,m.event_sequence-1,m.persona_id)&&
+     envelope.transition_id===generation.transition_id&&envelope.predecessor.epoch===generation.predecessor.epoch&&envelope.predecessor.session_id===generation.predecessor.session_id&&envelope.predecessor.boot_id===generation.predecessor.boot_id&&
+     envelope.successor.boot_id===generation.boot_id&&JSON.stringify(parseOwnerAlphaSuccessor(JSON.stringify(envelope))?.successor.policy)===JSON.stringify(generation.policy),
+     'INVALID_CONFIGURATION','Message-bound generation differs from its admission binding.',503);
+    return generation;
+   }
    requireThat(command?.type==='owner-alpha.activate'&&command.status==='applied'&&!/^(runtime|trigger):/.test(command.owner_id),
     'INVALID_CONFIGURATION','Owner-alpha activation receipt is missing.',503);
    requireThat(this.store.db.all("SELECT sequence FROM events WHERE id=? AND type='owner-alpha.activated' AND actor_id=? AND cause_id=? AND sequence=? AND json_extract(payload_json,'$.epoch')=?",
@@ -134,7 +158,7 @@ export class OwnerAlpha {
   return rows;
  }
  private generationCustody(generation:OwnerAlphaGeneration):Custody {
-  return {policy:generation.policy,admitted_run_ids:this.store.db.all<{run_id:string}>(
+  return {policy:generation.policy,...('kind' in generation.authority?{binding:generation.authority.manifest}:{}),admitted_run_ids:this.store.db.all<{run_id:string}>(
    'SELECT run_id FROM attempts WHERE epoch=? AND boot_id=? ORDER BY run_id',generation.epoch,generation.boot_id).map(row=>row.run_id)};
  }
  activeGeneration():OwnerAlphaGeneration|undefined {
@@ -200,7 +224,8 @@ export class OwnerAlpha {
   return !!command&&command.type==='message.send'&&!/^(runtime|trigger):/.test(command.owner_id)&&!!event&&event.actor_id===command.owner_id&&event.sequence>cutoff&&JSON.parse(command.payload_json).conversation_id===persona;
  }
  eligible(run:Run):boolean {
-  return run.role==='coordinator'&&run.current_attempt===0&&this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null);
+  const binding=this.custody().binding;
+  return (!binding||run.id===binding.run_id&&run.command_id===binding.command_id)&&run.role==='coordinator'&&run.current_attempt===0&&this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null,binding?binding.event_sequence-1:this.cutoff());
  }
  admit(run:Run):string {
   requireThat(this.available()&&this.eligible(run),'CAPABILITY_UNAVAILABLE','Owner-alpha admission is closed.');
@@ -229,9 +254,10 @@ export class OwnerAlpha {
   const run=this.store.db.all<Run>('SELECT * FROM runs WHERE id=?',runId)[0];
   const row=this.store.db.all<{epoch:number;boot_id:string;deadline_at:string;started_at:string;native_run_ref:string|null;submission_key:string}>('SELECT * FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
   if(!run||!row||attempt!==1||run.current_attempt!==1||run.persona_id!==custody.policy.persona_id||row.epoch!==epoch||row.boot_id!==bootId)return false;
+  if(custody.binding&&(runId!==custody.binding.run_id||run.command_id!==custody.binding.command_id||epoch!==custody.binding.epoch||bootId!==custody.binding.boot_id))return false;
   const link=this.store.db.all<{parent_run_id:string;parent_attempt:number;native_run_ref:string;native_session_key:string}>('SELECT * FROM native_task_links WHERE run_id=?',runId)[0];
   if(custody.admitted_run_ids.includes(runId))return run.role==='coordinator'&&run.parent_run_id===null&&!link&&row.submission_key===`${runId}:1`&&
-   this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null,cutoff,custody.policy.persona_id)&&
+   this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null,custody.binding?custody.binding.event_sequence-1:cutoff,custody.policy.persona_id)&&
    Number.isFinite(Date.parse(row.started_at))&&Number.isFinite(Date.parse(row.deadline_at))&&row.deadline_at<=custody.policy.expires_at&&Date.parse(row.deadline_at)<=Date.parse(row.started_at)+custody.policy.max_task_seconds*1000;
   if(!custody.policy.background_first_root||!link||run.role!=='background'||link.parent_run_id!==custody.admitted_run_ids[0]||run.parent_run_id!==link.parent_run_id||link.parent_attempt!==1||!link.native_session_key||!link.native_run_ref||row.native_run_ref!==link.native_run_ref||row.submission_key!==`native:${link.native_run_ref}`)return false;
   if(!this.validAttempt(link.parent_run_id,1,custody,epoch,bootId))return false;

@@ -17,6 +17,7 @@ import {OutputPreviews} from './output-preview';
 import {TokenUsageSnapshots} from './token-usage';
 import {captureWhatsAppReadPolicies} from './whatsapp-access';
 import {OwnerAlpha,ownerAlphaSuccessorSha256} from './owner-alpha';
+import {OwnerAlphaBootstrap} from './owner-alpha-bootstrap';
 import {timelineExpirySql} from './timeline-retention';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
@@ -38,12 +39,14 @@ export class ControlCore {
  readonly budget:BudgetLedger;
  readonly questions:NativeQuestionLedger;
  readonly ownerAlpha:OwnerAlpha;
+ readonly bootstrap:OwnerAlphaBootstrap;
  constructor(public store:Store,public options:Options){
   requireThat(!options.ownerAlpha||!options.executionEnabled,'INVALID_CONFIGURATION','Owner alpha cannot enable production execution.',503);
   requireThat(!options.ownerAlphaSuccessor||!options.executionEnabled,'INVALID_CONFIGURATION','Owner alpha successor cannot enable production execution.',503);
   this.ownerAlpha=new OwnerAlpha(store,options.ownerAlpha,()=>this.now());
   this.budget=new BudgetLedger(store,()=>this.now(),options.uuid);
   this.questions=new NativeQuestionLedger(store,new LifecycleCore(store,this),()=>this.now());
+  this.bootstrap=new OwnerAlphaBootstrap(this);
  }
  now(){return this.options.now().toISOString();}
  schedulePreview(cron:string,timezone:string){
@@ -87,6 +90,7 @@ export class ControlCore {
    this.store.db.transaction(()=>{
     insert('accepted',null,null);
     const resource=this.apply(owner,id,command);
+    if(command.type==='message.send')this.bootstrap.assignNewMessage(owner,id,resource);
     this.store.db.exec("UPDATE commands SET status='applied',resource_id=? WHERE id=?",resource,id);
    });
   }catch(error){
@@ -487,7 +491,7 @@ export class ControlCore {
  enqueue(personaId:string,instruction:string,commandId:string|null,routineId:string|null,occurrenceId:string|null,roomId:string|null=null,skill?:StoredObject<SkillBody>):string {
   const id=this.options.uuid(),now=this.now(),context=this.context(personaId,instruction,routineId,roomId,commandId);
   if(skill){context.skills=[skill];context.skill_invocation={skill_id:skill.id,skill_revision:skill.revision};}
-  const admitted=this.options.executionEnabled||(this.ownerAlpha.available()&&this.ownerAlpha.directMessage(personaId,commandId,routineId,occurrenceId,roomId));
+  const admitted=this.options.executionEnabled||(!this.bootstrap.assignedManifest()&&this.ownerAlpha.available()&&this.ownerAlpha.directMessage(personaId,commandId,routineId,occurrenceId,roomId));
   let status=admitted?'queued':'waiting',reason:string|null=admitted?null:'CAPABILITY_UNAVAILABLE';
   this.store.db.exec('INSERT INTO runs(id,command_id,occurrence_id,persona_id,routine_id,context_json,status,error_code,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',id,commandId,occurrenceId,personaId,routineId,JSON.stringify(context),status,reason,now,now);
   if(this.budget.blocks(this.store.run(id))){
@@ -548,7 +552,7 @@ export class ControlCore {
   const previews=new OutputPreviews(this.store,()=>now);
   const usage=new TokenUsageSnapshots(this.store,()=>now);
   const questions=this.questions.list();
-  const alpha=this.ownerAlpha.summary(),policy=alpha?.policy;
+  const alpha=this.ownerAlpha.summary(),policy=alpha?.policy,bootstrap=this.bootstrap.summary();
   let alphaSummary:{owner_alpha?:true;owner_alpha_session?:{persona_id:string;expires_at:string;max_runs:number;admitted_runs:number;max_task_seconds:number}}={};
   if(policy){
    alphaSummary={owner_alpha:true,owner_alpha_session:{persona_id:policy.persona_id,expires_at:policy.expires_at,max_runs:policy.max_runs,admitted_runs:alpha.admittedRuns,max_task_seconds:policy.max_task_seconds}};
@@ -570,7 +574,7 @@ export class ControlCore {
    token_usage_snapshots:runs.flatMap(run=>{const value=usage.read(run.id,run.current_attempt);return value?[value]:[];}),
    recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run,questions)),
    runs:runs.map(({context_json,checkpoint_json,...rest})=>rest),
-   summary:{...alphaSummary,phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},
+   summary:{...alphaSummary,...(bootstrap?{owner_alpha_bootstrap:bootstrap}:{}),phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},
    timeline:after===undefined?this.store.latestEvents(now):undefined};
  }
  taskPage(conversationId:string,after?:string,limit=10){

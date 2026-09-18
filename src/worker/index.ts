@@ -1,6 +1,7 @@
 import { unwrap } from './rpc';
 import { PersonalControl } from './control-object';
-import { authenticateOwner, assertSameOrigin, runtimeGenerationAuthority, verifyRuntimeToken, verifyWebhook } from './auth';
+import { assertBootstrapSecrets, authenticateOwner, assertSameOrigin, runtimeGenerationAuthority, verifyRuntimeTaskToken, verifyRuntimeToken, verifyWebhook } from './auth';
+import {parseOwnerAlphaBootstrap} from '../core/owner-alpha-bootstrap';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { digest, json, parseJson, readBounded } from './http';
 export { PersonalControl };
@@ -11,8 +12,19 @@ export default {
    const url=new URL(request.url),path=url.pathname;
    const control=env.CONTROL.getByName(env.INSTALLATION_ID);
    if(path.startsWith('/internal/')){
-    requireThat(request.method==='POST','NOT_FOUND','Route unavailable.',404);verifyRuntimeToken(request,env.RUNTIME_TOKEN);
-    const authority=runtimeGenerationAuthority(env.HEHEBOT_RUNTIME_GENERATION);
+    requireThat(request.method==='POST','NOT_FOUND','Route unavailable.',404);
+    const bootstrap=parseOwnerAlphaBootstrap(env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP);
+    if(bootstrap)assertBootstrapSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
+    if(path.startsWith('/internal/manager/')){
+     requireThat(!!bootstrap,'NOT_FOUND','Route unavailable.',404);
+     verifyRuntimeToken(request,env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN!);
+     const type=path.slice('/internal/manager/'.length);
+     requireThat(type==='manifest'||type==='retirement','NOT_FOUND','Route unavailable.',404);
+     return json(unwrap(await control.ownerAlphaManager(type,parseJson(await readBounded(request)))));
+    }
+    const authority=bootstrap
+     ?await verifyRuntimeTaskToken(request,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY!,{installation_id:env.INSTALLATION_ID,owner_binding_sha256:bootstrap.owner_binding_sha256})
+     :(verifyRuntimeToken(request,env.RUNTIME_TOKEN),runtimeGenerationAuthority(env.HEHEBOT_RUNTIME_GENERATION));
     const payload=parseJson(await readBounded(request));return json(unwrap(await control.runtime({type:path.slice('/internal/'.length),payload},authority)));
    }
    if(path.startsWith('/v1/triggers/')){

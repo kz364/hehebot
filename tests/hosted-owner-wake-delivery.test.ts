@@ -14,6 +14,22 @@ it('defaults off and permits only a hosted, privately authenticated pinned Sprit
  expect(()=>parseHostedOwnerWake(JSON.stringify(config),true,provider,'secret\nvalue')).toThrow();
 });
 
+it('automatic mode pins only the same Sprite URL and accepts a durable assignment transition',async()=>{
+ const raw=JSON.stringify({url:config.url});
+ expect(()=>parseHostedOwnerWake(raw,true,provider,token)).toThrow();
+ expect(()=>parseHostedOwnerWake(JSON.stringify(config),true,provider,token,true)).toThrow();
+ const automatic=parseHostedOwnerWake(raw,true,provider,token,true)!;
+ expect(automatic).toEqual({url:config.url});
+ const assigned={epoch:8,operationId:'88888888-8888-4888-8888-888888888888'};
+ const fetcher=vi.fn(async(_input:URL|RequestInfo,init?:RequestInit)=>{
+  expect(JSON.parse(init!.body as string)).toEqual(assigned);
+  return Response.json({accepted:true,epoch:8},{status:202});
+ });
+ await sendHostedOwnerWake(automatic,assigned,provider,token,fetcher as typeof fetch);
+ await expect(sendHostedOwnerWake(config,assigned,provider,token,fetcher as typeof fetch)).rejects.toMatchObject({code:'INVALID_CONFIGURATION'});
+ expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
 it('sends the exact staged notification once without service start or redirect',async()=>{
  const fetcher=vi.fn(async(input:URL|RequestInfo,init?:RequestInit)=>{
   expect(String(input)).toBe(config.url+'/wake');

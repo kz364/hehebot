@@ -4,6 +4,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ControlClient } from './control-client.mjs';
 import { launchHostedOwnerAlpha } from './hosted-owner-launcher.mjs';
+import { runHostedOwnerManager } from './hosted-owner-manager.mjs';
 import { readOwnerAlphaConfig } from './owner-alpha-entry.mjs';
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 import { createSpritesWakeHandler } from './sprites-wake-service.mjs';
@@ -97,6 +98,12 @@ export function createHostedOwnerWakeService({ configPath, wakeTokenFile, port }
           // Warm listeners must not retain a preceding generation's config.
           const initial = await readConfig(configPath);
           const config = initial.config;
+          if (config?.kind === 'owner-alpha-manager-v1') {
+            const code = await runHostedOwnerManager(config, request, { readSecret, launch,
+              control: deps.control, now, signal: controller.signal });
+            report({ event: 'hosted-owner-wake', code, ready: false });
+            return;
+          }
           const policy = ownerAlphaPolicy(config?.ownerAlpha);
           const staged = generation(config?.ownerAlphaGeneration);
           if (!policy.text_only || typeof config.hostedOwnerBindingSha256 !== 'string' ||

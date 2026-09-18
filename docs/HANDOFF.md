@@ -24,7 +24,22 @@ Fresh generation requires current-generation settlement gates plus durable trust
 direct-child-stop/both-locks-free observation; missing/unknown retirement blocks.
 No inference replay after uncertain launch. Preserve all historical UNKNOWN custody.
 Cumulative reservations must carry prior costs and never reset per session. This
-design is not implemented/enabled yet. Portal visit/history/bot switching/passive
+design is now implemented locally, not enabled or deployed. Core and runtime-manager
+patches are integrated; host Worker routing/issuance/task fencing passes78 focused
+tests in `.local/bootstrap-host-auth.log`. The core worker's actual-workerd fixture
+patch was integrated from the exact unpublished baseline; host rerun passes in
+`.local/bootstrap-workerd-host.log`, including passive no-wake, one admitted message,
+fixed issuance/process reopen and credential/expiry fences. All workers finished.
+Full verifier is running in `.local/bootstrap-combined.log` (1644 backend/497 runtime
+passed); no full-green claim until it exits successfully. Desktop16/typecheck pass.
+Owner requested local checkpoint/sync. Selective policy comparison found SwiftUI,
+wappmcp/exact patch and owner priorities already present; deferred 1Password was
+missing and is now added without implementing it. README/client wording now matches
+the native direction and current evidence. Do not import the stale coordination TODO.
+Runtime manager wire response is null or `{grant,policy,runtime_token}`; flat grant
+has installation/owner/run/epoch/boot/transition/hash/issue/expiry, while policy
+carries session/persona/text profile. Task-signing key stays in the control plane.
+Portal visit/history/bot switching/passive
 metadata must remain control-plane-only; only admitted model work authorizes wake.
 
 Billing browser worker completed a read-only existing-session check at06:32:06Z:

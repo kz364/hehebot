@@ -7,6 +7,7 @@ import type { RuntimeProvider, RuntimeRef, RuntimeObservation } from '../provide
 import {createHash} from 'node:crypto';
 import type {TextOnlyReceipt} from './runtime-types';
 import {ownerAlphaSuccessorSha256,parseOwnerAlphaSuccessor,type OwnerAlphaGeneration} from './owner-alpha';
+import type {MessageBoundAuthority} from './owner-alpha-bootstrap';
 import type {Command} from './types';
 export type Phase='STOPPED'|'START_REQUESTED'|'BOOTING'|'READY'|'DRAINING'|'STOP_COMMITTED'|'STOPPING'|'RECOVERY_REQUIRED'|'IDLE_PERMITTED';
 export type Lifecycle={singleton:number;provider_ref_json:string;boot_id:string|null;epoch:number;phase:Phase;desired_state:'RUN'|'STOP';lease_until:string|null;last_heartbeat:string|null;queue_sequence:number;stop_token:string|null;provider_operation_id:string|null;wake_after_stop:number};
@@ -25,44 +26,61 @@ export class LifecycleCore {
  get():Lifecycle{return this.store.db.all<Lifecycle>('SELECT * FROM lifecycle WHERE singleton=1')[0];}
  initialize(ref:RuntimeRef|Record<string,never>):void{this.store.db.exec("INSERT OR IGNORE INTO lifecycle(singleton,provider_ref_json,epoch,phase,desired_state,queue_sequence,wake_after_stop) VALUES(1,?,0,'STOPPED','STOP',0,0)",JSON.stringify(ref));this.core.ownerAlpha.initialize();}
  activateOwnerAlphaSuccessor(command:Extract<Command,{type:'owner-alpha.activate'}>,ownerId:string,ownerCommandId:string):{owner_alpha_generation:{epoch:number;boot_id:string;transition_id:string}} {
+  return this.activateGeneration(command,ownerId,ownerCommandId);
+ }
+ /** Internal issuance path; the bootstrap owns message admission and cost reservation. */
+ assignOwnerMessage(authority:MessageBoundAuthority,ownerId:string,ownerCommandId:string):void {
+  const {kind:_,manifest:__,...envelope}=authority;
+  this.activateGeneration({schema_version:1,type:'owner-alpha.activate',payload:{transition_id:envelope.transition_id,envelope_sha256:ownerAlphaSuccessorSha256(envelope)}},ownerId,ownerCommandId,authority);
+ }
+ /** Read-only settlement checks shared by issuance and bootstrap availability. */
+ assertOwnerAlphaSettlement(automatic=false):void {
+  const priorGeneration=this.core.ownerAlpha.activeGeneration();
+  if(priorGeneration){
+   const attempts=this.store.db.all<{status:string;attempt_status:string;result_json:string|null;proof:string|null;native_run_ref:string|null;coordinator_release_json:string|null}>(
+    `SELECT r.status,a.status AS attempt_status,a.result_json,m.value_json AS proof,a.native_run_ref,a.coordinator_release_json FROM attempts a JOIN runs r ON r.id=a.run_id
+     LEFT JOIN runtime_metadata m ON m.key='text_only_receipt:'||a.run_id||':'||a.attempt WHERE a.epoch=? AND a.boot_id=?`,priorGeneration.epoch,priorGeneration.boot_id);
+   requireThat(!automatic||attempts.length>0,'CAPABILITY_UNAVAILABLE','Automatic rollover requires observed completion, not an unclaimed or uncertain launch.');
+   requireThat(attempts.every(a=>{
+    if(a.status!=='completed'||a.attempt_status!=='completed'||!a.result_json||!a.proof)return false;
+    const result=JSON.parse(a.result_json),proof=JSON.parse(a.proof);
+    return result.status==='completed'&&typeof result.text==='string'&&proof.profile_version===priorGeneration.policy.text_only.profile_version&&
+     proof.profile_sha256===priorGeneration.policy.text_only.profile_sha256&&proof.turn_id===a.native_run_ref&&
+     proof.output_sha256===createHash('sha256').update(result.text).digest('hex')&&
+     a.coordinator_release_json===JSON.stringify({native_ref:a.native_run_ref,outcome:'completed'});
+   }),'CAPABILITY_UNAVAILABLE','Owner-alpha predecessor has not completed through matching stored text-only receipts.');
+   requireThat(!this.store.db.all(`SELECT a.run_id FROM attempts a WHERE a.epoch=? AND a.boot_id=? AND (
+    EXISTS(SELECT 1 FROM operations o WHERE o.run_id=a.run_id AND o.attempt=a.attempt AND o.status<>'settled') OR
+    EXISTS(SELECT 1 FROM effects e WHERE e.run_id=a.run_id AND e.status IN ('intent','dispatched','outcome_unknown')) OR
+    EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=a.run_id)) LIMIT 1`,priorGeneration.epoch,priorGeneration.boot_id).length&&
+    !this.core.questions.list().some(question=>this.store.db.all('SELECT run_id FROM attempts WHERE run_id=? AND epoch=? AND boot_id=? LIMIT 1',question.run_id,priorGeneration.epoch,priorGeneration.boot_id).length),
+    'RESOURCE_BUSY','Owner-alpha predecessor still has unsettled activity.');
+   requireThat(!this.store.db.all('SELECT id FROM controller_operations WHERE epoch=? LIMIT 1',priorGeneration.epoch).length,
+    'RESOURCE_BUSY','Owner-alpha predecessor has controller activity.');
+  }
+  requireThat(!this.store.db.all('SELECT id FROM controller_operations WHERE status IN (\'pending\',\'submitted\',\'unknown\') LIMIT 1').length,'RESOURCE_BUSY','A controller operation is still pending.');
+ }
+ private activateGeneration(command:Extract<Command,{type:'owner-alpha.activate'}>,ownerId:string,ownerCommandId:string,message?:MessageBoundAuthority):{owner_alpha_generation:{epoch:number;boot_id:string;transition_id:string}} {
   return this.store.db.transaction(()=>{
-   const envelope=parseOwnerAlphaSuccessor(JSON.stringify(this.core.options.ownerAlphaSuccessor))!;
-   requireThat(!!envelope&&command.payload.transition_id===envelope.transition_id&&command.payload.envelope_sha256===ownerAlphaSuccessorSha256(envelope)&&this.core.options.ownerBindingSha256===envelope.owner_binding_sha256,
+   const {kind:_,manifest:__,...messageEnvelope}=message??{};
+   const envelope=parseOwnerAlphaSuccessor(JSON.stringify(message?messageEnvelope:this.core.options.ownerAlphaSuccessor))!;
+   requireThat(!!envelope&&command.payload.transition_id===envelope.transition_id&&command.payload.envelope_sha256===ownerAlphaSuccessorSha256(envelope)&&(message?this.core.bootstrap.config?.owner_binding_sha256:this.core.options.ownerBindingSha256)===envelope.owner_binding_sha256,
     'FORBIDDEN','Owner-alpha activation does not match the configured grant and owner binding.',403);
    this.core.ownerAlpha.initialize();
    const priorGeneration=this.core.ownerAlpha.activeGeneration();
    requireThat(!this.core.options.executionEnabled&&envelope.predecessor.epoch===(priorGeneration?.epoch??1),'CAPABILITY_UNAVAILABLE','Owner-alpha successor must name the current generation.');
    const now=this.core.now(),state=this.get(),stored=this.store.db.all<{owner_id:string;type:string;payload_json:string;body_hash:string;status:string}>('SELECT owner_id,type,payload_json,body_hash,status FROM commands WHERE id=?',ownerCommandId)[0];
    const storedPayload=stored&&JSON.parse(stored.payload_json) as Record<string,unknown>;
-   requireThat(!!stored&&stored.owner_id===ownerId&&!/^(runtime|trigger):/.test(ownerId)&&stored.type==='owner-alpha.activate'&&stored.status==='accepted'&&
-    Object.keys(storedPayload).sort().join(',')==='envelope_sha256,transition_id'&&storedPayload.transition_id===command.payload.transition_id&&storedPayload.envelope_sha256===command.payload.envelope_sha256,
+   requireThat(!!stored&&stored.owner_id===ownerId&&!/^(runtime|trigger):/.test(ownerId)&&(message?
+    stored.type==='message.send'&&stored.status==='accepted'&&message.manifest.command_id===ownerCommandId&&message.manifest.command_sha256===stored.body_hash:
+    stored.type==='owner-alpha.activate'&&stored.status==='accepted'&&
+    Object.keys(storedPayload).sort().join(',')==='envelope_sha256,transition_id'&&storedPayload.transition_id===command.payload.transition_id&&storedPayload.envelope_sha256===command.payload.envelope_sha256),
     'FORBIDDEN','Owner-alpha activation command does not match the trusted envelope.',403);
    requireThat(state.phase==='RECOVERY_REQUIRED'&&state.epoch===envelope.predecessor.epoch&&state.boot_id===envelope.predecessor.boot_id&&state.provider_ref_json==='{}'&&state.provider_operation_id===null,
     'STALE_EPOCH','Owner-alpha predecessor lifecycle does not match the retired generation.');
    requireThat(this.core.ownerAlpha.policy?.session_id===envelope.predecessor.session_id&&this.core.ownerAlpha.policy.expires_at<=now&&state.lease_until!==null&&state.lease_until<=now,
     'CAPABILITY_UNAVAILABLE','Owner-alpha predecessor policy and lease must be expired.');
-   if(priorGeneration){
-    const attempts=this.store.db.all<{status:string;attempt_status:string;result_json:string|null;proof:string|null;native_run_ref:string|null;coordinator_release_json:string|null}>(
-     `SELECT r.status,a.status AS attempt_status,a.result_json,m.value_json AS proof,a.native_run_ref,a.coordinator_release_json FROM attempts a JOIN runs r ON r.id=a.run_id
-      LEFT JOIN runtime_metadata m ON m.key='text_only_receipt:'||a.run_id||':'||a.attempt WHERE a.epoch=? AND a.boot_id=?`,priorGeneration.epoch,priorGeneration.boot_id);
-    requireThat(attempts.every(a=>{
-     if(a.status!=='completed'||a.attempt_status!=='completed'||!a.result_json||!a.proof)return false;
-     const result=JSON.parse(a.result_json),proof=JSON.parse(a.proof);
-     return result.status==='completed'&&typeof result.text==='string'&&proof.profile_version===priorGeneration.policy.text_only.profile_version&&
-      proof.profile_sha256===priorGeneration.policy.text_only.profile_sha256&&proof.turn_id===a.native_run_ref&&
-      proof.output_sha256===createHash('sha256').update(result.text).digest('hex')&&
-      a.coordinator_release_json===JSON.stringify({native_ref:a.native_run_ref,outcome:'completed'});
-    }),'CAPABILITY_UNAVAILABLE','Owner-alpha predecessor has not completed through matching stored text-only receipts.');
-    requireThat(!this.store.db.all(`SELECT a.run_id FROM attempts a WHERE a.epoch=? AND a.boot_id=? AND (
-     EXISTS(SELECT 1 FROM operations o WHERE o.run_id=a.run_id AND o.attempt=a.attempt AND o.status<>'settled') OR
-     EXISTS(SELECT 1 FROM effects e WHERE e.run_id=a.run_id AND e.status IN ('intent','dispatched','outcome_unknown')) OR
-     EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=a.run_id)) LIMIT 1`,priorGeneration.epoch,priorGeneration.boot_id).length&&
-     !this.core.questions.list().some(question=>this.store.db.all('SELECT run_id FROM attempts WHERE run_id=? AND epoch=? AND boot_id=? LIMIT 1',question.run_id,priorGeneration.epoch,priorGeneration.boot_id).length),
-     'RESOURCE_BUSY','Owner-alpha predecessor still has unsettled activity.');
-    requireThat(!this.store.db.all('SELECT id FROM controller_operations WHERE epoch=? LIMIT 1',priorGeneration.epoch).length,
-     'RESOURCE_BUSY','Owner-alpha predecessor has controller activity.');
-   }
-   requireThat(!this.store.db.all('SELECT id FROM controller_operations WHERE status IN (\'pending\',\'submitted\',\'unknown\') LIMIT 1').length,'RESOURCE_BUSY','A controller operation is still pending.');
+   this.assertOwnerAlphaSettlement(!!message);
    const freshIds=[envelope.transition_id,envelope.successor.boot_id,envelope.successor.policy.session_id].map(value=>value.toLowerCase());
    requireThat(new Set(freshIds).size===3&&envelope.successor.policy.expires_at>now&&Date.parse(envelope.successor.policy.expires_at)<=Date.parse(now)+300000&&
     !this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',`owner_alpha_generation:${state.epoch+1}`).length&&
@@ -72,9 +90,9 @@ export class LifecycleCore {
     !this.store.db.all('SELECT id FROM commands WHERE id=? AND id<>?',envelope.transition_id,ownerCommandId).length,'INVALID_CONFIGURATION','Successor identities or expiry are not fresh.',503);
    const persona=this.store.get<{archived:boolean}>(envelope.successor.policy.persona_id,'persona');requireThat(!persona.body.archived,'CAPABILITY_UNAVAILABLE','This bot is archived.');
    const epoch=state.epoch+1,lease=new Date(Math.min(Date.parse(envelope.successor.policy.expires_at),Date.parse(now)+90000)).toISOString();
-   const cutoff=this.store.event(ownerCommandId,null,'owner-alpha.activated',ownerId,ownerCommandId,{epoch},now);
+   const cutoff=message?.manifest.event_sequence??this.store.event(ownerCommandId,null,'owner-alpha.activated',ownerId,ownerCommandId,{epoch},now);
    const generation:OwnerAlphaGeneration={epoch,boot_id:envelope.successor.boot_id,transition_id:envelope.transition_id,policy:envelope.successor.policy,
-    predecessor:{epoch:state.epoch,boot_id:state.boot_id!,session_id:envelope.predecessor.session_id,phase:state.phase,lease_until:state.lease_until},authority:envelope,
+    predecessor:{epoch:state.epoch,boot_id:state.boot_id!,session_id:envelope.predecessor.session_id,phase:state.phase,lease_until:state.lease_until},authority:message??envelope,
     activation_command_id:ownerCommandId,activation_command_sha256:stored.body_hash,activation_event_sequence:cutoff};
    this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',`owner_alpha_generation:${epoch}`,JSON.stringify(generation));
    this.store.db.exec("UPDATE lifecycle SET epoch=?,boot_id=?,phase='BOOTING',desired_state='RUN',lease_until=?,last_heartbeat=NULL,stop_token=NULL,wake_after_stop=0 WHERE singleton=1",epoch,envelope.successor.boot_id,lease);
@@ -118,10 +136,12 @@ export class LifecycleCore {
    const skillCutoff=new Date(this.core.options.now().getTime()-30*86400000).toISOString();
    const questions=[...new Set(this.core.questions.list().map(question=>question.run_id))];
    const alpha=this.core.ownerAlpha.policy;
+   const assigned=this.core.bootstrap.assignedManifest();
    return this.store.db.all<Run>(`SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) AND (${nativeDescendantsSettledSql}) ${questions.length?`AND r.id NOT IN (${questions.map(()=>'?').join(',')})`:''}
     AND (r.current_attempt>0 OR json_type(r.context_json,'$.skill_invocation') IS NULL OR r.created_at>?)
+    ${assigned?'AND r.id=?':''}
     ${alpha?`AND r.current_attempt=0 AND r.persona_id=? AND r.routine_id IS NULL AND r.occurrence_id IS NULL AND json_extract(r.context_json,'$.room_id') IS NULL AND c.type='message.send' AND c.owner_id NOT GLOB 'runtime:*' AND c.owner_id NOT GLOB 'trigger:*' AND json_extract(c.payload_json,'$.conversation_id')=r.persona_id AND EXISTS(SELECT 1 FROM events ev WHERE ev.id=r.command_id AND ev.type='message.user' AND ev.actor_id=c.owner_id AND ev.sequence>?)`:''}
-    ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings,...questions,skillCutoff,...(alpha?[alpha.persona_id,this.core.ownerAlpha.cutoff()]:[]))[0];
+    ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings,...questions,skillCutoff,...(assigned?[assigned.run_id]:[]),...(alpha?[alpha.persona_id,assigned?assigned.event_sequence-1:this.core.ownerAlpha.cutoff()]:[]))[0];
   });
  }
  private touch():void{this.store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('last_activity',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(this.core.now()));}

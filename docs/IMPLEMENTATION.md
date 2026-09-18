@@ -4,6 +4,34 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Message-bound bootstrap integration (2026-09-18, local/default-off): accepted direct
+owner messages can receive one immutable run/session assignment in the same SQLite
+transaction. Reads never assign or renew it. Expired current-generation settlement,
+trusted exact retirement and lifetime reservations gate successors; historical
+UNKNOWN work is not adopted. Reservations and a configured prior-cost baseline are
+admission bookkeeping, not proof of actual billing or an enforceable provider cap.
+The Worker separates manager manifest/retirement authentication from signed fixed
+task capabilities and rejects legacy-token fallback while bootstrap is configured.
+The DO additionally binds the exact run, manifest hash and current generation.
+The runtime manager stages an exclusive private transition directory before launch;
+uncertain or partial staging is never replayed. Retirement requires matching journal
+nativeStopped plus actual dual-flock acquisition after expiry, not root completion.
+
+Host verification:78 tests across auth, owner binding and bootstrap passed, including
+real Worker handler/DO calls over the SQLite test adapter. These are not workerd
+or live-provider evidence. Existing UI fixture passed and all eligible/unavailable/
+expired screenshots were inspected. Full combined rerun is in progress at
+`.local/bootstrap-combined.log`; earlier failed runs remain failed. Core and runtime
+patches and the actual-workerd fixture extension are integrated. Host rerun passed
+in `.local/bootstrap-workerd-host.log`: zero passive wake intents/reservations,
+one persisted message/one wake, fixed token/policy across process reopen, separate
+credentials and exact run/epoch/expiry rejection with old UNKNOWN custody unchanged.
+The extended fixture arrived after that stage of the combined run, so this host
+rerun is separate supplementary evidence. Typecheck and desktop16 passed. All workers
+finished; full verifier has passed1644 backend/497 runtime and is still running.
+No deployment, Sprite Service registration,
+live model call or automatic trial enablement in this checkpoint.
+
 Message-triggered wake / quiet listener follow-up (2026-09-18, local only):
 `deliverOwnerAlphaWake` requires an existing claimable run before retaining UNKNOWN
 intent. The actual workerd fixture proves activation, state/timeline reads and

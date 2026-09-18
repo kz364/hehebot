@@ -44,6 +44,52 @@ CODEX_HOME="$PWD/.local/codex-account" \
 
 Verify available models through supported app-server discovery before selecting one. Login, authenticated inference, quota, restart continuity and eventual refresh are separate checks. Each new runtime needs its own authorized flow. Do not enable production or sleep gates merely because login succeeds.
 
+## Message-triggered owner-alpha staging (default off)
+
+The quiet listener can use `runtime/hosted-owner-wake.mjs --listen` with an absolute
+private manager-config path, wake-token-file path and port8080. Listener startup
+does not load a native session. Only an authenticated wake requests the current
+assignment from `/internal/manager/manifest`; null means no staging or inference.
+Portal login, state/history reads, bot switching and passive metadata remain entirely
+in Cloudflare. They must not call the Sprite URL, service API or guest health checks.
+
+Manager configuration uses `kind: "owner-alpha-manager-v1"`, `portalOrigin`,
+`installationId`, `hostedOwnerBindingSha256`, `managerTokenFile`, `templatePath`,
+`templateSha256` and `sessionsDirectory`. Optional Access client ID/secret file paths
+must be supplied together. Paths are absolute; directories are private mode0700
+and files mode0600. The immutable template is an existing validated hosted text-only
+config with the same native account home, persona, supported model/profile and
+portal binding. Do not copy its account cache. Every assigned transition receives
+its own exclusive directory, task token and journal. Existing or partial directories
+are refusal evidence, not disposable retry state.
+
+Control-plane opt-in requires `HEHEBOT_OWNER_ALPHA_BOOTSTRAP` (strict config in
+`src/core/owner-alpha-bootstrap.ts`), distinct strong manager/signing secrets and
+the original hosted owner binding. `HEHEBOT_OWNER_ALPHA_WAKE` becomes `{ "url":
+"https://EXISTING-SPRITE-HOST.sprites.app" }`, with no deployment-pinned transition.
+Keep the signing key only in Cloudflare. The manager can read the fixed assignment
+and report trusted retirement; it cannot authenticate as a task or renew its token.
+The original runtime token does not authenticate automatic task requests. Task
+expiry is fixed at message admission, not when the listener becomes ready.
+
+A supported [Sprite HTTP service](https://docs.sprites.dev/concepts/services/)
+can register the absolute Node command and listener arguments with `http_port:8080`
+on the **same existing Sprite**. Registration starts the service and changes shared
+state; it is not a read-only staging check. Inspect conflicts and persistent paths
+within the authorized deployment window first. Only one HTTP-port service is allowed.
+Do not use explicit service stop as an authentication boundary. No registration is
+performed by these scripts, and cold listener restart/readiness is not live-verified.
+
+Before enabling a trial, establish the cumulative cost baseline and a defensible
+whole-awake budget within the existing total allowance; ledger reservations alone
+cannot cap provider charges. Keep all production/native flags false. Validate zero
+Sprite calls from portal-only actions, then one newly persisted admitted message,
+actual listener/native readiness and canonical result. A202 wake response proves
+queueing only. Retire only after matching journal stop evidence and both real locks
+are free after expiry; missing proof leaves recovery blocked. Do not replay UNKNOWN
+launches. Activity holds, their eventual expiry, quiet-listener pause and storage
+charges need separate observation; direct-child stop is not recursive settlement.
+
 ## Durable identity, events and cancellation
 
 `CodexAdapter` persists acknowledged thread identity before `turn/start` and exact turn identity afterward. Unknown submission outcomes remain unknown: recovery never chooses the newest turn or replays inference. Tool definitions are host-owned, snapshotted and included in submission identity.

@@ -1,7 +1,7 @@
 import {FlightRestoreIntegration} from '../core/flight-integration';
 import connectorCatalog from '../../config/connector-catalog.json';
 import { DurableObject } from 'cloudflare:workers';
-import {bindOwnerAuth,type RuntimeGenerationAuthority} from './auth';
+import {assertBootstrapSecrets,bindOwnerAuth,issueRuntimeTaskToken,type RuntimeGenerationAuthority,type RuntimeTaskGrant} from './auth';
 import {migrateApplication} from '../core/migrations';
 import {NativeTaskLedger} from '../core/native-tasks';
 import {ResourceLedger} from '../core/resources';
@@ -27,6 +27,7 @@ import type { RoutinePut } from '../core/types';
 import {AgentCommandBoundary} from '../core/agent-commands';
 import {parseWhatsAppReadPolicies,WhatsAppReadAccess} from '../core/whatsapp-access';
 import {parseHostedOwnerAlpha,parseOwnerAlpha,parseOwnerAlphaSuccessor} from '../core/owner-alpha';
+import {parseOwnerAlphaBootstrap,type OwnerAlphaRetirement} from '../core/owner-alpha-bootstrap';
 import {HostedWakeDeliveryError,parseHostedOwnerWake,sendHostedOwnerWake,type HostedOwnerWake} from './hosted-owner-wake';
 export type TriggerPolicy={routine_id:string;event_types:string[]};
 function stringList(value:string):string[]{const parsed:unknown=JSON.parse(value);if(!Array.isArray(parsed)||!parsed.every(x=>typeof x==='string'))throw new Error('Invalid policy configuration');return parsed;}
@@ -55,10 +56,15 @@ export class PersonalControl extends DurableObject<Env> {
   this.store=new Store(db);
   const hosted=parseHostedOwnerAlpha(env.HEHEBOT_HOSTED_OWNER_ALPHA,env);
   const successor=parseOwnerAlphaSuccessor(env.HEHEBOT_OWNER_ALPHA_SUCCESSOR);
+  const bootstrap=parseOwnerAlphaBootstrap(env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP);
+  requireThat(!bootstrap||!!hosted&&bootstrap.installation_id===env.INSTALLATION_ID&&bootstrap.owner_id===env.OWNER_SUB,
+   'INVALID_CONFIGURATION','Automatic owner alpha requires the authenticated hosted installation.',503);
+  if(bootstrap)assertBootstrapSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
   requireThat(!successor||!!hosted,'INVALID_CONFIGURATION','Owner-alpha successor requires the original hosted owner-alpha configuration.',503);
   this.hostedOwnerAlpha=!!hosted;
-  this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN);
-  this.core=new ControlCore(this.store,{ownerAlpha:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN,!!bootstrap);
+  requireThat(!bootstrap||!!this.hostedWake,'INVALID_CONFIGURATION','Automatic owner alpha requires its private wake destination.',503);
+  this.core=new ControlCore(this.store,{ownerAlphaBootstrap:bootstrap,ownerAlpha:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
@@ -72,6 +78,7 @@ export class PersonalControl extends DurableObject<Env> {
     const digest=bindOwnerAuth(db,env);
     requireThat(!hosted||hosted.ownerBindingSha256===digest,'OWNER_BINDING_MISMATCH','Hosted owner binding differs from configuration.',503);
     requireThat(!successor||successor.owner_binding_sha256===digest,'OWNER_BINDING_MISMATCH','Successor owner binding differs from authenticated custody.',503);
+    requireThat(!bootstrap||bootstrap.owner_binding_sha256===digest,'OWNER_BINDING_MISMATCH','Automatic owner binding differs from authenticated custody.',503);
     return digest;
    });
    this.core.options.ownerBindingSha256=this.ownerBindingSha256;
@@ -161,10 +168,35 @@ export class PersonalControl extends DurableObject<Env> {
   });
   await this.arm();return result;
  });}
- async runtime(input:unknown,authority?:RuntimeGenerationAuthority){return rpcResult(async()=>{
+ async ownerAlphaManager(type:string,input:unknown){return rpcResult(async()=>{
+  requireThat(this.hostedOwnerAlpha&&this.core.bootstrap.config,'CAPABILITY_UNAVAILABLE','Automatic owner alpha is not configured.');
+  this.rate('owner-alpha-manager',60);
+  requireThat(input&&typeof input==='object'&&!Array.isArray(input),'INVALID_INPUT','Invalid manager request.',422);
+  if(type==='manifest'){
+   requireThat(Object.keys(input).length===0,'INVALID_INPUT','Manifest reads do not select work.',422);
+   const manifest=this.core.bootstrap.assignedManifest(),state=this.lifecycle.get();
+   if(!manifest||state.phase!=='BOOTING'||manifest.issued_at>this.core.now()||Math.floor(Date.parse(manifest.expires_at)/1000)*1000<=Date.parse(this.core.now()))return null;
+   const {installation_id,owner_binding_sha256,run_id,epoch,boot_id,transition_id,manifest_sha256,issued_at,expires_at}=manifest;
+   const grant:RuntimeTaskGrant={installation_id,owner_binding_sha256,run_id,epoch,boot_id,transition_id,manifest_sha256,issued_at,expires_at};
+   return {grant,policy:this.core.ownerAlpha.policy!,runtime_token:await issueRuntimeTaskToken(grant,this.env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY!)};
+  }
+  requireThat(type==='retirement','NOT_FOUND','Manager route unavailable.',404);
+  this.core.bootstrap.recordRetirement(input as OwnerAlphaRetirement);
+  return {accepted:true};
+ });}
+ async runtime(input:unknown,authority?:RuntimeGenerationAuthority|RuntimeTaskGrant){return rpcResult(async()=>{
   requireThat(validateRuntime(input),'INVALID_INPUT','Invalid runtime envelope.',422);
   const command=input as RuntimeCommand;
   const generation=this.core.ownerAlpha.activeGeneration();
+  if(this.core.bootstrap.config||generation&&'kind' in generation.authority){
+   const manifest=this.core.bootstrap.assignedManifest();
+   requireThat(this.core.bootstrap.config&&manifest&&authority&&'manifest_sha256' in authority&&
+    authority.installation_id===manifest.installation_id&&authority.owner_binding_sha256===this.ownerBindingSha256&&
+    authority.run_id===manifest.run_id&&authority.manifest_sha256===manifest.manifest_sha256&&
+    authority.issued_at===manifest.issued_at&&authority.expires_at===manifest.expires_at&&manifest.expires_at>this.core.now(),
+    'STALE_EPOCH','Task credential is not bound to the active assignment.',409);
+   if('run_id' in command.payload)requireThat(command.payload.run_id===manifest.run_id,'FORBIDDEN','Task credential cannot address another run.',403);
+  }
   if(this.hostedOwnerAlpha&&(generation||authority)){
    requireThat(!!generation&&!!authority&&authority.epoch===generation.epoch&&authority.boot_id===generation.boot_id.toLowerCase()&&authority.transition_id===generation.transition_id.toLowerCase(),
     'STALE_EPOCH','Runtime credential is not bound to the active generation.',409);
@@ -309,7 +341,10 @@ export class PersonalControl extends DurableObject<Env> {
   try{
    this.reconcile();
    if(this.hostedWake){
-    try{await this.lifecycle.deliverOwnerAlphaWake(this.hostedWake.transition_id,command=>this.sendHostedWake(command));}
+    try{
+     const transition=this.hostedWake.transition_id??this.core.ownerAlpha.activeGeneration()?.transition_id;
+     if(transition)await this.lifecycle.deliverOwnerAlphaWake(transition,command=>this.sendHostedWake(command));
+    }
     // Delivery is already non-replayable. Keep the normal lease watchdog cadence.
     catch(error){console.error(JSON.stringify({event:'control.owner_alpha_wake_unknown',code:safeError(error).code,...(error instanceof HostedWakeDeliveryError?{phase:error.phase,upstream_status:error.upstreamStatus}:{})}));}
    }

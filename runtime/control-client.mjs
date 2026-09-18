@@ -10,11 +10,11 @@ const fail = (code, sent = false, status) => new ControlClientError(code, sent, 
 const secretValid = value => typeof value === 'string' && value.length > 0 && value.length <= 16384 && !/[\r\n\0]/.test(value);
 /** Fixed-origin HTTPS client; every request is a potential mutation. No automatic retries. */
 export class ControlClient {
-  #origin; #headers; #fetch; #timeout; #requestLimit; #responseLimit;
+  #origin; #headers; #fetch; #timeout; #requestLimit; #responseLimit; #types; #path;
   constructor({ origin, token, accessClientId, accessClientSecret, fetchImpl = globalThis.fetch,
-    timeoutMs = 15000, maxRequestBytes = 131072, maxResponseBytes = 1048576 } = {}) {
+    timeoutMs = 15000, maxRequestBytes = 131072, maxResponseBytes = 1048576, principal = 'runtime' } = {}) {
     let url; try { url = new URL(origin); } catch { throw fail('INVALID_CONFIGURATION'); }
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/' || !secretValid(token) || typeof fetchImpl !== 'function') throw fail('INVALID_CONFIGURATION');
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/' || !secretValid(token) || typeof fetchImpl !== 'function' || !['runtime', 'manager'].includes(principal)) throw fail('INVALID_CONFIGURATION');
     const accessSet = accessClientId !== undefined || accessClientSecret !== undefined;
     if (accessSet && (!secretValid(accessClientId) || !secretValid(accessClientSecret))) throw fail('INVALID_ACCESS_CREDENTIALS');
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000 ||
@@ -24,9 +24,12 @@ export class ControlClient {
     this.#headers = Object.freeze({ 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}`,
       ...(accessSet ? { 'CF-Access-Client-Id': accessClientId, 'CF-Access-Client-Secret': accessClientSecret } : {}) });
     this.#fetch = fetchImpl; this.#timeout = timeoutMs; this.#requestLimit = maxRequestBytes; this.#responseLimit = maxResponseBytes;
+    // Route selection is not authentication; the Worker checks separate keys.
+    this.#types = principal === 'manager' ? ['manifest', 'retirement'] : TYPES;
+    this.#path = principal === 'manager' ? '/internal/manager/' : '/internal/';
   }
   async request(type, payload) {
-    if (!TYPES.includes(type)) throw fail('UNSUPPORTED_RUNTIME_ENDPOINT');
+    if (!this.#types.includes(type)) throw fail('UNSUPPORTED_RUNTIME_ENDPOINT');
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw fail('INVALID_PAYLOAD');
     let body;
     try { body = JSON.stringify(payload); } catch { throw fail('INVALID_PAYLOAD'); }
@@ -36,7 +39,7 @@ export class ControlClient {
     const timeout = new Promise((_, reject) => { timer = setTimeout(() => { abort.abort(); void reader?.cancel().catch(() => {}); reject(fail('CONTROL_TIMEOUT', true)); }, this.#timeout); });
     const operation = (async () => {
       let response;
-      try { response = await this.#fetch(`${this.#origin}/internal/${type}`, { method: 'POST', headers: { ...this.#headers }, body, signal: abort.signal, redirect: 'error', credentials: 'omit', cache: 'no-store' }); }
+      try { response = await this.#fetch(`${this.#origin}${this.#path}${type}`, { method: 'POST', headers: { ...this.#headers }, body, signal: abort.signal, redirect: 'error', credentials: 'omit', cache: 'no-store' }); }
       catch { throw fail('CONTROL_TRANSPORT_FAILED', true); }
       if (!response || typeof response.status !== 'number' || !response.headers || response.redirected || response.status >= 300 && response.status < 400) throw fail('INVALID_CONTROL_RESPONSE', true);
       if (!response.ok) { void response.body?.cancel().catch(() => {}); throw fail('CONTROL_HTTP_ERROR', true, response.status); }

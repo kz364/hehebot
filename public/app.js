@@ -13,7 +13,24 @@ let selectionVersion=0;
 let memorySearchSelection='';
 let conversationSearchSelection='';
 let alphaSession=null,alphaSeen=false,alphaInvalid=false,alphaExpired=false,alphaDeadline=0,sending=false;
+let bootstrapSession=null;
 function alphaBlock(){
+ const bootstrap=snapshot?.summary.owner_alpha_bootstrap;
+ if(bootstrap||bootstrapSession){
+  alphaSeen=true;
+  if(!snapshot?.summary.owner_alpha||!bootstrap||typeof bootstrap.policy_revision!=='string'||!bootstrap.policy_revision||typeof bootstrap.persona_id!=='string'||!Number.isFinite(Date.parse(bootstrap.expires_at))||!Number.isInteger(bootstrap.max_task_seconds)||bootstrap.max_task_seconds<1||bootstrap.max_task_seconds>300||typeof bootstrap.message_admission_available!=='boolean')alphaInvalid=true;
+  if(!alphaInvalid){
+   if(!bootstrapSession)bootstrapSession={...bootstrap,deadline:performance.now()+Math.max(0,Date.parse(bootstrap.expires_at)-Date.now()),expired:false};
+   if(['policy_revision','persona_id','expires_at','max_task_seconds'].some(key=>bootstrap[key]!==bootstrapSession[key]))alphaInvalid=true;
+   if(Date.now()>=Date.parse(bootstrapSession.expires_at)||performance.now()>=bootstrapSession.deadline)bootstrapSession.expired=true;
+  }
+  if(alphaInvalid)return 'Session details changed or are unavailable. Reload to review the session; sending is closed.';
+  if(bootstrapSession.expired)return 'Trial expired. New messages are closed.';
+  if(current()?.kind!=='persona'||selected!==bootstrapSession.persona_id)return 'This trial accepts private messages only for its selected persona. Other bots and rooms are read-only.';
+  if($('connection').textContent!=='Connected'||!navigator.onLine)return 'Session status is offline. Reconnect before sending.';
+  if(!bootstrap.message_admission_available)return 'A new bounded session is not available. No new runtime is started.';
+  return '';
+ }
  if(!alphaSeen&&!snapshot?.summary.owner_alpha)return '';
  const s=snapshot?.summary.owner_alpha_session;
  alphaSeen=true;
@@ -39,8 +56,8 @@ function renderAlphaSession(){
  $('message').setAttribute('aria-describedby','runtime-banner');
  $('send').setAttribute('aria-describedby','runtime-banner');
  $('runtime-banner').hidden=false;
- const s=alphaSession,name=snapshot?.objects?.find(x=>x.id===s?.persona_id)?.body.name??s?.persona_id;
- const text=`Supervised owner alpha${s?` · ${name} only · ${Math.max(0,s.max_runs-s.admitted_runs)} of ${s.max_runs} admissions remaining · Deadline ${new Date(s.expires_at).toLocaleString(undefined,{timeZoneName:'short'})} · Up to ${s.max_task_seconds}s per task`:''}. ${reason||'Private message admission available; queued messages have not yet consumed admissions.'} History, previews and cancellation remain available. Provisional output or a successful root turn is not a completed result or proof of safe recovery. Background delegation requires an explicitly opted-in session. External actions and automatic recovery are unavailable.`;
+ const s=bootstrapSession??alphaSession,name=snapshot?.objects?.find(x=>x.id===s?.persona_id)?.body.name??s?.persona_id;
+ const text=bootstrapSession?`Message-triggered owner alpha · ${name} only · Trial deadline ${new Date(s.expires_at).toLocaleString(undefined,{timeZoneName:'short'})} · Up to ${s.max_task_seconds}s per task. ${reason||'Send saves your message before requesting a bounded session on the existing Sprite.'} Portal visits and history do not start the runtime. Previous recovery tasks are not retried. External actions remain unavailable.`:`Supervised owner alpha${s?` · ${name} only · ${Math.max(0,s.max_runs-s.admitted_runs)} of ${s.max_runs} admissions remaining · Deadline ${new Date(s.expires_at).toLocaleString(undefined,{timeZoneName:'short'})} · Up to ${s.max_task_seconds}s per task`:''}. ${reason||'Private message admission available; queued messages have not yet consumed admissions.'} History, previews and cancellation remain available. Provisional output or a successful root turn is not a completed result or proof of safe recovery. Background delegation requires an explicitly opted-in session. External actions and automatic recovery are unavailable.`;
  if($('runtime-banner').textContent!==text)$('runtime-banner').textContent=text;
 }
 const names={IDLE_PERMITTED:'Idle — hibernation permitted',STOPPED:'Sleeping',START_REQUESTED:'Waking',BOOTING:'Starting',READY:'Awake',DRAINING:'Finishing up',STOP_COMMITTED:'Stopping',STOPPING:'Stopping',RECOVERY_REQUIRED:'Recovery needed'};
@@ -110,7 +127,7 @@ function acceptHistory(conversationId,history){
  }
  return true;
 }
-function alphaConversationAvailable(id){return !(alphaSeen||snapshot?.summary.owner_alpha)||id===snapshot?.summary.owner_alpha_session?.persona_id;}
+function alphaConversationAvailable(id){return !(alphaSeen||snapshot?.summary.owner_alpha)||id===(snapshot?.summary.owner_alpha_bootstrap?.persona_id??snapshot?.summary.owner_alpha_session?.persona_id);}
 async function refresh(force=false){
  if(loading||document.hidden&&!force)return;loading=true;
  try{const value=await api('/v1/state');snapshot=value;

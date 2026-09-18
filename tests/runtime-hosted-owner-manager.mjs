@@ -1,0 +1,206 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, writeFile, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { runHostedOwnerManager } from '../runtime/hosted-owner-manager.mjs';
+import { createHostedOwnerWakeService } from '../runtime/hosted-owner-wake.mjs';
+import { readOwnerAlphaConfig } from '../runtime/owner-alpha-entry.mjs';
+import { createCodexTextOnlyProfile, codexTextOnlyProfileSha256 } from '../runtime/codex-text-only.mjs';
+import { FileJournal } from '../runtime/file-journal.mjs';
+
+const id = n => `${String(n).padStart(8, '0')}-1111-4111-8111-111111111111`;
+const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+async function fixture(t) {
+  const root = await mkdtemp(join(tmpdir(), 'hehe-manager-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const nativeHome = join(root, 'home'), sessionsDirectory = join(root, 'sessions');
+  await mkdir(nativeHome, { mode: 0o700 }); await mkdir(sessionsDirectory, { mode: 0o700 });
+  const textOnlyProfile = { codexVersion: '0.154.0', model: 'fixture', modelCatalog: { models: [
+    { slug: 'fixture', tool_mode: 'direct', experimental_supported_tools: [] }] },
+  catalogPath: join(root, 'catalog.json'), catalogValidation: 'synthetic-fixture', syntheticFixture: true };
+  const text_only = { profile_version: 'codex-text-only-v1',
+    profile_sha256: codexTextOnlyProfileSha256(createCodexTextOnlyProfile(textOnlyProfile)) };
+  const now = Date.now();
+  const policy = { session_id: id(1), persona_id: id(2), expires_at: new Date(now + 60000).toISOString(),
+    max_runs: 1, max_task_seconds: 60, text_only };
+  const template = { portalOrigin: 'https://control.example', installationId: 'manager-fixture',
+    hostedOwnerBindingSha256: 'ab'.repeat(32), nativeHome, stateDirectory: join(root, 'old-state'),
+    runtimeTokenFile: join(root, 'old-token'), ownerAlpha: policy, textOnlyProfile,
+    personas: { [id(2)]: { model: 'fixture', allowedTools: [] } } };
+  const templatePath = join(root, 'template.json'), bytes = JSON.stringify(template);
+  await writeFile(templatePath, bytes, { mode: 0o600 });
+  const config = { kind: 'owner-alpha-manager-v1', portalOrigin: template.portalOrigin,
+    installationId: template.installationId, hostedOwnerBindingSha256: template.hostedOwnerBindingSha256,
+    templatePath, templateSha256: sha(bytes), sessionsDirectory, managerTokenFile: join(root, 'manager-token') };
+  const grant = { installation_id: template.installationId, owner_binding_sha256: template.hostedOwnerBindingSha256,
+    run_id: id(4), epoch: 7, boot_id: id(5), transition_id: id(6), manifest_sha256: 'cd'.repeat(32),
+    issued_at: new Date(now - 1000).toISOString(), expires_at: policy.expires_at };
+  const assignment = { grant, policy, runtime_token: 'opaque-task-token' };
+  const calls = [], request = { epoch: 7, operationId: id(6) };
+  const control = { request: async (type, body) => { calls.push({ type, body }); return type === 'manifest' ? assignment : null; } };
+  return { root, config, template, assignment, calls, request, control };
+}
+async function stopped(path, mutate = row => row) {
+  const { config } = await readOwnerAlphaConfig(path);
+  const generation = config.ownerAlphaGeneration;
+  await new FileJournal(join(config.stateDirectory, 'journal')).putIfAbsent('service', mutate({
+    nativeStopped: true, bootId: generation.boot_id, identity: { epoch: generation.epoch, boot_id: generation.boot_id },
+    ownerAlpha: config.ownerAlpha, ownerAlphaGeneration: generation,
+    hostedOwner: { bindingSha256: config.hostedOwnerBindingSha256, origin: config.portalOrigin } }));
+}
+const futureForStaging = f => () => Date.parse(f.assignment.policy.expires_at) - 1000;
+function expiredForInspection(f) {
+  f.assignment.policy.expires_at = f.assignment.grant.expires_at = new Date(Date.now() - 1000).toISOString();
+  f.assignment.grant.issued_at = new Date(Date.now() - 60000).toISOString();
+}
+
+test('stages exclusive private task config preserving native identity; UNKNOWN survives reconstructed replay', async t => {
+  const f = await fixture(t); let launches = 0;
+  const launch = async (path, options) => {
+    launches++;
+    const { config, sha256 } = await readOwnerAlphaConfig(path);
+    assert.equal(options.expectedSha256, sha256);
+    assert.equal(config.nativeHome, f.template.nativeHome);
+    assert.deepEqual(config.textOnlyProfile, f.template.textOnlyProfile);
+    assert.equal(config.managerTokenFile, undefined);
+    assert.equal(await readFile(config.runtimeTokenFile, 'utf8'), 'opaque-task-token');
+    assert.equal((await stat(config.runtimeTokenFile)).mode & 0o777, 0o600);
+    const intent = JSON.parse(await readFile(join(config.stateDirectory, 'hosted-owner-launch-intent.json')));
+    assert.equal(intent.phase, 'unknown'); assert.equal(intent.config_sha256, sha256);
+    return { code: 0, signal: null }; // Not native stop evidence.
+  };
+  await assert.rejects(runHostedOwnerManager(f.config, f.request, { control: f.control, launch }));
+  await assert.rejects(runHostedOwnerManager(structuredClone(f.config), f.request, { control: f.control, launch }));
+  assert.equal(launches, 1); assert.equal(f.calls.filter(c => c.type === 'retirement').length, 0);
+});
+
+test('invalid identity, epoch, operation, lifetime, expiry and profile refuse before staging', async t => {
+  for (const mutate of [
+    f => { f.assignment.grant.installation_id = id(8); },
+    f => { f.assignment.grant.owner_binding_sha256 = 'ef'.repeat(32); },
+    f => { f.request.epoch++; }, f => { f.request.operationId = id(9); },
+    f => { f.assignment.grant.issued_at = new Date(Date.now() - 300000).toISOString(); },
+    f => { f.assignment.policy.expires_at = f.assignment.grant.expires_at = new Date(Date.now() - 1).toISOString(); },
+    f => { f.assignment.policy.persona_id = id(10); },
+    f => { f.assignment.policy.text_only.profile_sha256 = 'ef'.repeat(32); },
+    f => { f.assignment.policy.max_runs = 2; },
+    f => { f.assignment.grant.session_id = id(11); },
+    f => { f.config.templateSha256 = 'ef'.repeat(32); },
+  ]) {
+    const f = await fixture(t); mutate(f);
+    await assert.rejects(runHostedOwnerManager(f.config, f.request, { control: f.control, launch: () => assert.fail('launched') }));
+    assert.deepEqual(await readdir(f.config.sessionsDirectory), []);
+  }
+});
+
+test('partial directory is a permanent replay fence; null assignment stages nothing', async t => {
+  const f = await fixture(t);
+  assert.equal(await runHostedOwnerManager(f.config, f.request, { control: { request: async () => null } }), 'NO_ASSIGNMENT');
+  assert.deepEqual(await readdir(f.config.sessionsDirectory), []);
+  await mkdir(join(f.config.sessionsDirectory, f.request.operationId), { mode: 0o700 });
+  await assert.rejects(runHostedOwnerManager(f.config, f.request, { control: f.control, launch: () => assert.fail('launched') }));
+});
+
+test('manager bearer and paired Access files stay on manager transport; uncertain retirement is not retried', async t => {
+  const f = await fixture(t); expiredForInspection(f);
+  f.config.accessClientIdFile = join(f.root, 'access-id');
+  f.config.accessClientSecretFile = join(f.root, 'access-secret');
+  const secrets = new Map([[f.config.managerTokenFile, 'manager-only-canary'],
+    [f.config.accessClientIdFile, 'access-id-canary'], [f.config.accessClientSecretFile, 'access-secret-canary']]);
+  const calls = [], original = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    calls.push(url);
+    assert.equal(options.headers.Authorization, 'Bearer manager-only-canary');
+    assert.equal(options.headers['CF-Access-Client-Id'], 'access-id-canary');
+    assert.equal(options.headers['CF-Access-Client-Secret'], 'access-secret-canary');
+    if (url.endsWith('/manifest')) {
+      assert.equal(options.body, '{}');
+      return new Response(JSON.stringify(f.assignment), { headers: { 'content-type': 'application/json' } });
+    }
+    throw new Error('uncertain secret response');
+  };
+  t.after(() => { globalThis.fetch = original; });
+  await assert.rejects(runHostedOwnerManager(f.config, f.request, { now: futureForStaging(f),
+    readSecret: async path => secrets.get(path), launch: async path => {
+      const bytes = await readFile(path, 'utf8');
+      assert.ok(!bytes.includes('manager-only-canary'));
+      assert.ok(!bytes.includes(f.config.managerTokenFile));
+      await stopped(path);
+    } }), error => error.code === 'CONTROL_TRANSPORT_FAILED' && !error.message.includes('secret'));
+  assert.deepEqual(calls, ['https://control.example/internal/manager/manifest', 'https://control.example/internal/manager/retirement']);
+});
+
+test('retirement requires matching native-stop journal and both real locks after expiry', async t => {
+  const f = await fixture(t); expiredForInspection(f);
+  assert.equal(await runHostedOwnerManager(f.config, f.request, { control: f.control, now: futureForStaging(f),
+    launch: async path => { await stopped(path); return { code: 1 }; } }), 'RETIREMENT_REPORTED');
+  const report = f.calls[1];
+  assert.equal(report.type, 'retirement');
+  assert.deepEqual(report.body, { epoch: 7, boot_id: id(5), session_id: id(1), transition_id: id(6),
+    observed_at: report.body.observed_at, direct_child_stopped: true, execution_lock_free: true, session_lock_free: true,
+    source: 'hosted-manager:file-journal-nativeStopped+dual-flock' });
+  assert.ok(Date.parse(report.body.observed_at) >= Date.parse(f.assignment.policy.expires_at));
+});
+
+test('wrong journal identity, false stop, and pre-expiry stop never report retirement', async t => {
+  for (const mutate of [row => ({ ...row, nativeStopped: false }), row => ({ ...row, bootId: id(9) }),
+    row => ({ ...row, identity: { epoch: 8, boot_id: id(5) } }),
+    row => ({ ...row, ownerAlphaGeneration: { ...row.ownerAlphaGeneration, transition_id: id(9) } }),
+    row => ({ ...row, ownerAlpha: { ...row.ownerAlpha, session_id: id(9) } }),
+    row => ({ ...row, hostedOwner: { ...row.hostedOwner, bindingSha256: 'ef'.repeat(32) } }), null]) {
+    const f = await fixture(t); if (mutate) expiredForInspection(f);
+    await assert.rejects(runHostedOwnerManager(f.config, f.request, { control: f.control, now: futureForStaging(f),
+      launch: async path => stopped(path, mutate ?? (row => row)) }));
+    assert.deepEqual(f.calls.map(c => c.type), ['manifest']);
+  }
+});
+
+test('either held kernel lock prevents retirement despite matching native-stop journal', async t => {
+  for (const which of ['nativeHome', 'stateDirectory']) {
+    const f = await fixture(t); expiredForInspection(f); let holder;
+    try {
+      await assert.rejects(runHostedOwnerManager(f.config, f.request, { control: f.control, now: futureForStaging(f),
+        launch: async path => {
+          await stopped(path);
+          const { config } = await readOwnerAlphaConfig(path);
+          holder = spawn('bash', [resolve('scripts/with-executor-lock.sh'), config[which], process.execPath,
+            '-e', 'console.log("locked"); process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
+          await once(holder.stdout, 'data');
+        } }));
+      assert.deepEqual(f.calls.map(c => c.type), ['manifest']);
+    } finally { if (holder) { const exited = once(holder, 'exit'); holder.stdin.end(); await exited; } }
+  }
+});
+
+test('manager listener does no config/manifest/staging work on passive or unauthorized requests; reconstruction refuses replay', async t => {
+  const f = await fixture(t), token = 'w'.repeat(40), reports = []; let reads = 0, launches = 0;
+  const configPath = join(f.root, 'manager.json'), wakeTokenFile = join(f.root, 'wake-token');
+  await writeFile(configPath, JSON.stringify(f.config), { mode: 0o600 });
+  await writeFile(wakeTokenFile, token, { mode: 0o600 });
+  const start = async () => {
+    const service = createHostedOwnerWakeService({ configPath, wakeTokenFile, port: 8080 }, {
+      control: f.control, readConfig: async (...args) => { reads++; return readOwnerAlphaConfig(...args); },
+      launch: async () => { launches++; throw new Error('secret must not escape'); }, report: report => reports.push(report) });
+    service.listen(0, '127.0.0.1'); await once(service, 'listening'); t.after(() => service.stop());
+    return { service, origin: `http://127.0.0.1:${service.address().port}` };
+  };
+  let { service, origin } = await start();
+  assert.equal((await fetch(origin)).status, 404);
+  assert.equal((await fetch(`${origin}/wake`, { method: 'POST' })).status, 401);
+  assert.equal(reads, 0); assert.deepEqual(f.calls, []); assert.deepEqual(await readdir(f.config.sessionsDirectory), []);
+  const wake = async origin => {
+    assert.equal((await fetch(`${origin}/wake`, { method: 'POST', headers: { 'content-type': 'application/json',
+      'x-hehe-wake-token': token }, body: JSON.stringify(f.request) })).status, 202);
+  };
+  await wake(origin);
+  for (let n = 0; n < 100 && reports.length < 1; n++) await new Promise(ok => setTimeout(ok, 10));
+  service.stop(); ({ service, origin } = await start()); await wake(origin);
+  for (let n = 0; n < 100 && reports.length < 2; n++) await new Promise(ok => setTimeout(ok, 10));
+  assert.equal(launches, 1); assert.equal(reports.length, 2);
+  assert.ok(reports.every(report => report.code === 'LAUNCH_REFUSED_OR_UNKNOWN'));
+  assert.ok(!JSON.stringify(reports).includes('secret'));
+});

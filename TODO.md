@@ -6,13 +6,25 @@ It describes this checkout; local checkpoints are not necessarily published to G
 
 **Current local follow-up:** activation, portal state/history reads and alarms now
 produce zero Sprite notifications until a persisted message passes admission.
+Fresh-session implementation is underway: host task-token/manager transport and
+runtime staging integration pass30 auth/wake and39 runtime checks. Existing browser
+fixture passes message-triggered eligible/unavailable/expired states, with all three
+screenshots inspected. Core assignment and runtime-manager patches are integrated;
+Worker route/DO credential separation, exact assignment binding, fixed issuance,
+read-only access and expiry pass78 focused tests. The real-workerd bootstrap fixture
+is integrated and passes on the host: zero passive wake/reservation, one persisted
+message/one wake, separate credentials, expiry and fixed grants after process reopen.
+All workers finished. Typecheck and desktop16 pass. A fresh full combined verifier
+is running (1644 backend/497 runtime passed); no full-green claim yet. Automatic
+hosted trial remains incomplete and default-off.
 One admitted message produces one notification; real workerd SQLite/reopen and
 HTTP transport checks pass, as do typecheck,41 focused core/auth tests and19
 listener/launcher tests. Quiet `--listen` boots without session config and reads
 fresh immutable staging only on authenticated work; it does not mint/renew grants.
 These changes are local, not deployed; no Service installed or fresh model session.
 The combined rerun failed in the fixture's unconsumed POST-body stream; the fixture
-now consumes it and two targeted workerd runs pass. No full-green claim.
+now consumes it and two targeted workerd runs pass. The remaining verifier scripts
+through build also exited0; this is segmented evidence, not one full-green rerun.
 Billing readback at2026-09-18T06:32:06Z: Fly Cost Explorer and upcoming invoice show
 $0.03, credit balance$0.00, Sprite cold. This is rounded, potentially lagged Fly
 usage, not all-project spend or proof of$9.97 remaining. Keep the existing$10 TOTAL.
