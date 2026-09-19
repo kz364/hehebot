@@ -4,6 +4,16 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
+**Active implementation wave (2026-09-19):** owner requested continued implementation
+in new threads; this thread retains integration/verification ownership. Two new workers
+received the exact unpublished `source-custody` bundle: GLM5.3 owns the actual portal
+composer → local Worker/manager/native → two canonical replies/reload integration;
+Astra investigates the supported P0.3 background/ordinary-chat authority boundary
+before new runtime implementation. Existing one-message grants must not be widened.
+Neither task authorizes deployment, live campaigns, spending, push or schedule enablement.
+Next checkpoint: integrate composed chat evidence and dispatch the selected bounded
+background implementation. Live owner SSO/model/provider acceptance remains separate.
+
 **Current checkpoint: two-turn native owner continuation passes; two bugs fixed locally.**
 Real manager/wake listener/pinned Codex/local Worker fixture now completes two distinct
 owner sessions, with prior owner text AND canonical reply reaching the second model
