@@ -24,17 +24,52 @@ const sources = Object.fromEntries(Object.entries({ manager: './hosted-owner-man
   journal: './file-journal.mjs', text_only: './codex-text-only.mjs', lock_script: '../scripts/with-executor-lock.sh' })
   .map(([name, path]) => [name, fileURLToPath(new URL(path, import.meta.url))]));
 const assertions = ['original_source_semantics_reviewed', 'intact_single_writer_no_rollback', 'fsync_before_turn',
-  'no_alternate_ingress_throughout_predecessor', 'memories_disabled_throughout_predecessor', 'prospective_managed_denial_reviewed'];
+  'prospective_managed_denial_reviewed'];
+const isolationAssertions = ['supported_whole_execution_cut_reviewed', 'current_launch_autostart_custody_reviewed',
+  'old_authority_expired_and_fenced', 'fresh_workspace_and_native_thread_no_resume', 'only_reviewed_subsequent_launch_paths'];
+const label = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 256 && !/[\r\n\0]/.test(value);
+
+// A pinned operator receipt, not provider verification or historical absence proof.
+// Fixed projections make the retained bytes/source set unambiguous to reviewers.
+async function isolationReceipt(receipt, request) {
+  keys(receipt, ['kind', 'installation_id', 'owner_binding_sha256', 'predecessor', 'source', 'observed_at', 'valid_until',
+    'execution_cut', 'managed', 'ambient_input', 'assertions']);
+  const { execution_cut: cut, managed, assertions: reviewed } = receipt;
+  keys(cut, ['kind', 'resource_id', 'before_kernel_boot_id', 'after_kernel_boot_id', 'completed_at', 'supported_operation',
+    'retained_state_sha256', 'retained_sources_sha256']);
+  keys(managed, ['requirements', 'codex_version', 'same_process_readback', 'process_id', 'kernel_boot_id',
+    'allow_remote_control', 'required_memories', 'effective_memories']);
+  keys(reviewed, isolationAssertions);
+  const { files, roots, review } = request;
+  const retained = Object.fromEntries(['runtime', 'service', 'dispatch', 'native'].map(key => [key, files[key]]));
+  require(receipt.kind === 'owner-alpha-prospective-isolation-v2' && receipt.installation_id === request.installation_id &&
+    receipt.owner_binding_sha256 === request.owner_binding_sha256 && same(receipt.predecessor, request.predecessor) &&
+    receipt.source === review.source && receipt.observed_at === review.reviewed_at && utc(receipt.valid_until) &&
+    receipt.valid_until > receipt.observed_at && Date.parse(receipt.valid_until) > Date.now() &&
+    Date.parse(receipt.valid_until) - Date.parse(receipt.observed_at) <= 300000 &&
+    cut.kind === 'same-resource-whole-execution-cut' && label(cut.resource_id) && label(cut.supported_operation) &&
+    uuid(cut.before_kernel_boot_id) && uuid(cut.after_kernel_boot_id) && cut.before_kernel_boot_id !== cut.after_kernel_boot_id &&
+    cut.after_kernel_boot_id === (await readFile('/proc/sys/kernel/random/boot_id', 'utf8')).trim() &&
+    utc(cut.completed_at) && cut.completed_at >= request.assignment.policy.expires_at && cut.completed_at <= receipt.observed_at &&
+    cut.retained_state_sha256 === jsonHash({ files: retained, roots }) &&
+    cut.retained_sources_sha256 === jsonHash({ current_sources: review.current_sources, original_sources: review.original_sources }) &&
+    managed.codex_version === '0.154.0' && managed.same_process_readback === true &&
+    Number.isSafeInteger(managed.process_id) && managed.process_id > 0 && managed.kernel_boot_id === cut.after_kernel_boot_id &&
+    managed.allow_remote_control === false && managed.required_memories === false && managed.effective_memories === false &&
+    isolationAssertions.every(key => reviewed[key] === true));
+  await readPinned(managed.requirements, false, true);
+  await readPinned(receipt.ambient_input);
+}
 
 async function canonical(path) {
   require(typeof path === 'string' && isAbsolute(path) && resolve(path) === path && await realpath(path) === path);
 }
-async function readPinned(pin, privateFile = true) {
+async function readPinned(pin, privateFile = true, allowRootOwner = false) {
   keys(pin, ['path', 'sha256']); require(digest(pin.sha256)); await canonical(pin.path);
   const fd = await open(pin.path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const before = await fd.stat();
-    require(before.isFile() && before.uid === process.getuid() && before.nlink === 1 &&
+    require(before.isFile() && (before.uid === process.getuid() || allowRootOwner && before.uid === 0) && before.nlink === 1 &&
       !(before.mode & (privateFile ? 0o077 : 0o022)) && before.size > 0 && before.size <= 1048576);
     const bytes = await fd.readFile(), after = await fd.stat();
     require(bytes.length === before.size && before.size === after.size && before.mtimeMs === after.mtimeMs &&
@@ -72,7 +107,7 @@ async function validate(path, sha256) {
   keys(request.assignment, ['grant', 'policy']);
   const { grant } = request.assignment, policy = ownerAlphaPolicy(request.assignment.policy);
   keys(grant, ['installation_id', 'owner_binding_sha256', 'run_id', 'epoch', 'boot_id', 'transition_id', 'manifest_sha256', 'issued_at', 'expires_at']);
-  require(request.kind === 'owner-alpha-claimed-pre-turn-request-v1' && typeof request.installation_id === 'string' &&
+  require(request.kind === 'owner-alpha-claimed-pre-turn-request-v2' && typeof request.installation_id === 'string' &&
     /^[a-zA-Z0-9_-]{1,128}$/.test(request.installation_id) && digest(request.owner_binding_sha256) &&
     [p.manifest_sha256, p.native_attempt_id, p.native_fingerprint].every(digest) &&
     [p.boot_id, p.transition_id, p.session_id, p.run_id].every(uuid) && Number.isSafeInteger(p.epoch) && p.epoch >= 2 &&
@@ -81,9 +116,11 @@ async function validate(path, sha256) {
     ['manifest_sha256', 'epoch', 'boot_id', 'transition_id', 'run_id'].every(key => grant[key] === p[key]) &&
     policy.session_id === p.session_id && policy.max_runs === 1 && policy.text_only && grant.expires_at === policy.expires_at &&
     utc(grant.issued_at) && grant.issued_at < grant.expires_at && Date.parse(grant.expires_at) - Date.parse(grant.issued_at) <= 300000);
-  keys(review, ['source', 'reviewed_at', 'assertions', 'current_sources', 'original_sources']);
+  keys(review, ['source', 'reviewed_at', 'assertions', 'current_sources', 'original_sources',
+    'historical_memory_activity', 'historical_remote_ingress']);
   keys(review.assertions, assertions); keys(review.current_sources, Object.keys(sources)); keys(review.original_sources, Object.keys(sources));
-  require(assertions.every(key => review.assertions[key] === true) && typeof review.source === 'string' && review.source.trim() &&
+  require(review.historical_memory_activity === 'unknown' && review.historical_remote_ingress === 'unknown' &&
+    assertions.every(key => review.assertions[key] === true) && typeof review.source === 'string' && review.source.trim() &&
     review.source.length <= 256 && !/[\r\n\0]/.test(review.source) && utc(review.reviewed_at) &&
     review.reviewed_at >= policy.expires_at && Date.parse(review.reviewed_at) <= Date.now());
   for (const [key, path] of Object.entries(sources)) {
@@ -94,8 +131,9 @@ async function validate(path, sha256) {
   const loaded = {};
   for (const [key, pin] of Object.entries(files)) {
     const bytes = await readPinned(pin);
-    if (key !== 'requirements_evidence') loaded[key] = JSON.parse(bytes);
+    loaded[key] = JSON.parse(bytes);
   }
+  await isolationReceipt(loaded.requirements_evidence, request);
   keys(roots, ['native_home', 'sessions_root', 'session', 'journal']);
   for (const pin of Object.values(roots)) await root(pin);
   require(new Set(Object.values(roots).map(pin => `${pin.dev}:${pin.ino}`)).size === 4);
@@ -175,7 +213,7 @@ async function validate(path, sha256) {
   return request;
 }
 
-/** Operator evidence only. Historical assertions remain trusted review, never
+/** Operator evidence only. Isolation assertions remain trusted review, never
  * mechanical proof of absent startup effects, retirement or successor authority. */
 export async function produceClaimedPreTurnEvidence(path, sha256) {
   try {
@@ -188,13 +226,16 @@ export async function produceClaimedPreTurnEvidence(path, sha256) {
 async function writeLocked(path, sha256) {
   const request = await validate(path, sha256);
   await held(request.roots.native_home.path); await held(request.roots.session.path);
+  const receipt = JSON.parse(await readPinned(request.files.requirements_evidence));
+  await isolationReceipt(receipt, request);
   const observed_at = new Date().toISOString(), source = request.review.source;
   require(observed_at >= request.review.reviewed_at && observed_at >= request.assignment.policy.expires_at);
   const identity = { kind: 'claimed-pre-turn-quarantine-v1', installation_id: request.installation_id,
     owner_binding_sha256: request.owner_binding_sha256, predecessor: request.predecessor };
-  const bytes = Buffer.from(JSON.stringify({ ...identity, observed_at, source, request_sha256: sha256,
+  const bytes = Buffer.from(JSON.stringify({ ...identity, evidence_format: 'claimed-pre-turn-evidence-v2', observed_at, source, request_sha256: sha256,
     policy_expires_at: request.assignment.policy.expires_at, files: request.files, roots: request.roots,
-    text_only_binding: request.text_only_binding, trusted_operator_review: request.review }) + '\n');
+    text_only_binding: request.text_only_binding, trusted_operator_review: request.review,
+    trusted_prospective_isolation: receipt }) + '\n');
   const target = join(request.roots.session.path, marker), fd = await open(target, 'wx', 0o400);
   try { await fd.writeFile(bytes); await fd.sync(); } finally { await fd.close(); }
   const directory = await open(request.roots.session.path, 'r');

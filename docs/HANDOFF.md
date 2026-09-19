@@ -18,11 +18,20 @@ Omitted subordinate memory values remain null/unknown. Native exited; final coun
 temporary helper/staging copy removed. No thread/turn/account/model RPC, grant or send.
 Evidence `.local/managed-alpha-fence-{before,install,readback,mode,directory-mode,
 readback-recheck,final}.jsonl`; first readback failure retained, successful recheck exits0.
-Historical audit still cannot establish either required memory/alternate-ingress
-assertion for78. Defaults do not prove history; no supported persisted-ingress read
-RPC fills this gap. Do not issue a marker or grant by asserting missing evidence.
-Approval is no longer the blocker. Local quarantine implementation remains integrated
-and tested but undeployed. Recurring schedule remains paused; no automatic live retry.
+Historical memory/alternate-ingress activity for78 remains UNKNOWN. The explicitly
+requested oracle follow-up supports prospective isolation instead of absence proof:
+same-resource whole-execution cut, fresh workspace/native thread with no resume,
+managed denial and ambient startup-input review on every launch, same-process
+readback before account checks. Never infer historical settlement or refund.
+Schedule is enabled; meaningful authorized engineering remains. Producer v2 patch
+0ca224802c1fe503103c2e52c6bffe5cd59ce83cc2de7f06b101649f5ed7a5a2 is imported;
+host focused7/7 pass (`.local/forward-isolation-host-focused.log`). Launch-floor
+worker owns entry/profile/transport and runtime/owner-alpha-launch-floor.mjs;
+pin it in current_sources only, not the original historical source map.
+Official sprites-js client.ts exposes POST /v1/sprites/{name}/restart, a backing-machine
+restart distinct from Service restart/restore. No restart issued yet; require changed
+kernel boot plus same resource/retained bytes before attesting a cut. Launch-floor
+integration/deployment and prospective receipt remain pending; no new live message.
 
 New startup defect confirmed synthetically on same Sprite: deployed listener
 PID20242 inherited CapInh/Prm/Eff/Bnd/Amb=a82435fb, NoNewPrivs0. Saved Service config

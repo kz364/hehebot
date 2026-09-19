@@ -13,9 +13,14 @@ feature=false and remote-control RPC denial. Native diagnostic exited; final pro
 count0. No thread/turn/account/model RPC was submitted. Template is tracked; details
 and private evidence paths are in IMPLEMENTATION. Initial private umask blocked
 readback before launch; corrected config0644/directory0755 and rechecked successfully.
-**Residual blocker is historical evidence, not approval:** neither memory disablement
-nor alternate-ingress denial throughout trial78 is established. Tagged defaults
-do not prove either historical assertion. No quarantine marker/grant, fresh message,
+**Current checkpoint: prospective isolation integration.** The owner-requested oracle
+follow-up separates old settlement from safe fresh admission: historical memory and
+remote-ingress activity stay UNKNOWN, rather than requiring impossible absence proof.
+V2 producer is imported locally; per-launch managed/input validation is in progress.
+Remaining live prerequisites are a supported same-Sprite whole-execution cut,
+retained-state/source checks, fresh context and same-process restricted readback.
+The official sprites-js SDK exposes whole-machine restart; verification is in progress.
+Schedule is enabled, not paused. No quarantine marker/grant, fresh message,
 completion or reload verification; retained UNKNOWN/reservations are unchanged.
 
 **Hosted startup defect reproduced and fixed (2026-09-18):** the automatic listener
@@ -29,8 +34,8 @@ diagnostics installed after supported Service stop; hashes/imports verified and
 Service start completed. Fresh full combined recheck exits0:1669 backend/515 runtime
 plus Worker/browser/native/service/build.16:25 authenticated manager assignment null.
 No new policy/message, replay or settlement.
-Next: resolve the historical-custody evidence gap before any claimed-pre-turn
-quarantine issuance. The prospective managed fence is now verified above. Core and runtime evidence
+Next: verify and deploy the forward launch floor, then establish prospective isolation
+before claimed-pre-turn quarantine issuance. The managed fence is verified above. Core and runtime evidence
 producer are integrated locally, default-off, preserving UNKNOWN and reservations:
 exact expired claimed attempt, fresh-message-only consumption, immutable disposition,
 reopen validation after config removal, real dual locks and permanent entry refusal.
@@ -39,12 +44,12 @@ service/build after fixing a fresh-DO schema-order regression. Integrated runtim
 recheck passes520/520, focused19/19 and pinned hosted-manager composition; desktop16/16.
 No quarantine deployment, live marker or grant. Tagged Codex thread/start can persist
 metadata and send generate:false prewarm/auth/catalog requests before turn/start;
-no-turn is not no-effects/zero-cost. Evidence producer refuses missing historical
-review assertions; hashes/current settings do not prove them. Supported prospective
+no-turn is not no-effects/zero-cost. V1 required historical absence assertions; v2
+replaces them with explicit UNKNOWN and a reviewed isolation receipt. Supported prospective
 fence is managed allow_remote_control=false
 and [features] memories=false on the dedicated Sprite, now installed with approval.
-Historical ingress/custody still needs operator review. No quarantine authority or
-new live trial has been issued.
+Original source/single-writer custody still needs review, without asserting historical
+ingress or memory absence. No quarantine authority or new live trial has been issued.
 
 **Live78 failed after claim, not chat success:** recovered browser/passive reads and
 host15:14:15Z manager-null/same-Sprite-cold preceded ONE normal composer send.

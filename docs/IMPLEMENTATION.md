@@ -29,17 +29,37 @@ No rollback was performed. This is prospective verification, not historic settle
 or billing evidence; the existing $10 cumulative allowance is unchanged and actual
 billing remains unverified. No quarantine deployment, marker/grant or fresh message.
 
-Residual historical gate: pinned source review says memories feature defaults false,
+Historical uncertainty (not a permanent forward-admission gate): pinned source review says memories feature defaults false,
 but config/profile overrides can enable it; subordinate generate/use defaults true
 do not alone show execution. Stdio starts remote supervision with persisted desired
 state unless managed denial applies; it is not an ingress fence. No contemporaneous
 effective-memory/requirements readback or complete scoped ingress-transition history
 is available for78. Neither required historical assertion is established, nor is
-either proven false just by defaults. New fences cannot fill those gaps. The producer
-must refuse issuance rather than fabricate assertions; fresh completion/reload remains
+either proven false just by defaults. New fences cannot fill those gaps. V1 must
+refuse issuance rather than fabricate assertions; fresh completion/reload remains
 unverified. Source: tagged [feature defaults](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/features/src/lib.rs),
 [memory startup](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/memories/write/src/start.rs),
 and [remote desired state](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-transport/src/transport/remote_control/desired_state.rs).
+
+Forward-isolation checkpoint (2026-09-19): owner-requested oracle follow-up separates
+old settlement from prospective safety under the buggy-runtime, not established
+compromise, threat model. Existing authenticated native home can remain in place;
+no auth copying or native-store edits. Require whole-execution cut, fresh never-resumed
+context, per-launch root-controlled managed denial/input review, same-process readback
+before account work. Old persistent queues must never be loaded by resuming old threads;
+global AGENTS/override/environments are native host inputs, not sandbox-denied reads.
+V2 producer retains historical memory/remote activity literally UNKNOWN and binds a
+five-minute prospective receipt, changed/current kernel identity, retained bytes/source
+digests, managed readback and ambient inventory. Imported worker patch SHA256
+0ca224802c1fe503103c2e52c6bffe5cd59ce83cc2de7f06b101649f5ed7a5a2; host focused7/7
+pass in `.local/forward-isolation-host-focused.log`. No live receipt or authority.
+The official [Sprites JS client](https://github.com/superfly/sprites-js/blob/main/src/client.ts)
+exports restartSprite(name), POST /v1/sprites/{name}/restart, described as restarting
+the backing machine. A queued response alone is not cut/durability evidence. Host
+must verify same resource, changed kernel and retained bytes after the supported
+operation. Launch-floor integration and deployment remain in progress. Schedule
+resumed: the previous pause incorrectly treated historical absence proof as exhaustion
+of all useful authorized work. No new message, replay, settlement or budget reset.
 
 Hosted capability-drop defect (2026-09-18): earlier successful manual Sprite
 launches used setpriv, but the automatic listener Service registered Node directly.

@@ -63,7 +63,6 @@ async function fixture(t) {
   for (const [key, name] of [['dispatch', bridge.cursor], ['native', dispatch.attemptId]]) {
     const path = join(journalPath, `${name}.json`); files[key] = { path, sha256: hash(await readFile(path)) };
   }
-  files.requirements_evidence = await pin(join(base, 'reviewed-requirements'), 'Synthetic operator-reviewed evidence; no live attestation.');
   const rootPin = async path => { const s = await stat(path); return { path, dev: s.dev, ino: s.ino }; };
   const roots = { native_home: await rootPin(home), sessions_root: await rootPin(sessions), session: await rootPin(session), journal: await rootPin(journalPath) };
   const current_sources = {}, original_sources = {};
@@ -73,7 +72,7 @@ async function fixture(t) {
     const bytes = await readFile(resolve(path)); current_sources[key] = hash(bytes);
     original_sources[key] = await pin(join(base, `original-${key}`), bytes);
   }
-  const request = { kind: 'owner-alpha-claimed-pre-turn-request-v1', installation_id: template.installationId,
+  const request = { kind: 'owner-alpha-claimed-pre-turn-request-v2', installation_id: template.installationId,
     owner_binding_sha256: template.hostedOwnerBindingSha256, predecessor: { manifest_sha256: 'cd'.repeat(32), epoch: 9,
       boot_id: id(5), transition_id: id(6), session_id: id(1), run_id: id(4), attempt: 1, submission_key: claim.submission_key,
       native_attempt_id: dispatch.attemptId, native_fingerprint: native.fingerprint },
@@ -81,11 +80,34 @@ async function fixture(t) {
       run_id: id(4), epoch: 9, boot_id: id(5), transition_id: id(6), manifest_sha256: 'cd'.repeat(32),
       issued_at: new Date(issued).toISOString(), expires_at: policy.expires_at }, policy }, text_only_binding: profile.binding, files, roots,
     review: { source: 'synthetic-operator-review', reviewed_at: new Date().toISOString(), current_sources, original_sources,
+      historical_memory_activity: 'unknown', historical_remote_ingress: 'unknown',
       assertions: { original_source_semantics_reviewed: true, intact_single_writer_no_rollback: true, fsync_before_turn: true,
-        no_alternate_ingress_throughout_predecessor: true, memories_disabled_throughout_predecessor: true, prospective_managed_denial_reviewed: true } } };
+        prospective_managed_denial_reviewed: true } } };
+  const boot = (await readFile('/proc/sys/kernel/random/boot_id', 'utf8')).trim();
+  const receipt = { kind: 'owner-alpha-prospective-isolation-v2', installation_id: request.installation_id,
+    owner_binding_sha256: request.owner_binding_sha256, predecessor: structuredClone(request.predecessor),
+    source: request.review.source, observed_at: request.review.reviewed_at, valid_until: new Date(Date.now() + 120000).toISOString(),
+    execution_cut: { kind: 'same-resource-whole-execution-cut', resource_id: 'synthetic-same-resource',
+      before_kernel_boot_id: id(90), after_kernel_boot_id: boot, completed_at: new Date(expires + 1000).toISOString(),
+      supported_operation: 'synthetic-reviewed-provider-operation', retained_state_sha256: '',
+      retained_sources_sha256: hash(JSON.stringify({ current_sources, original_sources })) },
+    managed: { requirements: await pin(join(base, 'requirements.toml'), 'allow_remote_control = false\n[features]\nmemories = false\n'),
+      codex_version: '0.154.0', same_process_readback: true, process_id: 123, kernel_boot_id: boot,
+      allow_remote_control: false, required_memories: false, effective_memories: false },
+    ambient_input: await pin(join(base, 'ambient-review'), 'synthetic reviewed ambient input inventory'),
+    assertions: { supported_whole_execution_cut_reviewed: true, current_launch_autostart_custody_reviewed: true,
+      old_authority_expired_and_fenced: true, fresh_workspace_and_native_thread_no_resume: true, only_reviewed_subsequent_launch_paths: true } };
+  const saveReceipt = async () => { files.requirements_evidence = await pin(join(base, 'reviewed-requirements'), receipt); };
+  const rebindState = async () => {
+    receipt.execution_cut.retained_state_sha256 = hash(JSON.stringify({ files: Object.fromEntries(
+      ['runtime', 'service', 'dispatch', 'native'].map(key => [key, files[key]])), roots }));
+    await saveReceipt();
+  };
+  await rebindState();
   const requestPath = join(base, 'request.json'), save = async () => (await pin(requestPath, request)).sha256;
-  const change = async (key, action) => { const value = JSON.parse(await readFile(files[key].path)); action(value); files[key] = await pin(files[key].path, value); };
-  return { base, request, requestPath, sha256: await save(), save, change, runtime, session, markerPath: join(session, marker) };
+  const change = async (key, action) => { const value = JSON.parse(await readFile(files[key].path)); action(value);
+    files[key] = await pin(files[key].path, value); await rebindState(); };
+  return { base, request, requestPath, sha256: await save(), save, change, receipt, saveReceipt, runtime, session, markerPath: join(session, marker) };
 }
 
 test('exact claimed pre-turn evidence uses real locks, preserves old bytes, and does not emit retirement or prompt data', async t => {
@@ -96,6 +118,8 @@ test('exact claimed pre-turn evidence uses real locks, preserves old bytes, and 
     evidence: { sha256: hash(bytes), observed_at: JSON.parse(bytes).observed_at, source: f.request.review.source } });
   assert.ok(report.evidence.observed_at >= f.request.assignment.policy.expires_at);
   assert.deepEqual(JSON.parse(bytes).trusted_operator_review, f.request.review);
+  assert.equal(JSON.parse(bytes).evidence_format, 'claimed-pre-turn-evidence-v2');
+  assert.deepEqual(JSON.parse(bytes).trusted_prospective_isolation, f.receipt);
   assert.ok(!bytes.includes(canary)); assert.doesNotMatch(JSON.stringify(report), /nativeStopped|retirement|successor|refund/);
   assert.equal((await stat(f.markerPath)).mode & 0o777, 0o400);
   assert.deepEqual(await Promise.all(Object.values(f.request.files).map(pin => readFile(pin.path))), before);
@@ -135,21 +159,67 @@ test('literal null, contradictory records and unknown journals refuse without ma
   await assert.rejects(stat(corrupt.markerPath), { code: 'ENOENT' });
 });
 
-test('pins, expiry, identity and all historical assertions are required before writes', async t => {
+test('pins, expiry, identity and retained custody assertions are required before writes', async t => {
   const mutations = [r => { r.files.runtime.sha256 = '00'.repeat(32); }, r => { r.review.current_sources.adapter = '00'.repeat(32); },
     r => { r.review.original_sources.bridge.sha256 = '00'.repeat(32); }, r => { r.files.requirements_evidence.sha256 = '00'.repeat(32); },
     r => { r.predecessor.native_fingerprint = '00'.repeat(32); }, r => { r.predecessor.native_attempt_id = '00'.repeat(32); },
     r => { r.predecessor.run_id = id(9); }, r => { r.owner_binding_sha256 = '00'.repeat(32); },
     r => { r.assignment.policy.expires_at = '2099-01-01T00:00:00.000Z'; }, r => { r.roots.session.ino++; },
-    r => { r.review.assertions.fsync_before_turn = 'true'; }, r => { r.review.assertions.memories_disabled_throughout_predecessor = null; },
+    r => { r.review.assertions.fsync_before_turn = 'true'; }, r => { r.review.historical_memory_activity = false; },
+    r => { delete r.review.historical_remote_ingress; }, r => { r.kind = 'owner-alpha-claimed-pre-turn-request-v1'; },
+    r => { r.review.assertions.memories_disabled_throughout_predecessor = true; },
     ...['original_source_semantics_reviewed', 'intact_single_writer_no_rollback', 'fsync_before_turn',
-      'no_alternate_ingress_throughout_predecessor', 'memories_disabled_throughout_predecessor', 'prospective_managed_denial_reviewed']
+      'prospective_managed_denial_reviewed']
       .map(key => r => { delete r.review.assertions[key]; })];
   for (const mutate of mutations) {
     const f = await fixture(t); mutate(f.request);
     await assert.rejects(produceClaimedPreTurnEvidence(f.requestPath, await f.save()));
     await assert.rejects(stat(f.markerPath), { code: 'ENOENT' });
   }
+});
+
+test('prospective receipt rejects crossed, stale, missing and weaker isolation evidence', async t => {
+  const mutations = [
+    r => { r.predecessor.epoch++; }, r => { r.installation_id = 'other'; },
+    r => { r.owner_binding_sha256 = 'aa'.repeat(32); }, r => { r.source = 'other-review'; },
+    r => { r.valid_until = r.observed_at; }, r => { r.valid_until = '2099-01-01T00:00:00.000Z'; },
+    r => { r.execution_cut.before_kernel_boot_id = r.execution_cut.after_kernel_boot_id; },
+    r => { r.execution_cut.after_kernel_boot_id = id(91); r.managed.kernel_boot_id = id(91); },
+    r => { r.execution_cut.completed_at = '2000-01-01T00:00:00.000Z'; },
+    r => { r.execution_cut.retained_state_sha256 = '00'.repeat(32); },
+    r => { r.execution_cut.retained_sources_sha256 = '00'.repeat(32); },
+    r => { delete r.execution_cut.resource_id; }, r => { delete r.execution_cut.supported_operation; },
+    r => { r.managed.same_process_readback = false; }, r => { r.managed.kernel_boot_id = id(92); },
+    r => { r.managed.codex_version = '0.155.0'; }, r => { r.managed.allow_remote_control = true; },
+    r => { r.managed.required_memories = null; }, r => { r.managed.effective_memories = true; },
+    r => { r.managed.requirements.sha256 = '00'.repeat(32); }, r => { r.ambient_input.sha256 = '00'.repeat(32); },
+    ...['supported_whole_execution_cut_reviewed', 'current_launch_autostart_custody_reviewed',
+      'old_authority_expired_and_fenced', 'fresh_workspace_and_native_thread_no_resume', 'only_reviewed_subsequent_launch_paths']
+      .map(key => r => { delete r.assertions[key]; }),
+  ];
+  for (const mutate of mutations) {
+    const f = await fixture(t); mutate(f.receipt); await f.saveReceipt();
+    await assert.rejects(produceClaimedPreTurnEvidence(f.requestPath, await f.save()));
+    await assert.rejects(stat(f.markerPath), { code: 'ENOENT' });
+  }
+});
+
+test('stopped direct child and both free locks do not attest a surviving helper is cut', async t => {
+  const f = await fixture(t), helper = spawn(process.execPath, ['-e', 'console.log("alive");process.stdin.resume()'],
+    { stdio: ['pipe', 'pipe', 'pipe'] });
+  await once(helper.stdout, 'data');
+  try {
+    await run(process.execPath, ['-e', 'process.exit(0)']);
+    await run('bash', [lockScript, f.request.roots.native_home.path, 'bash', lockScript,
+      f.request.roots.session.path, process.execPath, '-e', 'process.exit(0)']);
+    assert.equal(helper.exitCode, null);
+    f.receipt.execution_cut = { kind: 'direct-child-stopped', direct_child_stopped: true,
+      execution_lock_free: true, session_lock_free: true };
+    await f.saveReceipt();
+    await assert.rejects(produceClaimedPreTurnEvidence(f.requestPath, await f.save()));
+    assert.equal(helper.exitCode, null);
+    await assert.rejects(stat(f.markerPath), { code: 'ENOENT' });
+  } finally { const exit = once(helper, 'exit'); helper.stdin.end(); await exit; }
 });
 
 test('both kernel locks are required and a direct helper invocation cannot assert their ownership', async t => {
