@@ -189,6 +189,7 @@ export class CodexTransport extends EventEmitter {
 
 function configValue(value, depth = 0) {
   if (['string', 'boolean'].includes(typeof value)) return JSON.stringify(value);
+  if (Number.isSafeInteger(value)) return String(value);
   if (depth < 4 && value && Object.getPrototypeOf(value) === Object.prototype) {
     return `{${Object.entries(value).map(([key, item]) => `${JSON.stringify(key)}=${configValue(item, depth + 1)}`).join(',')}}`;
   }

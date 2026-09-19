@@ -16,10 +16,15 @@ readback before launch; corrected config0644/directory0755 and rechecked success
 **Current checkpoint: prospective isolation integration.** The owner-requested oracle
 follow-up separates old settlement from safe fresh admission: historical memory and
 remote-ingress activity stay UNKNOWN, rather than requiring impossible absence proof.
-V2 producer is imported locally; per-launch managed/input validation is in progress.
-Remaining live prerequisites are a supported same-Sprite whole-execution cut,
-retained-state/source checks, fresh context and same-process restricted readback.
-The official sprites-js SDK exposes whole-machine restart; verification is in progress.
+V2 producer and per-launch managed/input validation are integrated and installed with
+source backup/hash verification. Host focused80/80 and original-binding7/7 pass;
+combined verification is running (backend1710/runtime550 passed so far).
+Supported same-Sprite restart returned202, changed kernel observed stable over two
+minutes with all seven retained files unchanged. Directory inodes changed; post-cut
+pins are required. Listener auto-started despite its earlier stop and was stopped
+again; its startup path is HTTP-only. Live launch-floor/readback passes before account
+work. Remaining: exact epoch9 custody review, immutable marker/grant, new profile
+template and Worker deployment, then one bounded fresh message and reload verification.
 Schedule is enabled, not paused. No quarantine marker/grant, fresh message,
 completion or reload verification; retained UNKNOWN/reservations are unchanged.
 
@@ -34,8 +39,8 @@ diagnostics installed after supported Service stop; hashes/imports verified and
 Service start completed. Fresh full combined recheck exits0:1669 backend/515 runtime
 plus Worker/browser/native/service/build.16:25 authenticated manager assignment null.
 No new policy/message, replay or settlement.
-Next: verify and deploy the forward launch floor, then establish prospective isolation
-before claimed-pre-turn quarantine issuance. The managed fence is verified above. Core and runtime evidence
+Next: complete prospective receipt and exact current custody review before claimed-pre-turn
+quarantine issuance. The managed fence is verified above. Core and runtime evidence
 producer are integrated locally, default-off, preserving UNKNOWN and reservations:
 exact expired claimed attempt, fresh-message-only consumption, immutable disposition,
 reopen validation after config removal, real dual locks and permanent entry refusal.

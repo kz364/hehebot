@@ -2,7 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { CodexTransport } from '../runtime/codex-transport.mjs';
+import { CodexTransport, spawnCodex } from '../runtime/codex-transport.mjs';
+
+test('startup numeric overrides reject floats, nonfinite and unsafe integers before spawn', () => {
+  for (const value of [0.5, NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => spawnCodex({ binary: '/must-not-spawn', home: '/private', cwd: '/private',
+      configOverrides: { project_doc_max_bytes: value } }), /INVALID_CONFIG_OVERRIDES/);
+  }
+});
 
 function fixture(options) {
   const child = new EventEmitter();

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,6 +10,12 @@ import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 
 const at = Date.parse('2026-09-16T10:00:00.000Z');
+const layers = ['user', 'system'].map(type => ({ name: { type, file: `/fixture/${type}/config.toml` }, config: {} }));
+const hash = text => createHash('sha256').update(text).digest('hex');
+const floor = { version: 'owner-alpha-launch-floor-v1', requirements_sha256: 'a'.repeat(64), ordinary_config_sha256: 'b'.repeat(64),
+  layers: layers.map(layer => ({ path_sha256: hash(layer.name.file), config_sha256: hash('{}') })) };
+const requirements = { requirements: { allowRemoteControl: false, featureRequirements: { memories: false } } };
+const safeConfig = { features: { memories: false, plugins: false }, model_provider: 'openai', model_providers: {} };
 const policy = { session_id: 'aaaaaaaa-1111-4111-8111-111111111111',
   persona_id: '11111111-1111-4111-8111-111111111111', expires_at: new Date(at + 60000).toISOString(),
   max_runs: 2, max_task_seconds: 43 };
@@ -85,11 +92,11 @@ for (const hosted of [false, true]) for (const background of [false, true]) test
   let now = at, stopped = 0;
   const config = { stateDirectory, ownerAlpha: { ...policy, ...(background ? { background_first_root: true } : {}) }, personas: { [policy.persona_id]: { model: 'chosen' } },
     ...(hosted ? { hostedOwnerBindingSha256: '19'.repeat(32) } : {}) };
-  await (hosted ? runHostedOwnerAlpha : runOwnerAlpha)(config, { now: () => now, report: value => reports.push(value), wait: async () => { now += 45000; },
+  await (hosted ? runHostedOwnerAlpha : runOwnerAlpha)(config, { launchFloor: () => floor, now: () => now, report: value => reports.push(value), wait: async () => { now += 45000; },
     launch: options => {
-      assert.deepEqual(options.configOverrides, { 'features.apps': false, model_provider: 'openai' });
+      assert.deepEqual(options.configOverrides, { 'features.apps': false, model_provider: 'openai', 'features.memories': false, 'features.plugins': false });
       return { initialize: async () => ({}), request: async method => {
-        calls.push(method); return method === 'config/read' ? { config: { model_provider: 'openai', model_providers: {} } }
+        calls.push(method); return method === 'configRequirements/read' ? requirements : method === 'config/read' ? { config: safeConfig, layers }
           : method === 'account/read' ? { account: { type: 'chatgpt' }, requiresOpenaiAuth: true }
           : { data: [{ model: 'chosen', hidden: false }], nextCursor: null };
       } };
@@ -102,7 +109,7 @@ for (const hosted of [false, true]) for (const background of [false, true]) test
         maintain: async () => calls.push('maintain'), stop: async () => { stopped++; } };
     },
   });
-  assert.equal(stopped, 1); assert.deepEqual(calls, ['config/read', 'account/read', 'model/list', 'maintain', 'maintain']);
+  assert.equal(stopped, 1); assert.deepEqual(calls, ['configRequirements/read', 'config/read', 'account/read', 'model/list', 'maintain', 'maintain']);
   assert.equal(reports[0].productionEnabled, false); assert.equal(reports[1].settlementProved, false);
   assert.equal(reports[0].providerHold, hosted);
   assert.equal(reports[0].hosted, hosted ? true : undefined);
@@ -130,12 +137,12 @@ test('existing home keeps its store selection and rejects custom provider before
   const stateDirectory = await directory(t), nativeHome = await directory(t), calls = [];
   await writeFile(join(nativeHome, 'config.toml'), 'cli_auth_credentials_store = "keyring"\n', { mode: 0o600 });
   const config = { stateDirectory, nativeHome, ownerAlpha: policy, personas: { [policy.persona_id]: { model: 'chosen' } } };
-  await assert.rejects(runOwnerAlpha(config, { now: () => at, report: () => {},
+  await assert.rejects(runOwnerAlpha(config, { launchFloor: () => floor, now: () => at, report: () => {},
     launch: options => {
-      assert.deepEqual(options.configOverrides, { model_provider: 'openai' });
+      assert.deepEqual(options.configOverrides, { model_provider: 'openai', 'features.memories': false, 'features.plugins': false });
       return { initialize: async () => ({}), request: async method => {
         calls.push(method);
-        return { config: { model_provider: 'openai', model_providers: { openai: { base_url: 'https://unapproved.invalid' } } } };
+        return method === 'configRequirements/read' ? requirements : { layers, config: { ...safeConfig, model_providers: { openai: { base_url: 'https://unapproved.invalid' } } } };
       } };
     },
     createService: (captured, dependencies) => {
@@ -143,7 +150,7 @@ test('existing home keeps its store selection and rejects custom provider before
       return { start: () => dependencies.launch({}).initialize(), stop: async () => calls.push('stop') };
     },
   }), { code: 'OWNER_ALPHA_PROVIDER_DENIED' });
-  assert.deepEqual(calls, ['config/read', 'stop']);
+  assert.deepEqual(calls, ['configRequirements/read', 'config/read', 'stop']);
 });
 
 for (const hosted of [false, true]) test(`session watchdog hosted=${hosted} stops native work at grace boundary during held maintenance`, async t => {

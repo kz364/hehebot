@@ -462,6 +462,7 @@ async function successorFixture(t) {
   f.transport.request = async (method, params) => {
     const reply = await rpc(method, params);
     if (method === 'config/read') Object.assign(reply.config, { model: profile.model, model_catalog_json: catalogPath,
+      skills: { include_instructions: false }, project_doc_max_bytes: 0,
       mcp_servers: {}, features: Object.fromEntries(CODEX_TEXT_ONLY_FEATURES.map(key => [key, false])) });
     return reply;
   };
@@ -547,6 +548,7 @@ for (const corruption of [null, 'catalog', 'output']) test(`text-only service co
       items: [{ id: 'answer', type: 'agentMessage', phase: 'final_answer', text: corruption === 'output' ? 'different' : 'Full exact answer ✓' }] }] } };
     const reply = await originalRpc(method, params);
     if (method === 'config/read') Object.assign(reply.config, { model: profile.model, model_catalog_json: catalogPath,
+      skills: { include_instructions: false }, project_doc_max_bytes: 0,
       mcp_servers: {}, features: Object.fromEntries(CODEX_TEXT_ONLY_FEATURES.map(key => [key, false])) });
     return reply;
   };

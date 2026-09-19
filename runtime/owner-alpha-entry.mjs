@@ -5,10 +5,11 @@ import { pathToFileURL } from 'node:url';
 import { createCodexService } from './codex-service.mjs';
 import { spawnCodex } from './codex-transport.mjs';
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
+import { inspectOwnerAlphaLaunchFloor, verifyOwnerAlphaLaunchFloor } from './owner-alpha-launch-floor.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 // Do not force login/store settings: that can log out an existing account.
-const authOverrides = { model_provider: 'openai' };
+const authOverrides = { model_provider: 'openai', 'features.memories': false, 'features.plugins': false };
 // A genuine single-model catalog includes model instructions as well as metadata.
 const maxConfigBytes = 128 * 1024;
 
@@ -60,6 +61,7 @@ export async function runHostedOwnerAlpha(config, options = {}) {
 }
 
 async function runBoundedOwnerAlpha(config, { createService = createCodexService, launch = spawnCodex,
+  launchFloor = inspectOwnerAlphaLaunchFloor,
   report = value => console.info(JSON.stringify(value)), signal, now = Date.now,
   wait = ms => new Promise(resolveWait => setTimeout(resolveWait, ms)) } = {}, hosted) {
   config = structuredClone(config);
@@ -96,11 +98,15 @@ async function runBoundedOwnerAlpha(config, { createService = createCodexService
   signal?.addEventListener('abort', stop, { once: true });
   try {
     service = createService(config, { now, launch: options => {
+      const floor = launchFloor(options);
       const transport = launch({ ...options, configOverrides: { ...options.configOverrides, ...authOverrides } });
       const initialize = transport.initialize.bind(transport);
       transport.initialize = async options => {
         const result = await initialize(options);
-        const readback = await transport.request('config/read', { includeLayers: false });
+        const requirements = await transport.request('configRequirements/read', {});
+        const readback = await transport.request('config/read', { includeLayers: true });
+        verifyOwnerAlphaLaunchFloor(floor, requirements, readback);
+        if (JSON.stringify(launchFloor({ home, cwd: join(config.stateDirectory, 'workspace') })) !== JSON.stringify(floor)) fail('OWNER_ALPHA_LAUNCH_FLOOR_CHANGED');
         if (readback?.config?.model_provider !== 'openai' || readback.config.model_providers?.openai != null) fail('OWNER_ALPHA_PROVIDER_DENIED');
         await checkAlphaAccount(transport, config.personas[policy.persona_id].model);
         if (signal?.aborted) fail('OWNER_ALPHA_STOPPED');

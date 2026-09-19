@@ -25,13 +25,24 @@ managed denial and ambient startup-input review on every launch, same-process
 readback before account checks. Never infer historical settlement or refund.
 Schedule is enabled; meaningful authorized engineering remains. Producer v2 patch
 0ca224802c1fe503103c2e52c6bffe5cd59ce83cc2de7f06b101649f5ed7a5a2 is imported;
-host focused7/7 pass (`.local/forward-isolation-host-focused.log`). Launch-floor
-worker owns entry/profile/transport and runtime/owner-alpha-launch-floor.mjs;
-pin it in current_sources only, not the original historical source map.
+host focused7/7 pass (`.local/forward-isolation-host-focused.log`). Launch-floor patch
+82baff050cda7bf633f0aacd89fba7e3608b9c9b787672a153b35e6c71d58797 is integrated;
+runtime/owner-alpha-launch-floor.mjs is pinned in current_sources only. Host combined
+focused80/80, original-profile binding7/7 pass; full verifier running.
 Official sprites-js client.ts exposes POST /v1/sprites/{name}/restart, a backing-machine
-restart distinct from Service restart/restore. No restart issued yet; require changed
-kernel boot plus same resource/retained bytes before attesting a cut. Launch-floor
-integration/deployment and prospective receipt remain pending; no new live message.
+restart distinct from Service restart/restore, already used successfully in trial74.
+Current one POST returned202; changed kernel 3c2cba93-3886-406b-b1a0-18fe51815386 is
+stable >2min, same Sprite and seven retained files unchanged. Inodes change across
+reboot: use current pins, do not claim identical filesystem object numbers. Listener
+restarted despite its earlier stop; stopped again, no named Codex process observed.
+Reviewed listener startup is HTTP-only, no native startup/poll. Five runtime files
+installed with source backup and exact hashes, `.local/forward-isolation-installed.log`.
+Live floor inspection/readback passes under both locks/capability drop before account;
+native exited. Evidence `.local/forward-isolation-{retained-*,services-*,live-*}`.
+Original source archive from pre78 revision27088 has adapter/launcher hashes matching
+pre-deployment records; installed privately for source review, not executed.
+Browser worker resumed passive-only exact epoch9 export/readiness. No marker/grant
+or new message. Full verifier PID3117657, log `.local/forward-isolation-integrated-combined.log`.
 
 New startup defect confirmed synthetically on same Sprite: deployed listener
 PID20242 inherited CapInh/Prm/Eff/Bnd/Amb=a82435fb, NoNewPrivs0. Saved Service config

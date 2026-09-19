@@ -8,6 +8,7 @@ export const CODEX_TEXT_ONLY_FEATURES = Object.freeze([
   'image_generation', 'standalone_web_search', 'token_budget',
   'request_permissions_tool', 'exec_permission_approvals', 'code_mode',
   'code_mode_only', 'goals', 'hooks', 'view_image', 'sleep_tool',
+  'memories', 'skill_search',
 ]);
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
@@ -59,6 +60,8 @@ export function createCodexTextOnlyProfile({ codexVersion, model, modelCatalog, 
     ...Object.fromEntries(CODEX_TEXT_ONLY_FEATURES.map(key => [`features.${key}`, false])),
     'tools.experimental_request_user_input.enabled': false,
     'tools.update_plan.enabled': false,
+    'skills.include_instructions': false,
+    project_doc_max_bytes: 0,
     mcp_servers: Object.freeze({}),
   });
   const commandedBytes = Buffer.from(JSON.stringify(startupConfig));
@@ -84,6 +87,7 @@ export function verifyCodexTextOnlyProfile(profile, { codexVersion, model, confi
   const config = configReadback;
   if (!config || config.model !== model || config.model_catalog_json !== profile.startupConfig.model_catalog_json ||
       config.web_search !== 'disabled' || config.agents?.enabled !== false ||
+      config.skills?.include_instructions !== false || config.project_doc_max_bytes !== 0 ||
       Object.keys(config.mcp_servers ?? {}).length || config.notify != null) fail('TEXT_ONLY_READBACK_MISMATCH');
   for (const tool of ['experimental_request_user_input', 'update_plan']) {
     if (config.tools?.[tool] !== undefined && config.tools[tool]?.enabled !== false) fail('TEXT_ONLY_READBACK_MISMATCH');

@@ -19,7 +19,7 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const marker = 'claimed-pre-turn-quarantine.json', canary = 'PRIVATE_CONTEXT_CANARY';
 const lockScript = resolve('scripts/with-executor-lock.sh'), producer = resolve('runtime/hosted-owner-claimed-pre-turn.mjs');
 const run = promisify(execFile);
-async function fixture(t) {
+async function fixture(t, originalProfile = false) {
   const base = await mkdtemp(join(tmpdir(), 'hehe-claimed-')); t.after(() => rm(base, { recursive: true, force: true }));
   const home = join(base, 'home'), sessions = join(base, 'sessions'), session = join(sessions, id(6)), journalPath = join(session, 'journal');
   for (const path of [home, sessions, session, journalPath]) await mkdir(path, { mode: 0o700 });
@@ -27,7 +27,13 @@ async function fixture(t) {
   const textOnlyProfile = { codexVersion: '0.154.0', model: 'fixture', catalogPath: join(base, 'catalog'),
     catalogValidation: 'synthetic-fixture', syntheticFixture: true,
     modelCatalog: { models: [{ slug: 'fixture', tool_mode: 'direct', experimental_supported_tools: [] }] } };
-  const profile = createCodexTextOnlyProfile(textOnlyProfile), policy = { session_id: id(1), persona_id: id(2),
+  let profile = createCodexTextOnlyProfile(textOnlyProfile);
+  if (originalProfile) {
+    const startupConfig = { ...profile.startupConfig };
+    for (const key of ['features.memories', 'features.skill_search', 'skills.include_instructions', 'project_doc_max_bytes']) delete startupConfig[key];
+    profile = { ...profile, startupConfig, binding: { ...profile.binding, commandedConfigSha256: hash(JSON.stringify(startupConfig)) } };
+  }
+  const policy = { session_id: id(1), persona_id: id(2),
     expires_at: new Date(expires).toISOString(), max_runs: 1, max_task_seconds: 60,
     text_only: { profile_version: profile.version, profile_sha256: codexTextOnlyProfileSha256(profile) } };
   const template = { portalOrigin: 'https://control.example', installationId: 'claimed-fixture', hostedOwnerBindingSha256: 'ab'.repeat(32),
@@ -72,6 +78,7 @@ async function fixture(t) {
     const bytes = await readFile(resolve(path)); current_sources[key] = hash(bytes);
     original_sources[key] = await pin(join(base, `original-${key}`), bytes);
   }
+  current_sources.launch_floor = hash(await readFile(resolve('runtime/owner-alpha-launch-floor.mjs')));
   const request = { kind: 'owner-alpha-claimed-pre-turn-request-v2', installation_id: template.installationId,
     owner_binding_sha256: template.hostedOwnerBindingSha256, predecessor: { manifest_sha256: 'cd'.repeat(32), epoch: 9,
       boot_id: id(5), transition_id: id(6), session_id: id(1), run_id: id(4), attempt: 1, submission_key: claim.submission_key,
@@ -125,8 +132,9 @@ test('exact claimed pre-turn evidence uses real locks, preserves old bytes, and 
   assert.deepEqual(await Promise.all(Object.values(f.request.files).map(pin => readFile(pin.path))), before);
   await assert.rejects(produceClaimedPreTurnEvidence(f.requestPath, f.sha256));
   assert.deepEqual(await readFile(f.markerPath), bytes);
-  // Pre-diagnostic native journals remain eligible without conversion.
-  const legacy = await fixture(t); await legacy.change('native', row => { delete row.submissionFailure; });
+  // Original commanded hashes and pre-diagnostic journals remain eligible without conversion.
+  const legacy = await fixture(t, true); await legacy.change('native', row => { delete row.submissionFailure; });
+  assert.notEqual(legacy.request.text_only_binding.commandedConfigSha256, f.request.text_only_binding.commandedConfigSha256);
   const { stdout } = await run(process.execPath, [producer, '--produce', legacy.requestPath, await legacy.save()]);
   assert.equal(JSON.parse(stdout).evidence.sha256, hash(await readFile(legacy.markerPath)));
 });
@@ -161,6 +169,8 @@ test('literal null, contradictory records and unknown journals refuse without ma
 
 test('pins, expiry, identity and retained custody assertions are required before writes', async t => {
   const mutations = [r => { r.files.runtime.sha256 = '00'.repeat(32); }, r => { r.review.current_sources.adapter = '00'.repeat(32); },
+    r => { delete r.review.current_sources.launch_floor; }, r => { r.review.current_sources.launch_floor = '00'.repeat(32); },
+    r => { r.review.original_sources.launch_floor = r.review.original_sources.entry; },
     r => { r.review.original_sources.bridge.sha256 = '00'.repeat(32); }, r => { r.files.requirements_evidence.sha256 = '00'.repeat(32); },
     r => { r.predecessor.native_fingerprint = '00'.repeat(32); }, r => { r.predecessor.native_attempt_id = '00'.repeat(32); },
     r => { r.predecessor.run_id = id(9); }, r => { r.owner_binding_sha256 = '00'.repeat(32); },

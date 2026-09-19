@@ -43,6 +43,7 @@ let configPath, originalConfig, catalogPath, originalCatalog;
 let textOnlyProfile, effectiveConfig, commandedConfigContent;
 let targetSubmission, targetReadback;
 const transportDisconnects = [];
+const inputCanaries = ['PROJECT_INPUT_CANARY_739', 'SKILL_INPUT_CANARY_281', 'MEMORY_INPUT_CANARY_463'];
 let deadline;
 async function wait(predicate) {
   const until = Date.now() + 15000;
@@ -89,6 +90,16 @@ try {
   const workspace = join(directory, 'workspace');
   await mkdir(home, { mode: 0o700 });
   await mkdir(workspace, { mode: 0o700 });
+  if (textOnly) {
+    await writeFile(join(workspace, 'AGENTS.md'), inputCanaries[0]);
+    const skill = join(workspace, '.agents/skills/canary');
+    await mkdir(skill, { recursive: true });
+    await writeFile(join(skill, 'SKILL.md'), `---\nname: canary\ndescription: ${inputCanaries[1]}\n---\n${inputCanaries[1]}\n`);
+    await mkdir(join(home, 'memories'), { recursive: true });
+    // Synthetic files in a disposable home only; no existing native store edited.
+    await writeFile(join(home, 'memories', 'MEMORY.md'), inputCanaries[2]);
+    await writeFile(join(home, 'memories', 'memory_summary.md'), inputCanaries[2]);
+  }
   // These are deny-list placeholders, not real credentials or journal content.
   const filesystem = { ':minimal': 'read', [workspace]: 'read', [home]: 'deny',
     [join(directory, 'journal')]: 'deny', [join(directory, 'token')]: 'deny' };
@@ -103,6 +114,7 @@ try {
       }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       raw.requests.push(body);
+      if (textOnly) for (const marker of inputCanaries) assert.equal(JSON.stringify(body).includes(marker), false, 'AMBIENT_INPUT_LEAK');
       assert.equal(body.model, 'fixture-model'); assert.equal(body.stream, true);
       const names = body.tools.flatMap(tool => tool.type === 'namespace'
         ? tool.tools.map(nested => `${tool.name}.${nested.name}`) : [tool.name ?? tool.type]);
@@ -190,6 +202,10 @@ try {
   assert.deepEqual(effective.mcp_servers, {});
   if (textOnly) {
     assert.equal(effective.model_catalog_json, catalogPath);
+    assert.equal(effective.project_doc_max_bytes, 0);
+    assert.equal(effective.skills.include_instructions, false);
+    assert.equal(effective.features.memories, false);
+    assert.equal(effective.features.skill_search, false);
     // This protocol's config/read omits these extension tool settings. Verify
     // their effect via the exact provider catalog and injected dispatch probes.
     assert.ok(effective.notify == null);
@@ -272,6 +288,7 @@ try {
   }
   assert.ok(Date.now() - startedAt < 300000);
   report.noChildObserved = true;
+  if (textOnly) report.forwardInputIsolation = { capturedRequests: raw.requests.length, projectCanaryAbsent: true, skillCanaryAbsent: true, memoryCanaryAbsent: true, memoryGenerationObserved: false };
   report.exactRootOutputs = ['ROOT_ONLY_DENIALS_VISIBLE_19', 'ROOT_COMPLETION_OK_43'];
   report.status = 'passed';
 } catch (error) {

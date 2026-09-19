@@ -55,9 +55,22 @@ digests, managed readback and ambient inventory. Imported worker patch SHA256
 pass in `.local/forward-isolation-host-focused.log`. No live receipt or authority.
 The official [Sprites JS client](https://github.com/superfly/sprites-js/blob/main/src/client.ts)
 exports restartSprite(name), POST /v1/sprites/{name}/restart, described as restarting
-the backing machine. A queued response alone is not cut/durability evidence. Host
-must verify same resource, changed kernel and retained bytes after the supported
-operation. Launch-floor integration and deployment remain in progress. Schedule
+the backing machine. Reused trial74's established bounded procedure, not a new API
+assumption. Current single POST returned202; changed kernel observed stable >2min,
+same Sprite identity and seven pinned retained files unchanged. Inodes changed across
+boot while paths/bytes remained; current receipts use newly observed root pins.
+Listener auto-started despite the prior Service stop. Stopped it again; reviewed
+HTTP-only startup has no native launch/poll and expired authority remains unchanged.
+No named Codex processes observed; that scan is corroboration, not containment proof.
+Launch-floor patch SHA25682baff050cda7bf633f0aacd89fba7e3608b9c9b787672a153b35e6c71d58797
+is integrated; host pins it only in current sources, preserving original sources and
+commanded digest. Host focused80/80 plus legacy-command-binding7/7 pass. Five runtime
+files installed with original source backup and matching hashes. Live floor and
+same-process requirements/config readback pass under both locks and capability drop;
+native diagnostic exited without thread/account/model calls. Evidence:
+`.local/forward-isolation-{installed.log,live-floor-inspection.json,live-readback.json,
+retained-before.json,retained-after-stable.json,services-after.json}`. Full combined
+verifier continues; no marker/grant or fresh message. Schedule
 resumed: the previous pause incorrectly treated historical absence proof as exhaustion
 of all useful authorized work. No new message, replay, settlement or budget reset.
 

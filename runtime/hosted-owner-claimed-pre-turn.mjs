@@ -23,6 +23,7 @@ const sources = Object.fromEntries(Object.entries({ manager: './hosted-owner-man
   entry: './owner-alpha-entry.mjs', service: './codex-service.mjs', bridge: './execution-bridge.mjs', adapter: './codex-adapter.mjs',
   journal: './file-journal.mjs', text_only: './codex-text-only.mjs', lock_script: '../scripts/with-executor-lock.sh' })
   .map(([name, path]) => [name, fileURLToPath(new URL(path, import.meta.url))]));
+const currentSources = { ...sources, launch_floor: fileURLToPath(new URL('./owner-alpha-launch-floor.mjs', import.meta.url)) };
 const assertions = ['original_source_semantics_reviewed', 'intact_single_writer_no_rollback', 'fsync_before_turn',
   'prospective_managed_denial_reviewed'];
 const isolationAssertions = ['supported_whole_execution_cut_reviewed', 'current_launch_autostart_custody_reviewed',
@@ -118,15 +119,15 @@ async function validate(path, sha256) {
     utc(grant.issued_at) && grant.issued_at < grant.expires_at && Date.parse(grant.expires_at) - Date.parse(grant.issued_at) <= 300000);
   keys(review, ['source', 'reviewed_at', 'assertions', 'current_sources', 'original_sources',
     'historical_memory_activity', 'historical_remote_ingress']);
-  keys(review.assertions, assertions); keys(review.current_sources, Object.keys(sources)); keys(review.original_sources, Object.keys(sources));
+  keys(review.assertions, assertions); keys(review.current_sources, Object.keys(currentSources)); keys(review.original_sources, Object.keys(sources));
   require(review.historical_memory_activity === 'unknown' && review.historical_remote_ingress === 'unknown' &&
     assertions.every(key => review.assertions[key] === true) && typeof review.source === 'string' && review.source.trim() &&
     review.source.length <= 256 && !/[\r\n\0]/.test(review.source) && utc(review.reviewed_at) &&
     review.reviewed_at >= policy.expires_at && Date.parse(review.reviewed_at) <= Date.now());
-  for (const [key, path] of Object.entries(sources)) {
+  for (const [key, path] of Object.entries(currentSources)) {
     await readPinned({ path, sha256: review.current_sources[key] }, false);
-    await readPinned(review.original_sources[key]);
   }
+  for (const pin of Object.values(review.original_sources)) await readPinned(pin);
   keys(files, ['manager', 'template', 'runtime', 'service', 'dispatch', 'native', 'requirements_evidence']);
   const loaded = {};
   for (const [key, pin] of Object.entries(files)) {

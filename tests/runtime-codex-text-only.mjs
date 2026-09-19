@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { CODEX_TEXT_ONLY_FEATURES, codexTextOnlyProfileSha256, createCodexTextOnlyCompletionReceipt,
   createCodexTextOnlyProfile, verifyCodexTextOnlyProfile } from '../runtime/codex-text-only.mjs';
 
@@ -8,6 +9,7 @@ const make = (extra = {}) => createCodexTextOnlyProfile({ codexVersion: '0.154.0
   modelCatalog: { models: [modelEntry] }, catalogPath: '/private/models.json', catalogValidation: 'validated-genuine', accountModelChecked: true, ...extra });
 const readback = profile => ({ model: profile.model, web_search: 'disabled', notify: null,
   model_catalog_json: '/private/models.json',
+  skills: { include_instructions: false }, project_doc_max_bytes: 0,
   agents: { enabled: false }, features: Object.fromEntries(CODEX_TEXT_ONLY_FEATURES.map(key => [key, false])), mcp_servers: {} });
 const verify = (profile, extra = {}) => verifyCodexTextOnlyProfile(profile, { codexVersion: '0.154.0', model: profile.model,
   configReadback: readback(profile), catalogContent: JSON.stringify(profile.modelCatalog),
@@ -23,6 +25,18 @@ test('constructs the exact versioned direct text-only command surface', () => {
   assert.equal(profile.startupConfig['tools.experimental_request_user_input.enabled'], false);
   assert.equal(profile.startupConfig['tools.update_plan.enabled'], false);
   assert.equal(verify(profile).completionEligible, false);
+});
+
+test('forward input flags change only the new commanded digest and require explicit readback', () => {
+  const profile = make(), oldCommands = structuredClone(profile.startupConfig);
+  for (const key of ['features.memories', 'features.skill_search', 'skills.include_instructions', 'project_doc_max_bytes']) delete oldCommands[key];
+  assert.notEqual(profile.binding.commandedConfigSha256, createHash('sha256').update(JSON.stringify(oldCommands)).digest('hex'));
+  for (const key of ['memories', 'skill_search']) {
+    const config = readback(profile); delete config.features[key];
+    assert.throws(() => verify(profile, { configReadback: config }), /TEXT_ONLY_READBACK_MISMATCH/);
+  }
+  for (const change of [{ skills: null }, { skills: { include_instructions: true } }, { project_doc_max_bytes: 1 }, { project_doc_max_bytes: undefined }])
+    assert.throws(() => verify(profile, { configReadback: { ...readback(profile), ...change } }), /TEXT_ONLY_READBACK_MISMATCH/);
 });
 
 test('requires caller catalog/account attestations, except explicit synthetic fixtures', () => {
