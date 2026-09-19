@@ -4,6 +4,24 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
+Latest06:51Z: exact authenticated epoch9 custody export received and hash verified,
+`.local/forward-isolation-custody.json`, SHA25692444f1e3f053836448d819d53acdc5c61c59decb96545fc9d2c15da4f83be7d.
+Browser needs explicit --cdp on EVERY command; otherwise it attaches a separate blank
+browser. Exact target30B951C10F072B3E2D76BFF6EB587CD9 is now verified/readable.
+Producer first refused a private request with300002ms validity; marker confirmed absent.
+Corrected builder to observed_at+300000, retained failed request, refreshed readback.
+Marker issued06:48:23.680Z, SHA256c7b7d38b1305c3e157407e148f6b4563d4b049aa4f761eb1f7810146fbca7380.
+Evidence `.local/forward-isolation-live-evidence.json`; successful private request in
+guest `.local/forward-isolation-evidence-v2`. Old UNKNOWN never settled/refunded.
+Existing Service PUT/start switched only to separate manager/template. V4 secret
+activation succeeded, expiry06:58:58.101Z, same prior/reservation$1,total$10 and180s/120s.
+06:49:55 manager null and portal admission true;06:50:49 same Sprite warm, not cold.
+Browser authorized exactly ONE normal composer message requesting
+HEHEBOT_FORWARD_ISOLATION_OK_79, no resend. Pre-send UI readonly despite fresh GET;
+source pins loaded policy revision, so one normal refresh authorized before send.
+No send/result confirmed yet. Do not guest-wake during the actual trial. Current
+authority supersedes earlier staging-only/no-send notes below.
+
 Owner “Keep going” verified against parent thread's immediately preceding disclosed
 scope: managed alpha restrictions, conservative quarantine, one fresh message only
 if evidence permits; existing $10 total, no push or unrelated effects. Installed

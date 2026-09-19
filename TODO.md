@@ -16,6 +16,15 @@ readback before launch; corrected config0644/directory0755 and rechecked success
 **Current checkpoint: prospective isolation integration.** The owner-requested oracle
 follow-up separates old settlement from safe fresh admission: historical memory and
 remote-ingress activity stay UNKNOWN, rather than requiring impossible absence proof.
+**Live v4 trial now authorized:** authenticated epoch9 export verified; permanent
+quarantine marker issued06:48:23Z, old UNKNOWN and reservation retained. Separate
+manager/template are active. Policy expires06:58:58.101Z with existing $10 total,
+180s session/120s task; manager preflight null, portal admission true, Sprite warm.
+Browser worker may send exactly one normal message for trial79 and verify canonical
+result/reload, never retry an uncertain send. Pre-send UI retained the old policy;
+one normal refresh is authorized (source intentionally closes sending on revision
+change until reload). No message or completion confirmed yet. Details below record
+the preceding preparation, not the current activation state.
 V2 producer and per-launch managed/input validation are integrated and installed with
 source backup/hash verification. Host focused80/80 and original-binding7/7 pass;
 combined verification passes backend1710/runtime550 plus Worker/browser/native/
