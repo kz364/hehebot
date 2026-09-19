@@ -4,6 +4,26 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stage A control draft review (2026-09-19, local): received154482-byte patch SHA256
+4de1b25d4d471302e5fe8d36c5578527b68042760c015bc3a7763c1e4d1ac5d0,
+baseline dd3808b. Applied only to isolated `.local/warm-review`, not the integration
+checkout. Parent reran the unmodified warm suites:22/22 pass. Two deliberately
+asymmetric probes expose missing coverage: repeating the first message body with
+a fresh idempotency key returns503 INVALID_CONFIGURATION (validator wrongly
+requires distinct body hashes); claiming at00:04:19.900 for fixed00:04:20 deadline
+persists one attempt instead of refusing before writes. Logs:
+`.local/warm-review-{baseline,identical,deadline}.log`. Probe edits were restored.
+Static review also found missing comparison between warm owner binding and actual
+authenticated custody, second-admission gate lacking live-lease validation, and
+host-token issuance using manager read time rather than activation time. Draft
+rewrites its generation row to append admissions and creates waiting runs after
+config removal, contrary to the agreed immutable/no-orphan contract. Requested
+corrections plus real message-bound predecessor reconstruction, valid legacy JWT
+isolation, repeat-text/same-clock and rounded-deadline tests from the control worker.
+One finite warm revision remains an intentional Stage A limit, not rollover support.
+Runtime/UI assignment and integration remain blocked on correction/reverification.
+No live/account/provider operations or production gate changes occurred.
+
 Composer/native integration (2026-09-19, local): GLM worker's two-file patch reviewed,
 revised and hash-verified before parent integration. Hosted-manager `--browser` now
 drives the actual portal with fixture-signed owner JWT through real authenticated

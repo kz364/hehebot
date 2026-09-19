@@ -4,6 +4,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
+Stage A patch review is blocked on corrections, not accepted integration. Parent
+downloaded `.local/stage-a-warm-generation.patch` (154482 bytes, SHA256
+4de1b25d4d471302e5fe8d36c5578527b68042760c015bc3a7763c1e4d1ac5d0)
+and applied it only in detached `.local/warm-review` at integration checkpoint9589631.
+Unmodified warm suites pass22 tests, but parent probes reproduce repeated-message
+HTTP503 and a claim persisted with100ms remaining. Probe edits restored; logs are
+`.local/warm-review-{baseline,identical,deadline}.log`. Worker received eight fixes:
+repeat text/same timestamp; pre-write claim lifetime fence; actual owner binding;
+immutable generation plus separate admission rows; no runs after config removal;
+live lease for admission2; deterministic activation-bound host token; actual retired
+bootstrap-predecessor transition/reconstruction and valid legacy-JWT isolation.
+Await replacement dd3808b-relative patch/hash from existing control worker before
+integration or new runtime/UI assignments. Main integration checkout has tracking
+changes only; no live operations. Keep one warm revision as a bounded Stage A limit.
+
 Owner requested all further implementation in new threads. Composer/native worker
 `T-01a0b94d-7913-71ff-aba8-8ed10ec336fa` delivered the hosted-manager browser mode
 and hosted-control asset support. Parent integrated revised patch SHA256

@@ -27,6 +27,14 @@ Corrected authority split approved for implementation; final manifest hash must 
 warm version/admission identity, and public summary must distinguish fixed policy expiry
 from generation expiry. Legacy composer remains read-only for warm mode pending its
 separate new consumer; runtime/UI workers follow the reviewed control patch.
+Delivered Stage A draft is **not integrated**: parent isolated review reproduces
+HTTP503 for identical text under a fresh command key and a persisted claim with
+only100ms of task lifetime left. The unmodified22 focused tests pass; they missed
+these boundaries. Control worker is correcting authenticated owner-binding validation,
+immutable generation/separate admission records, removal-time rejection without runs,
+lost-lease admission fencing and stable activation-bound host credentials, with actual
+legacy-bootstrap predecessor reconstruction coverage. Runtime/UI assignment waits
+for the corrected patch; no live state changed. Evidence is in docs/IMPLEMENTATION.md.
 Next checkpoint: integrate composer evidence and Stage A control contract, then one-process
 native integration before separately opting into background capabilities. No live rollout,
 campaign, spending, push or schedule enablement; owner SSO/provider gates remain separate.
