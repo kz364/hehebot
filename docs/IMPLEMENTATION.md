@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+F1a automatic warm entrypoint control flow (2026-09-19, local): imported and
+reviewed tests/runtime-owner-alpha-warm-entry.mjs. Parent focused tests pass 4/4,
+full runtime suite passes 568/568 and typecheck passes. Logs:
+`.local/warm-entry-parent.log`, `.local/warm-entry-runtime.log`,
+`.local/warm-entry-typecheck.log`. No production code changes. Existing runtime
+test glob automatically includes the new suite in the combined verifier; the
+broad browser/native verifier was not rerun for this test-only addition.
+Actual runHostedOwnerAlpha drives the normal deadline loop, independent timer
+while start/maintenance awaits remain pending, and immediate operator abort.
+Stop dispatch is observed exactly at expiry plus 30 seconds; pending awaits do
+not produce false shutdown/settlement reports. Service and native execution are
+simulated: no real Codex boot, termination or durable service journal is proved
+here. Real explicit-stop journal/dual-lock fixtures remain separate; automatic
+real-native termination is still lifecycle acceptance work under F3.
+
 Owner-directed follow-through (2026-09-19): TODO.md now records the ordered F1–F6
 remaining queue and explicit exit evidence. Two disjoint implementors started from
 the verified local source-custody bundle at 5d45262: automatic warm entrypoint

@@ -5,8 +5,11 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
 Owner now requested the full remaining queue plus scheduled orchestration.
-The top of TODO.md is authoritative: F1a automatic warm entrypoint shutdown and
-F1b actual local Worker wake are active in disjoint GLM5.3 workers, followed by
+The top of TODO.md is authoritative: F1a entrypoint control-flow tests are now
+integrated and parent-verified (4 focused, 568 runtime, typecheck). No production
+code changed; simulated service/native stop is not real native termination.
+Automatic real-native termination remains F3 lifecycle acceptance. F1a worker is
+complete; F1b actual local Worker wake remains active, followed by
 Stage B, recovery/sleep safety, gated live-trial preparation and required P1 work.
 Workers: T-01a0ba7c-fad5-710c-a2e1-099b66e11fb5 (entry/tests) and
 T-01a0ba7d-641c-76b6-a549-8da2c8e092d2 (warm script/hosted fixtures).
