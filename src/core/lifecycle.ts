@@ -36,7 +36,7 @@ export class LifecycleCore {
  /** Separate owner-configured unused disposition; never a native retirement claim. */
  assignUnusedOwnerMessage(authority:UnusedMessageBoundAuthority,ownerId:string,commandId:string):void {
   const c=this.core.bootstrap.config!,grant=c.unused_recovery,prior=this.core.ownerAlpha.activeGeneration(),state=this.get(),now=this.core.now(),m=authority.manifest;
-  requireThat(grant&&prior&&'kind' in prior.authority&&state.phase==='RECOVERY_REQUIRED'&&state.epoch===grant.predecessor.epoch&&state.boot_id===grant.predecessor.boot_id&&
+  requireThat(grant&&prior&&'kind' in prior.authority&&prior.authority.kind!=='owner-message-warm-generation'&&state.phase==='RECOVERY_REQUIRED'&&state.epoch===grant.predecessor.epoch&&state.boot_id===grant.predecessor.boot_id&&
    state.provider_ref_json==='{}'&&state.provider_operation_id===null&&state.lease_until!==null&&state.lease_until<=now&&prior.policy.expires_at<=now&&
    m.epoch===state.epoch+1&&m.command_id===commandId&&m.policy_revision===grant.successor_policy_revision&&m.policy_revision===c.policy_revision&&m.expires_at<=grant.expires_at&&m.expires_at<=c.expires_at&&ownerId===c.owner_id&&
    !this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',`owner_alpha_unused_disposition:${state.epoch}`).length,
@@ -56,7 +56,7 @@ export class LifecycleCore {
  /** Quarantine retains the predecessor's startup uncertainty; this never settles it. */
  assignClaimedPreTurnOwnerMessage(authority:ClaimedPreTurnMessageBoundAuthority,ownerId:string,commandId:string):void {
   const c=this.core.bootstrap.config!,grant=c.claimed_pre_turn_quarantine,prior=this.core.ownerAlpha.activeGeneration(),state=this.get(),now=this.core.now(),m=authority.manifest;
-  requireThat(grant&&prior&&'kind' in prior.authority&&state.phase==='RECOVERY_REQUIRED'&&state.epoch===grant.predecessor.epoch&&state.boot_id===grant.predecessor.boot_id&&
+  requireThat(grant&&prior&&'kind' in prior.authority&&prior.authority.kind!=='owner-message-warm-generation'&&state.phase==='RECOVERY_REQUIRED'&&state.epoch===grant.predecessor.epoch&&state.boot_id===grant.predecessor.boot_id&&
    state.provider_ref_json==='{}'&&state.provider_operation_id===null&&state.lease_until!==null&&state.lease_until<=now&&prior.policy.expires_at<=now&&
    m.epoch===state.epoch+1&&m.command_id===commandId&&m.policy_revision===grant.successor_policy_revision&&m.policy_revision===c.policy_revision&&m.expires_at<=grant.expires_at&&m.expires_at<=c.expires_at&&ownerId===c.owner_id&&
    !this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',`owner_alpha_claimed_pre_turn_disposition:${state.epoch}`).length,

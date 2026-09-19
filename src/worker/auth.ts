@@ -198,3 +198,108 @@ export async function verifyWebhook(rawBody: string | Uint8Array, headers: Heade
   if (!await crypto.subtle.verify('HMAC', key, signatureBytes, signed)) throw unauthorized();
   return { eventId, timestamp };
 }
+
+export interface WarmHostGrant {
+ installation_id:string;epoch:number;boot_id:string;transition_id:string;generation_sha256:string;
+ issued_at:string;expires_at:string;
+}
+const warmHostAudience='hehebot-runtime-generation';
+const warmHostTokenType='hehebot-runtime-generation+jwt';
+const grantIdentifier=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The warm generation keeps four deployment secrets: manager bearer token, host
+ * signing key, task signing key and the legacy runtime token. None may overlap. */
+export function assertWarmSecrets(managerToken:string|undefined,hostSigningKey:string|undefined,warmTaskSigningKey:string|undefined,legacyToken:string|undefined):void {
+ if(!managerToken||!hostSigningKey||!warmTaskSigningKey||!legacyToken)throw configurationError();
+ taskSigningKey(managerToken);taskSigningKey(hostSigningKey);taskSigningKey(warmTaskSigningKey);taskSigningKey(legacyToken);
+ const values=[managerToken,hostSigningKey,warmTaskSigningKey,legacyToken];
+ if(new Set(values).size!==values.length)throw configurationError();
+}
+function warmTimestamps(g:{issued_at:unknown;expires_at:unknown}):{issued:number;expires:number} {
+ for(const timestamp of [g.issued_at,g.expires_at]) {
+  if(typeof timestamp!=='string'||!Number.isFinite(Date.parse(timestamp))||new Date(timestamp).toISOString()!==timestamp)throw configurationError();
+ }
+ const issued=Math.floor(Date.parse(g.issued_at as string)/1000),expires=Math.floor(Date.parse(g.expires_at as string)/1000);
+ const duration=expires*1000-issued*1000;
+ if(duration<1000||duration>300000)throw configurationError();
+ return {issued,expires};
+}
+function warmHostGrant(value:unknown):WarmHostGrant {
+ if(!value||typeof value!=='object'||Array.isArray(value))throw configurationError();
+ const g=value as WarmHostGrant;
+ if(Object.keys(g).sort().join(',')!=='boot_id,epoch,expires_at,generation_sha256,installation_id,issued_at,transition_id'||
+  typeof g.installation_id!=='string'||!g.installation_id||g.installation_id.length>256||
+  typeof g.boot_id!=='string'||!grantIdentifier.test(g.boot_id)||typeof g.transition_id!=='string'||!grantIdentifier.test(g.transition_id)||
+  typeof g.generation_sha256!=='string'||!/^[a-f0-9]{64}$/.test(g.generation_sha256)||!Number.isSafeInteger(g.epoch)||g.epoch<1)throw configurationError();
+ warmTimestamps(g);
+ return {installation_id:g.installation_id,epoch:g.epoch,boot_id:g.boot_id.toLowerCase(),transition_id:g.transition_id.toLowerCase(),
+  generation_sha256:g.generation_sha256,issued_at:g.issued_at,expires_at:g.expires_at};
+}
+/** Host executor authority: bound to the immutable generation digest, not model
+ * tasks. Issued only while the generation is BOOTING and live. */
+export async function issueWarmHostToken(grant:WarmHostGrant,secret:string):Promise<string> {
+ const g=warmHostGrant(grant),key=taskSigningKey(secret),{issued,expires}=warmTimestamps(g);
+ return new SignJWT({grant:g}).setProtectedHeader({alg:'HS256',typ:warmHostTokenType})
+  .setIssuer(`hehebot:${g.installation_id}`).setAudience(warmHostAudience).setSubject(g.boot_id)
+  .setIssuedAt(issued).setNotBefore(issued).setExpirationTime(expires).sign(key);
+}
+export async function verifyWarmHostToken(request:Request,secret:string,expectedInstallationId:string,now=new Date()):Promise<WarmHostGrant> {
+ const key=taskSigningKey(secret);
+ if(!expectedInstallationId)throw configurationError();
+ const authorization=request.headers.get('Authorization')??'';
+ if(!authorization.startsWith('Bearer ')||authorization.length>16384)throw unauthorized();
+ try{
+  const {payload}=await jwtVerify(authorization.slice(7),key,{algorithms:['HS256'],typ:warmHostTokenType,
+   issuer:`hehebot:${expectedInstallationId}`,audience:warmHostAudience,currentDate:now,clockTolerance:0,
+   requiredClaims:['iss','aud','sub','iat','nbf','exp','grant']});
+  const grant=warmHostGrant(payload.grant);
+  if(Object.keys(payload).sort().join(',')!=='aud,exp,grant,iat,iss,nbf,sub'||payload.sub!==grant.boot_id||
+   payload.iat!==warmTimestamps(grant).issued||payload.exp!==warmTimestamps(grant).expires||
+   grant.installation_id!==expectedInstallationId||!Number.isFinite(now.getTime())||
+   Date.parse(grant.issued_at)>now.getTime()||Date.parse(grant.expires_at)<=now.getTime())throw unauthorized();
+  return grant;
+ }catch{throw unauthorized();}
+}
+export interface WarmTaskGrant extends WarmHostGrant {
+ owner_binding_sha256:string;run_id:string;attempt:number;manifest_sha256:string;
+}
+const warmTaskAudience='hehebot-warm-task';
+const warmTaskTokenType='hehebot-warm-task+jwt';
+function warmTaskGrant(value:unknown):WarmTaskGrant {
+ if(!value||typeof value!=='object'||Array.isArray(value))throw configurationError();
+ const g=value as WarmTaskGrant;
+ if(Object.keys(g).sort().join(',')!=='attempt,boot_id,epoch,expires_at,generation_sha256,installation_id,issued_at,manifest_sha256,owner_binding_sha256,run_id,transition_id'||
+  typeof g.owner_binding_sha256!=='string'||!/^[a-f0-9]{64}$/.test(g.owner_binding_sha256)||
+  typeof g.manifest_sha256!=='string'||!/^[a-f0-9]{64}$/.test(g.manifest_sha256)||
+  typeof g.run_id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[0-9a-f]{12}$/.test(g.run_id)||
+  !Number.isSafeInteger(g.attempt)||g.attempt!==1)throw configurationError();
+ const host=warmHostGrant({installation_id:g.installation_id,epoch:g.epoch,boot_id:g.boot_id,transition_id:g.transition_id,
+  generation_sha256:g.generation_sha256,issued_at:g.issued_at,expires_at:g.expires_at});
+ return {...host,owner_binding_sha256:g.owner_binding_sha256,run_id:g.run_id,attempt:g.attempt,manifest_sha256:g.manifest_sha256};
+}
+/** Model-facing task authority: separately signed, bound to one exact persisted
+ * run/attempt/manifest/generation. Never reaches host lifecycle routes. */
+export async function issueWarmTaskToken(grant:WarmTaskGrant,secret:string):Promise<string> {
+ const g=warmTaskGrant(grant),key=taskSigningKey(secret),{issued,expires}=warmTimestamps(g);
+ return new SignJWT({grant:g}).setProtectedHeader({alg:'HS256',typ:warmTaskTokenType})
+  .setIssuer(`hehebot:${g.installation_id}`).setAudience(warmTaskAudience).setSubject(g.run_id)
+  .setIssuedAt(issued).setNotBefore(issued).setExpirationTime(expires).sign(key);
+}
+export async function verifyWarmTaskToken(request:Request,secret:string,
+ expected:{installation_id:string;owner_binding_sha256:string},now=new Date()):Promise<WarmTaskGrant> {
+ const key=taskSigningKey(secret);
+ if(!expected.installation_id||!/^[a-f0-9]{64}$/.test(expected.owner_binding_sha256))throw configurationError();
+ const authorization=request.headers.get('Authorization')??'';
+ if(!authorization.startsWith('Bearer ')||authorization.length>16384)throw unauthorized();
+ try{
+  const {payload}=await jwtVerify(authorization.slice(7),key,{algorithms:['HS256'],typ:warmTaskTokenType,
+   issuer:`hehebot:${expected.installation_id}`,audience:warmTaskAudience,currentDate:now,clockTolerance:0,
+   requiredClaims:['iss','aud','sub','iat','nbf','exp','grant']});
+  const grant=warmTaskGrant(payload.grant);
+  if(Object.keys(payload).sort().join(',')!=='aud,exp,grant,iat,iss,nbf,sub'||payload.sub!==grant.run_id||
+   payload.iat!==warmTimestamps(grant).issued||payload.exp!==warmTimestamps(grant).expires||
+   grant.installation_id!==expected.installation_id||grant.owner_binding_sha256!==expected.owner_binding_sha256||
+   !Number.isFinite(now.getTime())||Date.parse(grant.issued_at)>now.getTime()||Date.parse(grant.expires_at)<=now.getTime())throw unauthorized();
+  return grant;
+ }catch{throw unauthorized();}
+}

@@ -18,6 +18,7 @@ import {TokenUsageSnapshots} from './token-usage';
 import {captureWhatsAppReadPolicies} from './whatsapp-access';
 import {OwnerAlpha,ownerAlphaSuccessorSha256} from './owner-alpha';
 import {OwnerAlphaBootstrap} from './owner-alpha-bootstrap';
+import {OwnerAlphaWarm} from './owner-alpha-warm';
 import {TestCampaign} from './test-campaign';
 import {timelineExpirySql} from './timeline-retention';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
@@ -41,13 +42,19 @@ export class ControlCore {
  readonly questions:NativeQuestionLedger;
  readonly ownerAlpha:OwnerAlpha;
  readonly bootstrap:OwnerAlphaBootstrap;
+ readonly warm:OwnerAlphaWarm;
  constructor(public store:Store,public options:Options){
   requireThat(!options.ownerAlpha||!options.executionEnabled,'INVALID_CONFIGURATION','Owner alpha cannot enable production execution.',503);
   requireThat(!options.ownerAlphaSuccessor||!options.executionEnabled,'INVALID_CONFIGURATION','Owner alpha successor cannot enable production execution.',503);
+  requireThat(!options.ownerAlphaWarm||!options.executionEnabled,'INVALID_CONFIGURATION','Warm owner alpha cannot enable production execution.',503);
+  requireThat(!options.ownerAlphaWarm||!options.ownerAlphaBootstrap&&!options.ownerAlphaSuccessor,'INVALID_CONFIGURATION','Warm owner alpha is mutually exclusive with bootstrap and successor configuration.',503);
+  requireThat(!options.ownerAlphaWarm||!options.testCampaignGrant,'INVALID_CONFIGURATION','Warm owner alpha is mutually exclusive with test campaign grants.',503);
+  requireThat(!options.ownerAlphaWarm||!!options.ownerAlpha,'INVALID_CONFIGURATION','Warm owner alpha requires the hosted owner-alpha policy.',503);
   this.ownerAlpha=new OwnerAlpha(store,options.ownerAlpha,()=>this.now());
   this.budget=new BudgetLedger(store,()=>this.now(),options.uuid);
   this.questions=new NativeQuestionLedger(store,new LifecycleCore(store,this),()=>this.now());
   this.bootstrap=new OwnerAlphaBootstrap(this);
+  this.warm=new OwnerAlphaWarm(this);
  }
  now(){return this.options.now().toISOString();}
  schedulePreview(cron:string,timezone:string){
@@ -91,7 +98,7 @@ export class ControlCore {
    this.store.db.transaction(()=>{
     insert('accepted',null,null);
     const resource=this.apply(owner,id,command);
-    if(command.type==='message.send')this.bootstrap.assignNewMessage(owner,id,resource);
+    if(command.type==='message.send'){this.bootstrap.assignNewMessage(owner,id,resource);this.warm.assignNewMessage(owner,id,resource);}
     this.store.db.exec("UPDATE commands SET status='applied',resource_id=? WHERE id=?",resource,id);
    });
   }catch(error){
@@ -198,7 +205,13 @@ export class ControlCore {
     const target=this.store.get<PersonaPut|RoomPut>(command.payload.conversation_id);
     requireThat(target.kind==='persona'||target.kind==='room','INVALID_INPUT','Choose a bot or room.',422);
     const persona=target.kind==='persona'?target.id:(target.body as RoomPut).default_responder_id;
+    // Retained warm custody without configuration denies candidate owner
+    // messages before any event, run or reservation is created.
+    if(!this.options.ownerAlphaWarm&&!this.options.executionEnabled&&target.kind==='persona')this.warm.assertMessageAdmissible(owner,commandId,target.id);
     this.store.event(commandId,target.id,'message.user',owner,null,{text:command.payload.text},now);
+    // With a warm generation configured, a candidate owner message either
+    // admits or the whole command is rejected; no orphan unassigned run.
+    if(this.options.ownerAlphaWarm&&!this.options.executionEnabled&&target.kind==='persona')this.warm.assertMessageAdmissible(owner,commandId,target.id);
     return this.enqueue(persona,command.payload.text,commandId,null,null,target.kind==='room'?target.id:null);
    }
    case 'persona.put': {
@@ -497,7 +510,7 @@ export class ControlCore {
  enqueue(personaId:string,instruction:string,commandId:string|null,routineId:string|null,occurrenceId:string|null,roomId:string|null=null,skill?:StoredObject<SkillBody>):string {
   const id=this.options.uuid(),now=this.now(),context=this.context(personaId,instruction,routineId,roomId,commandId);
   if(skill){context.skills=[skill];context.skill_invocation={skill_id:skill.id,skill_revision:skill.revision};}
-  const admitted=this.options.executionEnabled||(!this.bootstrap.assignedManifest()&&this.ownerAlpha.available()&&this.ownerAlpha.directMessage(personaId,commandId,routineId,occurrenceId,roomId));
+  const admitted=this.options.executionEnabled||(!this.bootstrap.assignedManifest()&&this.ownerAlpha.available()&&this.ownerAlpha.directMessage(personaId,commandId,routineId,occurrenceId,roomId))||this.warmMessageAdmitted(personaId,commandId,routineId,occurrenceId,roomId);
   let status=admitted?'queued':'waiting',reason:string|null=admitted?null:'CAPABILITY_UNAVAILABLE';
   this.store.db.exec('INSERT INTO runs(id,command_id,occurrence_id,persona_id,routine_id,context_json,status,error_code,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',id,commandId,occurrenceId,personaId,routineId,JSON.stringify(context),status,reason,now,now);
   if(this.budget.blocks(this.store.run(id))){
@@ -509,6 +522,11 @@ export class ControlCore {
  }
  private noteRunnable(){
   this.store.db.exec("UPDATE lifecycle SET queue_sequence=queue_sequence+1,desired_state='RUN',stop_token=CASE WHEN phase='DRAINING' THEN NULL ELSE stop_token END,wake_after_stop=CASE WHEN phase IN ('STOP_COMMITTED','STOPPING') THEN 1 ELSE wake_after_stop END,phase=CASE WHEN phase='DRAINING' THEN 'READY' ELSE phase END WHERE singleton=1");
+ }
+ private warmMessageAdmitted(persona:string,commandId:string|null,routine:string|null,occurrence:string|null,room:string|null):boolean{
+  // Validation-only warm candidate gate; the warm generation itself is appended
+  // atomically by assignNewMessage within the same accept transaction.
+  return this.warm.messageAdmitted(persona,commandId,routine,occurrence,room);
  }
  private publishRoom(owner:string,commandId:string,p:RoomPublish):string {
   const room=this.store.get<RoomPut>(p.room_id,'room');
@@ -558,9 +576,12 @@ export class ControlCore {
   const previews=new OutputPreviews(this.store,()=>now);
   const usage=new TokenUsageSnapshots(this.store,()=>now);
   const questions=this.questions.list();
-  const alpha=this.ownerAlpha.summary(),policy=alpha?.policy,bootstrap=this.bootstrap.summary();
+  const alpha=this.ownerAlpha.summary(),policy=alpha?.policy,bootstrap=this.bootstrap.summary(),warm=this.warm.summary();
+  // A warm generation is a separate versioned contract: legacy session and
+  // bootstrap summaries stay unavailable while it is configured or retained.
+  const warmActive=!!this.options.ownerAlphaWarm||!!warm;
   let alphaSummary:{owner_alpha?:true;owner_alpha_session?:{persona_id:string;expires_at:string;max_runs:number;admitted_runs:number;max_task_seconds:number}}={};
-  if(policy){
+  if(policy&&!warmActive){
    alphaSummary={owner_alpha:true,owner_alpha_session:{persona_id:policy.persona_id,expires_at:policy.expires_at,max_runs:policy.max_runs,admitted_runs:alpha.admittedRuns,max_task_seconds:policy.max_task_seconds}};
   }
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
@@ -580,7 +601,7 @@ export class ControlCore {
    token_usage_snapshots:runs.flatMap(run=>{const value=usage.read(run.id,run.current_attempt);return value?[value]:[];}),
    recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run,questions)),
    runs:runs.map(({context_json,checkpoint_json,...rest})=>rest),
-   summary:{...alphaSummary,...(bootstrap?{owner_alpha_bootstrap:bootstrap}:{}),phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},
+   summary:{...alphaSummary,...(bootstrap&&!warmActive?{owner_alpha_bootstrap:bootstrap}:{}),...(warm?{owner_alpha_warm:warm}:{}),phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},
    timeline:after===undefined?this.store.latestEvents(now):undefined};
  }
  taskPage(conversationId:string,after?:string,limit=10){

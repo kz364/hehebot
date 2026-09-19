@@ -1,11 +1,11 @@
 import {FlightRestoreIntegration} from '../core/flight-integration';
 import connectorCatalog from '../../config/connector-catalog.json';
 import { DurableObject } from 'cloudflare:workers';
-import {assertBootstrapSecrets,bindOwnerAuth,issueRuntimeTaskToken,type RuntimeGenerationAuthority,type RuntimeTaskGrant} from './auth';
+import {assertBootstrapSecrets,assertWarmSecrets,bindOwnerAuth,issueRuntimeTaskToken,issueWarmHostToken,issueWarmTaskToken,type RuntimeGenerationAuthority,type RuntimeTaskGrant,type WarmHostGrant,type WarmTaskGrant} from './auth';
 import {migrateApplication} from '../core/migrations';
 import {NativeTaskLedger} from '../core/native-tasks';
 import {ResourceLedger} from '../core/resources';
-import { rpcResult } from './rpc';
+import { rpcResult, type RpcResult } from './rpc';
 import schema from '../../DB/schema.sql';
 import { Store, type Database, type SqlValue } from '../core/store';
 import { ControlCore } from '../core/control';
@@ -28,6 +28,7 @@ import {AgentCommandBoundary} from '../core/agent-commands';
 import {parseWhatsAppReadPolicies,WhatsAppReadAccess} from '../core/whatsapp-access';
 import {parseHostedOwnerAlpha,parseOwnerAlpha,parseOwnerAlphaSuccessor} from '../core/owner-alpha';
 import {parseOwnerAlphaBootstrap,type OwnerAlphaRetirement} from '../core/owner-alpha-bootstrap';
+import {parseOwnerAlphaWarm,type WarmGenerationView,type WarmManifest} from '../core/owner-alpha-warm';
 import {HostedWakeDeliveryError,parseHostedOwnerWake,sendHostedOwnerWake,type HostedOwnerWake} from './hosted-owner-wake';
 import {TestCampaign,parseTestCampaignGrant} from '../core/test-campaign';
 import {parseTestAuthConfig} from './test-auth';
@@ -59,6 +60,7 @@ export class PersonalControl extends DurableObject<Env> {
   const hosted=parseHostedOwnerAlpha(env.HEHEBOT_HOSTED_OWNER_ALPHA,env);
   const successor=parseOwnerAlphaSuccessor(env.HEHEBOT_OWNER_ALPHA_SUCCESSOR);
   const bootstrap=parseOwnerAlphaBootstrap(env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP);
+  const warm=parseOwnerAlphaWarm(env.HEHEBOT_OWNER_ALPHA_WARM_GENERATION);
   const testAccess=parseTestAuthConfig(env.HEHEBOT_TEST_ACCESS,env),testGrant=parseTestCampaignGrant(env.HEHEBOT_TEST_CAMPAIGN);
   requireThat(!!testAccess===!!testGrant&&(!testGrant||testAccess&&testGrant.actor_id===`test-service:${testAccess.client_id}`&&
    testGrant.expires_at===testAccess.expires_at&&bootstrap&&bootstrap.owner_id===testGrant.actor_id&&
@@ -66,19 +68,22 @@ export class PersonalControl extends DurableObject<Env> {
    'INVALID_CONFIGURATION','Test service identity and bounded capability grant must match.',503);
   requireThat(!bootstrap||!!hosted&&bootstrap.installation_id===env.INSTALLATION_ID&&bootstrap.owner_id===(testGrant?.actor_id??env.OWNER_SUB),
    'INVALID_CONFIGURATION','Automatic owner alpha requires the authenticated hosted installation.',503);
+  requireThat(!warm||!!hosted&&!bootstrap&&!successor&&!env.HEHEBOT_OWNER_ALPHA&&warm.installation_id===env.INSTALLATION_ID&&warm.owner_id===(testGrant?.actor_id??env.OWNER_SUB),
+   'INVALID_CONFIGURATION','Warm owner alpha requires its own authenticated hosted installation.',503);
   if(bootstrap)assertBootstrapSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
+  if(warm)assertWarmSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_HOST_SIGNING_KEY,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
   requireThat(!successor||!!hosted,'INVALID_CONFIGURATION','Owner-alpha successor requires the original hosted owner-alpha configuration.',503);
   this.hostedOwnerAlpha=!!hosted;
-  this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN,!!bootstrap);
-  requireThat(!bootstrap||!!this.hostedWake,'INVALID_CONFIGURATION','Automatic owner alpha requires its private wake destination.',503);
-  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN,!!bootstrap||!!warm);
+  requireThat(!(bootstrap||warm)||!!this.hostedWake,'INVALID_CONFIGURATION','Automatic owner alpha requires its private wake destination.',503);
+  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:warm?hosted?.policy:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaWarm:warm,ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
   try{idleMode=createProvider(JSON.parse(env.PROVIDER_CONFIG) as ProviderConfig).capabilities.stopMode==='provider-idle';}catch{}
   this.lifecycle=new LifecycleCore(this.store,this.core,{idleMode});
   this.flights=new FlightRestoreIntegration(this.store,this.core,this.lifecycle,{enabled:env.FLIGHT_RESTORE_VERIFIED==='true',policyId:env.FLIGHT_RESTORE_POLICY_ID??''});
-  this.ctx.blockConcurrencyWhile(async()=>{
+  this.ctx.blockConcurrencyWhile(async()=>{try{
    if(!db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_versions'").length)db.exec(schema.replace('PRAGMA foreign_keys = ON;',''));
    migrateApplication(db,this.core.now());
    this.ownerBindingSha256=db.transaction(()=>{
@@ -86,6 +91,7 @@ export class PersonalControl extends DurableObject<Env> {
     requireThat(!hosted||hosted.ownerBindingSha256===digest,'OWNER_BINDING_MISMATCH','Hosted owner binding differs from configuration.',503);
     requireThat(!successor||successor.owner_binding_sha256===digest,'OWNER_BINDING_MISMATCH','Successor owner binding differs from authenticated custody.',503);
     requireThat(!bootstrap||bootstrap.owner_binding_sha256===digest,'OWNER_BINDING_MISMATCH','Automatic owner binding differs from authenticated custody.',503);
+    requireThat(!warm||warm.owner_binding_sha256===digest,'OWNER_BINDING_MISMATCH','Warm owner binding differs from authenticated custody.',503);
     return digest;
    });
    this.core.options.ownerBindingSha256=this.ownerBindingSha256;
@@ -102,7 +108,21 @@ export class PersonalControl extends DurableObject<Env> {
     const existing=db.all<{revision:number;body_json:string}>('SELECT revision,body_json FROM objects WHERE id=?',id)[0];
     if(!existing||existing.body_json!==JSON.stringify(policy))this.store.put(id,'trigger',policy,existing?.revision??0,'operator',this.core.now());
    }
-  });
+  }catch(error){
+   // A failed owner-binding check must leave the Durable Object fail-closed,
+   // never serving half-initialized custody. Every RPC rejects with this exact
+   // error. Other initialization failures keep their existing behavior.
+   if(error instanceof ControlError&&error.code==='OWNER_BINDING_MISMATCH')this.initializationFailure=error;
+   throw error;
+  }});
+ }
+ private initializationFailure:ControlError|undefined;
+ /** Fail closed with the exact initialization failure instead of serving a
+  * half-initialized Durable Object. */
+ private rpc<T>(fn:()=>T|Promise<T>):Promise<RpcResult<T>>{
+  const failure=this.initializationFailure;
+  if(failure)return Promise.resolve({ok:false,error:safeError(failure),status:failure.status});
+  return rpcResult(fn);
  }
  private rate(subject:string,limit:number){
   const window=Math.floor(Date.now()/60000);
@@ -129,7 +149,7 @@ export class PersonalControl extends DurableObject<Env> {
   new OutputPreviews(this.store,()=>this.core.now()).prune();
   new TokenUsageSnapshots(this.store,()=>this.core.now()).prune();
  }
- async accept(owner:string,key:string,hash:string,input:unknown){return rpcResult(async()=>{
+ async accept(owner:string,key:string,hash:string,input:unknown){return this.rpc(async()=>{
   // Even rejected activation must leave retained predecessor history untouched.
   // Core.accept still validates the complete envelope and idempotency receipt.
   const activation=!!input&&typeof input==='object'&&'type' in input&&input.type==='owner-alpha.activate';
@@ -138,37 +158,37 @@ export class PersonalControl extends DurableObject<Env> {
   if(!activation||result.status==='applied')await this.arm();
   return result;
  });}
- submitTest(actor:string,campaignId:string,key:string){return rpcResult(async()=>{
+ submitTest(actor:string,campaignId:string,key:string){return this.rpc(async()=>{
   requireThat(this.core.options.testCampaignGrant?.campaign_id===campaignId,'FORBIDDEN','Test campaign is unavailable.',403);
   this.rate(actor+':test-write',2);
   const result=new TestCampaign(this.core).submit(actor,key);
   await this.arm();return result;
  });}
- readTest(actor:string,kind:'receipts'|'runs',id:string){return rpcResult(()=>{
+ readTest(actor:string,kind:'receipts'|'runs',id:string){return this.rpc(()=>{
   this.rate(actor+':test-read',60);
   const campaign=new TestCampaign(this.core);
   return kind==='receipts'?campaign.receipt(actor,id):campaign.run(actor,id);
  });}
- getConnectorCatalog(owner:string){return rpcResult(()=>{
+ getConnectorCatalog(owner:string){return this.rpc(()=>{
   this.rate(owner+':read',120);
   requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Connector setup diagnostics are unavailable in owner-alpha sessions.');
   return {scope:'bundled-diagnostic-baseline',runtime_inventory:'unobserved',authority:'not-granted',catalog:structuredClone(connectorCatalog)};
  });}
- getReceipt(owner:string,id:string){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receipt(id);});}
- getSchedulePreview(owner:string,cron:string,timezone:string){return rpcResult(()=>{this.rate(owner+':schedule-preview',30);return this.core.schedulePreview(cron,timezone);});}
- getRoutinePreflight(owner:string,id:string){return rpcResult(()=>{this.rate(owner+':schedule-preview',30);return this.core.routinePreflight(id);});}
- getSkillHistory(owner:string,id:string,before?:number,limit=10){return rpcResult(()=>{this.rate(owner+':read',120);return new SkillCatalog(this.store,()=>this.core.now(),this.core.options.uuid).history(id,before,limit);});}
- async getState(owner:string,after?:number,limit=100){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return {...this.core.state(after,limit),provider:this.providerSummary()};});}
- getTasks(owner:string,id:string,after?:string,limit=10){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.taskPage(id,after,limit);});}
- getRoutineTasks(owner:string,id:string,after?:string,limit=10){return rpcResult(()=>{this.rate(owner+':read',120);return this.core.routineTaskPage(id,after,limit);});}
- getRecovery(owner:string,id:string,after?:string,limit=20){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);return this.core.recoveryPage(id,after,limit);});}
- getControlExport(owner:string){return rpcResult(()=>{this.rate(owner+':export',2);return new Blob([exportControl(this.store.db,this.core.now())]).stream();});}
- getTimeline(owner:string,id:string,before?:number){return rpcResult(async()=>{await this.beforeRequest(owner+':read',120);const object=this.store.get(id);requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);const now=this.core.now();const events=this.store.conversationEvents(id,now,before,100);const prunedThrough=this.store.retentionFloor(now,id);return {events,before_cursor:events[0]?.sequence??null,has_more:events.length===100,history_gap:prunedThrough>0,pruned_through:prunedThrough};});}
+ getReceipt(owner:string,id:string){return this.rpc(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receipt(id);});}
+ getSchedulePreview(owner:string,cron:string,timezone:string){return this.rpc(()=>{this.rate(owner+':schedule-preview',30);return this.core.schedulePreview(cron,timezone);});}
+ getRoutinePreflight(owner:string,id:string){return this.rpc(()=>{this.rate(owner+':schedule-preview',30);return this.core.routinePreflight(id);});}
+ getSkillHistory(owner:string,id:string,before?:number,limit=10){return this.rpc(()=>{this.rate(owner+':read',120);return new SkillCatalog(this.store,()=>this.core.now(),this.core.options.uuid).history(id,before,limit);});}
+ async getState(owner:string,after?:number,limit=100){return this.rpc(async()=>{await this.beforeRequest(owner+':read',120);return {...this.core.state(after,limit),provider:this.providerSummary()};});}
+ getTasks(owner:string,id:string,after?:string,limit=10){return this.rpc(async()=>{await this.beforeRequest(owner+':read',120);return this.core.taskPage(id,after,limit);});}
+ getRoutineTasks(owner:string,id:string,after?:string,limit=10){return this.rpc(()=>{this.rate(owner+':read',120);return this.core.routineTaskPage(id,after,limit);});}
+ getRecovery(owner:string,id:string,after?:string,limit=20){return this.rpc(async()=>{await this.beforeRequest(owner+':read',120);return this.core.recoveryPage(id,after,limit);});}
+ getControlExport(owner:string){return this.rpc(()=>{this.rate(owner+':export',2);return new Blob([exportControl(this.store.db,this.core.now())]).stream();});}
+ getTimeline(owner:string,id:string,before?:number){return this.rpc(async()=>{await this.beforeRequest(owner+':read',120);const object=this.store.get(id);requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);const now=this.core.now();const events=this.store.conversationEvents(id,now,before,100);const prunedThrough=this.store.retentionFloor(now,id);return {events,before_cursor:events[0]?.sequence??null,has_more:events.length===100,history_gap:prunedThrough>0,pruned_through:prunedThrough};});}
  private providerSummary(){
   try{const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);return {id:provider.id,capabilities:provider.capabilities,live_verified:false};}
   catch{return {id:'unconfigured',capabilities:null,live_verified:false};}
  }
- async trigger(sourceId:string,eventId:string,bodyHash:string,type:string,data:Record<string,unknown>){return rpcResult(async()=>{
+ async trigger(sourceId:string,eventId:string,bodyHash:string,type:string,data:Record<string,unknown>){return this.rpc(async()=>{
   await this.beforeRequest(sourceId+':trigger',120);
   const old=this.store.db.all<{body_hash:string;command_id:string}>('SELECT body_hash,command_id FROM webhook_receipts WHERE source_id=? AND event_id=?',sourceId,eventId)[0];
   if(old){requireThat(old.body_hash===bodyHash,'IDEMPOTENCY_CONFLICT','Event ID already has different content.');return this.core.receipt(old.command_id);}
@@ -187,7 +207,10 @@ export class PersonalControl extends DurableObject<Env> {
   });
   await this.arm();return result;
  });}
- async ownerAlphaManager(type:string,input:unknown){return rpcResult(async()=>{
+ async ownerAlphaManager(type:string,input:unknown){return this.rpc(async()=>{
+  // A warm generation never widens the legacy manager contract; when one is
+  // configured or retained, the legacy manager route stays unavailable.
+  requireThat(!this.core.options.ownerAlphaWarm&&!this.core.warm.retained(),'NOT_FOUND','Route unavailable.',404);
   requireThat(this.hostedOwnerAlpha&&this.core.bootstrap.config,'CAPABILITY_UNAVAILABLE','Automatic owner alpha is not configured.');
   this.rate('owner-alpha-manager',60);
   requireThat(input&&typeof input==='object'&&!Array.isArray(input),'INVALID_INPUT','Invalid manager request.',422);
@@ -203,10 +226,14 @@ export class PersonalControl extends DurableObject<Env> {
   this.core.bootstrap.recordRetirement(input as OwnerAlphaRetirement);
   return {accepted:true};
  });}
- async runtime(input:unknown,authority?:RuntimeGenerationAuthority|RuntimeTaskGrant){return rpcResult(async()=>{
+ async runtime(input:unknown,authority?:RuntimeGenerationAuthority|RuntimeTaskGrant){return this.rpc(async()=>{
   requireThat(validateRuntime(input),'INVALID_INPUT','Invalid runtime envelope.',422);
   const command=input as RuntimeCommand;
   const generation=this.core.ownerAlpha.activeGeneration();
+  // Warm generations are reachable only through the versioned warm routes;
+  // legacy runtime credentials never become a bypass into a warm generation.
+  requireThat(!this.core.options.ownerAlphaWarm&&!(generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-warm-generation'),
+   'NOT_FOUND','Route unavailable.',404);
   if(this.core.bootstrap.config||generation&&'kind' in generation.authority){
    const manifest=this.core.bootstrap.assignedManifest();
    requireThat(this.core.bootstrap.config&&manifest&&authority&&'manifest_sha256' in authority&&
@@ -228,8 +255,18 @@ export class PersonalControl extends DurableObject<Env> {
    }
   }
   const alpha=this.core.ownerAlpha.policy;
-  if(command.type==='status'){const state=this.lifecycle.get();return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{}),...(generation?{owner_alpha_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{}),...(this.hostedOwnerAlpha?{owner_alpha_hosted:true}:{}),...(this.ownerBindingSha256?{owner_binding_sha256:this.ownerBindingSha256}:{})};}
-  requireThat(this.core.options.executionEnabled||alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','token-usage','steer-pending','agent-routines','agent-skill'].includes(command.type)||alpha.text_only&&command.type==='complete'||alpha.background_first_root&&command.type==='native-child'),'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified for this operation.');
+  if(command.type==='status')return this.statusSummary();
+  return this.execute(command,!!alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','token-usage','steer-pending','agent-routines','agent-skill'].includes(command.type)||!!(alpha.text_only&&command.type==='complete')||!!(alpha.background_first_root&&command.type==='native-child')));
+ });}
+ private statusSummary(){
+  const state=this.lifecycle.get(),alpha=this.core.ownerAlpha.policy,generation=this.core.ownerAlpha.activeGeneration();
+  const warm=!!generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-warm-generation';
+  return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{}),
+   ...(generation?warm?{owner_alpha_warm_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{owner_alpha_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{}),
+   ...(this.hostedOwnerAlpha?{owner_alpha_hosted:true}:{}),...(this.ownerBindingSha256?{owner_binding_sha256:this.ownerBindingSha256}:{})};
+ }
+ private async execute(command:RuntimeCommand,allowed:boolean):Promise<unknown>{
+  requireThat(this.core.options.executionEnabled||allowed,'CAPABILITY_UNAVAILABLE','Native execution is not enabled and verified for this operation.');
   if(command.type==='whatsapp-read-authorize')return new WhatsAppReadAccess(this.core,this.lifecycle).authorize(command.payload);
   let result:unknown={ok:true};
   switch(command.type){
@@ -316,6 +353,112 @@ export class PersonalControl extends DurableObject<Env> {
    case 'agent-skill-search':result=new AgentCommandBoundary(this.core,this.lifecycle).searchSkills(command.payload);break;
   }
   await this.arm();return result;
+ }
+ /** Whether a warm generation is retained in this Durable Object's custody. */
+ warmRetained():Promise<RpcResult<boolean>>{return this.rpc(()=>this.core.warm.retained());}
+ /** Manager-only warm endpoints: the launch envelope exists only while the
+  * generation is BOOTING and live; a READY or retired generation never yields a
+  * second launch envelope. Retirement is manager-authenticated, valid after the
+  * generation expiry, idempotent, and settles nothing by itself. */
+ async warmManager(type:string,input:unknown){return this.rpc(async()=>{
+  requireThat(type==='generation'||type==='retirement','NOT_FOUND','Manager route unavailable.',404);
+  if(type==='retirement'){
+   // Retirement of a retained warm generation stays available after its
+   // configuration was removed; persisted custody remains reconstructible.
+   requireThat(this.core.warm.retained(),'CAPABILITY_UNAVAILABLE','Warm generation retirement is unavailable.');
+   this.rate('owner-alpha-warm-manager',60);
+   requireThat(input&&typeof input==='object'&&!Array.isArray(input),'INVALID_INPUT','Invalid manager request.',422);
+   this.core.warm.recordRetirement(input as OwnerAlphaRetirement);
+   return {accepted:true};
+  }
+  requireThat(this.core.options.ownerAlphaWarm,'CAPABILITY_UNAVAILABLE','Warm owner alpha is not configured.');
+  this.rate('owner-alpha-warm-manager',60);
+  requireThat(input&&typeof input==='object'&&!Array.isArray(input)&&Object.keys(input).length===0,'INVALID_INPUT','Generation reads do not select work.',422);
+  const generation=this.core.ownerAlpha.activeGeneration() as WarmGenerationView|undefined;
+  const state=this.lifecycle.get(),now=this.core.now();
+  if(!generation||!('kind' in generation.authority&&generation.authority.kind==='owner-message-warm-generation')||state.epoch!==generation.epoch||state.boot_id!==generation.boot_id||
+   state.phase!=='BOOTING'||Date.parse(generation.policy.expires_at)<=Date.parse(now))return null;
+  const warm=this.core.options.ownerAlphaWarm!;
+  // The host credential is deterministic: issued_at is frozen at the
+  // generation's first admission (its activation) so repeated launch reads at
+  // different times produce the identical credential and zero writes.
+  const grant:WarmHostGrant={installation_id:warm.installation_id,epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id,
+   generation_sha256:generation.authority.generation_sha256,issued_at:generation.authority.admissions[0].issued_at,expires_at:generation.policy.expires_at};
+  return {schema_version:1,kind:'owner-alpha-warm-launch-v1',
+   generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id,session_id:generation.policy.session_id,
+    generation_sha256:generation.authority.generation_sha256,
+    policy:{persona_id:generation.policy.persona_id,expires_at:generation.policy.expires_at,max_runs:generation.policy.max_runs,max_task_seconds:generation.policy.max_task_seconds,text_only:generation.policy.text_only},
+    predecessor:{epoch:generation.predecessor.epoch,boot_id:generation.predecessor.boot_id,session_id:generation.predecessor.session_id}},
+   host_credential:{grant,token:await issueWarmHostToken(grant,this.env.HEHEBOT_OWNER_ALPHA_HOST_SIGNING_KEY!)}};
+ });}
+ /** Versioned warm host/task routes. Host authority is bound to the immutable
+  * generation digest and reaches only the host allowlist; task authority is
+  * separately signed and reaches only model-facing task reads. Crossed or
+  * expired credentials, foreign run IDs and nested child/operation targets are
+  * denied. Legacy credentials never reach these routes. */
+ async warmRuntime(type:string,input:unknown,authority:WarmHostGrant|WarmTaskGrant,mode:'host'|'task'){return this.rpc(async()=>{
+  requireThat(validateRuntime({type,payload:input}),'INVALID_INPUT','Invalid runtime envelope.',422);
+  const command={type,payload:input} as RuntimeCommand;
+  const generation=this.core.ownerAlpha.activeGeneration() as WarmGenerationView|undefined;
+  requireThat(generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-warm-generation','STALE_EPOCH','Warm generation is not active.',409);
+  const state=this.lifecycle.get();
+  requireThat(state.epoch===generation.epoch&&state.boot_id===generation.boot_id&&!['STOPPED','RECOVERY_REQUIRED'].includes(state.phase),'STALE_EPOCH','Warm generation is no longer live.',409);
+  requireThat(authority.epoch===generation.epoch&&authority.boot_id.toLowerCase()===generation.boot_id&&
+   authority.transition_id.toLowerCase()===generation.transition_id&&authority.generation_sha256===generation.authority.generation_sha256,
+   'STALE_EPOCH','Credential is not bound to the active warm generation.',409);
+  const manifestFor=(runId:string):WarmManifest|undefined=>generation.authority.admissions.find(item=>item.run_id===runId);
+  if(mode==='task'){
+   requireThat(type==='agent-routines'||type==='agent-skill','FORBIDDEN','Warm task credential cannot reach this route.',403);
+   const task=authority as WarmTaskGrant;
+   const p=command.payload as {identity?:{epoch?:number;boot_id?:string};run_id?:unknown;attempt?:unknown};
+   requireThat(p.identity?.epoch===generation.epoch&&p.identity.boot_id?.toLowerCase()===generation.boot_id,'STALE_EPOCH','Runtime payload is not bound to the active generation.',409);
+   requireThat(p.run_id===task.run_id&&p.attempt===1,'FORBIDDEN','Task credential cannot address another run.',403);
+   requireThat(manifestFor(task.run_id)?.manifest_sha256===task.manifest_sha256,'STALE_EPOCH','Task credential is not bound to an admitted manifest.',409);
+   return this.execute(command,true);
+  }
+  requireThat(['boot','ready','claim','heartbeat','submitted','coordinator-release','complete','status','output-preview','token-usage','steer-pending'].includes(type),
+   'FORBIDDEN','Warm host credential cannot reach this route.',403);
+  if(type==='boot'){
+   requireThat(state.phase==='BOOTING','STALE_EPOCH','No boot is expected.',409);
+   requireThat(command.payload&&typeof command.payload==='object'&&!Array.isArray(command.payload)&&Object.keys(command.payload).join(',')==='boot_id'&&
+    (command.payload as {boot_id:unknown}).boot_id===generation.boot_id,'STALE_EPOCH','Runtime boot identity is not authorized.',409);
+  }else if(type!=='status'){
+   const identity=(command.payload as {identity?:{epoch?:number;boot_id?:string}}).identity;
+   requireThat(identity?.epoch===generation.epoch&&identity.boot_id?.toLowerCase()===generation.boot_id,'STALE_EPOCH','Runtime payload is not bound to the active generation.',409);
+   if(type==='claim'){
+    // A claim in the frozen deadline's final partial second is rejected before
+    // any claim or attempt mutation: the task credential's exp is the persisted
+    // deadline, never a fresh claim-time window.
+    const next=this.lifecycle.nextClaimableRun();
+    if(next){
+     const pending=manifestFor(next.id);
+     requireThat(pending&&Date.parse(pending.expires_at)-Date.parse(this.core.now())>=1000,
+      'CAPABILITY_UNAVAILABLE','Less than one second remains for the warm task.',409);
+    }
+    const claimed=await this.execute(command,true) as {run:{id:string;current_attempt:number};submission_key:string;deadline_at:string}|null;
+    if(!claimed)return null;
+    const m=manifestFor(claimed.run.id);
+    requireThat(m,'STALE_EPOCH','Claimed run is not admitted by this warm generation.',409);
+    const attempt=this.store.db.all<{started_at:string;attempt:number}>('SELECT started_at,attempt FROM attempts WHERE run_id=? AND attempt=?',m.run_id,claimed.run.current_attempt)[0];
+    requireThat(attempt&&attempt.attempt===1,'STALE_EPOCH','Claimed attempt is not the admitted warm attempt.',409);
+    const grant:WarmTaskGrant={installation_id:m.installation_id,owner_binding_sha256:m.owner_binding_sha256,run_id:m.run_id,attempt:1,
+     manifest_sha256:m.manifest_sha256,epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id,
+     generation_sha256:generation.authority.generation_sha256,issued_at:attempt.started_at,expires_at:m.expires_at};
+    return {schema_version:1,kind:'owner-alpha-warm-claim-v1',run:claimed.run,submission_key:claimed.submission_key,deadline_at:m.expires_at,
+     text_only:m.text_only,manifest:m,task_credential:{grant,token:await issueWarmTaskToken(grant,this.env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY!)}};
+   }
+   // Every run reference in the payload — top level, heartbeat operations and
+   // steering targets — must be an admitted run at its admitted attempt.
+   const admitted=new Set(generation.authority.admissions.map(m=>m.run_id));
+   const check=(runId:unknown,attempt:unknown)=>requireThat(runId&&typeof runId==='string'&&admitted.has(runId)&&attempt===1,
+    'FORBIDDEN','Host credential cannot address another run.',403);
+   const p=command.payload as {run_id?:unknown;attempt?:unknown;operations?:{run_id:unknown;attempt:unknown}[];targets?:{run_id:unknown;attempt:unknown}[]};
+   if('run_id' in p)check(p.run_id,p.attempt);
+   for(const op of p.operations??[])check(op.run_id,op.attempt);
+   for(const target of p.targets??[])check(target.run_id,target.attempt);
+  }
+  if(type==='status')return this.statusSummary();
+  return this.execute(command,true);
  });}
  private async arm(delayMs=0):Promise<void>{
   const generation=this.core.ownerAlpha.activeGeneration();

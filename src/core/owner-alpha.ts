@@ -1,8 +1,9 @@
 import {createHash} from 'node:crypto';
-import { requireThat } from './errors';
+import { ControlError, requireThat } from './errors';
 import type { Store } from './store';
 import type { Run } from './types';
 import {ownerAlphaManifestSha256,parseOwnerAlphaUnusedRecovery,assertUnusedRecoveryCustody,parseOwnerAlphaClaimedPreTurnQuarantine,assertClaimedPreTurnQuarantineCustody,type ClaimedPreTurnMessageBoundAuthority,type OwnerAlphaClaimedPreTurnDisposition,type UnusedMessageBoundAuthority,type OwnerAlphaUnusedDisposition,type MessageBoundAuthority,type OwnerAlphaManifest,type OwnerAlphaBootstrapConfig} from './owner-alpha-bootstrap';
+import {warmAdmissionsView,validateWarmGenerationView,type WarmManifest,type WarmMessageBoundAuthority,type WarmGenerationView} from './owner-alpha-warm';
 
 export type TextOnlyProfile={profile_version:'codex-text-only-v1';profile_sha256:string};
 export type OwnerAlphaPolicy = { session_id:string; persona_id:string; expires_at:string; max_runs:number; max_task_seconds:number; background_first_root?:true;text_only?:TextOnlyProfile };
@@ -94,11 +95,11 @@ export function parseHostedOwnerAlpha(value:string|undefined,env:HostedOwnerAlph
   typeof envelope.owner_binding_sha256==='string'&&/^[0-9a-f]{64}$/.test(envelope.owner_binding_sha256),'INVALID_CONFIGURATION','Invalid hosted owner-alpha envelope.',503);
  return {policy:parsePolicy(envelope.policy),ownerBindingSha256:envelope.owner_binding_sha256};
 }
-type Custody={policy:OwnerAlphaPolicy;admitted_run_ids:string[];binding?:OwnerAlphaManifest};
+type Custody={policy:OwnerAlphaPolicy;admitted_run_ids:string[];binding?:OwnerAlphaManifest;warm?:{manifests:WarmManifest[]}};
 export type OwnerAlphaGeneration={
  epoch:number;boot_id:string;transition_id:string;policy:OwnerAlphaPolicy&{text_only:TextOnlyProfile};
  predecessor:{epoch:number;boot_id:string;session_id:string;phase:string;lease_until:string|null};
- authority:OwnerAlphaSuccessor|MessageBoundAuthority|UnusedMessageBoundAuthority|ClaimedPreTurnMessageBoundAuthority;activation_command_id:string;activation_command_sha256:string;activation_event_sequence:number;
+ authority:OwnerAlphaSuccessor|MessageBoundAuthority|UnusedMessageBoundAuthority|ClaimedPreTurnMessageBoundAuthority|WarmMessageBoundAuthority;activation_command_id:string;activation_command_sha256:string;activation_event_sequence:number;
 };
 /** Immutable local-session policy; each durable admitted ID consumes one run forever. */
 export class OwnerAlpha {
@@ -111,7 +112,7 @@ export class OwnerAlpha {
     generation.predecessor?.epoch===generation.epoch-1&&generation.predecessor.phase==='RECOVERY_REQUIRED'&&uuid.test(generation.activation_command_id),
     'INVALID_CONFIGURATION','Invalid owner-alpha generation record.',503);
    const command=this.store.db.all<{payload_json:string;body_hash:string;type:string;owner_id:string;status:string;resource_id:string;accepted_at:string}>('SELECT payload_json,body_hash,type,owner_id,status,resource_id,accepted_at FROM commands WHERE id=?',generation.activation_command_id)[0];
-   if('kind' in generation.authority){
+   if('kind' in generation.authority&&generation.authority.kind!=='owner-message-warm-generation'){
     const m=generation.authority.manifest;
     const run=this.store.db.all<Run>('SELECT * FROM runs WHERE id=?',m.run_id)[0];
     const policyRow=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_bootstrap_policy:${m.policy_revision}`)[0];
@@ -142,7 +143,7 @@ export class OwnerAlpha {
      requireThat((quarantine||generation.authority.kind==='owner-message-unused-recovery')&&row&&priorRow&&createHash('sha256').update(row.value_json).digest('hex')===generation.authority.disposition_sha256,'INVALID_CONFIGURATION','Disposition binding is missing.',503);
      const disposition=JSON.parse(row.value_json) as OwnerAlphaUnusedDisposition|OwnerAlphaClaimedPreTurnDisposition,grant=quarantine?parseOwnerAlphaClaimedPreTurnQuarantine(disposition.grant):parseOwnerAlphaUnusedRecovery(disposition.grant),prior=JSON.parse(priorRow.value_json) as OwnerAlphaGeneration;
      requireThat(Object.keys(disposition).sort().join(',')==='grant,successor_epoch,successor_manifest_sha256,successor_run_id'&&JSON.stringify(grant)===JSON.stringify(disposition.grant)&&
-      'kind' in prior.authority&&disposition.successor_epoch===m.epoch&&disposition.successor_run_id===m.run_id&&disposition.successor_manifest_sha256===m.manifest_sha256&&
+      'kind' in prior.authority&&prior.authority.kind!=='owner-message-warm-generation'&&disposition.successor_epoch===m.epoch&&disposition.successor_run_id===m.run_id&&disposition.successor_manifest_sha256===m.manifest_sha256&&
       grant.predecessor.epoch===generation.predecessor.epoch&&grant.predecessor.boot_id===generation.predecessor.boot_id&&grant.predecessor.session_id===generation.predecessor.session_id&&
       grant.successor_policy_revision===m.policy_revision&&grant.installation_id===m.installation_id&&grant.owner_binding_sha256===m.owner_binding_sha256&&m.expires_at<=grant.expires_at&&
       generation.predecessor.lease_until!==null&&generation.predecessor.lease_until<=m.issued_at,'INVALID_CONFIGURATION','Disposition differs from its successor.',503);
@@ -170,11 +171,34 @@ export class OwnerAlpha {
    requireThat(generation.epoch===i+2&&(!prior||generation.predecessor.boot_id===prior.boot_id&&generation.predecessor.session_id===prior.policy.session_id&&generation.activation_event_sequence>prior.activation_event_sequence),
     'INVALID_CONFIGURATION','Owner-alpha generation chain is not contiguous.',503);
   }
-  const identities=rows.flatMap(g=>[g.boot_id,g.transition_id,g.policy.session_id]);
+  const warmRows=this.store.db.all<{key:string;value_json:string}>("SELECT key,value_json FROM runtime_metadata WHERE key GLOB 'owner_alpha_warm_generation:*' ORDER BY CAST(substr(key,29) AS INTEGER)");
+  requireThat(warmRows.length<=1,'INVALID_CONFIGURATION','Warm generation history is inconsistent.',503);
+  const warm=warmRows.map(row=>{
+   let generation:OwnerAlphaGeneration;
+   try{generation=JSON.parse(row.value_json) as OwnerAlphaGeneration;}catch{throw new ControlError('INVALID_CONFIGURATION','Warm generation record is unreadable.',503);}
+   requireThat(row.key===`owner_alpha_warm_generation:${generation?.epoch}`&&Number.isSafeInteger(generation?.epoch)&&generation.epoch>=2,'INVALID_CONFIGURATION','Invalid warm generation record.',503);
+   // The persisted descriptor is write-once and carries no admissions; the
+   // admissions view is reconstructed from separate append-only manifest rows.
+   const persistedAuthority=generation.authority as WarmMessageBoundAuthority;
+   requireThat('kind' in persistedAuthority&&persistedAuthority.kind==='owner-message-warm-generation'&&Array.isArray(persistedAuthority.admissions)&&persistedAuthority.admissions.length===0,
+    'INVALID_CONFIGURATION','Invalid warm generation record.',503);
+   generation={...generation,authority:{...persistedAuthority,admissions:warmAdmissionsView(this.store,generation.epoch)}};
+   validateWarmGenerationView(this.store,generation);
+   return generation as WarmGenerationView;
+  });
+  const all=[...rows,...warm].sort((x,y)=>x.epoch-y.epoch);
+  for(let i=0;i<all.length;i++){
+   const generation=all[i],prior=all[i-1];
+   requireThat(generation.epoch===i+2&&(!prior||generation.predecessor.boot_id===prior.boot_id&&generation.predecessor.session_id===prior.policy.session_id&&generation.activation_event_sequence>prior.activation_event_sequence),
+    'INVALID_CONFIGURATION','Owner-alpha generation chain is not contiguous.',503);
+  }
+  const identities=all.flatMap(g=>[g.boot_id,g.transition_id,g.policy.session_id]);
   requireThat(new Set(identities.map(value=>value.toLowerCase())).size===identities.length,'INVALID_CONFIGURATION','Owner-alpha generation identities are not unique.',503);
-  return rows;
+  return all;
  }
  private generationCustody(generation:OwnerAlphaGeneration):Custody {
+  if('kind' in generation.authority&&generation.authority.kind==='owner-message-warm-generation')return {policy:generation.policy,warm:{manifests:structuredClone(generation.authority.admissions)},admitted_run_ids:this.store.db.all<{run_id:string}>(
+   'SELECT run_id FROM attempts WHERE epoch=? AND boot_id=? ORDER BY run_id',generation.epoch,generation.boot_id).map(row=>row.run_id)};
   return {policy:generation.policy,...('kind' in generation.authority?{binding:generation.authority.manifest}:{}),admitted_run_ids:this.store.db.all<{run_id:string}>(
    'SELECT run_id FROM attempts WHERE epoch=? AND boot_id=? ORDER BY run_id',generation.epoch,generation.boot_id).map(row=>row.run_id)};
  }
@@ -232,7 +256,15 @@ export class OwnerAlpha {
   return this.store.db.all<{count:number}>("SELECT COUNT(*) AS count FROM attempts a JOIN runs r ON r.id=a.run_id WHERE a.epoch=? AND r.role='coordinator' AND r.parent_run_id IS NULL",epoch)[0].count<this.policy.max_runs;
  }
  private custody():Custody{const generation=this.activeGeneration();return generation?this.generationCustody(generation):this.read();}
- cutoff():number{return this.activeGeneration()?.activation_event_sequence??0;}
+ cutoff():number{
+  const generation=this.activeGeneration();
+  if(generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-warm-generation')
+   // Admitted warm messages sit AT their manifest event, not strictly after the
+   // activation event like a legacy generation, so the cutoff is one below the
+   // latest admitted sequence: claim selection uses `sequence > cutoff`.
+   return Math.max(...generation.authority.admissions.map(m=>m.event_sequence))-1;
+  return generation?.activation_event_sequence??0;
+ }
  summary(){const policy=this.policy;if(!policy)return undefined;const custody=this.custody();return {policy,admittedRuns:custody.admitted_run_ids.length,generation:this.activeGeneration()};}
  directMessage(persona:string,commandId:string|null,routine:string|null,occurrence:string|null,room:string|null,cutoff=this.cutoff(),expectedPersona=this.policy?.persona_id):boolean {
   if(!expectedPersona||persona!==expectedPersona||!commandId||routine||occurrence||room)return false;
@@ -241,10 +273,26 @@ export class OwnerAlpha {
   return !!command&&command.type==='message.send'&&!/^(runtime|trigger):/.test(command.owner_id)&&!!event&&event.actor_id===command.owner_id&&event.sequence>cutoff&&JSON.parse(command.payload_json).conversation_id===persona;
  }
  eligible(run:Run):boolean {
-  const binding=this.custody().binding;
+  const custody=this.custody();
+  if(custody.warm){
+   const m=custody.warm.manifests.find(item=>item.run_id===run.id);
+   return !!m&&run.role==='coordinator'&&run.parent_run_id===null&&run.current_attempt===0&&
+    this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null,m.event_sequence-1,custody.policy.persona_id);
+  }
+  const binding=custody.binding;
   return (!binding||run.id===binding.run_id&&run.command_id===binding.command_id)&&run.role==='coordinator'&&run.current_attempt===0&&this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null,binding?binding.event_sequence-1:this.cutoff());
  }
  admit(run:Run):string {
+  const generation=this.activeGeneration();
+  if(generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-warm-generation'){
+   const m=generation.authority.admissions.find(item=>item.run_id===run.id);
+   // A full second must remain so the separately signed task credential always
+   // covers at least one whole JWT second after its deterministic iat; a claim
+   // in the deadline's final partial second is rejected before any attempt row.
+   requireThat(m&&run.current_attempt===0&&this.eligible(run)&&Date.parse(m.expires_at)-Date.parse(this.now())>=1000,
+    'CAPABILITY_UNAVAILABLE','Owner-alpha warm admission is closed.');
+   return m.expires_at;
+  }
   requireThat(this.available()&&this.eligible(run),'CAPABILITY_UNAVAILABLE','Owner-alpha admission is closed.');
   if(!this.activeGeneration()){
    const saved=this.read();saved.admitted_run_ids.push(run.id);
@@ -273,6 +321,13 @@ export class OwnerAlpha {
   if(!run||!row||attempt!==1||run.current_attempt!==1||run.persona_id!==custody.policy.persona_id||row.epoch!==epoch||row.boot_id!==bootId)return false;
   if(custody.binding&&(runId!==custody.binding.run_id||run.command_id!==custody.binding.command_id||epoch!==custody.binding.epoch||bootId!==custody.binding.boot_id))return false;
   const link=this.store.db.all<{parent_run_id:string;parent_attempt:number;native_run_ref:string;native_session_key:string}>('SELECT * FROM native_task_links WHERE run_id=?',runId)[0];
+  if(custody.warm){
+   const m=custody.warm.manifests.find(item=>item.run_id===runId);
+   return !!m&&!link&&row.submission_key===`${runId}:1`&&run.command_id===m.command_id&&epoch===m.epoch&&bootId===m.boot_id&&
+    this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null,m.event_sequence-1,custody.policy.persona_id)&&
+    row.deadline_at===m.expires_at&&row.deadline_at<=custody.policy.expires_at&&
+    Date.parse(row.deadline_at)<=Date.parse(m.issued_at)+custody.policy.max_task_seconds*1000&&Number.isFinite(Date.parse(row.started_at));
+  }
   if(custody.admitted_run_ids.includes(runId))return run.role==='coordinator'&&run.parent_run_id===null&&!link&&row.submission_key===`${runId}:1`&&
    this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,JSON.parse(run.context_json).room_id??null,custody.binding?custody.binding.event_sequence-1:cutoff,custody.policy.persona_id)&&
    Number.isFinite(Date.parse(row.started_at))&&Number.isFinite(Date.parse(row.deadline_at))&&row.deadline_at<=custody.policy.expires_at&&Date.parse(row.deadline_at)<=Date.parse(row.started_at)+custody.policy.max_task_seconds*1000;

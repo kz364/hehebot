@@ -1,7 +1,8 @@
 import { unwrap } from './rpc';
 import { PersonalControl } from './control-object';
-import { assertBootstrapSecrets, authenticateOwner, assertSameOrigin, runtimeGenerationAuthority, verifyRuntimeTaskToken, verifyRuntimeToken, verifyWebhook } from './auth';
+import { assertBootstrapSecrets, assertWarmSecrets, authenticateOwner, assertSameOrigin, runtimeGenerationAuthority, verifyRuntimeTaskToken, verifyRuntimeToken, verifyWarmHostToken, verifyWarmTaskToken, verifyWebhook } from './auth';
 import {parseOwnerAlphaBootstrap} from '../core/owner-alpha-bootstrap';
+import {parseOwnerAlphaWarm} from '../core/owner-alpha-warm';
 import {authenticateTestPrincipal,parseTestAuthConfig} from './test-auth';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { digest, json, parseJson, readBounded } from './http';
@@ -35,7 +36,36 @@ export default {
    if(path.startsWith('/internal/')){
     requireThat(request.method==='POST','NOT_FOUND','Route unavailable.',404);
     const bootstrap=parseOwnerAlphaBootstrap(env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP);
+    const warm=parseOwnerAlphaWarm(env.HEHEBOT_OWNER_ALPHA_WARM_GENERATION);
     if(bootstrap)assertBootstrapSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
+    if(warm)assertWarmSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_HOST_SIGNING_KEY,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
+    if(path.startsWith('/internal/warm/')){
+     requireThat(!bootstrap,'NOT_FOUND','Route unavailable.',404);
+     if(path.startsWith('/internal/warm/manager/')){
+      // Retirement stays reachable for a retained generation even after its
+      // configuration was removed; other manager routes require configuration.
+      requireThat(!!warm||(path==='/internal/warm/manager/retirement'&&unwrap(await control.warmRetained())),'NOT_FOUND','Route unavailable.',404);
+      verifyRuntimeToken(request,env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN!);
+      const type=path.slice('/internal/warm/manager/'.length);
+      return json(unwrap(await control.warmManager(type,parseJson(await readBounded(request)))));
+     }
+     if(path.startsWith('/internal/warm/host/')){
+      requireThat(!!warm,'NOT_FOUND','Route unavailable.',404);
+      const authority=await verifyWarmHostToken(request,env.HEHEBOT_OWNER_ALPHA_HOST_SIGNING_KEY!,env.INSTALLATION_ID);
+      const type=path.slice('/internal/warm/host/'.length);
+      return json(unwrap(await control.warmRuntime(type,parseJson(await readBounded(request)),authority,'host')));
+     }
+     if(path.startsWith('/internal/warm/task/')){
+      requireThat(!!warm,'NOT_FOUND','Route unavailable.',404);
+      const authority=await verifyWarmTaskToken(request,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY!,{installation_id:env.INSTALLATION_ID,owner_binding_sha256:warm.owner_binding_sha256});
+      const type=path.slice('/internal/warm/task/'.length);
+      return json(unwrap(await control.warmRuntime(type,parseJson(await readBounded(request)),authority,'task')));
+     }
+     throw new ControlError('NOT_FOUND','Route unavailable.',404);
+    }
+    // Legacy internal routes fail closed inside the Durable Object when a warm
+    // generation is configured or retained; verification happens there so the
+    // production path gains no extra round trip.
     if(path.startsWith('/internal/manager/')){
      requireThat(!!bootstrap,'NOT_FOUND','Route unavailable.',404);
      verifyRuntimeToken(request,env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN!);
