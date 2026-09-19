@@ -28,7 +28,8 @@ Schedule is enabled; meaningful authorized engineering remains. Producer v2 patc
 host focused7/7 pass (`.local/forward-isolation-host-focused.log`). Launch-floor patch
 82baff050cda7bf633f0aacd89fba7e3608b9c9b787672a153b35e6c71d58797 is integrated;
 runtime/owner-alpha-launch-floor.mjs is pinned in current_sources only. Host combined
-focused80/80, original-profile binding7/7 pass; full verifier running.
+focused80/80, original-profile binding7/7 pass; full verifier passes backend1710,
+runtime550 plus Worker/browser/native/service/build. Desktop16/16 passes.
 Official sprites-js client.ts exposes POST /v1/sprites/{name}/restart, a backing-machine
 restart distinct from Service restart/restore, already used successfully in trial74.
 Current one POST returned202; changed kernel 3c2cba93-3886-406b-b1a0-18fe51815386 is
@@ -42,7 +43,13 @@ native exited. Evidence `.local/forward-isolation-{retained-*,services-*,live-*}
 Original source archive from pre78 revision27088 has adapter/launcher hashes matching
 pre-deployment records; installed privately for source review, not executed.
 Browser worker resumed passive-only exact epoch9 export/readiness. No marker/grant
-or new message. Full verifier PID3117657, log `.local/forward-isolation-integrated-combined.log`.
+or new message. Full verifier exited0, log `.local/forward-isolation-integrated-combined.log`.
+Worker deployed with keep-vars and expired policy unchanged, version
+e52e649b-a54d-472c-9c6a-f7585665aa27; authenticated manager06:13:38Z returns null.
+New template `.local/template-forward-isolation.json` staged on Sprite, manager and
+old template unchanged; new profile hash654c727f3194ce1d4b192fbc507d5b0f24124840d335f38925a6f51e4fb2f91c.
+Private request-builder `.local/forward-isolation-request.mjs` prepared but not run;
+needs exact manifest from passive browser export and fresh readback (<60s).
 
 New startup defect confirmed synthetically on same Sprite: deployed listener
 PID20242 inherited CapInh/Prm/Eff/Bnd/Amb=a82435fb, NoNewPrivs0. Saved Service config

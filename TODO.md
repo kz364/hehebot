@@ -18,13 +18,16 @@ follow-up separates old settlement from safe fresh admission: historical memory 
 remote-ingress activity stay UNKNOWN, rather than requiring impossible absence proof.
 V2 producer and per-launch managed/input validation are integrated and installed with
 source backup/hash verification. Host focused80/80 and original-binding7/7 pass;
-combined verification is running (backend1710/runtime550 passed so far).
+combined verification passes backend1710/runtime550 plus Worker/browser/native/
+service/build; desktop16/16 passes. Worker code deployed with expired policy unchanged,
+authenticated manager06:13:38Z returns null. New profile template is staged, not activated.
 Supported same-Sprite restart returned202, changed kernel observed stable over two
 minutes with all seven retained files unchanged. Directory inodes changed; post-cut
 pins are required. Listener auto-started despite its earlier stop and was stopped
 again; its startup path is HTTP-only. Live launch-floor/readback passes before account
-work. Remaining: exact epoch9 custody review, immutable marker/grant, new profile
-template and Worker deployment, then one bounded fresh message and reload verification.
+work. Remaining: exact epoch9 custody review, immutable marker/grant and new profile
+activation, then one bounded fresh message and reload verification. Browser worker is
+checking custody and readiness passively; no send authority yet.
 Schedule is enabled, not paused. No quarantine marker/grant, fresh message,
 completion or reload verification; retained UNKNOWN/reservations are unchanged.
 

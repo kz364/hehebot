@@ -70,7 +70,12 @@ same-process requirements/config readback pass under both locks and capability d
 native diagnostic exited without thread/account/model calls. Evidence:
 `.local/forward-isolation-{installed.log,live-floor-inspection.json,live-readback.json,
 retained-before.json,retained-after-stable.json,services-after.json}`. Full combined
-verifier continues; no marker/grant or fresh message. Schedule
+verifier exits0: backend1710/runtime550 plus Worker/browser/native/service/build,
+`.local/forward-isolation-integrated-combined.log`; desktop16/16 passes separately.
+Worker source deployed with keep-vars and expired policy unchanged, version
+e52e649b-a54d-472c-9c6a-f7585665aa27. Authenticated manager06:13:38Z returns null.
+New profile template staged separately, old template/manager unchanged; no marker/grant
+or fresh message. Exact epoch9 custody and browser readiness review pending. Schedule
 resumed: the previous pause incorrectly treated historical absence proof as exhaustion
 of all useful authorized work. No new message, replay, settlement or budget reset.
 
