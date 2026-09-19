@@ -4,6 +4,37 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
+## Owner follow-through queue — current priority
+
+Owner instruction, 2026-09-19: record all remaining work and orchestrate implementors
+with scheduled follow-through. Keep this existing `TODO.md` as the sole checklist;
+do not create a competing `todos.md`. This queue supersedes older active-assignment
+and next-priority prose below. Local implementation is authorized; external actions
+still require their applicable approval. Completed fixtures are not live acceptance.
+
+| Done | Order / status | Deliverable and exit evidence |
+| --- | --- | --- |
+| [ ] | **F1a — Active; Stage A automatic shutdown** | Exercise the real warm entrypoint's automatic expiry plus existing 30-second grace, including pending start/maintenance. No test-owned stop may stand in for the timer. Verify bounded stop, preserved identity/uncertainty and no replay; distinguish simulated stop calls from actual native termination. Worker: [automatic shutdown](https://ampcode.com/threads/T-01a0ba7c-fad5-710c-a2e1-099b66e11fb5). |
+| [ ] | **F1b — Active; Stage A Worker wake** | Replace the warm fixture's no-op wake/manual POST seam with actual PersonalControl alarm/sendHostedWake into the warm listener through explicitly synthetic loopback routing. Prove zero passive wake, one exact generation-bound delivery, valid acknowledgement and no second wake for message 2/replay/reload; preserve both native/composer modes. Worker: [Worker wake integration](https://ampcode.com/threads/T-01a0ba7d-641c-76b6-a549-8da2c8e092d2). |
+| [ ] | **F2 — Queued after F1; Stage B / P0.3 / E03** | Implement a separately versioned, default-off background capability, never reinterpret Stage A text-only grants. While isolated task A runs, a status question leaves A unchanged, independent task B has separate authority/context, and explicit steer/cancel targets only its admitted task. Resolve intent, isolation, capacity and supported tool/descendant boundaries; local fixtures do not prove live model judgment. |
+| [ ] | **F3 — Queued; P0.4 / E01–E02** | Verify cancellation, uncertain outcomes, crash/restart/reconnect and recovery for the demonstrated path. Preserve task/effect identity and locks; never blindly replay unknown effects. Prove applicable child/tool/transfer/flush settlement before safe sleep/replacement. Conservative refusal alone is not successful recovery. |
+| [ ] | **F4 — Prepare locally; live trial externally gated / P0.2 / E14** | Prepare the exact bounded owner trial and readiness checklist: actual Access identity, supported Codex subscription/model, Sprite wake, canonical reply and reconnect, cumulative budget evidence and no paid fallback. Run only with applicable explicit deployment/account/live-operation authorization. Local commits are unpushed; publication is a separate approval. |
+| [ ] | **F5 — After usable slice; E05/E07/E09** | Complete required Google/WhatsApp/Messages integrations, adopted routine workflows and browser/computer tasks. Track permissions, per-effect authority, watermarks/dedupe and uncertain effects. Resolve the pinned WhatsApp SDK response-shape blocker through supported upstream changes or separately approved patch review; pairing alone cannot fix it. Connector account access and routine activation remain gated. |
+| [ ] | **F6 — After usable slice; E10–E15** | Complete Mac build/render/device acceptance, coordinated backups and restore, clean installation/upgrade, measured cost/reliability and remaining product acceptance. Use the detailed E01–E15 rows below for scope; keep optional polish behind P0/P1. Mac hardware, account/billing data, signing/release and live infrastructure measurements require their own access/approval. |
+
+**Ownership and scheduling:** this parent owns review, integration, combined verification,
+tracking and user decisions. F1 workers use disjoint files and the exact local
+source-custody bundle at `5d45262`, not origin/main. They report completion directly;
+do not poll them or create duplicate assignments. Start subsequent bounded workers
+only when dependencies and write ownership are clear.
+
+An **Amp development follow-through schedule is enabled every two hours** in this
+thread (schedule ID `b05eb8f2-8407-53d6-a253-e01637ba8f38`). It advances ready local
+work and integrates delivered results; it does not enable Hehebot routines or live
+operations. Clear it on completion, owner stop, or when every remaining item is
+blocked on external approval/access; report exact blockers once rather than loop.
+No-op runs stay quiet. All production gates remain false.
+
 **Active implementation wave (2026-09-19):** owner requested continued implementation
 in new threads; this thread retains integration/verification ownership. GLM5.3 composer
 worker delivered and parent integrated actual portal → local Worker/manager/native →

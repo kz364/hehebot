@@ -4,6 +4,17 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner-directed follow-through (2026-09-19): TODO.md now records the ordered F1–F6
+remaining queue and explicit exit evidence. Two disjoint implementors started from
+the verified local source-custody bundle at 5d45262: automatic warm entrypoint
+expiry/grace and real local Worker-to-warm-listener delivery. Neither is complete
+yet; previous test totals are not evidence for these new gaps. Parent retains
+review, integration and verification. Amp development schedule
+b05eb8f2-8407-53d6-a253-e01637ba8f38 was successfully enabled every two hours,
+existing-thread mode. Worker results arrive by message, not scheduled polling.
+Ready local work proceeds; external-only blockers stop the schedule with an exact
+owner action list. No product routines, deployment, spend or live flags were enabled.
+
 Stage A warm composer integration (2026-09-19, local d76a074): parent reviewed
 patch 79ff88a29b9df9283ef37d83dc7b4e1012397bb2862c84b57e6f57aef83830e6
 and added actual passive-refresh observation and pre-expiry reload assertions.

@@ -4,6 +4,23 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
+Owner now requested the full remaining queue plus scheduled orchestration.
+The top of TODO.md is authoritative: F1a automatic warm entrypoint shutdown and
+F1b actual local Worker wake are active in disjoint GLM5.3 workers, followed by
+Stage B, recovery/sleep safety, gated live-trial preparation and required P1 work.
+Workers: T-01a0ba7c-fad5-710c-a2e1-099b66e11fb5 (entry/tests) and
+T-01a0ba7d-641c-76b6-a549-8da2c8e092d2 (warm script/hosted fixtures).
+Both receive `.local/followthrough-source.bundle` at local source-custody
+5d45262252ff5a3a46c68bc5754235e9828fdde8; SHA256
+14084aa70cc90cea23cdfdf34c644a61281ecb69c839a0d9b747bb9d9c6fdf47.
+Wait for their completion messages; do not duplicate or poll their work.
+Amp schedule b05eb8f2-8407-53d6-a253-e01637ba8f38 is enabled every two hours
+for ready local implementation/integration. This supersedes prior disabled-Amp-
+schedule notes only, not product routine/live-operation restrictions. It clears
+when complete, stopped, or entirely externally blocked. Parent owns review and
+verification; no push/deploy/spend/live-account authorization is inferred.
+The earlier no-active-worker notes below describe the previous checkpoint.
+
 Warm composer patch is integrated at d76a074. Source patch
 `.local/warm-browser-composer.patch` SHA256
 79ff88a29b9df9283ef37d83dc7b4e1012397bb2862c84b57e6f57aef83830e6.
