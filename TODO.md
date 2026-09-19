@@ -4,7 +4,22 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current checkpoint07:09Z: trial80 blocked before send by Chrome/CDP.** Saved owner
+**Current checkpoint07:30Z: trial80 unsent; one manual refresh needed.**
+Authenticated no-send reconciliation07:25:15Z confirms no command/run after trial79,
+epoch10 unchanged and baseline+holds still$4. Host independently reverified exact
+service GET/process argv, manager/template/profile/marker hashes and manager null.
+V5 expired unused; V6 fixed expiry07:36:16.338Z activated,180s session/120s task.
+Automated reload again timed out, but passive read07:29:39Z recovered: correct target/
+persona, V6 admission true, empty composer still readonly and Send disabled. Source
+`public/app.js` intentionally latches changed-policy refusal until page reload; fresh
+state alone cannot clear it. Do not bypass guards or stage more windows against the
+same failing prerequisite. Owner should manually refresh existing portal tab once.
+Installed tool default25s exceeds wrapper15s; whether env10s applied is unknown, so
+neither persistent CDP deadlock nor consent is established. Automated reloads stopped.
+Same exclusive sender may proceed only after fresh valid state AND writable composer.
+No result/reload-persistence claim; no send or added reservation yet.
+Historical browser blocker and earlier preparation follow; they are not current status.
+Saved owner
 authorization permits continued bounded engineering trials without repeated consent;
 the previous request for another human approval was unnecessary. Trial79 is never replayed.
 Exact epoch10 unused marker issued once07:04:43.609Z under dual locks; its transition

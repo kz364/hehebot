@@ -4,6 +4,23 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Trial80 follow-up07:30Z: after owner go-for-it, passive access recovered. Authenticated
+07:25 no-send reconciliation found no new command/run since79, epoch10 and$4 ledger
+unchanged. Host exact service GET/process argv, manager/template/profile/marker hashes
+pass; manager null, no new session directory. Evidence `.local/trial80-host-resume.json`
+and `.local/trial80-service-resume.json`. V5 expired unused; new V6 revision activated
+with fixed07:36:16.338Z expiry, same180s/120s and cumulative$10 ceiling.
+Automation reload again timed out15s, following eval12s. Later passive07:29:39Z read
+returned v6 admission=true/correct persona but empty readonly composer/disabled Send.
+`public/app.js` alphaBlock latches changed policy revision until document reload; fresh
+state alone is not safe readiness and guards must not be removed. Request one manual
+normal refresh of existing portal tab; no further automated reload or fixed-window
+staging against an unresolved prerequisite. No message/result or additional hold.
+Installed CLI0.38.1 documents default action timeout25s, reload without wait-until;
+external15s bound may preempt it, and env10s application to existing daemon unknown.
+Eventual reads disprove persistent CDP deadlock as an established diagnosis. No evidence
+proves consent was the cause. No browser restart/security change or credential copying.
+
 Trial80 preparation (2026-09-19 07:06Z): saved owner continuation authorizes fresh
 bounded trials without repeating consent. Exact authenticated epoch10 custody/zero
 attempts/obligations and persistent-root/source review support existing unused path,

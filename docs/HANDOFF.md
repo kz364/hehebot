@@ -4,7 +4,23 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
-Latest07:09Z: trial80 remains UNSENT. Browser worker's normal reload15s and read-only
+Latest07:30Z: trial80 still UNSENT, no additional reservation. Owner go-for-it resumed
+passive access;07:25 authenticated state/export confirmed no new command/run after79,
+epoch10 unchanged/$4 baseline+holds. Exact service/process/manager/template/profile/
+marker checked again; manager null. V5 expired unused; V6 fixed expiry07:36:16.338Z.
+Second automated reload timed out15s, then eval12s. Later read07:29:39Z works: current
+v6 admission true, correct exact target/persona, composer empty but readonly/Send disabled.
+Source public/app.js alphaBlock permanently latches changed loaded revision until reload;
+cannot substitute fresh state for writable composer. Ask owner manual normal refresh
+of existing Chief of Staff tab ONCE, then read readiness without automated navigation.
+Do not stage another fixed window until prerequisite addressed. Existing sender only;
+never expired v6 send, duplicate, guard bypass or browser restart/security changes.
+Installed agent-browser0.38.1 default action timeout25s vs external15s; env10s behavior
+on existing daemon undocumented. Reload has no wait-until option. Eventual read recovery
+means no persistent deadlock/consent diagnosis established. All bounded subprocesses
+reaped. Post-result persistence must be separately observed, not assumed from reload.
+
+Historical07:09Z: trial80 remains UNSENT. Browser worker's normal reload15s and read-only
 check15s timed out before fill/click. Mac shell responsive; named session info7s and
 independent raw CDP WebSocket handshake5s also timed out. TCP connected but no upgrade
 response, so no targets/readiness retrieved. No repeated reload, browser restart,
