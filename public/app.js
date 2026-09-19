@@ -14,10 +14,83 @@ let memorySearchSelection='';
 let conversationSearchSelection='';
 let alphaSession=null,alphaSeen=false,alphaInvalid=false,alphaExpired=false,alphaDeadline=0,sending=false;
 let bootstrapSession=null;
+// Warm owner-alpha generation state: a separate strict path that never reuses
+// legacy alpha-session/bootstrap fences. warmSession binds the first observed
+// summary; identity, policy deadline, count, and generation identity are then
+// immutable for this page. Terminal states are sticky in sessionStorage so a
+// reload with a rolled-back clock cannot reopen a closed generation.
+let warmSession=null,warmSeen=false,warmInvalid=false,warmPolicyExpired=false,warmGenerationExpired=false;
 const reviewedBootstrapRevisions=new Set();
 const bootstrapFields=['policy_revision','persona_id','expires_at','max_task_seconds'];
 const validBootstrap=value=>value&&typeof value.policy_revision==='string'&&value.policy_revision&&typeof value.persona_id==='string'&&Number.isFinite(Date.parse(value.expires_at))&&Number.isInteger(value.max_task_seconds)&&value.max_task_seconds>=1&&value.max_task_seconds<=300&&typeof value.message_admission_available==='boolean';
+const validWarmTimestamp=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d\d\dZ$/.test(value)&&Number.isFinite(Date.parse(value));
+const validWarmGeneration=(value,policyExpiresAt)=>value===null||!!value&&typeof value==='object'&&!Array.isArray(value)&&typeof value.session_id==='string'&&value.session_id&&validWarmTimestamp(value.expires_at)&&Date.parse(value.expires_at)<=Date.parse(policyExpiresAt)&&Number.isSafeInteger(value.epoch)&&value.epoch>=2;
+const validWarmSummary=value=>!!value&&typeof value==='object'&&!Array.isArray(value)&&value.schema_version===1&&value.kind==='owner-alpha-warm-summary-v1'&&typeof value.policy_revision==='string'&&value.policy_revision&&typeof value.persona_id==='string'&&value.persona_id&&validWarmTimestamp(value.policy_expires_at)&&value.max_admissions===2&&Number.isSafeInteger(value.admissions_used)&&value.admissions_used>=0&&value.admissions_used<=2&&typeof value.message_admission_available==='boolean'&&validWarmGeneration(value.generation,value.policy_expires_at);
+/** Strict warm-generation gate. Returns null only when warm mode is truly
+ * absent (no summary.owner_alpha_warm property and never seen); a present
+ * property with any value — including null, false, 0, '' or malformed — latches
+ * warm mode and fails closed. Otherwise returns a blocking reason or '' when
+ * an explicit Send is admissible. Passive calls only read and bind local
+ * state; they never send or assign. First-observed generation and count
+ * consistency are checked within this same invocation, never deferred to a
+ * later render. */
+function warmBlock(){
+ const w=snapshot?.summary?.owner_alpha_warm;
+ if(w===undefined&&!warmSeen)return null;
+ warmSeen=true;alphaSeen=true;
+ if(!validWarmSummary(w))warmInvalid=true;
+ if(!warmInvalid){
+  if(!warmSession){
+   warmSession={policy_revision:w.policy_revision,persona_id:w.persona_id,policy_expires_at:w.policy_expires_at,
+    policy_deadline:performance.now()+Math.max(0,Date.parse(w.policy_expires_at)-Date.now()),
+    admissions_used:w.admissions_used,generation:null,generation_deadline:0};
+   // A previously observed terminal state for this exact revision stays closed.
+   if(sessionStorage.getItem('personal.warm-policy-expired.'+w.policy_revision))warmPolicyExpired=true;
+   if(w.generation){
+    warmSession.generation={session_id:w.generation.session_id,expires_at:w.generation.expires_at,epoch:w.generation.epoch};
+    warmSession.generation_deadline=performance.now()+Math.max(0,Date.parse(w.generation.expires_at)-Date.now());
+    if(sessionStorage.getItem('personal.warm-generation-expired.'+w.generation.session_id))warmGenerationExpired=true;
+   }
+  }else{
+   if(['policy_revision','persona_id','policy_expires_at'].some(key=>w[key]!==warmSession[key]))warmInvalid=true;
+   if(w.admissions_used<warmSession.admissions_used)warmInvalid=true;else warmSession.admissions_used=w.admissions_used;
+   if(!warmSession.generation&&w.generation){
+    // generation:null -> the first bound identity is the expected transition
+    // when the first message starts the generation; it is not a new policy.
+    warmSession.generation={session_id:w.generation.session_id,expires_at:w.generation.expires_at,epoch:w.generation.epoch};
+    warmSession.generation_deadline=performance.now()+Math.max(0,Date.parse(w.generation.expires_at)-Date.now());
+    if(sessionStorage.getItem('personal.warm-generation-expired.'+w.generation.session_id))warmGenerationExpired=true;
+   }else if(warmSession.generation&&(!w.generation||w.generation.session_id!==warmSession.generation.session_id||w.generation.expires_at!==warmSession.generation.expires_at||w.generation.epoch!==warmSession.generation.epoch))warmInvalid=true;
+  }
+  if(w.admissions_used>=1&&!w.generation)warmInvalid=true;
+  if(w.generation&&w.admissions_used<1)warmInvalid=true;
+ }
+ if(warmInvalid)return 'Warm generation details changed or are unavailable. Reload to review the current generation; sending is closed.';
+ if(warmSession){
+  // Both deadlines are immutable and monotonic locally: a wall-clock rollback
+  // never reopens a deadline the local timer has already passed.
+  if(Date.now()>=Date.parse(warmSession.policy_expires_at)||performance.now()>=warmSession.policy_deadline)warmPolicyExpired=true;
+  if(warmSession.generation&&(Date.now()>=Date.parse(warmSession.generation.expires_at)||performance.now()>=warmSession.generation_deadline))warmGenerationExpired=true;
+  if(warmPolicyExpired)sessionStorage.setItem('personal.warm-policy-expired.'+warmSession.policy_revision,'1');
+  if(warmGenerationExpired&&warmSession.generation)sessionStorage.setItem('personal.warm-generation-expired.'+warmSession.generation.session_id,'1');
+ }
+ if(warmPolicyExpired)return 'Warm policy expired. New messages are closed.';
+ if(warmGenerationExpired)return 'Warm generation expired. New messages are closed.';
+ if(warmSession&&warmSession.admissions_used>=2)return 'Both warm messages have been used. This warm generation is closed.';
+ if(warmSession&&(current()?.kind!=='persona'||selected!==warmSession.persona_id))return 'This warm generation accepts private messages only for its selected persona. Other bots and rooms are read-only.';
+ if($('connection').textContent!=='Connected'||!navigator.onLine)return 'Warm generation status is offline. Reconnect before sending.';
+ if(warmSession&&!snapshot.summary.owner_alpha_warm.message_admission_available)return 'No message admission is available in this warm revision. New messages are closed.';
+ return '';
+}
+function warmBannerText(reason){
+ if(!warmSession)return `Warm owner generation · Session details changed or are unavailable. Reload to review the current generation; sending is closed.`;
+ const name=snapshot?.objects?.find(x=>x.id===warmSession.persona_id)?.body.name??warmSession.persona_id;
+ const generation=warmSession.generation?` · Generation ${warmSession.generation.epoch} deadline ${new Date(warmSession.generation.expires_at).toLocaleString(undefined,{timeZoneName:'short'})}`:' · One fixed generation starts with your first Send';
+ return `Warm owner generation · ${name} only · ${Math.max(0,2-warmSession.admissions_used)} of 2 messages remaining${generation} · Policy deadline ${new Date(warmSession.policy_expires_at).toLocaleString(undefined,{timeZoneName:'short'})}. ${reason||'Message admission available. The second message reuses this generation only after the first task completes canonically.'} This is not always-on chat or safe recovery. Portal visits, refreshes and history do not start the runtime. No renewal, rollover, successor generation or background work in this revision.`;
+}
 function alphaBlock(){
+ const warm=warmBlock();
+ if(warm!==null)return warm;
  const bootstrap=snapshot?.summary.owner_alpha_bootstrap;
  if(bootstrap||bootstrapSession){
   alphaSeen=true;
@@ -56,12 +129,19 @@ function renderAlphaSession(){
  $('send').disabled=sending||Boolean(reason);
  $('message').readOnly=Boolean(reason);
  const review=$('review-alpha-session');
- review.hidden=!(bootstrapSession||snapshot?.summary.owner_alpha_bootstrap);
+ // A latched warm generation never offers the legacy bootstrap review/renewal
+ // flow, including a page previously bound to a bootstrap session.
+ review.hidden=warmSeen||!(bootstrapSession||snapshot?.summary.owner_alpha_bootstrap);
  review.disabled=sending||loading||!navigator.onLine||$('connection').textContent!=='Connected';
  if(!alphaSeen)return;
  $('message').setAttribute('aria-describedby','runtime-banner');
  $('send').setAttribute('aria-describedby','runtime-banner');
  $('runtime-banner').hidden=false;
+ if(warmSeen){
+  const text=warmBannerText(reason);
+  if($('runtime-banner-text').textContent!==text)$('runtime-banner-text').textContent=text;
+  return;
+ }
  const s=bootstrapSession??alphaSession,name=snapshot?.objects?.find(x=>x.id===s?.persona_id)?.body.name??s?.persona_id;
  const text=bootstrapSession?`Message-triggered owner alpha · ${name} only · Trial deadline ${new Date(s.expires_at).toLocaleString(undefined,{timeZoneName:'short'})} · Up to ${s.max_task_seconds}s per task. ${reason||'Send saves your message before requesting a bounded session on the existing Sprite.'} Portal visits and history do not start the runtime. Previous recovery tasks are not retried. External actions remain unavailable.`:`Supervised owner alpha${s?` · ${name} only · ${Math.max(0,s.max_runs-s.admitted_runs)} of ${s.max_runs} admissions remaining · Deadline ${new Date(s.expires_at).toLocaleString(undefined,{timeZoneName:'short'})} · Up to ${s.max_task_seconds}s per task`:''}. ${reason||'Private message admission available; queued messages have not yet consumed admissions.'} History, previews and cancellation remain available. Provisional output or a successful root turn is not a completed result or proof of safe recovery. Background delegation requires an explicitly opted-in session. External actions and automatic recovery are unavailable.`;
  if($('runtime-banner-text').textContent!==text)$('runtime-banner-text').textContent=text;
@@ -163,10 +243,21 @@ function acceptHistory(conversationId,history){
  }
  return true;
 }
-function alphaConversationAvailable(id){return !(alphaSeen||snapshot?.summary.owner_alpha)||id===(snapshot?.summary.owner_alpha_bootstrap?.persona_id??snapshot?.summary.owner_alpha_session?.persona_id);}
+// Warm mode scopes reads to the validated bound identity only; pre-binding
+// invalid state closes all conversation reads. Legacy fallback personas are
+// never authorized while a warm summary has been observed on this page.
+function alphaConversationAvailable(id){
+ if(warmSeen)return Boolean(warmSession)&&id===warmSession.persona_id;
+ return !(alphaSeen||snapshot?.summary.owner_alpha)||id===(snapshot?.summary.owner_alpha_bootstrap?.persona_id??snapshot?.summary.owner_alpha_session?.persona_id);
+}
 async function refresh(force=false){
  if(loading||document.hidden&&!force)return;loading=true;
  try{const value=await api('/v1/state');snapshot=value;
+  // Bind warm/alpha fences before any conversation reads so unrelated personas
+  // and rooms stay read-only without issuing denied requests. Presence of the
+  // owner_alpha_warm property (even null/false/0/'') latches warm mode; only a
+  // truly absent property leaves legacy/default behavior.
+  if(value.summary.owner_alpha||'owner_alpha_warm' in value.summary)alphaBlock();
   if(!selected||!managedSelected()&&!value.objects.some(x=>x.id===selected))selected=items('persona').find(x=>!x.body.archived)?.id;
   const conversationId=selected,readable=!managedSelected()&&alphaConversationAvailable(conversationId);if(readable){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId&&acceptHistory(conversationId,history)){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
   if(readable){
@@ -189,7 +280,7 @@ async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=nul
 }
 function render(){
  if(!snapshot)return;
- if(snapshot.summary.owner_alpha)alphaBlock();
+ if(snapshot.summary.owner_alpha||'owner_alpha_warm' in snapshot.summary)alphaBlock();
  $('show-connectors').hidden=!connectorsAllowed();$('show-connectors').setAttribute('aria-current',String(selected==='connectors'));
  if(!connectorsAllowed()||!connectorOnline())connectorView=null;
  if(routinePreflight&&!routinePreflightCurrent(routinePreflight))routinePreflight=null;
