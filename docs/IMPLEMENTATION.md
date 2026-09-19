@@ -19,6 +19,16 @@ No trial79 replay/refund/settlement; no native or model call in host preparation
 Evidence `.local/trial80-{preflight-custody,unused-request-report,unused-evidence,
 manager-before,service-preflight}.json` and `.local/bootstrap-v5-*`. No result yet.
 
+Trial80 browser blocker07:09Z: normal reload and read-only eval timed out15s each,
+before any fill/send. Bounded follow-up found responsive Mac shell, but session-info7s
+and raw direct CDP WebSocket5s both timed out; TCP connected without upgrade response.
+The /json/version404 is known endpoint behavior, not evidence Chrome is down. Exact
+cause remains unknown, possibly consent. All diagnostic subprocesses exited/reaped.
+No second reload, send, replay, runtime wake, Chrome restart, settings change or auth
+copy. Need owner to inspect Chrome responsiveness/remote-debugging consent. Fixed v5
+expiry unchanged; no canonical result/reload/shutdown evidence can be claimed for an
+unsent trial. This is a device-control blocker, not renewed spend approval.
+
 Trial79 reconciliation (2026-09-19, supersedes earlier activation claims): one normal
 composer message received HTTP202/applied06:53:39.615Z, but lifecycle reached recovery
 without READY/claim. Authenticated export06:57:00Z confirms epoch10, queued attempt0,

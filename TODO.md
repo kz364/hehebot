@@ -4,7 +4,7 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current checkpoint07:06Z: fresh trial80 assigned, no result yet.** Saved owner
+**Current checkpoint07:09Z: trial80 blocked before send by Chrome/CDP.** Saved owner
 authorization permits continued bounded engineering trials without repeated consent;
 the previous request for another human approval was unnecessary. Trial79 is never replayed.
 Exact epoch10 unused marker issued once07:04:43.609Z under dual locks; its transition
@@ -12,8 +12,13 @@ is permanently fenced without settlement/refund. Corrected service GET and actua
 manager/template/source hashes and profile all pass. Authenticated manager returned null.
 V5 expires07:15:53.997Z; browser worker owns one normal send after fresh readiness,
 then canonical completion/reload observation. No manual guest wake during trial.
-07:07Z: normal reload and read-only browser check timed out before fill/send; assignment
-unconsumed. Bounded CDP/daemon attachment diagnosis active, no second reload or expiry extension.
+Normal reload and read-only browser check timed out before fill/send; assignment unused.
+Bounded diagnosis confirms Mac shell responsive but raw Chrome CDP WebSocket handshake
+timed out before upgrade response; not merely an agent-browser command stall. All
+diagnostic processes exited. Exact cause unknown, consent possibly pending. Owner must
+inspect existing Chrome responsiveness/remote-debugging consent; no restart/settings
+change, second reload or expiry extension performed. Resume same send only after fresh
+unexpired readiness; if expired, do not send or silently extend that fixed policy.
 Ledger baseline+retained reservations=$4, with next $1 hold=$5 against unchanged$10;
 actual billing remains unverified. Schedule stays enabled. Earlier checkpoints below
 are historical, including the superseded per-trial approval requirement.

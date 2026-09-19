@@ -4,7 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
-Latest07:06Z: owner/saved schedule reaffirm continued fresh bounded trials, not repeated
+Latest07:09Z: trial80 remains UNSENT. Browser worker's normal reload15s and read-only
+check15s timed out before fill/click. Mac shell responsive; named session info7s and
+independent raw CDP WebSocket handshake5s also timed out. TCP connected but no upgrade
+response, so no targets/readiness retrieved. No repeated reload, browser restart,
+access-setting changes or credential transfer. All diagnostic subprocesses reaped.
+Need owner to inspect existing Chrome responsiveness/remote-debugging consent. Exact
+cause not established. V5 expiry remains07:15:53.997Z, no extension; same assignment
+can proceed only after fresh unexpired admission. No new reservation/result exists
+from a browser send. Schedule enabled; don't rerun unchanged diagnostics indefinitely.
+
+Preparation07:06Z: owner/saved schedule reaffirm continued fresh bounded trials, not repeated
 human consent after each worker assignment. Trial80 assigned to existing browser worker;
 do not send elsewhere or guest-wake during observation. V5 revision
 owner-message-bootstrap-20260919-v5 expires07:15:53.997Z,180s session/120s task.
