@@ -4,6 +4,26 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stage A round-2 integration (2026-09-19, local): replacement SHA256
+c7dae83f1624b40665ae20203aa009b67db71ea2d2f352f9039b26b32c58503b
+addresses all eight findings below and is integrated locally at 63c1421. Parent
+typecheck and nine focused suites pass 274 tests. Integrated full backend suite
+passes 89 files / 1,782 tests; desktop passes 16/16. Combined browser/native/build
+verification is still running in `.local/warm-stage-a-integrated-verify.log`.
+Focused evidence: `.local/warm-round2-focused.log`; desktop evidence:
+`.local/warm-stage-a-desktop.log`. Review worktree initially lacked generated
+Cloudflare declarations; `npm run types` resolved that prerequisite failure.
+Repeated-body/same-clock admissions now remain distinct, sub-second claims create
+no attempts, generation/manifest-1 bytes are immutable, and actual bootstrap-to-warm
+reconstruction preserves legacy reservations. Removal and lost lease deny new runs.
+Authenticated owner binding is validated and its initialization failure fences RPCs;
+broader legacy initialization semantics are deliberately unchanged. Host launch
+credentials are activation-bound and stable across reads. Parent fixed one doc
+sentence about repeated command-body hashes; code/tests already used the correct rule.
+The contract remains default-off, one finite warm revision, two text-only tasks and
+no rollover. Runtime/portal consumers and one-process native acceptance remain next;
+control fixtures do not prove live provider/model behavior. Nothing was published.
+
 Stage A control draft review (2026-09-19, local): received154482-byte patch SHA256
 4de1b25d4d471302e5fe8d36c5578527b68042760c015bc3a7763c1e4d1ac5d0,
 baseline dd3808b. Applied only to isolated `.local/warm-review`, not the integration
