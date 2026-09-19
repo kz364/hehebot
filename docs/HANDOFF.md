@@ -4,15 +4,20 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
-Portal worker's first patch `.local/stage-a-portal.patch` (SHA256
-76f4904cb619011833da506cfb8683aa4fd58ed52ff20d2df98289e7a2c50653)
-is NOT integrated. Parent applied/reverted only its own imported diff after review.
-Original warm browser script passed here; screenshots inspected. Worker received
-corrections for present falsy metadata, changed-persona read scope, timestamp types,
-first-bind consistency and legacy review-button visibility on warm transition, plus
-narrow actual Send reachability. Wait for replacement against the same fd6f503 baseline.
-Evidence is `.local/warm-portal-review-baseline.log` and docs/IMPLEMENTATION.md.
-Runtime worker remains independently active; do not duplicate either assignment.
+Portal round-2 patch is integrated locally at ebe78e1, including the new browser
+script in scripts/verify-codex.sh. Source `.local/stage-a-portal-round2.patch` SHA256
+e6aa804f4eeda6311e8e25cc6b08ea0236d3ab54381da688dbfc36c61a832169.
+Present malformed metadata and changed-persona read scope are fixed; first-bind,
+date-type and review-button regressions pass. Parent warm browser and legacy three
+sections exit 0; typecheck passes. Logs `.local/warm-portal-round2-{browser,legacy}.log`.
+Narrow Send is reachable after scrolling (786–831px inside 844px viewport), exercised
+for real and blocked sends. Fresh narrow enabled/exhausted and malformed captures
+inspected; final exhausted capture re-inspected after the combined browser pass.
+Combined verifier exited 0 in `.local/warm-portal-integrated-verify.log`: 1,782
+backend/550 runtime tests, browser/native/service fixtures and build pass. Desktop
+rerun passes 16/16 in `.local/warm-portal-desktop.log`. Report gates remain false.
+Runtime worker remains independently active; one-process warm native/composer
+integration remains next. Do not duplicate either assignment.
 
 Stage A round-2 control patch is reviewed and integrated on local `source-custody`
 at 63c1421; origin/main is unchanged. Downloaded replacement is

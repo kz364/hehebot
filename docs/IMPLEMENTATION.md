@@ -4,6 +4,29 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stage A portal round-2 integration (2026-09-19, local): replacement SHA256
+e6aa804f4eeda6311e8e25cc6b08ea0236d3ab54381da688dbfc36c61a832169
+fixes the review findings below and is integrated at ebe78e1. Parent reran the
+new warm browser suite and legacy alpha-session suite: both exited 0, including
+all three legacy sections. Typecheck passes. Evidence:
+`.local/warm-portal-round2-{browser,legacy}.log`. Fresh-page malformed values close
+all reads and Send; changed persona cannot redirect the validated read scope.
+Generation/count consistency, string timestamps and hidden legacy review controls
+are covered. Chromium 390×844 at 2x exercises an actual Send and a blocked exhausted
+submit: scrolling114px moves Send from900–945px to786–831px inside the viewport.
+Parent inspected narrow enabled/exhausted and malformed captures; the final
+representative artifact is `.amp/in/artifacts/portal-alpha-warm-narrow-exhausted.png`.
+No layout change was needed for reachability; ordinary scroll-edge clipping remains.
+The new browser script is included in scripts/verify-codex.sh; integrated full rerun
+exited 0 in `.local/warm-portal-integrated-verify.log`: 1,782 backend/550 runtime tests,
+browser/native/service fixtures, typecheck and dry-run build passed. Desktop rerun
+passes 16/16 (`.local/warm-portal-desktop.log`). Final exhausted capture re-inspected
+after combined run. Existing two-launch composer/native retention regression still
+passes. Final operational/production/model-judgment report flags remain false.
+The warm summary server is synthetic: this does not prove warm native execution,
+provider behavior or live SSO. Local commits only; no publication or activation.
+Runtime worker remains active; parent owns subsequent combined composer/native proof.
+
 Stage A portal draft review (2026-09-19, local): patch SHA256
 76f4904cb619011833da506cfb8683aa4fd58ed52ff20d2df98289e7a2c50653
 was applied temporarily for review and then removed pending correction. Parent

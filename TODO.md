@@ -25,8 +25,8 @@ scoped reads; admission freezes task deadlines. Legacy-token downgrade, historic
 reconstruction and first-message-only wake require explicit tests before integration.
 Corrected authority split approved for implementation; final manifest hash must cover
 warm version/admission identity, and public summary must distinguish fixed policy expiry
-from generation expiry. The existing portal does not yet recognize warm metadata;
-its separately owned consumer must implement composer and action gating.
+from generation expiry. The portal now recognizes warm metadata and applies
+separate composer, conversation-read and action gating; legacy modes are unchanged.
 Stage A control contract is now integrated locally after all eight review corrections.
 Parent typecheck and 274 focused tests pass, including repeated text, exact deadline
 boundaries, immutable custody, lost lease, config removal and a real legacy-bootstrap
@@ -34,16 +34,18 @@ transition. Integrated backend suite passes 1,782 tests; desktop passes 16/16.
 Combined verifier exited 0 with 550 runtime tests, browser/native/service fixtures,
 typecheck and dry-run build. Operational/production/model-judgment flags stay false. Owner-binding
 initialization failures are fenced without broadening other initialization behavior.
-New GLM5.3 runtime and portal workers are implementing the independently owned
-consumers against the frozen contract and exact transferred source bundle. Runtime
-owns one-process native integration; portal owns composer/status gating. One warm
-revision admits two tasks, with no rollover. Parent owns combined integration.
-Portal draft returned for correction, not integrated: its original browser suite
-passes here, but present falsy warm metadata falls back to ordinary mode, and a
-changed persona redirects conversation reads despite the invalid-state latch.
-Worker is adding those cases, first-bind consistency/date-type checks, warm-mode
-review-button fencing and actual narrow-viewport Send reachability verification.
-Desktop available/expired captures were inspected; runtime work remains active.
+The GLM5.3 runtime worker owns pending one-process native integration against the
+frozen contract and exact transferred source bundle. The portal worker has delivered
+composer/status gating. One warm revision admits two tasks, with no rollover.
+Parent owns combined integration.
+Corrected portal consumer is integrated locally. Parent warm browser suite, all
+three legacy alpha-session sections and typecheck pass. Malformed-value, bound-persona,
+first-bind/date-type and review-button regressions pass; real narrow Send and blocked
+exhausted submit were exercised after scrolling. Representative captures inspected.
+Warm browser suite is now in the combined verifier; integrated rerun exited 0:
+1,782 backend/550 runtime tests, browser/native/service fixtures and build pass.
+Desktop rerun passes 16/16. Final narrow exhausted capture re-inspected after the run.
+Runtime worker remains active; one-process native warm acceptance is still unproved.
 No live state changed. Evidence is in docs/IMPLEMENTATION.md.
 Next checkpoint: one-process native and portal integration before separately
 opting into background capabilities. No live rollout,
