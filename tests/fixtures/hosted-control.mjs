@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { mkdir, readFile } from 'node:fs/promises';
 import { createServer } from 'node:https';
-import { join, resolve } from 'node:path';
+import { join, isAbsolute, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { build } from 'esbuild';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -16,9 +16,15 @@ const OWNER = 'fixture-owner';
 const INSTALLATION = 'hosted-fixture';
 const ROUTINE_MANAGE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 
-export async function startHostedControlFixture({ directory, ownerAlpha, ownerAlphaSuccessor, runtimeToken, accessClientId, accessClientSecret, manager }) {
+export async function startHostedControlFixture({ directory, ownerAlpha, ownerAlphaSuccessor, runtimeToken, accessClientId, accessClientSecret, manager, portalAssetsDirectory }) {
   if (![directory, runtimeToken, accessClientId, accessClientSecret].every(value => typeof value === 'string' && value)) {
     throw new TypeError('Hosted fixture requires a private directory and non-empty synthetic credentials.');
+  }
+  // Browser mode serves the actual portal assets from the real authenticated
+  // Worker. The synthetic signed owner identity stays fixture-only; this is
+  // never production Access SSO.
+  if (portalAssetsDirectory !== undefined && (typeof portalAssetsDirectory !== 'string' || !isAbsolute(portalAssetsDirectory))) {
+    throw new TypeError('Browser-mode fixture requires an absolute portal assets directory.');
   }
   const root = resolve(directory), bundle = join(root, 'worker.mjs');
   const caFile = join(root, 'loopback-cert.pem'), keyFile = join(root, 'loopback-key.pem');
@@ -44,8 +50,12 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
       ? ownerAlphaSuccessor(ownerBindingSha256, ownerAlpha)
       : ownerAlphaSuccessor;
     const outboundRequests = [];
+    const browserCommands = [];
     mf = new Miniflare(convertV4MiniflareOptions({ rootPath: root, modules: true, scriptPath: 'worker.mjs', compatibilityDate: '2026-09-10',
-      compatibilityFlags: ['nodejs_compat'], resourcePersistencePath: join(root, 'miniflare'),
+      compatibilityFlags: ['nodejs_compat'],
+      // V4-style options: the assets converter reads snake_case keys and the
+      // router config, so the user worker runs ahead of static assets.
+      ...(portalAssetsDirectory ? { assets: { directory: portalAssetsDirectory, binding: 'ASSETS', run_worker_first: true, routerConfig: { has_user_worker: true } } } : {}), resourcePersistencePath: join(root, 'miniflare'),
       durableObjects: { CONTROL: { className: manager ? 'HostedManagerControl' : 'PersonalControl', useSQLite: true } },
       bindings: { INSTALLATION_ID: INSTALLATION, AUTH_MODE: 'access', ACCESS_ISSUER: ISSUER, ACCESS_AUD: AUDIENCE,
         OWNER_SUB: OWNER, EXECUTION_ENABLED: 'false', NATIVE_VERIFIED: 'false', PROVIDER_CONFIG: '{}',
@@ -76,6 +86,16 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
         }
         const chunks = []; for await (const chunk of incoming) chunks.push(chunk);
         const body = Buffer.concat(chunks);
+        // Browser-mode custody recording: exact owner command bytes as the real
+        // portal composer sent them, for replay and duplicate-command checks.
+        // Only browser-originated requests are recorded (browsers always send
+        // Sec-Fetch-Site; Node replay through fetchImpl does not).
+        if (portalAssetsDirectory && path === '/v1/commands' && incoming.method === 'POST' && incoming.headers['sec-fetch-site'] !== undefined) {
+          browserCommands.push({ method: incoming.method, path,
+            headers: { origin: incoming.headers.origin, 'content-type': incoming.headers['content-type'],
+              'idempotency-key': incoming.headers['idempotency-key'], 'sec-fetch-site': incoming.headers['sec-fetch-site'] },
+            body: body.toString('utf8') });
+        }
         const result = await mf.dispatchFetch(`https://${incoming.headers.host}${path}`, {
           method: incoming.method, headers: incoming.headers, body: body.length ? body : undefined,
         });
@@ -107,6 +127,7 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
       return response.json();
     };
     return { origin, caFile, fetchImpl, ownerJwt, otherOwnerJwt, ownerBindingSha256, outboundRequests, close,
+      ...(portalAssetsDirectory ? { browserCommands } : {}),
       ...(manager ? { retireUnusedPredecessor: () => fixtureCall('fixture-retire'), retainedManifest: () => fixtureCall('fixture-manifest') } : {}) };
   } catch (error) {
     if (server) await new Promise(resolveClose => server.close(() => resolveClose()));

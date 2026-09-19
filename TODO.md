@@ -5,8 +5,14 @@ This is the owner-facing progress checklist. Open this file to check progress wi
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
 **Active implementation wave (2026-09-19):** owner requested continued implementation
-in new threads; this thread retains integration/verification ownership. GLM5.3 owns the actual portal
-composer → local Worker/manager/native → two canonical replies/reload integration;
+in new threads; this thread retains integration/verification ownership. GLM5.3 composer
+worker delivered and parent integrated actual portal → local Worker/manager/native →
+two canonical replies/reload. Parent reruns pass HTTP/browser modes and eight fixture
+tests; both turns retained, zero passive launches, exact owner-only asset gating.
+Review fixes are included; integrated screenshot inspected. Browser mode is now in
+the combined verifier, which exited0 in `.local/p02-combined-integrated.log`:
+1756 backend/550 runtime plus browser/native/service/build. Desktop16/16 passes.
+Composer worker is complete/integrated; checkpoint committed locally, not published.
 Astra's completed P0.3 investigation supports one pinned process with tested V2
 family isolation for a bounded workload, not general tool containment or settlement.
 A new GLM5.3 control-plane worker owns Stage A: separate versioned/default-off finite

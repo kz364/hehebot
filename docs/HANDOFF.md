@@ -5,8 +5,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
 Owner requested all further implementation in new threads. Composer/native worker
-`T-01a0b94d-7913-71ff-aba8-8ed10ec336fa` owns only hosted-manager browser-mode fixture
-and hosted-control fixture support. P0.3 advisor `T-01a0b94d-ec79-70df-a54d-534eec09664c`
+`T-01a0b94d-7913-71ff-aba8-8ed10ec336fa` delivered the hosted-manager browser mode
+and hosted-control asset support. Parent integrated revised patch SHA256
+17be8c62f6bc78ce620a650773641ce0ae0251c1eb14353f309d4d2a431da10d;
+both modes and eight shared-fixture tests pass here, with integrated screenshot
+inspected. Owner-only assets, exact Connected wait and short session name are included.
+Browser mode is wired into verifier; `.local/p02-combined-integrated.log` exited0:
+1756 backend/550 runtime plus browser/native/service/build; desktop16/16 passes.
+Final screenshot re-inspected; composer worker complete/integrated, locally committed.
+No public/production UI changes or live SSO/model/provider acceptance. P0.3 advisor `T-01a0b94d-ec79-70df-a54d-534eec09664c`
 finished: actual pinned V2 terminal-root-mailbox fixture passed33 scripted requests,
 22 core and18 runtime checks; not fresh upstream-source verification (HTTP404), live
 tool containment, managed-refresh arbitration or settlement proof. Recommended finite

@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 // Two credential-free owner sessions: real manager staging -> Sprite service
 // -> pinned Codex -> scripted loopback text -> canonical completion/retirement.
+// --browser drives the same two turns through the actual portal composer in a
+// real browser against the same authenticated Worker/SQLite fixture; it is
+// local integration only, never production Access SSO or live-model proof.
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { EventEmitter, once } from 'node:events';
 import { createServer } from 'node:http';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -17,12 +21,29 @@ import { createSpriteCodexService } from '../runtime/sprites-codex-service.mjs';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { createCodexTextOnlyProfile, codexTextOnlyProfileSha256 } from '../runtime/codex-text-only.mjs';
 
+const browserMode = process.argv.includes('--browser');
+const exec = (await import('node:util')).promisify(execFile);
 const persona = '11111111-1111-4111-8111-111111111111';
 const replies = ['The notebook is cobalt blue, reference 47.', 'Cobalt blue.'];
 const pause = ms => new Promise(ok => setTimeout(ok, ms));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const directory = await mkdtemp(join(tmpdir(), 'hehe-hosted-manager-'));
-const report = { status: 'failed', nativeStarts: 0, modelRequests: 0, spriteRequests: [] };
+const report = { status: 'failed', mode: browserMode ? 'browser-composer' : 'http', nativeStarts: 0, modelRequests: 0, spriteRequests: [] };
+// Real-browser session for --browser mode. The synthetic signed owner identity
+// is fixture-only: the header rides the same authenticated Worker ingress.
+// Session names must stay short; keep this label at or under 20 characters.
+const browserSession = 'hosted-manager-' + randomUUID().slice(0, 5);
+const browser = (...args) => exec('agent-browser', ['--session', browserSession, '--ignore-https-errors', ...args], { timeout: 30000 });
+const browserJson = async code => JSON.parse((await browser('eval', code)).stdout);
+const waitFor = async (probe, timeoutMs, stepMs = 250) => {
+  const end = Date.now() + timeoutMs;
+  do {
+    try { if (await probe()) return true; } catch { /* transient DOM/parse states */ }
+    await pause(stepMs);
+  } while (Date.now() < end);
+  return false;
+};
 let fixture, model, service, modelError, listener, wakeDeadline;
 try {
   const home = join(directory, 'native-home'), sessionsDirectory = join(directory, 'sessions');
@@ -44,6 +65,7 @@ try {
   const managerToken = randomBytes(32).toString('hex');
   fixture = await startHostedControlFixture({ directory: join(directory, 'control'), ownerAlpha: originalPolicy,
     runtimeToken: randomBytes(32).toString('hex'), accessClientId, accessClientSecret,
+    ...(browserMode ? { portalAssetsDirectory: resolve('public') } : {}),
     manager: { token: managerToken, signingKey: randomBytes(48).toString('hex'), bootstrap: {
       policy_revision: 'native-manager-fixture-v1', persona_id: persona, text_only,
       expires_at: new Date(Date.now() + 180000).toISOString(), session_seconds: 45, max_task_seconds: 30,
@@ -69,9 +91,43 @@ try {
   assert.equal(report.nativeStarts, 0); assert.deepEqual(await readdir(sessionsDirectory), []);
 
   const ownerHeaders = { 'Cf-Access-Jwt-Assertion': fixture.ownerJwt };
+  if (browserMode) {
+    // The user worker runs ahead of static assets: portal routes stay behind
+    // owner authentication. Unauthenticated and wrong-owner requests to the
+    // asset routes are denied; the authenticated owner is served.
+    for (const route of ['/', '/app.js']) {
+      assert.equal((await fixture.fetchImpl(route)).status, 401, `unauthenticated ${route} was not denied`);
+      assert.equal((await fixture.fetchImpl(route, { headers: { 'Cf-Access-Jwt-Assertion': fixture.otherOwnerJwt } })).status, 401,
+        `wrong-owner ${route} was not denied`);
+      const served = await fixture.fetchImpl(route, { headers: ownerHeaders });
+      assert.equal(served.status, 200, `authenticated ${route} was not served`);
+      assert.ok((await served.text()).length > 0, `authenticated ${route} returned an empty body`);
+    }
+    // Open the actual portal in a real browser against the authenticated
+    // Worker origin. The synthetic signed identity is fixture-only.
+    await browser('set', 'headers', JSON.stringify(ownerHeaders));
+    await browser('open', fixture.origin + '/');
+    await browser('set', 'viewport', '1280', '900', '2');
+    // Wait for the exact connected state: an initial Connecting is also truthy.
+    assert.ok(await waitFor(() => browserJson('document.querySelector("#connection")?.textContent === "Connected"'), 30000),
+      'portal did not connect to the Worker');
+    // Select the bootstrap persona explicitly (Chief of Staff).
+    assert.ok(await waitFor(() => browserJson('Boolean(document.querySelector(\'[data-persona-id="' + persona + '"]\'))'), 30000), 'bootstrap persona missing from roster');
+    await browser('click', `[data-persona-id="${persona}"]`);
+    // The page adopts the bootstrap policy on observation and admits a send.
+    assert.ok(await waitFor(() => browserJson('!document.querySelector("#send").disabled'), 30000), 'composer never admitted a first send');
+    // Passive-read custody: portal load, roster selection, state polling and
+    // bootstrap adoption caused zero launches, model requests or commands.
+    assert.equal(report.nativeStarts, 0, 'portal visit launched a native runtime');
+    assert.equal(report.modelRequests, 0, 'portal visit reached a model');
+    assert.deepEqual(report.spriteRequests, [], 'portal visit contacted the Sprite');
+    assert.equal(await control.request('manifest', {}), null, 'portal visit staged an assignment');
+    assert.deepEqual(fixture.browserCommands, [], 'portal visit sent a command');
+  }
   let prior;
   for (let turn = 1; turn <= 2; turn++) {
   const reply = replies[turn - 1];
+  const text = turn === 1 ? 'Remember the cobalt blue notebook, reference 47.' : 'What color was the notebook?';
   const ready = await (await fixture.fetchImpl('/v1/state', { headers: ownerHeaders })).json();
   assert.equal(ready.summary.owner_alpha_bootstrap.message_admission_available, true);
   if (prior) {
@@ -81,13 +137,46 @@ try {
     assert.equal(await control.request('manifest', {}), null);
     assert.equal(report.nativeStarts, 1); assert.equal(report.modelRequests, 1);
   }
+  let receipt;
+  let sentRequest;
+  if (browserMode) {
+    // The real composer only re-enables Send once retirement freed the turn
+    // (turn 2) and the fixed bootstrap policy is still admitted.
+    assert.ok(await waitFor(() => browserJson('!document.querySelector("#send").disabled'), 30000),
+      `composer never admitted the turn-${turn} send`);
+    await browser('fill', '#message', text);
+    await browser('click', '#send');
+    // The composer clears the textarea only after its receipt is confirmed.
+    assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),
+      'composer did not confirm the sent message');
+    assert.equal(fixture.browserCommands.length, turn, 'unexpected command count after composer send');
+    const sent = fixture.browserCommands[turn - 1];
+    assert.deepEqual(JSON.parse(sent.body), { schema_version: 1, type: 'message.send',
+      payload: { conversation_id: persona, text } });
+    assert.match(sent.headers['idempotency-key'], uuidPattern, 'composer idempotency key is not a UUID');
+    assert.equal(sent.headers.origin, fixture.origin);
+    assert.equal(sent.headers['sec-fetch-site'], 'same-origin');
+    assert.equal(new Set(fixture.browserCommands.map(command => command.headers['idempotency-key'])).size, turn,
+      'turns reused an idempotency key');
+    sentRequest = { method: 'POST',
+      headers: { ...ownerHeaders, 'Content-Type': sent.headers['content-type'], Origin: fixture.origin,
+        'Idempotency-Key': sent.headers['idempotency-key'] }, body: sent.body };
+    // Recover the durable receipt by replaying the exact composer bytes; the
+    // idempotent replay returns the stored receipt without a new command.
+    const confirmed = await fixture.fetchImpl('/v1/commands', sentRequest);
+    assert.equal(confirmed.status, 202); assert.equal(fixture.browserCommands.length, turn);
+    receipt = await confirmed.json();
+  } else {
   const ownerRequest = { method: 'POST', headers: { ...ownerHeaders,
     Origin: fixture.origin, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() },
     body: JSON.stringify({ schema_version: 1, type: 'message.send', payload: { conversation_id: persona,
-      text: turn === 1 ? 'Remember the cobalt blue notebook, reference 47.' : 'What color was the notebook?' } }) };
+      text } }) };
   const response = await fixture.fetchImpl('/v1/commands', ownerRequest);
   assert.equal(response.status, 202);
-  const receipt = await response.json(); assert.equal(receipt.status, 'applied');
+  receipt = await response.json();
+  sentRequest = ownerRequest;
+  }
+  assert.equal(receipt.status, 'applied');
   const assignment = await control.request('manifest', {}); assert.ok(assignment);
   assert.equal(assignment.grant.run_id, receipt.resource_id);
   const retained = await fixture.retainedManifest();
@@ -172,6 +261,15 @@ try {
       const history = await (await fixture.fetchImpl(`/v1/conversations/${persona}/events`, { headers: ownerHeaders })).json();
       const results = history.events.filter(event => event.type === 'run.result' && event.payload.run_id === receipt.resource_id);
       assert.equal(results.length, 1); assert.equal(results[0].payload.text, reply);
+  if (browserMode) {
+    // The portal timeline must show the attributed canonical reply for this turn.
+    assert.ok(await waitFor(() => browserJson(
+      `[...document.querySelectorAll(".message.bot .message-body")].some(node => node.textContent === ${JSON.stringify(reply)})`), 30000),
+      `turn-${turn} canonical reply missing from portal timeline`);
+    const userShown = await browserJson(
+      `[...document.querySelectorAll(".message.user .message-body")].some(node => node.textContent === ${JSON.stringify(text)})`);
+    assert.ok(userShown, `turn-${turn} owner message missing from portal timeline`);
+  }
       assert.equal(await control.request('manifest', {}), null, 'completed assignment is no longer launchable');
       assert.deepEqual(await fixture.retainedManifest(), retained, 'durable assignment must not renew or change after completion');
       const families = await service.supervisor.bridge.families();
@@ -200,14 +298,48 @@ try {
   assert.equal(result, 'RETIREMENT_REPORTED'); assert.equal(report.nativeStarts, turn); assert.equal(report.modelRequests, turn);
   assert.deepEqual(report.spriteRequests.slice((turn - 1) * 4), ['PUT', 'GET', 'PUT', 'GET']);
   assert.deepEqual(taskNames, [`hehe-bootstrap-${assignment.grant.transition_id}`, `hehe-${assignment.grant.epoch}-${assignment.grant.boot_id}`]);
-  prior = { request: ownerRequest, receipt, retained };
+  prior = { request: sentRequest, receipt, retained };
   listener.stop(); listener = null;
   model.closeAllConnections(); await new Promise(ok => model.close(ok)); model = null;
   }
   assert.ok(fixture.outboundRequests.every(request => request.method === 'GET' && request.url.endsWith('/cdn-cgi/access/certs')));
+  if (browserMode) {
+    // Reload the real portal: both turns' owner messages and canonical replies
+    // must be retained, with no duplicate commands or extra launches.
+    await browser('reload');
+    assert.ok(await waitFor(() => browserJson('document.querySelector("#connection")?.textContent === "Connected"'), 30000),
+      'portal did not reconnect after reload');
+    assert.ok(await waitFor(() => browserJson(
+      '[...document.querySelectorAll(".message.bot .message-body")].filter(node => node.textContent === "Cobalt blue.").length === 1'), 30000),
+      'reloaded timeline missing the second canonical reply');
+    const timeline = await browserJson(`(() => ({
+      users: [...document.querySelectorAll(".message.user .message-body")].map(node => node.textContent),
+      bots: [...document.querySelectorAll(".message.bot .message-body")].map(node => node.textContent) }) )()`);
+    assert.equal(timeline.users.length, 2, 'reloaded timeline lost or duplicated owner messages');
+    assert.equal(timeline.bots.length, 2, 'reloaded timeline lost or duplicated canonical replies');
+    assert.ok(timeline.users.includes('Remember the cobalt blue notebook, reference 47.'));
+    assert.ok(timeline.users.includes('What color was the notebook?'));
+    assert.ok(timeline.bots.includes('The notebook is cobalt blue, reference 47.'));
+    assert.ok(timeline.bots.includes('Cobalt blue.'));
+    assert.equal(fixture.browserCommands.length, 2, 'reload sent or duplicated a command');
+    assert.equal(report.nativeStarts, 2, 'reload launched another native runtime');
+    assert.equal(report.modelRequests, 2, 'reload reached a model');
+    assert.equal(await browserJson(`localStorage.getItem("personal.pending.${persona}")`), null,
+      'composer left an unconfirmed pending message');
+    assert.equal((await browser('errors')).stdout.trim(), '', 'portal reported page errors');
+    // Absolute path: the CLI resolves relative screenshot names against its own
+    // working directory, not this script's. Enlarge the viewport and scroll the
+    // timeline so the screenshot shows both turns' messages and replies.
+    await browser('set', 'viewport', '1280', '1600', '2');
+    await browser('eval', 'document.querySelector("#timeline").scrollTo(0, 0)');
+    await browser('screenshot', resolve('.amp/in/artifacts/hosted-manager-browser-portal.png'));
+    await browser('close');
+  }
   Object.assign(report, { status: 'passed', canonicalReplies: replies, ownerContinuation: true, priorConversationReachedNative: true,
     receiptReplayDidNotLaunch: true, immutableAssignment: true, noNativeBeforeAssignment: true,
-    bootstrapHoldBeforeLaunch: true, httpWakeVerified: true, productionEnabled: false, providerOrAccountVerified: false });
+    bootstrapHoldBeforeLaunch: true, httpWakeVerified: true, productionEnabled: false, providerOrAccountVerified: false,
+    ...(browserMode ? { browserComposerVerified: true, passivePortalReadsDidNotLaunch: true,
+      retirementReenabledComposer: true, portalReloadRetainedBothTurns: true } : {}) });
 } catch (error) {
   report.error = error.code ?? error.name;
   report.frames = error.stack?.split('\n').filter(line => line.trimStart().startsWith('at '));
@@ -215,6 +347,7 @@ try {
 }
 finally {
   clearTimeout(wakeDeadline); listener?.stop();
+  if (browserMode) await browser('close').catch(() => {});
   await service?.stop().catch(() => {}); await fixture?.close().catch(() => {});
   if (model) { model.closeAllConnections(); await new Promise(ok => model.close(ok)); }
   if (report.status === 'passed') await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

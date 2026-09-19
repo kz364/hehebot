@@ -4,6 +4,30 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Composer/native integration (2026-09-19, local): GLM worker's two-file patch reviewed,
+revised and hash-verified before parent integration. Hosted-manager `--browser` now
+drives the actual portal with fixture-signed owner JWT through real authenticated
+Worker/SQLite, manager/wake and pinned Codex0.154.0. Two composer sends each produce
+one canonical reply; exact browser command bytes/keys replay without another launch,
+retirement reopens Send, prior owner text/reply reach turn2, and reload retains exactly
+two owner messages/two replies with no pending localStorage or page errors. Passive
+portal load/selection/readback makes zero commands/native/model/Sprite calls.
+Optional real asset binding uses run_worker_first; unauthenticated/wrong-owner `/`
+and `/app.js` return401, owner requests200/nonempty. Parent review corrected a
+truthy-Connecting wait and shortened browser session naming before application.
+Parent browser and standalone HTTP reruns both exit0 with2 native starts/2 model
+requests; eight shared-fixture tests pass. Evidence `.local/p02-{browser,http,fixture}-integrated.log`.
+The parent capture `.amp/in/artifacts/hosted-manager-browser-portal.png` was inspected:
+both turns and empty composer readable. Runtime recovery/provider-unconfigured labels
+describe disposable runtime state, not failed canonical task results. No public UI
+code changed. Browser mode replaces HTTP mode in combined verification (HTTP mode
+remains separately tested). Full `.local/p02-combined-integrated.log` exited0:
+86 files/1756 backend tests,550 runtime, browser/native/service fixtures and build.
+Final browser capture re-inspected after combined run. Desktop16/16 passes in
+`.local/p02-desktop-integrated.log`. Final report retains assistantOperational,
+productionAdmission and modelJudgmentVerified false. Integration committed locally.
+No production Access SSO, live model/provider acceptance, deployment or push is claimed.
+
 Native ordinary-owner continuation (2026-09-19, local): existing hosted-manager fixture
 now runs two ordinary owner sessions through actual signed local HTTP, real Worker,
 manager staging/wake listener, pinned Codex0.154.0, canonical completion and manager
