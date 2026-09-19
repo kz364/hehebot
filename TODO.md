@@ -30,8 +30,10 @@ work. Remaining: exact epoch9 custody review, immutable marker/grant and new pro
 activation, then one bounded fresh message and reload verification. Browser worker has
 a passive custody/readiness assignment but no returned evidence or send authority.
 Owner reconnected the laptop at06:29Z. Runner my-laptop is live with the existing
-browser worker attached; its read-only assignment has resumed. Await exact custody
-and portal readiness before activation; no new connection or spend approval needed.
+browser worker attached. CDP works, but one export fetch failed and reload produced
+a null-origin page; no custody received. Bounded portal/network diagnosis is active.
+Orb unauthenticated portal GET returns302, not proof of laptop/authenticated readiness.
+Await exact custody and portal readiness before activation; no new spend approval needed.
 Schedule is enabled, not paused. No quarantine marker/grant, fresh message,
 completion or reload verification; retained UNKNOWN/reservations are unchanged.
 

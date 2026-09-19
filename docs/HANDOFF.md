@@ -65,6 +65,12 @@ Owner connected laptop06:29Z; list_runners confirms my-laptop at /Users/kaspar w
 the existing browser worker attached. Read-only assignment resumed, no send authority.
 Host prepared `.local/prepare-bootstrap-v4.mjs` (syntax checked, not executed), which
 requires exact manifest/marker evidence and preserves v3 cost fields and180s/120s bounds.
+Browser06:32:25 complete DOM/history/empty composer was not fresh auth proof. One
+export fetch failed TypeError with no HTTP status/object; normal reload left null
+origin/blank page06:32:47. CDP responds, so this is now portal-load diagnosis, not
+missing runner. Worker owns one explicit navigation/error inspection and credential-free
+Mac HEAD; no TLS/Access bypass, repeats or sends. Orb public GET06:37:54 returns302.
+No custody file exists yet; do not fabricate manifest values from timing guesses.
 
 New startup defect confirmed synthetically on same Sprite: deployed listener
 PID20242 inherited CapInh/Prm/Eff/Bnd/Amb=a82435fb, NoNewPrivs0. Saved Service config
