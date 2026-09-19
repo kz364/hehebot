@@ -4,6 +4,18 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Ordinary owner continuation integration (2026-09-19):
+`tests/owner-alpha-http-continuation.test.ts` exercises locally signed owner JWTs,
+normal `/v1/commands`, real PersonalControl/SQLite, separately authenticated manager
+retirement, and repeated object reconstruction. Completion and expiry without retirement
+keep readiness false; stale epoch retirement returns422; exact current report returns200.
+Replaying the first key and reading its receipt preserve all runs and the old manifest.
+A fresh second message gets epoch3/distinct session and retains the first owner's text
+at actual claim. Both synthetic completion records persist; two reservations and one
+baseline remain. No live model/native launch/SSO or actual manager lock observation is
+claimed by this fixture. Full `npm test` passes86 files/1754 tests; typecheck passes.
+Evidence `.local/owner-continuation-backend.log`; no production code/deployment change.
+
 Owner continuation follow-through (2026-09-19, local): real DO/HTTP fixture reproduced
 owner-facing `message_admission_available:true` for a service-only campaign. Bootstrap
 summary now keeps that policy visible but unavailable to the ordinary composer;

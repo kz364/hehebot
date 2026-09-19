@@ -4,13 +4,22 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current checkpoint: owner readiness excludes delegated authority; trial80 cold observed.**
+**Current checkpoint: ordinary owner HTTP session continuation verified locally.**
+Signed owner HTTP → real control object/SQLite now has an integrated two-message
+regression: completion/expiry alone stays unavailable, stale retirement refuses,
+exact manager retirement reopens readiness, reconstruction retains receipts, replay
+creates no run, and the next claim retains prior owner text with a distinct session.
+Both synthetic completions persist; two reservations share one cost baseline.
+Typecheck and full backend suite pass:86 files/1754 tests. No live model/provider call,
+owner SSO proof, deployment or push. Next: native/service integration of this same
+ordinary-owner continuation path; live activation still requires explicit assignment.
+
 Local regression reproduced service-only grant advertising ordinary owner admission.
 Owner summary now remains read-only during a delegated campaign; actual service
 submission/result and ordinary owner continuation tests still pass (121 focused tests
 plus typecheck). No new send, policy activation or revocation removal. This follow-up
-is not deployed. Next owned deliverable: ordinary owner retained-session continuation
-verification; live owner campaign activation still needs an explicit assignment.
+is not deployed. The integrated control-plane continuation check above is now complete;
+live owner campaign activation still needs an explicit assignment.
 
 Real same-Sprite native wake completed from the orb without owner Mac/CDP: accepted
 08:55:02Z, canonical result `HEHEBOT_NATIVE_TEST_OK` observed08:55:19Z, actual Chromium

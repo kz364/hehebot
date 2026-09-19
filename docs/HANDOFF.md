@@ -4,14 +4,24 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
+09:29Z local continuation checkpoint: new ordinary owner HTTP/real DO/SQLite regression
+passes two successive sessions with distinct message text and retained context.
+Completion/expiry does not reopen readiness without exact manager retirement; stale
+retirement refuses. Reconstruction and same-key receipt replay create no new run.
+Two synthetic completions persist and keep two reservations on one baseline. Owner
+JWT and manager bearer are separate request principals. Full backend86 files/1754
+tests plus typecheck pass; `.local/owner-continuation-backend.log`. No production code
+change in this checkpoint, no live calls/deploy/push or new campaign assignment.
+Next: native/service integration for ordinary owner continuation; preserve test revoke.
+
 09:15Z scheduled continuation: single provider GET reports cold; no guest exec/wake.
 Local owner readiness fix: service-only bootstrap grant previously advertised owner
 message availability. Red regression reproduced true instead of false; summary now
 stays read-only whenever a test campaign is configured. Dedicated service admission
 and ordinary owner continuation remain intact:121 focused tests and typecheck pass.
 Not deployed; no fresh campaign assigned. Keep test revocation and old custody intact.
-Next owned deliverable is ordinary owner retained-session continuation verification,
-not another marker trial. Coordinator confirms no overlapping implementation owner.
+Control-plane continuation now verified above; native/service integration remains.
+Coordinator confirms no overlapping implementation owner.
 
 Delegated trial80 PASSED: one orb submission08:55:02Z, canonical result
 `HEHEBOT_NATIVE_TEST_OK`08:55:19Z, actual Chromium reload retained result08:57:16Z.
