@@ -5,9 +5,14 @@
 // server + the authenticated Worker/SQLite fixture; credential-free, no live
 // model, provider or account. A second message never triggers a second wake,
 // process, provider bootstrap, activity hold, boot or epoch.
+// --browser drives both ordinary owner messages through the actual portal
+// composer in a real browser against the same authenticated Worker/SQLite
+// fixture and the same single warm process; it is local integration only,
+// never production Access SSO, actual outbound Worker wake or a live model.
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { EventEmitter, once } from 'node:events';
+import { execFile } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -20,6 +25,8 @@ import { createSpriteCodexService } from '../runtime/sprites-codex-service.mjs';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { createCodexTextOnlyProfile, codexTextOnlyProfileSha256 } from '../runtime/codex-text-only.mjs';
 
+const browserMode = process.argv.includes('--browser');
+const exec = (await import('node:util')).promisify(execFile);
 const ROUTINE_MANAGE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 const persona = '11111111-1111-4111-8111-111111111111';
 const replies = ['The notebook is cobalt blue, reference 47.', 'Cobalt blue.'];
@@ -27,7 +34,21 @@ const pause = ms => new Promise(ok => setTimeout(ok, ms));
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const directory = await mkdtemp(join(tmpdir(), 'hehe-warm-manager-'));
-const report = { status: 'failed', mode: 'http-one-process', nativeStarts: 0, modelRequests: 0, spriteRequests: [] };
+const report = { status: 'failed', mode: browserMode ? 'browser-composer' : 'http-one-process', nativeStarts: 0, modelRequests: 0, spriteRequests: [] };
+// Real-browser session for --browser mode. The synthetic signed owner identity
+// is fixture-only: the header rides the same authenticated Worker ingress.
+// Session names must stay short; keep this label at or under 20 characters.
+const browserSession = 'warm-manager-' + randomUUID().slice(0, 5);
+const browser = (...args) => exec('agent-browser', ['--session', browserSession, '--ignore-https-errors', ...args], { timeout: 30000 });
+const browserJson = async code => JSON.parse((await browser('eval', code)).stdout);
+const waitFor = async (probe, timeoutMs, stepMs = 250) => {
+  const end = Date.now() + timeoutMs;
+  do {
+    try { if (await probe()) return true; } catch { /* transient DOM/parse states */ }
+    await pause(stepMs);
+  } while (Date.now() < end);
+  return false;
+};
 // Disposable Sprite seam: the manager task hold and the activity guard both
 // ride it; every hold and confirmation is recorded for exact-sequence asserts.
 const held = new Map(), taskNames = [];
@@ -86,6 +107,7 @@ try {
       execution_lock_free: true, session_lock_free: true, source: 'synthetic-warm-seed' } };
   fixture = await startHostedControlFixture({ directory: join(directory, 'control'), ownerAlpha: originalPolicy,
     runtimeToken, accessClientId, accessClientSecret,
+    ...(browserMode ? { portalAssetsDirectory: resolve('public') } : {}),
     warm: { generation: warmConfig, token: managerToken, hostSigningKey, taskSigningKey, wakeToken } });
   assert.equal(fixture.ownerBindingSha256, ownerBinding, 'warm owner binding differs from authenticated custody');
   await fixture.retirePredecessor(epochOneBoot);
@@ -117,11 +139,82 @@ try {
   assert.equal(report.nativeStarts, 0); assert.equal(report.modelRequests, 0);
   assert.deepEqual(report.spriteRequests, []); assert.deepEqual(await readdir(sessionsDirectory), []);
 
+  if (browserMode) {
+    // The user worker runs ahead of static assets: the portal routes stay
+    // behind owner authentication. Unauthenticated and wrong-owner requests
+    // to the asset routes are denied; the authenticated owner is served.
+    for (const route of ['/', '/app.js']) {
+      assert.equal((await fixture.fetchImpl(route)).status, 401, `unauthenticated ${route} was not denied`);
+      assert.equal((await fixture.fetchImpl(route, { headers: { 'Cf-Access-Jwt-Assertion': fixture.otherOwnerJwt } })).status, 401,
+        `wrong-owner ${route} was not denied`);
+      const served = await fixture.fetchImpl(route, { headers: ownerHeaders });
+      assert.equal(served.status, 200, `authenticated ${route} was not served`);
+      assert.ok((await served.text()).length > 0, `authenticated ${route} returned an empty body`);
+    }
+    // Open the actual portal in a real browser against the authenticated
+    // Worker origin. The synthetic signed identity is fixture-only.
+    await browser('set', 'headers', JSON.stringify(ownerHeaders));
+    await browser('open', fixture.origin + '/');
+    await browser('set', 'viewport', '1280', '900', '2');
+    // Wait for the exact connected state: an initial Connecting is also truthy.
+    assert.ok(await waitFor(() => browserJson('document.querySelector("#connection")?.textContent === "Connected"'), 30000),
+      'portal did not connect to the Worker');
+    // The pre-first warm banner still offers both admissions of one generation.
+    assert.match(await browserJson('document.querySelector("#runtime-banner-text")?.textContent ?? ""'), /2 of 2 messages remaining/);
+    assert.match(await browserJson('document.querySelector("#runtime-banner-text")?.textContent ?? ""'), /One fixed generation starts with your first Send/);
+    // Select the warm generation's persona explicitly (Chief of Staff).
+    assert.ok(await waitFor(() => browserJson(`Boolean(document.querySelector('[data-persona-id="${persona}"]'))`), 30000),
+      'warm persona missing from roster');
+    await browser('click', `[data-persona-id="${persona}"]`);
+    assert.ok(await waitFor(() => browserJson('!document.querySelector("#send").disabled && !document.querySelector("#message").readOnly'), 30000),
+      'warm persona composer never admitted the first send');
+    // Passive-read custody: portal load, roster selection, state polling and
+    // the 5-second refresh timer caused zero commands, launches, model
+    // requests, Sprite contacts or staged sessions.
+    const stateReadCount = 'performance.getEntriesByType("resource").filter(entry => new URL(entry.name).pathname === "/v1/state").length';
+    const priorStateReads = await browserJson(stateReadCount);
+    assert.ok(await waitFor(async () => await browserJson(stateReadCount) > priorStateReads, 10000),
+      'passive portal refresh never completed another state read');
+    assert.equal(report.nativeStarts, 0, 'passive portal load launched a native runtime');
+    assert.equal(report.modelRequests, 0, 'passive portal load reached a model');
+    assert.deepEqual(report.spriteRequests, [], 'passive portal load contacted the Sprite');
+    assert.deepEqual(await readdir(sessionsDirectory), [], 'passive portal load staged a session');
+    assert.equal(await managerClient.request('generation', {}), null, 'passive portal load staged a launch envelope');
+    assert.deepEqual(fixture.browserCommands, [], 'passive portal load sent a command');
+  }
+
   const text1 = 'Remember the cobalt blue notebook, reference 47.', text2 = 'What color was the notebook?';
-  const request1 = command('message.send', { conversation_id: persona, text: text1 });
-  const response1 = await fixture.fetchImpl('/v1/commands', request1);
-  assert.equal(response1.status, 202);
-  const receipt1 = await response1.json();
+  let request1, receipt1;
+  if (browserMode) {
+    // Send the first ordinary owner message through the actual composer.
+    await browser('fill', '#message', text1);
+    await browser('click', '#send');
+    // The composer clears the textarea only after its receipt is confirmed.
+    assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),
+      'composer did not confirm the first message');
+    assert.equal(await browserJson(`localStorage.getItem("personal.pending.${persona}")`), null,
+      'composer left an unconfirmed pending first message');
+    assert.equal(fixture.browserCommands.length, 1, 'composer send was not recorded exactly once');
+    const sent1 = fixture.browserCommands[0];
+    assert.deepEqual(JSON.parse(sent1.body), { schema_version: 1, type: 'message.send',
+      payload: { conversation_id: persona, text: text1 } });
+    assert.match(sent1.headers['idempotency-key'], uuidPattern, 'composer idempotency key is not a UUID');
+    assert.equal(sent1.headers.origin, fixture.origin);
+    assert.equal(sent1.headers['sec-fetch-site'], 'same-origin');
+    // Recover the durable receipt by replaying the exact composer bytes: the
+    // idempotent replay returns the stored receipt without a new command.
+    request1 = { method: 'POST', headers: { ...ownerHeaders, 'Content-Type': sent1.headers['content-type'],
+      Origin: fixture.origin, 'Idempotency-Key': sent1.headers['idempotency-key'] }, body: sent1.body };
+    const confirmed1 = await fixture.fetchImpl('/v1/commands', request1);
+    assert.equal(confirmed1.status, 202);
+    assert.equal(fixture.browserCommands.length, 1, 'receipt replay sent another browser command');
+    receipt1 = await confirmed1.json();
+  } else {
+    request1 = command('message.send', { conversation_id: persona, text: text1 });
+    const response1 = await fixture.fetchImpl('/v1/commands', request1);
+    assert.equal(response1.status, 202);
+    receipt1 = await response1.json();
+  }
   assert.equal(receipt1.status, 'applied');
   const rowsOf = (rows, suffix) => rows.filter(row => row.key.endsWith(suffix));
   const rows1 = await fixture.warmRows();
@@ -268,6 +361,25 @@ try {
     let families = await service.supervisor.bridge.families();
     assert.equal(families.length, 1); assert.equal(families[0].phase, 'complete');
     assert.equal(families[0].claim.run.id, receipt1.resource_id);
+    if (browserMode) {
+      // The portal timeline must show the owner message and the attributed
+      // canonical reply for the first turn.
+      assert.ok(await waitFor(() => browserJson(
+        `[...document.querySelectorAll(".message.bot .message-body")].some(node => node.textContent === ${JSON.stringify(replies[0])})`), 30000),
+        'first canonical reply missing from portal timeline');
+      assert.ok(await browserJson(
+        `[...document.querySelectorAll(".message.user .message-body")].some(node => node.textContent === ${JSON.stringify(text1)})`),
+        'first owner message missing from portal timeline');
+      // Canonical completion re-enables Send within the SAME generation: no
+      // retirement, no second boot, no second launch envelope taken.
+      assert.ok(await waitFor(() => browserJson(
+        '!document.querySelector("#send").disabled && !document.querySelector("#message").readOnly'), 30000),
+        'first canonical completion did not re-enable the composer within the same generation');
+      assert.match(await browserJson('document.querySelector("#runtime-banner-text")?.textContent ?? ""'), /1 of 2 messages remaining/);
+      assert.match(await browserJson('document.querySelector("#runtime-banner-text")?.textContent ?? ""'), /Generation 2 deadline/);
+      assert.equal(report.nativeStarts, 1, 'first completion started another native process');
+      assert.equal(fixture.browserCommands.length, 1, 'completion sent another browser command');
+    }
     run1Done.resolve();
 
     await proceed2.promise;
@@ -298,6 +410,23 @@ try {
     const history2 = await (await fixture.fetchImpl(`/v1/conversations/${persona}/events`, { headers: ownerHeaders })).json();
     const results2 = history2.events.filter(event => event.type === 'run.result' && event.payload.run_id === run2.resource_id);
     assert.equal(results2.length, 1); assert.equal(results2[0].payload.text, replies[1]);
+    if (browserMode) {
+      // The second canonical reply must appear in the same timeline, and the
+      // exhausted generation must close the composer again: no third admission,
+      // no retirement, no second boot.
+      assert.ok(await waitFor(() => browserJson(
+        `[...document.querySelectorAll(".message.bot .message-body")].filter(node => node.textContent === ${JSON.stringify(replies[1])}).length === 1`), 30000),
+        'second canonical reply missing from portal timeline');
+      assert.ok(await browserJson(
+        `[...document.querySelectorAll(".message.user .message-body")].some(node => node.textContent === ${JSON.stringify(text2)})`),
+        'second owner message missing from portal timeline');
+      assert.ok(await waitFor(() => browserJson(
+        'document.querySelector("#send").disabled && document.querySelector("#message").readOnly'), 30000),
+        'exhausted generation did not close the composer');
+      assert.match(await browserJson('document.querySelector("#runtime-banner-text")?.textContent ?? ""'), /Both warm messages have been used/);
+      assert.equal(report.nativeStarts, 1, 'second completion started another native process');
+      assert.equal(fixture.browserCommands.length, 2, 'exhaustion sent another browser command');
+    }
     run2Done.resolve();
 
     await proceedStop.promise;
@@ -338,10 +467,38 @@ try {
   assert.deepEqual(await wakeResponse.json(), { accepted: true, epoch: intent.epoch, duplicate: false });
 
   await run1Done.promise;
-  const request2 = command('message.send', { conversation_id: persona, text: text2 });
-  const response2 = await fixture.fetchImpl('/v1/commands', request2);
-  assert.equal(response2.status, 202);
-  const receipt2 = await response2.json();
+  let request2, receipt2;
+  if (browserMode) {
+    // Send the second ordinary owner message through the same composer in the
+    // same browser session and the same warm generation.
+    assert.ok(await waitFor(() => browserJson(
+      '!document.querySelector("#send").disabled && !document.querySelector("#message").readOnly'), 30000),
+      'composer never admitted the second send');
+    await browser('fill', '#message', text2);
+    await browser('click', '#send');
+    assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),
+      'composer did not confirm the second message');
+    assert.equal(await browserJson(`localStorage.getItem("personal.pending.${persona}")`), null,
+      'composer left an unconfirmed pending second message');
+    assert.equal(fixture.browserCommands.length, 2, 'second composer send was not recorded exactly once');
+    const sent2 = fixture.browserCommands[1];
+    assert.deepEqual(JSON.parse(sent2.body), { schema_version: 1, type: 'message.send',
+      payload: { conversation_id: persona, text: text2 } });
+    assert.match(sent2.headers['idempotency-key'], uuidPattern, 'second composer idempotency key is not a UUID');
+    assert.notEqual(sent2.headers['idempotency-key'], request1.headers['Idempotency-Key'],
+      'both turns reused one idempotency key');
+    request2 = { method: 'POST', headers: { ...ownerHeaders, 'Content-Type': sent2.headers['content-type'],
+      Origin: fixture.origin, 'Idempotency-Key': sent2.headers['idempotency-key'] }, body: sent2.body };
+    const confirmed2 = await fixture.fetchImpl('/v1/commands', request2);
+    assert.equal(confirmed2.status, 202);
+    assert.equal(fixture.browserCommands.length, 2, 'receipt replay sent another browser command');
+    receipt2 = await confirmed2.json();
+  } else {
+    request2 = command('message.send', { conversation_id: persona, text: text2 });
+    const response2 = await fixture.fetchImpl('/v1/commands', request2);
+    assert.equal(response2.status, 202);
+    receipt2 = await response2.json();
+  }
   assert.equal(receipt2.status, 'applied');
   const run2 = { resource_id: receipt2.resource_id };
   const rows2 = await fixture.warmRows();
@@ -386,6 +543,44 @@ try {
     accessClientId, accessClientSecret, fetchImpl: fixture.fetchImpl });
   await assert.rejects(() => legacyRuntime.request('status', {}),
     error => error.code === 'CONTROL_HTTP_ERROR' && error.status === 404, 'legacy runtime route stayed open');
+  if (browserMode) {
+    // Reload the real portal while the warm generation is still open: the
+    // exact two owner messages and two canonical bot replies must be retained,
+    // the exhausted composer stays disabled/readOnly, no uncertain pending
+    // bytes survive, and the reload itself stays passive.
+    await browser('reload');
+    assert.ok(await waitFor(() => browserJson('document.querySelector("#connection")?.textContent === "Connected"'), 30000),
+      'portal did not reconnect after reload');
+    assert.ok(await waitFor(() => browserJson(
+      '[...document.querySelectorAll(".message.bot .message-body")].filter(node => node.textContent === "Cobalt blue.").length === 1'), 30000),
+      'reloaded timeline missing the second canonical reply');
+    const timeline = await browserJson(`(() => ({
+      users: [...document.querySelectorAll(".message.user .message-body")].map(node => node.textContent),
+      bots: [...document.querySelectorAll(".message.bot .message-body")].map(node => node.textContent) }) )()`);
+    assert.equal(timeline.users.length, 2, 'reloaded timeline lost or duplicated owner messages');
+    assert.equal(timeline.bots.length, 2, 'reloaded timeline lost or duplicated canonical bot replies');
+    assert.ok(timeline.users.includes(text1) && timeline.users.includes(text2), 'reloaded timeline lost an owner message');
+    assert.ok(timeline.bots.includes(replies[0]) && timeline.bots.includes(replies[1]), 'reloaded timeline lost a canonical reply');
+    assert.equal(await browserJson('document.querySelector("#send").disabled'), true, 'reloaded composer is not disabled');
+    assert.equal(await browserJson('document.querySelector("#message").readOnly'), true, 'reloaded composer textarea is not readOnly');
+    assert.match(await browserJson('document.querySelector("#runtime-banner-text")?.textContent ?? ""'), /Both warm messages have been used/);
+    assert.equal(await browserJson(`localStorage.getItem("personal.pending.${persona}")`), null,
+      'reloaded composer left an unconfirmed pending message');
+    assert.equal(fixture.browserCommands.length, 2, 'reload sent or duplicated a browser command');
+    assert.equal(report.nativeStarts, 1, 'reload launched another native runtime');
+    assert.equal(report.modelRequests, 2, 'reload reached a model');
+    assert.equal((await browser('errors')).stdout.trim(), '', 'portal reported page errors');
+    assert.ok(Date.now() < Date.parse(generationRow1.value.policy.expires_at),
+      'reload assertions completed only after generation expiry');
+    // Absolute path: the CLI resolves relative screenshot names against its
+    // own working directory, not this script's. Enlarge the viewport and scroll
+    // the timeline so the screenshot shows both turns' messages and replies.
+    await mkdir('.amp/in/artifacts', { recursive: true });
+    await browser('set', 'viewport', '1280', '1600', '2');
+    await browser('eval', 'document.querySelector("#timeline").scrollTo(0, 0)');
+    await browser('eval', 'new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    await browser('screenshot', resolve('.amp/in/artifacts/warm-manager-browser-portal.png'));
+  }
   proceedStop.resolve();
 
   const result = await Promise.race([wakeFinished, new Promise((_, reject) => {
@@ -420,7 +615,9 @@ try {
   Object.assign(report, { status: 'passed', canonicalReplies: replies, oneProcessTwoTurns: true,
     sameGenerationBothTurns: true, distinctTaskCredentials: true, boundedPriorCanonicalContext: true,
     passiveReadsDidNotLaunch: true, replayDidNotRelaunch: true, noPrematureRetirement: true,
-    explicitPostExpiryStop: true, dualLockRetirement: true, productionEnabled: false, providerOrAccountVerified: false });
+    explicitPostExpiryStop: true, dualLockRetirement: true, productionEnabled: false, providerOrAccountVerified: false,
+    ...(browserMode ? { browserComposerVerified: true, passivePortalReadsDidNotLaunch: true,
+      completionReenabledComposer: true, portalReloadRetainedBothTurns: true } : {}) });
 } catch (error) {
   report.error = error.code ?? error.name;
   report.message = error.message;
@@ -428,6 +625,7 @@ try {
   process.exitCode = 1;
 } finally {
   clearTimeout(wakeDeadline); listener?.stop();
+  if (browserMode) await browser('close').catch(() => {});
   await service?.stop().catch(() => {}); await fixture?.close().catch(() => {});
   if (model) { model.closeAllConnections(); await new Promise(ok => model.close(ok)); }
   if (report.status === 'passed') await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
