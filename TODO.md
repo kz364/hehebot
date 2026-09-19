@@ -29,9 +29,9 @@ again; its startup path is HTTP-only. Live launch-floor/readback passes before a
 work. Remaining: exact epoch9 custody review, immutable marker/grant and new profile
 activation, then one bounded fresh message and reload verification. Browser worker has
 a passive custody/readiness assignment but no returned evidence or send authority.
-Current host runner inventory is empty; this orb cannot access the owner-authenticated
-Mac browser. Reconnect its existing executor to finish the assigned check. Inventory
-alone does not prove every other browser transport unavailable; worker confirmation is pending.
+Owner reconnected the laptop at06:29Z. Runner my-laptop is live with the existing
+browser worker attached; its read-only assignment has resumed. Await exact custody
+and portal readiness before activation; no new connection or spend approval needed.
 Schedule is enabled, not paused. No quarantine marker/grant, fresh message,
 completion or reload verification; retained UNKNOWN/reservations are unchanged.
 

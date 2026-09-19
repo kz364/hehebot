@@ -61,6 +61,10 @@ Browser worker asked to report its precise transport blocker; coordinator notifi
 that reconnecting the existing executor is the remaining access step, not renewed
 spend/recovery approval. Do not infer all browser transports absent from inventory
 alone. No new live probes/authority; schedule remains enabled pending that response.
+Owner connected laptop06:29Z; list_runners confirms my-laptop at /Users/kaspar with
+the existing browser worker attached. Read-only assignment resumed, no send authority.
+Host prepared `.local/prepare-bootstrap-v4.mjs` (syntax checked, not executed), which
+requires exact manifest/marker evidence and preserves v3 cost fields and180s/120s bounds.
 
 New startup defect confirmed synthetically on same Sprite: deployed listener
 PID20242 inherited CapInh/Prm/Eff/Bnd/Amb=a82435fb, NoNewPrivs0. Saved Service config
