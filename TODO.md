@@ -27,8 +27,11 @@ minutes with all seven retained files unchanged. Directory inodes changed; post-
 pins are required. Listener auto-started despite its earlier stop and was stopped
 again; its startup path is HTTP-only. Live launch-floor/readback passes before account
 work. Remaining: exact epoch9 custody review, immutable marker/grant and new profile
-activation, then one bounded fresh message and reload verification. Browser worker is
-checking custody and readiness passively; no send authority yet.
+activation, then one bounded fresh message and reload verification. Browser worker has
+a passive custody/readiness assignment but no returned evidence or send authority.
+Current host runner inventory is empty; this orb cannot access the owner-authenticated
+Mac browser. Reconnect its existing executor to finish the assigned check. Inventory
+alone does not prove every other browser transport unavailable; worker confirmation is pending.
 Schedule is enabled, not paused. No quarantine marker/grant, fresh message,
 completion or reload verification; retained UNKNOWN/reservations are unchanged.
 

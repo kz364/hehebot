@@ -55,6 +55,12 @@ staging confirms all seven pins unchanged, same kernel and zero named Codex proc
 (`.local/forward-isolation-retained-after-staging.json`).
 Private request-builder `.local/forward-isolation-request.mjs` prepared but not run;
 needs exact manifest from passive browser export and fresh readback (<60s).
+06:23 scheduled continuation: no browser evidence returned. Host list_runners reports
+none, so there is no runner route here to the existing owner Mac browser session.
+Browser worker asked to report its precise transport blocker; coordinator notified
+that reconnecting the existing executor is the remaining access step, not renewed
+spend/recovery approval. Do not infer all browser transports absent from inventory
+alone. No new live probes/authority; schedule remains enabled pending that response.
 
 New startup defect confirmed synthetically on same Sprite: deployed listener
 PID20242 inherited CapInh/Prm/Eff/Bnd/Amb=a82435fb, NoNewPrivs0. Saved Service config
