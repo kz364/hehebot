@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
+F1b first patch downloaded to `.local/warm-wake-listener.patch`, SHA256
+3eb7edd449b8d41fffdcf68c5d4a8351ea987563ede9a97cc8d4a8152bbc6d9d;
+NOT applied. Parent returned a review correction to the same wake worker:
+launch callback still references receipt1/generationRow1/manifestRow1 initialized
+by the main flow after the first send, and post-send assertions require a launch
+envelope and empty sessions even though the real alarm may already have staged
+the manager. A 5-second alarm floor is not synchronization with browser receipt
+processing. Worker must remove these timing assumptions and add delayed-observation
+coverage where wake runs first. Await replacement; no duplicate implementation.
+
 Owner now requested the full remaining queue plus scheduled orchestration.
 The top of TODO.md is authoritative: F1a entrypoint control-flow tests are now
 integrated and parent-verified (4 focused, 568 runtime, typecheck). No production

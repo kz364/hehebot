@@ -4,6 +4,19 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+F1b first review (2026-09-19): worker reports positive HTTP/browser real alarm
+delivery and two UNKNOWN/no-retry negative tests. Parent verified patch SHA256
+3eb7edd449b8d41fffdcf68c5d4a8351ea987563ede9a97cc8d4a8152bbc6d9d,
+but did not apply or rerun it. Source review found launchImpl closes over
+post-send main-flow receipt/generation/manifest bindings, while the now-real
+alarm can launch independently. Post-admission nonnull-envelope and empty-session
+assertions likewise assume observation wins the wake race. Production has a
+minimum 5-second alarm delay, but browser receipt waits allow 15 seconds; that
+delay is not a correctness guarantee. Requested a replacement with independent
+callback custody and deliberately delayed receipt observation. This is a test
+orchestration finding, not evidence of a production wake defect. No new acceptance
+claim or live operation; worker owns corrections and parent will verify replacement.
+
 F1a automatic warm entrypoint control flow (2026-09-19, local): imported and
 reviewed tests/runtime-owner-alpha-warm-entry.mjs. Parent focused tests pass 4/4,
 full runtime suite passes 568/568 and typecheck passes. Logs:
