@@ -38,6 +38,12 @@ New GLM5.3 runtime and portal workers are implementing the independently owned
 consumers against the frozen contract and exact transferred source bundle. Runtime
 owns one-process native integration; portal owns composer/status gating. One warm
 revision admits two tasks, with no rollover. Parent owns combined integration.
+Portal draft returned for correction, not integrated: its original browser suite
+passes here, but present falsy warm metadata falls back to ordinary mode, and a
+changed persona redirects conversation reads despite the invalid-state latch.
+Worker is adding those cases, first-bind consistency/date-type checks, warm-mode
+review-button fencing and actual narrow-viewport Send reachability verification.
+Desktop available/expired captures were inspected; runtime work remains active.
 No live state changed. Evidence is in docs/IMPLEMENTATION.md.
 Next checkpoint: one-process native and portal integration before separately
 opting into background capabilities. No live rollout,

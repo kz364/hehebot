@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stage A portal draft review (2026-09-19, local): patch SHA256
+76f4904cb619011833da506cfb8683aa4fd58ed52ff20d2df98289e7a2c50653
+was applied temporarily for review and then removed pending correction. Parent
+`node scripts/test-portal-alpha-warm-portal.mjs` exited 0; evidence:
+`.local/warm-portal-review-baseline.log`. Executing the actual app functions in a
+Node VM with browser-state stubs exposed two omitted cases: present null/false/0/empty
+warm metadata returns the non-warm sentinel without setting warmSeen/alphaSeen;
+changing a bound persona makes warmBlock invalid but alphaConversationAvailable
+allows the changed persona and denies the original one. These are frontend admission/
+read-gating defects, not evidence of bypassing Worker authorization. Requested actual
+browser regressions, strict string timestamps, first-call generation/count binding,
+and hiding the legacy review control on warm transition. Parent inspected fresh 2x
+desktop available/expired captures and narrow pre-first capture. Narrow Send is below
+the captured viewport; worker must exercise scroll/reachability rather than infer it.
+No portal code is integrated yet; native/runtime worker continues independently.
+
 Stage A round-2 integration (2026-09-19, local): replacement SHA256
 c7dae83f1624b40665ae20203aa009b67db71ea2d2f352f9039b26b32c58503b
 addresses all eight findings below and is integrated locally at 63c1421. Parent
