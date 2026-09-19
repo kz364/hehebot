@@ -17,6 +17,10 @@ Initial wire review returned corrections: lifetime accounting must include old a
 reservations; output/usage observations are host-only; task tokens retain only existing
 scoped reads; admission freezes task deadlines. Legacy-token downgrade, historical
 reconstruction and first-message-only wake require explicit tests before integration.
+Corrected authority split approved for implementation; final manifest hash must cover
+warm version/admission identity, and public summary must distinguish fixed policy expiry
+from generation expiry. Legacy composer remains read-only for warm mode pending its
+separate new consumer; runtime/UI workers follow the reviewed control patch.
 Next checkpoint: integrate composer evidence and Stage A control contract, then one-process
 native integration before separately opting into background capabilities. No live rollout,
 campaign, spending, push or schedule enablement; owner SSO/provider gates remain separate.
