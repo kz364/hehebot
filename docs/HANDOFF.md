@@ -4,6 +4,20 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
+Owner requested all further implementation in new threads. Composer/native worker
+`T-01a0b94d-7913-71ff-aba8-8ed10ec336fa` owns only hosted-manager browser-mode fixture
+and hosted-control fixture support. P0.3 advisor `T-01a0b94d-ec79-70df-a54d-534eec09664c`
+finished: actual pinned V2 terminal-root-mailbox fixture passed33 scripted requests,
+22 core and18 runtime checks; not fresh upstream-source verification (HTTP404), live
+tool containment, managed-refresh arbitration or settlement proof. Recommended finite
+single-process generation with separate immutable task grants; old V1 cross-root
+failure does not establish a V2 failure. New Stage A control worker
+`T-01a0b954-dde5-71bf-ba76-9ec7271c113c` owns default-off versioned text-only warm
+generation/two sequential messages and separated executor/task capabilities. Runtime
+implementation is dependent and must start in a new thread after contract review.
+All workers use the verified bundle baseline through dd3808b; parent owns tracking
+and integration. Legacy grants unchanged; no live assignment, push or schedule activation.
+
 10:05Z native continuation: extended existing hosted-manager script passes2 ordinary
 owner sessions with2 actual Codex launches/2 scripted model requests. Prior owner
 message AND canonical reply reach second request; old receipt replay launches nothing;
