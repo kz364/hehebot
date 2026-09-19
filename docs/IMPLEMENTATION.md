@@ -4,6 +4,20 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner continuation follow-through (2026-09-19, local): real DO/HTTP fixture reproduced
+owner-facing `message_admission_available:true` for a service-only campaign. Bootstrap
+summary now keeps that policy visible but unavailable to the ordinary composer;
+service submission still uses unchanged actor/grant admission. The regression then
+executes the existing signed-service submit/result flow.121 campaign/route/bootstrap
+tests and typecheck pass, including ordinary owner readiness after trusted retirement.
+`node scripts/test-portal-alpha-session.mjs` passed existing Chromium DOM checks:
+unavailable admission blocks normal/programmatic Send, eligible admission works,
+review/adoption performs no commands/reload, and uncertain message text/key persist.
+Log `.local/owner-readiness-browser.log`; no visual layout changes in this follow-up.
+No live campaign, deployment or gate change. One bounded provider metadata GET around
+09:15Z returned `status:cold`; no guest execution or wake. Earlier process/lock checks
+plus this observation are not repeated cold-recovery or general sleep acceptance.
+
 Delegated live acceptance (2026-09-19): source deployed as Worker version
 `ba6b658b-4ba2-4ed5-bea2-9ed645e4bd0b`, followed by atomic campaign/auth/bootstrap
 secret update. Includes explicit session-adoption UI; no owner SSO/composer acceptance

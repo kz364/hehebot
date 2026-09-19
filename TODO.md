@@ -4,7 +4,14 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current checkpoint: delegated orb trial80 completed; backend test access revoked.**
+**Current checkpoint: owner readiness excludes delegated authority; trial80 cold observed.**
+Local regression reproduced service-only grant advertising ordinary owner admission.
+Owner summary now remains read-only during a delegated campaign; actual service
+submission/result and ordinary owner continuation tests still pass (121 focused tests
+plus typecheck). No new send, policy activation or revocation removal. This follow-up
+is not deployed. Next owned deliverable: ordinary owner retained-session continuation
+verification; live owner campaign activation still needs an explicit assignment.
+
 Real same-Sprite native wake completed from the orb without owner Mac/CDP: accepted
 08:55:02Z, canonical result `HEHEBOT_NATIVE_TEST_OK` observed08:55:19Z, actual Chromium
 reload retained the same completed result08:57:16Z. This is delegated test-principal
@@ -12,14 +19,15 @@ acceptance, NOT owner SSO/composer proof. Session-adoption UI and delegated rout
 deployed; source remains locally committed, not pushed. Combined verifier passed
 (1752 backend/550 runtime plus browser/native/service/build); desktop16/16 passed.
 09:04:48Z durable stop record and both free locks verified; named bootstrap/activity
-tasks absent and native process count0. Provider last reported warm, not proven cold.
+tasks absent and native process count0. One read-only provider GET around09:15Z now
+reports cold, without guest execution/wake. This does not prove repeated cold recovery.
 Old UNKNOWN/holds remain untouched. Existing $10 cap is unchanged; billing unverified.
 End-of-campaign backend revocation deployed and live credential read returned404 at
 09:11:48Z;24 focused auth/HTTP tests and typecheck pass. Access token deletion itself
 is blocked: dashboard read timed out40s BEFORE any write. Known token expiry is
 2026-09-20T08:23:19Z, not immediate revocation. Next: delete exactly the named test token
 when dashboard access is available; no navigation retries or new laptop testing loop.
-Owner SSO/composer and cold-state acceptance remain separate outstanding gates.
+Owner SSO/composer and repeated cold-start acceptance remain outstanding gates.
 
 **Historical pre-delegation checkpoint: trial80 was on HOLD and unsent.**
 Owner withdrew the manual-refresh loop. Exclusive browser worker confirms no trial80

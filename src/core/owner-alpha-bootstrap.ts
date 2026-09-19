@@ -159,7 +159,11 @@ export class OwnerAlphaBootstrap {
  summary():OwnerAlphaBootstrapSummary|undefined {
   const c=this.config;if(!c)return undefined;
   let available=false;
-  try{this.admission();available=true;}catch{/* Corrupt or incomplete trusted evidence is unavailable, never repaired here. */}
+  // This projection serves the owner portal, not the delegated service route.
+  // Keep the policy visible/read-only without advertising another actor's grant.
+  if(!this.core.options.testCampaignGrant){
+   try{this.admission();available=true;}catch{/* Corrupt or incomplete trusted evidence is unavailable, never repaired here. */}
+  }
   return {policy_revision:c.policy_revision,persona_id:c.persona_id,expires_at:c.expires_at,max_task_seconds:c.max_task_seconds,message_admission_available:available};
  }
  private admission(){

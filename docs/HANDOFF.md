@@ -4,14 +4,24 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
+09:15Z scheduled continuation: single provider GET reports cold; no guest exec/wake.
+Local owner readiness fix: service-only bootstrap grant previously advertised owner
+message availability. Red regression reproduced true instead of false; summary now
+stays read-only whenever a test campaign is configured. Dedicated service admission
+and ordinary owner continuation remain intact:121 focused tests and typecheck pass.
+Not deployed; no fresh campaign assigned. Keep test revocation and old custody intact.
+Next owned deliverable is ordinary owner retained-session continuation verification,
+not another marker trial. Coordinator confirms no overlapping implementation owner.
+
 Delegated trial80 PASSED: one orb submission08:55:02Z, canonical result
 `HEHEBOT_NATIVE_TEST_OK`08:55:19Z, actual Chromium reload retained result08:57:16Z.
 Run `ca895bf8-887e-4323-85a3-a9dcd5b29f9a`, attempt1. No owner Mac dependency for
 this native gate; NOT owner SSO/composer proof. Session-adoption UI deployed too.
 Full combined verifier passed1752 backend/550 runtime and desktop16/16. Session
 expired08:58:02Z;09:04:48Z nativeStopped and dual-lock inspection passed, named
-activity/bootstrap tasks absent and native process count0. Last provider state warm,
-not proven cold. Old UNKNOWN/holds unchanged; no budget reset or billing claim.
+activity/bootstrap tasks absent and native process count0. Provider was warm then;
+later cold observation recorded above. Old UNKNOWN/holds unchanged; no budget reset
+or billing claim. Repeated cold-recovery acceptance remains open.
 
 Campaign ended: dashboard token deletion blocked BEFORE write by40s CDP timeout.
 No repeat navigation requested. Backend revocation binding `HEHEBOT_TEST_REVOKED`

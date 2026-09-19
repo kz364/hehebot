@@ -33,6 +33,8 @@ it('integrates signed service identity with real DO admission, rate limits and o
   const identity=lifecycle.registerBoot(randomUUID());lifecycle.ready(identity);
   vi.setSystemTime(new Date('2026-09-19T00:02:00.000Z'));lifecycle.watchdog();
   core.bootstrap.recordRetirement({...identity,session_id:policy.session_id,transition_id:null,observed_at:new Date().toISOString(),direct_child_stopped:true,execution_lock_free:true,session_lock_free:true,source:'synthetic-stop-observation'});
+  // A ready service campaign is not authority for the ordinary owner composer.
+  expect(core.state().summary.owner_alpha_bootstrap?.message_admission_available).toBe(false);
   const pair=await generateKeyPair('RS256');keys.resolve=createLocalJWKSet({keys:[{...await exportJWK(pair.publicKey),kid:'http-test',alg:'RS256'}]});
   const token=await new SignJWT({iss:issuer,aud:'test-aud',sub:'',common_name:client,iat:Date.now()/1000,exp:Date.now()/1000+3600}).setProtectedHeader({alg:'RS256',kid:'http-test'}).sign(pair.privateKey);
   const key=randomUUID(),request=(path:string,body?:unknown)=>worker.fetch(new Request(origin+path,{method:body===undefined?'GET':'POST',headers:{'Cf-Access-Jwt-Assertion':token,'Idempotency-Key':key,'Content-Type':'application/json',Origin:origin},body:body===undefined?undefined:JSON.stringify(body)}),env);
