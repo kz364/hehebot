@@ -4,6 +4,28 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
+Delegated trial80 PASSED: one orb submission08:55:02Z, canonical result
+`HEHEBOT_NATIVE_TEST_OK`08:55:19Z, actual Chromium reload retained result08:57:16Z.
+Run `ca895bf8-887e-4323-85a3-a9dcd5b29f9a`, attempt1. No owner Mac dependency for
+this native gate; NOT owner SSO/composer proof. Session-adoption UI deployed too.
+Full combined verifier passed1752 backend/550 runtime and desktop16/16. Session
+expired08:58:02Z;09:04:48Z nativeStopped and dual-lock inspection passed, named
+activity/bootstrap tasks absent and native process count0. Last provider state warm,
+not proven cold. Old UNKNOWN/holds unchanged; no budget reset or billing claim.
+
+Campaign ended: dashboard token deletion blocked BEFORE write by40s CDP timeout.
+No repeat navigation requested. Backend revocation binding `HEHEBOT_TEST_REVOKED`
+now disables all test routes before authentication/RPC, preserving immutable grants,
+owner auth and runtime policy. Latest deployment `1b93f346-8341-4f31-a6e3-cc3c8d6dcb7f`;
+live credential read09:11:48Z returned404/NOT_FOUND. Typecheck and24 targeted auth/HTTP
+tests pass after this small follow-up. Do not clear revocation or resubmit without
+new explicit campaign assignment. Remaining cleanup: delete named Access token
+9096f9fe-ed91-4216-ad77-91ab6e419a59 via sole dashboard owner when available; token
+itself is NOT claimed deleted, known expiry2026-09-20T08:23:19Z. Preserve apps/policies.
+Private evidence `.local/delegated-revocation.json` and `.local/delegated-trial80-*.json`;
+inspected screenshot `.amp/in/artifacts/delegated-native-result-reloaded.png`.
+Local commits only, no Git push. Historical preparation below is superseded.
+
 Owner explicitly approved delegated orb test route/credential: finite24h, revocable,
 current installation/DO and same Sprite, fixed synthetic context/text only, one active
 test, own receipt/run/result reads, no owner impersonation or private context/tools.
@@ -16,9 +38,11 @@ persisted after owner broadened original credential. Core worker source transfer
 reviewed/integrated; host owns all source now. Core permits exact operator-configured
 unused recovery through existing custody checks, but not caller-provided evidence or
 claimed-pre-turn recovery. Bootstrap expiry cannot exceed campaign expiry.
-Backend1752/runtime550 and desktop16/16 pass; full combined check still running in
-`.local/delegated-combined.log`. No live delegated message yet. Campaign bindings at
-`.local/delegated-test-bindings.json`, new token at `.local/secrets/hehebot-orb-native-test.json`.
+Backend1752/runtime550 and desktop16/16 pass; full combined check passed in
+`.local/delegated-combined.log`. Live result recorded above. Campaign bindings at
+`.local/delegated-test-bindings.json`. Host credential file removed after verified
+backend revocation; dashboard worker confirms its source copy was already deleted.
+Iteration/send scripts removed; no retained runnable send assignment.
 Same-Sprite listener now uses manager-delegated-test.json; exact GET/argv/template/
 profile/seven sources/old epoch10 marker verified08:47Z, zero native processes. Old
 manager/template files preserved; no new historical absence proof produced.

@@ -62,3 +62,19 @@ it('keeps the new routes off without explicit test configuration',async()=>{
  const response=await worker.fetch(new Request(origin+`/v1/test/runs/${id}`,{headers:{'Cf-Access-Jwt-Assertion':service}}),{...env,HEHEBOT_TEST_ACCESS:undefined});
  expect(response.status).toBe(404);expect(readTest).not.toHaveBeenCalled();
 });
+
+it('revokes all test reads and writes without changing owner authentication or calling the DO',async()=>{
+ const revoked={...env,HEHEBOT_TEST_REVOKED:'campaign-ended'};
+ for(const path of ['/v1/test/commands',`/v1/test/receipts/${id}`,`/v1/test/runs/${id}`]){
+  const post=path.endsWith('/commands');
+  const response=await worker.fetch(new Request(origin+path,{method:post?'POST':'GET',headers:{'Cf-Access-Jwt-Assertion':service,'Content-Type':'application/json','Idempotency-Key':'revoked-key'},body:post?JSON.stringify({campaign_id:campaign}):undefined}),revoked);
+  expect(response.status).toBe(404);
+ }
+ const assets=vi.fn(async()=>new Response('owner-only'));
+ for(const [token,status] of [[owner,200],[service,401]] as const){
+  const response=await worker.fetch(new Request(origin+'/',{headers:{'Cf-Access-Jwt-Assertion':token}}),{...revoked,ASSETS:{fetch:assets} as unknown as Env['ASSETS']});
+  expect(response.status).toBe(status);
+ }
+ expect(assets).toHaveBeenCalledTimes(1);
+ expect(submitTest).not.toHaveBeenCalled();expect(readTest).not.toHaveBeenCalled();expect(unexpected).not.toHaveBeenCalled();
+});

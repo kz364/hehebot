@@ -4,7 +4,24 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current checkpoint: remove Mac/CDP dependency; trial80 is on HOLD and unsent.**
+**Current checkpoint: delegated orb trial80 completed; backend test access revoked.**
+Real same-Sprite native wake completed from the orb without owner Mac/CDP: accepted
+08:55:02Z, canonical result `HEHEBOT_NATIVE_TEST_OK` observed08:55:19Z, actual Chromium
+reload retained the same completed result08:57:16Z. This is delegated test-principal
+acceptance, NOT owner SSO/composer proof. Session-adoption UI and delegated route are
+deployed; source remains locally committed, not pushed. Combined verifier passed
+(1752 backend/550 runtime plus browser/native/service/build); desktop16/16 passed.
+09:04:48Z durable stop record and both free locks verified; named bootstrap/activity
+tasks absent and native process count0. Provider last reported warm, not proven cold.
+Old UNKNOWN/holds remain untouched. Existing $10 cap is unchanged; billing unverified.
+End-of-campaign backend revocation deployed and live credential read returned404 at
+09:11:48Z;24 focused auth/HTTP tests and typecheck pass. Access token deletion itself
+is blocked: dashboard read timed out40s BEFORE any write. Known token expiry is
+2026-09-20T08:23:19Z, not immediate revocation. Next: delete exactly the named test token
+when dashboard access is available; no navigation retries or new laptop testing loop.
+Owner SSO/composer and cold-state acceptance remain separate outstanding gates.
+
+**Historical pre-delegation checkpoint: trial80 was on HOLD and unsent.**
 Owner withdrew the manual-refresh loop. Exclusive browser worker confirms no trial80
 fill/click/POST under V5/V6/V7 and no in-flight run. V7 fixed expiry08:11:17.458Z stays
 unchanged; do not renew it or ask for another laptop refresh.07:40 authenticated export
@@ -29,9 +46,9 @@ grant; no renewed scope/spend approval is needed. Dashboard provisioning complet
 one named token expires2026-09-20T08:23:19Z, exact path app/token-only policy read back,
 owner/internal apps unchanged; secret transferred privately and host0600 verified.
 Core/HTTP isolation and admission integrated;1752 backend and550 runtime tests pass,
-combined native/browser checks continuing. Effective Sprite argv/manager/template/
+combined native/browser checks passed. Effective Sprite argv/manager/template/
 seven source pins and retained epoch10 marker verified08:47Z; zero native processes.
-No live delegated message yet. Host owns deployment and single sender; browser HOLD.
+Live delegated result is recorded above. Host owns single sender; owner browser HOLD.
 Existing API/dashboard visibility discrepancy remains, not a reason to broaden token
 permissions again. New wake diagnostic retention passes121 focused tests, preserving UNKNOWN.
 Keep production exact owner JWT subject checks and cumulative budget unchanged.

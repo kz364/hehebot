@@ -13,6 +13,7 @@ export default {
    const url=new URL(request.url),path=url.pathname;
    const control=env.CONTROL.getByName(env.INSTALLATION_ID);
    if(path==='/v1/test'||path.startsWith('/v1/test/')){
+    requireThat(!env.HEHEBOT_TEST_REVOKED,'NOT_FOUND','Route unavailable.',404);
     const config=parseTestAuthConfig(env.HEHEBOT_TEST_ACCESS,env);
     requireThat(!!config,'NOT_FOUND','Route unavailable.',404);
     const actor=await authenticateTestPrincipal(request,config);

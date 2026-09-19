@@ -4,6 +4,39 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Delegated live acceptance (2026-09-19): source deployed as Worker version
+`ba6b658b-4ba2-4ed5-bea2-9ed645e4bd0b`, followed by atomic campaign/auth/bootstrap
+secret update. Includes explicit session-adoption UI; no owner SSO/composer acceptance
+is inferred. Orb-only single sender submitted command `3bc3066d-94b1-4e5a-80f5-ee46d5446916`
+once, HTTP202/applied08:55:02.362Z. Run `ca895bf8-887e-4323-85a3-a9dcd5b29f9a`
+claimed attempt1 and canonically completed08:55:18.677Z, observed08:55:19.111Z,
+with exact text `HEHEBOT_NATIVE_TEST_OK`. Independent HTTP reread and actual Chromium
+reload08:57:16.024Z retained the same result. Inspected screenshot:
+`.amp/in/artifacts/delegated-native-result-reloaded.png`. This exercises real native
+wake/result under the delegated synthetic capability in the same installation/Sprite,
+not owner login/composer or unrestricted ongoing availability.
+
+Session epoch11/boot44ac930c-c965-4501-9c0c-82605a35ac20 expired08:58:02.362Z.
+09:04:48.411Z supported inspect-locked read verified durable nativeStopped plus both
+executor/session locks free;09:04:49.745Z bootstrap/activity tasks absent and Codex
+process count0. Provider observation09:04:08Z was warm: cold/hibernated state unproven.
+No old UNKNOWN was replayed/refunded/settled. Cumulative cap remains$10; reservations
+are not measured billing. End-of-campaign dashboard revocation blocked BEFORE write
+by40s CDP read timeout. Token is not claimed deleted. Backend revocation binding
+`HEHEBOT_TEST_REVOKED` disables test routes before auth/RPC without changing immutable
+grants, production owner authentication or runtime policy. Follow-up deployment
+`1b93f346-8341-4f31-a6e3-cc3c8d6dcb7f`; live credential GET09:11:48.277Z returned
+404/NOT_FOUND. Typecheck and24 auth/route/DO integration tests pass; test proves valid
+owner auth still works while service reads/writes refuse without RPC. Private evidence
+`.local/delegated-revocation.json`. Named Access token deletion remains cleanup for
+sole dashboard owner; no retry/login loop. Private evidence: `.local/delegated-trial80-*.json`,
+`.local/delegated-browser-readback.json`. No credentials or owner content in screenshot.
+Full `bash scripts/verify-codex.sh` exited0:85 files/1752 backend tests,550 runtime,
+browser/native/service/build, final status passed with production flags false.
+`npm ci --prefix desktop && npm test --prefix desktop` passed16/16. Logs:
+`.local/delegated-combined.log`, `.local/delegated-desktop.log`. Source committed locally,
+not pushed. Historical implementation checkpoints below precede this live result.
+
 Delegated test implementation checkpoint (2026-09-19): owner explicitly approved one
 24h revocable named Access Service Auth credential, exact `/v1/test/*` path app/policy,
 bounded backend grant in current installation/DO and same Sprite. No owner impersonation,
@@ -15,8 +48,8 @@ Browser worker completed one-time provisioning/readback08:24Z: token
 credential file transferred to host and chmod0600 verified; no personal session copied.
 API403/list-empty discrepancy is not evidence known apps are absent; no token broadening.
 Host integrated core context isolation/admission and real DO/HTTP test:1752 backend,
-550 runtime pass so far, combined suite continuing; desktop16/16 passes. This is not
-live native acceptance. Delegated grant permits3 submissions, fixed persona,180s
+550 runtime pass, combined suite passed; desktop16/16 passes. Live acceptance is
+recorded above. Delegated grant permits3 submissions, fixed persona,180s
 session/120s task, existing$1 reservation and$10 lifetime ledger. Exact operator-reviewed
 unused epoch10 evidence remains unchanged; service principal cannot provide it.
 Separate manager/template staged on same Sprite; old configs preserved. Effective
