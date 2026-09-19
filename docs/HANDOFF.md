@@ -4,7 +4,27 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
-Latest06:51Z: exact authenticated epoch9 custody export received and hash verified,
+Latest06:59Z: trial79 FAILED, not completed. One message accepted06:53:39.615Z,
+command f1561a34-2cdf-475b-9128-58a4de5439eb, run eec5ab8d-e403-4f6a-b8aa-deea3d97089d.
+Epoch10/transition435539d1-5f17-4bcd-86ac-7a723550cf4c entered RECOVERY_REQUIRED;
+run queued/attempt0, no attempt rows or canonical result, wake UNKNOWN. Exact sanitized
+export `.local/trial79-failure-custody.json` hash
+a319021e8d97679d5642e708e5637046297d55556936524706e837c05295c457.
+Single-message authority consumed. No resend/cancel/old settlement; no reload because
+completion never occurred. V4 expires06:58:58.101Z; preserve all cumulative reservations.
+Original service PUT did not update args: its retained response said already running,
+GET/process argv remained old manager, and log06:53:44.907Z records preparation refusal.
+No epoch10 session exists. Stopped listener, saved original definition, tried stopped
+PUT (also ignored) and canonical command PUT (explicit conflict), then supported
+DELETE/PUT replaced only the service definition. No application data deleted.
+Exact service GET comparison PASS; live process10803 uses manager-forward-isolation.json,
+no named Codex process, old permanent marker hash unchanged. Evidence in
+`.local/trial79-{listener-*,services-*,corrected-process.json}`. Do not equate a PUT/start
+response with applied config: compare every field and actual process argv before admission.
+Next is epoch10 unused-admission recovery review and another explicitly authorized
+single-message trial; no new send under trial79 authority. Schedule remains enabled.
+
+Historical06:51Z preparation (superseded by above): exact authenticated epoch9 custody export received and hash verified,
 `.local/forward-isolation-custody.json`, SHA25692444f1e3f053836448d819d53acdc5c61c59decb96545fc9d2c15da4f83be7d.
 Browser needs explicit --cdp on EVERY command; otherwise it attaches a separate blank
 browser. Exact target30B951C10F072B3E2D76BFF6EB587CD9 is now verified/readable.

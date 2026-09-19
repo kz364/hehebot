@@ -4,6 +4,36 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Trial79 reconciliation (2026-09-19, supersedes earlier activation claims): one normal
+composer message received HTTP202/applied06:53:39.615Z, but lifecycle reached recovery
+without READY/claim. Authenticated export06:57:00Z confirms epoch10, queued attempt0,
+zero attempt rows and canonical results, wake UNKNOWN, retained $1 reservation.
+Manifest expiry06:56:39.615Z; bootstrap v4 expiry06:58:58.101Z. No completion/reload,
+resend, cancellation, replay or old settlement. Export hash
+`a319021e8d97679d5642e708e5637046297d55556936524706e837c05295c457` in
+`.local/trial79-failure-custody.json` verified locally. Provider was cold after failed
+observation; subsequent guest execution was failure reconciliation, not trial wake evidence.
+
+Deployment error found: earlier service PUT returned “already running with that command”
+and did NOT apply new manager arguments. Service GET and actual process argv both
+still pointed at `.local/manager.json`. Listener log06:53:44.907Z records
+PREPARATION_REFUSED_OR_UNKNOWN; no epoch10 session directory was created. Old template
+profile differs from new assignment; manager validates it before session creation.
+This explains the observed refusal path, though the redacted log itself has no substage.
+Stopped listener, preserved complete old definition, confirmed a stopped PUT still
+ignored args and a different command returned a configuration conflict. Followed the
+provider response's supported DELETE/PUT replacement for that service definition only.
+No filesystem, credentials, journal, marker or task records were removed. New definition
+GET matches every requested field (`EXACT_SERVICE_DEFINITION_PASS running`); process
+argv independently confirms `.local/manager-forward-isolation.json`. Named Codex process
+count0, epoch10 session absent, old marker hash still
+`c7b7d38b1305c3e157407e148f6b4563d4b049aa4f761eb1f7810146fbca7380`.
+Evidence `.local/trial79-{listener-*,services-*,corrected-process.json}`. This is a verified
+listener correction, not a successful fresh hosted trial. Single-message authorization
+is consumed; further admission must preserve UNKNOWN/reservations and have fresh authority.
+No application code changed at this checkpoint; previous full test results remain
+historical, not a rerun or proof of this live deployment. No Git push performed.
+
 Managed-alpha restrictions (2026-09-19): verified owner “Keep going” in parent
 thread after its disclosed restrictions/recovery/fresh-message scope. On the same
 dedicated Sprite, initial metadata check found no requirements file and zero Codex

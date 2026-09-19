@@ -13,18 +13,24 @@ feature=false and remote-control RPC denial. Native diagnostic exited; final pro
 count0. No thread/turn/account/model RPC was submitted. Template is tracked; details
 and private evidence paths are in IMPLEMENTATION. Initial private umask blocked
 readback before launch; corrected config0644/directory0755 and rechecked successfully.
-**Current checkpoint: prospective isolation integration.** The owner-requested oracle
-follow-up separates old settlement from safe fresh admission: historical memory and
-remote-ingress activity stay UNKNOWN, rather than requiring impossible absence proof.
-**Live v4 trial now authorized:** authenticated epoch9 export verified; permanent
-quarantine marker issued06:48:23Z, old UNKNOWN and reservation retained. Separate
-manager/template are active. Policy expires06:58:58.101Z with existing $10 total,
-180s session/120s task; manager preflight null, portal admission true, Sprite warm.
-Browser worker may send exactly one normal message for trial79 and verify canonical
-result/reload, never retry an uncertain send. Pre-send UI retained the old policy;
-one normal refresh is authorized (source intentionally closes sending on revision
-change until reload). No message or completion confirmed yet. Details below record
-the preceding preparation, not the current activation state.
+**Current checkpoint: trial79 failed before observed claim; listener corrected.**
+One normal message accepted06:53:39.615Z (HTTP202/applied), then lifecycle entered
+RECOVERY_REQUIRED. Authenticated export06:57:00Z confirms epoch10 run queued,
+attempt0, zero attempt rows/results, wake UNKNOWN and retained $1 reservation.
+No successful reply or completion-only reload. Single-message authorization consumed;
+no resend, cancellation or old settlement. Trial78 and its immutable marker remain intact.
+The intended manager switch had NOT taken effect: provider PUT returned “already
+running with that command”; GET and process argv still named the old manager.
+Listener logged PREPARATION_REFUSED_OR_UNKNOWN; no epoch10 session directory exists.
+Stopped listener, preserved definition, replaced only its service definition through
+supported DELETE/PUT, then verified exact GET fields and running process manager path.
+No runtime data/auth/journals were deleted. No Codex process observed after correction.
+V4 expires06:58:58.101Z; existing $10 cumulative budget and reservations are unchanged.
+Next: review epoch10 unused-admission recovery and obtain another single-message
+authorization before any fresh trial. Billing remains unverified. Schedule stays enabled.
+Private evidence: `.local/trial79-failure-custody.json`, `.local/trial79-services-*.json`,
+`.local/trial79-corrected-process.json`. Details below are historical preparation,
+superseded by this checkpoint where they describe current activation or browser status.
 V2 producer and per-launch managed/input validation are integrated and installed with
 source backup/hash verification. Host focused80/80 and original-binding7/7 pass;
 combined verification passes backend1710/runtime550 plus Worker/browser/native/
