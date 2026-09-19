@@ -4,7 +4,23 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
-Latest06:59Z: trial79 FAILED, not completed. One message accepted06:53:39.615Z,
+Latest07:06Z: owner/saved schedule reaffirm continued fresh bounded trials, not repeated
+human consent after each worker assignment. Trial80 assigned to existing browser worker;
+do not send elsewhere or guest-wake during observation. V5 revision
+owner-message-bootstrap-20260919-v5 expires07:15:53.997Z,180s session/120s task.
+One normal pre-send refresh allowed, then exactly HEHEBOT_FORWARD_ISOLATION_OK_80
+request via composer after current state admission. Await canonical completion/reload,
+not queued status. Old79 never replayed. Exact unused marker issued07:04:43.609Z,
+hash99e8f558e26bd00b45b35b03463285360bf8f40b3a30f254abe95810debf38e4,
+`.local/trial80-unused-evidence.json`. Root identities match post-cut custody; seven
+deployed source pins, manager/template hashes and profile verified. Corrected service
+GET and process argv confirmed; authenticated manager null07:05:53.850Z.
+Fresh export `.local/trial80-preflight-custody.json` hash
+1abfd3de1bea29c105fc498510c4d5cf1512faf28c2f5895427b16eeb0bdac97 shows zero
+epoch10 attempts/results/obligations. Baseline$1+epochs8/9/10 holds$3=$4; next hold=$5
+against$10, no refunds/reset, billing unknown. No result yet.
+
+Historical06:59Z: trial79 FAILED, not completed. One message accepted06:53:39.615Z,
 command f1561a34-2cdf-475b-9128-58a4de5439eb, run eec5ab8d-e403-4f6a-b8aa-deea3d97089d.
 Epoch10/transition435539d1-5f17-4bcd-86ac-7a723550cf4c entered RECOVERY_REQUIRED;
 run queued/attempt0, no attempt rows or canonical result, wake UNKNOWN. Exact sanitized

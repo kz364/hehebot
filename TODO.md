@@ -4,6 +4,20 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
+**Current checkpoint07:06Z: fresh trial80 assigned, no result yet.** Saved owner
+authorization permits continued bounded engineering trials without repeated consent;
+the previous request for another human approval was unnecessary. Trial79 is never replayed.
+Exact epoch10 unused marker issued once07:04:43.609Z under dual locks; its transition
+is permanently fenced without settlement/refund. Corrected service GET and actual argv,
+manager/template/source hashes and profile all pass. Authenticated manager returned null.
+V5 expires07:15:53.997Z; browser worker owns one normal send after fresh readiness,
+then canonical completion/reload observation. No manual guest wake during trial.
+07:07Z: normal reload and read-only browser check timed out before fill/send; assignment
+unconsumed. Bounded CDP/daemon attachment diagnosis active, no second reload or expiry extension.
+Ledger baseline+retained reservations=$4, with next $1 hold=$5 against unchanged$10;
+actual billing remains unverified. Schedule stays enabled. Earlier checkpoints below
+are historical, including the superseded per-trial approval requirement.
+
 **Managed alpha restrictions installed and verified (2026-09-19):** owner “Keep going”
 after the disclosed scope authorizes the dedicated Sprite changes. Created the
 previously absent `/etc/codex/requirements.toml` exclusively; no existing fields,
@@ -13,7 +27,7 @@ feature=false and remote-control RPC denial. Native diagnostic exited; final pro
 count0. No thread/turn/account/model RPC was submitted. Template is tracked; details
 and private evidence paths are in IMPLEMENTATION. Initial private umask blocked
 readback before launch; corrected config0644/directory0755 and rechecked successfully.
-**Current checkpoint: trial79 failed before observed claim; listener corrected.**
+**Previous checkpoint: trial79 failed before observed claim; listener corrected.**
 One normal message accepted06:53:39.615Z (HTTP202/applied), then lifecycle entered
 RECOVERY_REQUIRED. Authenticated export06:57:00Z confirms epoch10 run queued,
 attempt0, zero attempt rows/results, wake UNKNOWN and retained $1 reservation.

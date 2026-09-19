@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Trial80 preparation (2026-09-19 07:06Z): saved owner continuation authorizes fresh
+bounded trials without repeating consent. Exact authenticated epoch10 custody/zero
+attempts/obligations and persistent-root/source review support existing unused path,
+not a new historical absence assertion. Producer ran once under both locks, issuing
+marker07:04:43.609Z SHA25699e8f558e26bd00b45b35b03463285360bf8f40b3a30f254abe95810debf38e4.
+Independent marker readback, corrected service GET/process argv, manager/template
+hashes and new-profile recomputation pass; seven installed sources match local pins.
+Authenticated manager null07:05:53.850Z. V5 fixed expiry07:15:53.997Z activated with
+180s session/120s task, existing baseline$1 and three retained $1 reservations.
+Next reservation makes$5 of$10; actual billing unverified. Browser worker assigned one
+fresh composer message after current readiness and then canonical completion/reload.
+No trial79 replay/refund/settlement; no native or model call in host preparation.
+Evidence `.local/trial80-{preflight-custody,unused-request-report,unused-evidence,
+manager-before,service-preflight}.json` and `.local/bootstrap-v5-*`. No result yet.
+
 Trial79 reconciliation (2026-09-19, supersedes earlier activation claims): one normal
 composer message received HTTP202/applied06:53:39.615Z, but lifecycle reached recovery
 without READY/claim. Authenticated export06:57:00Z confirms epoch10, queued attempt0,
