@@ -14,17 +14,20 @@ let memorySearchSelection='';
 let conversationSearchSelection='';
 let alphaSession=null,alphaSeen=false,alphaInvalid=false,alphaExpired=false,alphaDeadline=0,sending=false;
 let bootstrapSession=null;
+const reviewedBootstrapRevisions=new Set();
+const bootstrapFields=['policy_revision','persona_id','expires_at','max_task_seconds'];
+const validBootstrap=value=>value&&typeof value.policy_revision==='string'&&value.policy_revision&&typeof value.persona_id==='string'&&Number.isFinite(Date.parse(value.expires_at))&&Number.isInteger(value.max_task_seconds)&&value.max_task_seconds>=1&&value.max_task_seconds<=300&&typeof value.message_admission_available==='boolean';
 function alphaBlock(){
  const bootstrap=snapshot?.summary.owner_alpha_bootstrap;
  if(bootstrap||bootstrapSession){
   alphaSeen=true;
-  if(!snapshot?.summary.owner_alpha||!bootstrap||typeof bootstrap.policy_revision!=='string'||!bootstrap.policy_revision||typeof bootstrap.persona_id!=='string'||!Number.isFinite(Date.parse(bootstrap.expires_at))||!Number.isInteger(bootstrap.max_task_seconds)||bootstrap.max_task_seconds<1||bootstrap.max_task_seconds>300||typeof bootstrap.message_admission_available!=='boolean')alphaInvalid=true;
+  if(!snapshot?.summary.owner_alpha||!validBootstrap(bootstrap))alphaInvalid=true;
   if(!alphaInvalid){
-   if(!bootstrapSession)bootstrapSession={...bootstrap,deadline:performance.now()+Math.max(0,Date.parse(bootstrap.expires_at)-Date.now()),expired:false};
-   if(['policy_revision','persona_id','expires_at','max_task_seconds'].some(key=>bootstrap[key]!==bootstrapSession[key]))alphaInvalid=true;
+   if(!bootstrapSession){bootstrapSession={...bootstrap,deadline:performance.now()+Math.max(0,Date.parse(bootstrap.expires_at)-Date.now()),expired:false};reviewedBootstrapRevisions.add(bootstrap.policy_revision);}
+   if(bootstrapFields.some(key=>bootstrap[key]!==bootstrapSession[key]))alphaInvalid=true;
    if(Date.now()>=Date.parse(bootstrapSession.expires_at)||performance.now()>=bootstrapSession.deadline)bootstrapSession.expired=true;
   }
-  if(alphaInvalid)return 'Session details changed or are unavailable. Reload to review the session; sending is closed.';
+  if(alphaInvalid)return 'Session details changed or are unavailable. Review the current session before sending.';
   if(bootstrapSession.expired)return 'Trial expired. New messages are closed.';
   if(current()?.kind!=='persona'||selected!==bootstrapSession.persona_id)return 'This trial accepts private messages only for its selected persona. Other bots and rooms are read-only.';
   if($('connection').textContent!=='Connected'||!navigator.onLine)return 'Session status is offline. Reconnect before sending.';
@@ -52,13 +55,46 @@ function renderAlphaSession(){
  const reason=alphaBlock();
  $('send').disabled=sending||Boolean(reason);
  $('message').readOnly=Boolean(reason);
+ const review=$('review-alpha-session');
+ review.hidden=!(bootstrapSession||snapshot?.summary.owner_alpha_bootstrap);
+ review.disabled=sending||loading||!navigator.onLine||$('connection').textContent!=='Connected';
  if(!alphaSeen)return;
  $('message').setAttribute('aria-describedby','runtime-banner');
  $('send').setAttribute('aria-describedby','runtime-banner');
  $('runtime-banner').hidden=false;
  const s=bootstrapSession??alphaSession,name=snapshot?.objects?.find(x=>x.id===s?.persona_id)?.body.name??s?.persona_id;
  const text=bootstrapSession?`Message-triggered owner alpha · ${name} only · Trial deadline ${new Date(s.expires_at).toLocaleString(undefined,{timeZoneName:'short'})} · Up to ${s.max_task_seconds}s per task. ${reason||'Send saves your message before requesting a bounded session on the existing Sprite.'} Portal visits and history do not start the runtime. Previous recovery tasks are not retried. External actions remain unavailable.`:`Supervised owner alpha${s?` · ${name} only · ${Math.max(0,s.max_runs-s.admitted_runs)} of ${s.max_runs} admissions remaining · Deadline ${new Date(s.expires_at).toLocaleString(undefined,{timeZoneName:'short'})} · Up to ${s.max_task_seconds}s per task`:''}. ${reason||'Private message admission available; queued messages have not yet consumed admissions.'} History, previews and cancellation remain available. Provisional output or a successful root turn is not a completed result or proof of safe recovery. Background delegation requires an explicitly opted-in session. External actions and automatic recovery are unavailable.`;
- if($('runtime-banner').textContent!==text)$('runtime-banner').textContent=text;
+ if($('runtime-banner-text').textContent!==text)$('runtime-banner-text').textContent=text;
+}
+async function reviewAlphaSession(){
+ const conversation=selected,version=selectionVersion;
+ const assertReady=()=>{
+  if(sending||loading||!navigator.onLine||$('connection').textContent!=='Connected'||selected!==conversation||selectionVersion!==version)throw new Error('Conversation or connection changed. Close and review the session again.');
+  if(localStorage.getItem('personal.pending.'+conversation)!==null)throw new Error('A message has an unconfirmed outcome. Session adoption is blocked; its saved text and retry key are unchanged.');
+ };
+ const check=value=>{
+  const policy=value?.summary?.owner_alpha_bootstrap,persona=value?.objects?.find(x=>x.id===conversation);
+  if(!value?.summary?.owner_alpha||!validBootstrap(policy)||policy.persona_id!==conversation||persona?.kind!=='persona'||persona.body.archived||!policy.message_admission_available||Date.parse(policy.expires_at)<=Date.now())throw new Error('No available, unexpired session for this selected persona. Nothing was adopted.');
+  if(reviewedBootstrapRevisions.has(policy.policy_revision))throw new Error('This policy was already reviewed. Its deadline cannot be renewed; a new policy revision is required.');
+  return {...policy};
+ };
+ assertReady();
+ const proposed=check(await api('/v1/state'));assertReady();
+ const deadline=performance.now()+Math.max(0,Date.parse(proposed.expires_at)-Date.now());
+ const affirmation=node('label',undefined,'check'),checkBox=node('input');checkBox.type='checkbox';checkBox.name='confirm';checkBox.required=true;
+ affirmation.append(checkBox,document.createTextNode('Use this exact session for my next explicit Send.'));
+ openEditor('Review current session',[
+  node('p',`Persona: ${current().body.name} · ${conversation}`,'hint'),
+  node('p',`Policy: ${proposed.policy_revision}`,'review-notice'),
+  node('p',`Fixed deadline: ${new Date(proposed.expires_at).toLocaleString(undefined,{timeZoneName:'short'})}. Up to ${proposed.max_task_seconds}s per task.`),
+  node('p','This only updates this page. It sends no message, starts no runtime and does not extend the deadline. Drafts and earlier task outcomes stay unchanged.','hint'),affirmation
+ ],async form=>{
+  assertReady();if(form.get('confirm')!=='on')throw new Error('Confirm the exact session before adopting it.');
+  const value=await api('/v1/state'),latest=check(value);assertReady();
+  if(bootstrapFields.some(key=>latest[key]!==proposed[key])||performance.now()>=deadline)throw new Error('The reviewed session changed or expired. Close and review it again.');
+  bootstrapSession={...latest,deadline:Math.min(deadline,performance.now()+Math.max(0,Date.parse(latest.expires_at)-Date.now())),expired:false};
+  reviewedBootstrapRevisions.add(latest.policy_revision);snapshot=value;alphaInvalid=false;alphaSeen=true;render();
+ },'Adopt session');
 }
 const names={IDLE_PERMITTED:'Idle — hibernation permitted',STOPPED:'Sleeping',START_REQUESTED:'Waking',BOOTING:'Starting',READY:'Awake',DRAINING:'Finishing up',STOP_COMMITTED:'Stopping',STOPPING:'Stopping',RECOVERY_REQUIRED:'Recovery needed'};
 const statuses={queued:'Queued',claimed:'Starting',running:'Working',finishing:'Saving result',completed:'Completed',waiting:'Waiting',failed:'Failed',cancelling:'Cancelling',cancelled:'Cancelled',recovery_required:'Needs recovery'};
@@ -177,7 +213,7 @@ function render(){
  const object=current();$('conversation-name').textContent=object?.body.name??'Choose a bot';$('conversation-type').textContent=object?.kind==='room'?'SHARED ROOM':'ASSISTANT';$('edit-bot').hidden=object?.kind!=='persona';
  $('runtime-state').textContent=names[snapshot.summary.phase]??snapshot.summary.phase;$('runtime-provider').textContent=snapshot.provider?.id??'Unconfigured';$('runtime-queued').textContent=snapshot.summary.queued_runs;$('runtime-waiting').textContent=snapshot.summary.blocked_runs;
  $('runtime-banner').hidden=snapshot.summary.execution_enabled;
- if(!alphaSeen&&!snapshot.summary.owner_alpha)$('runtime-banner').textContent='Your messages and routines are saved. The assistant is waiting for its runtime connection and sign-in before it can work.';
+ if(!alphaSeen&&!snapshot.summary.owner_alpha)$('runtime-banner-text').textContent='Your messages and routines are saved. The assistant is waiting for its runtime connection and sign-in before it can work.';
  renderAlphaSession();
  const view=recoveryView?.conversationId===selected?recoveryView:null;
  const conversation=view?[]:events.filter(x=>x.conversation_id===selected);const runs=view?(view.page?.runs??[]):snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
@@ -760,6 +796,7 @@ function editSkillProposal(skill,source){
  });
 }
 async function act(fn){try{report('');await fn();await refresh(true);}catch(e){report(e.message);}}
+$('review-alpha-session').onclick=()=>act(reviewAlphaSession);
 $('message').oninput=()=>{if(selected)localStorage.setItem('personal.draft.'+selected,$('message').value);$('draft-status').textContent='Unsent draft saved on this device';};
 $('composer').onsubmit=async event=>{
  event.preventDefault();if(!selected||!$('message').value.trim())return;const text=$('message').value,conversation=selected;

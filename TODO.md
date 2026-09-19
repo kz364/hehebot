@@ -4,39 +4,30 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current checkpoint07:30Z: trial80 unsent; one manual refresh needed.**
-Authenticated no-send reconciliation07:25:15Z confirms no command/run after trial79,
-epoch10 unchanged and baseline+holds still$4. Host independently reverified exact
-service GET/process argv, manager/template/profile/marker hashes and manager null.
-V5 expired unused; V6 fixed expiry07:36:16.338Z activated,180s session/120s task.
-Automated reload again timed out, but passive read07:29:39Z recovered: correct target/
-persona, V6 admission true, empty composer still readonly and Send disabled. Source
-`public/app.js` intentionally latches changed-policy refusal until page reload; fresh
-state alone cannot clear it. Do not bypass guards or stage more windows against the
-same failing prerequisite. Owner should manually refresh existing portal tab once.
-Installed tool default25s exceeds wrapper15s; whether env10s applied is unknown, so
-neither persistent CDP deadlock nor consent is established. Automated reloads stopped.
-Same exclusive sender may proceed only after fresh valid state AND writable composer.
-No result/reload-persistence claim; no send or added reservation yet.
-Historical browser blocker and earlier preparation follow; they are not current status.
-Saved owner
-authorization permits continued bounded engineering trials without repeated consent;
-the previous request for another human approval was unnecessary. Trial79 is never replayed.
-Exact epoch10 unused marker issued once07:04:43.609Z under dual locks; its transition
-is permanently fenced without settlement/refund. Corrected service GET and actual argv,
-manager/template/source hashes and profile all pass. Authenticated manager returned null.
-V5 expires07:15:53.997Z; browser worker owns one normal send after fresh readiness,
-then canonical completion/reload observation. No manual guest wake during trial.
-Normal reload and read-only browser check timed out before fill/send; assignment unused.
-Bounded diagnosis confirms Mac shell responsive but raw Chrome CDP WebSocket handshake
-timed out before upgrade response; not merely an agent-browser command stall. All
-diagnostic processes exited. Exact cause unknown, consent possibly pending. Owner must
-inspect existing Chrome responsiveness/remote-debugging consent; no restart/settings
-change, second reload or expiry extension performed. Resume same send only after fresh
-unexpired readiness; if expired, do not send or silently extend that fixed policy.
-Ledger baseline+retained reservations=$4, with next $1 hold=$5 against unchanged$10;
-actual billing remains unverified. Schedule stays enabled. Earlier checkpoints below
-are historical, including the superseded per-trial approval requirement.
+**Current checkpoint: remove Mac/CDP dependency; trial80 is on HOLD and unsent.**
+Owner withdrew the manual-refresh loop. Exclusive browser worker confirms no trial80
+fill/click/POST under V5/V6/V7 and no in-flight run. V7 fixed expiry08:11:17.458Z stays
+unchanged; do not renew it or ask for another laptop refresh.07:40 authenticated export
+confirmed epoch10/manifest unchanged, zero commands/runs after79, baseline+holds$4/$10.
+No refund, replay or settlement. Actual billing remains unverified.
+
+Local explicit session review/adoption is implemented in the existing portal: fresh
+read at review and confirmation, exact policy/persona/deadline/task bounds, affirmative
+consent, no command/wake, no old-revision renewal, monotonic expiry and preserved drafts.
+Unconfirmed pending messages block adoption without altering their text/retry key.
+Focused Chromium and combined credential-free checks pass (backend1710/runtime550,
+Worker/browser/native/service/build); desktop16/16 passes. Desktop and narrow review
+captures inspected, alongside adopted/pending states. Not deployed or a live-message success.
+
+Recommended next live-testing boundary: narrow delegated test principal in the CURRENT
+installation/DO and same single-authority Sprite. New named Access service identity
+may submit only a fixed synthetic text-only test and read its own run/result under an
+explicit owner-issued bounded grant; no owner impersonation, history/global memory,
+connectors, export/config or separate competing executor. Requires exact new credential/
+path-policy/capability approval before shared changes. No auth code/policy/provisioning
+change yet. Separate synthetic-only deployment would not close the actual native gate.
+Keep production exact owner JWT subject checks and cumulative budget unchanged.
+Schedule remains enabled; previous manual-refresh and approval notes below are historical.
 
 **Managed alpha restrictions installed and verified (2026-09-19):** owner “Keep going”
 after the disclosed scope authorizes the dedicated Sprite changes. Created the

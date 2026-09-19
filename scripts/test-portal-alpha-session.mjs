@@ -9,14 +9,14 @@ import {randomUUID} from 'node:crypto';
 const bot=randomUUID(),other=randomUUID(),room=randomUUID(),session='alpha-'+randomUUID().slice(0,8);
 const state={objects:[{id:bot,kind:'persona',revision:1,body:{name:'Travel'}},{id:other,kind:'persona',revision:1,body:{name:'Inbox'}},{id:room,kind:'room',revision:1,body:{name:'Planning room'}}],runs:[],summary:{phase:'STOPPED',execution_enabled:false,queued_runs:0,blocked_runs:0}};
 const run={id:randomUUID(),persona_id:bot,title:'Synthetic in-flight reply',role:'coordinator',status:'running',current_attempt:1};
-const commands=[];let reads=0,deniedReads=0,offline=false;
+const commands=[],commandKeys=[];let reads=0,deniedReads=0,offline=false,failMessage=false;
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
 const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
 const wait=code=>browser('wait','--fn',code);
 const server=createServer(async(req,res)=>{
  const json=(data,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(data));};
  const path=new URL(req.url,'http://fixture').pathname;
- if(path==='/v1/commands'){let raw='';for await(const part of req)raw+=part;commands.push(JSON.parse(raw));return json({status:'applied'});}
+ if(path==='/v1/commands'){let raw='';for await(const part of req)raw+=part;commands.push(JSON.parse(raw));commandKeys.push(req.headers['idempotency-key']);return failMessage?json({error:{message:'Synthetic lost response'}},503):json({status:'applied'});}
  if(path==='/v1/state'){reads++;return json(offline?{error:{message:'Synthetic offline'}}:state,offline?503:200);}
  if(state.summary.owner_alpha&&path.startsWith('/v1/conversations/')&&!path.startsWith(`/v1/conversations/${bot}/`)){deniedReads++;return json({error:{message:'Conversation unavailable in session'}},403);}
  if(path.endsWith('/events'))return json({events:[{sequence:1,conversation_id:bot,type:'message.user',created_at:new Date().toISOString(),payload:{text:'Retained synthetic history'}}]});
@@ -84,4 +84,53 @@ try{
  assert.equal(reads,beforeTrialExpiry);await blocked();await capture('bootstrap-expired');
  assert.equal(commands.length,4);assert.equal(deniedReads,0);
  console.log('PASS message-triggered trial: expired legacy session does not close eligible message admission; visits/refresh/bot switching make zero commands; one explicit Send; unavailable/missing metadata and local trial expiry close admission; generation changes do not renew the trial.');
+ // Explicit adoption changes only local reviewed policy; it never submits or
+ // discards a draft, renews an old deadline, or replays an uncertain command.
+ const nextPolicy=(revision,ttl=120000)=>({policy_revision:revision,persona_id:bot,expires_at:new Date(Date.now()+ttl).toISOString(),max_task_seconds:83,message_admission_available:true});
+ const clickReview=async()=>{await wait('!document.querySelector("#review-alpha-session").disabled');await browser('click','#review-alpha-session');};
+ const review=async()=>{await clickReview();await wait('document.querySelector("#editor").open');};
+ const confirm=async()=>{await browser('check','#editor [name=confirm]');await browser('click','#editor-form button[type=submit]');};
+ const dismiss=async()=>{await browser('click','#cancel-editor');await wait('!document.querySelector("#editor").open');};
+ state.summary.owner_alpha_bootstrap=nextPolicy('synthetic-policy-3');await refresh();
+ await evaluate('document.querySelector("#message").value="Preserved unsent draft";document.querySelector("#message").dispatchEvent(new Event("input"))');
+ assert.equal(await evaluate('document.querySelector("#send").disabled'),true);await capture('session-changed');
+ await review();assert.equal(commands.length,4);assert.match(await evaluate('document.querySelector("#editor-fields").textContent'),/synthetic-policy-3/);
+ await capture('session-review');await browser('set','viewport','390','844','2');await browser('screenshot',new URL('portal-alpha-session-review-narrow.png',artifacts).pathname);await browser('set','viewport','1280','900','2');
+ await dismiss();assert.equal(await evaluate('document.querySelector("#send").disabled'),true);
+ await review();state.summary.owner_alpha_bootstrap.max_task_seconds=84;await confirm();
+ await wait('!document.querySelector("#editor-error").hidden');assert.match(await evaluate('document.querySelector("#editor-error").textContent'),/changed or expired/);
+ assert.equal(commands.length,4);await dismiss();
+ state.summary.owner_alpha_bootstrap=nextPolicy('synthetic-policy-4');await refresh();await review();
+ state.summary.owner_alpha_bootstrap.message_admission_available=false;await confirm();await wait('!document.querySelector("#editor-error").hidden');
+ assert.match(await evaluate('document.querySelector("#editor-error").textContent'),/No available/);await dismiss();state.summary.owner_alpha_bootstrap.message_admission_available=true;
+ await evaluate(`document.querySelector('[data-persona-id="${other}"]').click()`);await refresh();
+ await clickReview();await wait('document.querySelector("#error").textContent.includes("selected persona")');assert.equal(await evaluate('document.querySelector("#editor").open'),false);
+ await evaluate(`document.querySelector('[data-persona-id="${bot}"]').click()`);await refresh();
+ await review();await confirm();await wait('!document.querySelector("#editor").open&&!document.querySelector("#send").disabled');
+ assert.equal(await evaluate('document.querySelector("#message").value'),'Preserved unsent draft');
+ assert.equal(await evaluate(`localStorage.getItem('personal.draft.${bot}')`),'Preserved unsent draft');assert.equal(commands.length,4);await capture('session-adopted');
+ // A same-revision deadline edit and rollback to a previously adopted revision
+ // cannot renew its local monotonic expiry through the review action.
+ state.summary.owner_alpha_bootstrap.expires_at=new Date(Date.now()+180000).toISOString();await refresh();
+ await clickReview();await wait('document.querySelector("#error").textContent.includes("already reviewed")');assert.equal(await evaluate('document.querySelector("#send").disabled'),true);
+ state.summary.owner_alpha_bootstrap=nextPolicy('synthetic-policy-2');await refresh();await clickReview();await wait('document.querySelector("#error").textContent.includes("already reviewed")');
+ state.summary.owner_alpha_bootstrap=nextPolicy('synthetic-policy-5',5000);await refresh();await review();
+ await evaluate('globalThis.realDateNow=Date.now;Date.now=()=>0;new Promise(resolve=>setTimeout(resolve,5100))');await confirm();
+ await wait('!document.querySelector("#editor-error").hidden');assert.match(await evaluate('document.querySelector("#editor-error").textContent'),/changed or expired/);
+ await evaluate('Date.now=globalThis.realDateNow');await dismiss();assert.equal(commands.length,4);
+ state.summary.owner_alpha_bootstrap=nextPolicy('synthetic-policy-6');await refresh();await review();
+ offline=true;await evaluate('document.querySelector("#refresh").click()');await wait('document.querySelector("#connection").textContent==="Offline"');await confirm();
+ await wait('!document.querySelector("#editor-error").hidden');assert.match(await evaluate('document.querySelector("#editor-error").textContent'),/connection changed/);
+ offline=false;await dismiss();await refresh();await review();await confirm();await wait('!document.querySelector("#editor").open&&!document.querySelector("#send").disabled');
+ failMessage=true;await browser('fill','#message','Unconfirmed exact request');await browser('click','#send');await wait('document.querySelector("#draft-status").textContent.includes("Not confirmed")');
+ const pending=await evaluate(`localStorage.getItem('personal.pending.${bot}')`);assert.equal(JSON.parse(pending).key,commandKeys.at(-1));assert.equal(JSON.parse(pending).text,'Unconfirmed exact request');
+ state.summary.owner_alpha_bootstrap=nextPolicy('synthetic-policy-7');await refresh();await clickReview();
+ await wait('document.querySelector("#error").textContent.includes("unconfirmed outcome")');
+ assert.equal(await evaluate(`localStorage.getItem('personal.pending.${bot}')`),pending);assert.equal(await evaluate('document.querySelector("#message").value'),'Unconfirmed exact request');assert.equal(commands.length,5);
+ assert.equal(await evaluate('document.querySelector("#send").disabled'),true);assert.equal(await evaluate('document.querySelector("#editor").open'),false);await capture('session-pending-blocked');
+ console.log('PASS explicit session adoption: no reload/commands, reviewed identity+fresh recheck, cancel/stale/persona/offline/monotonic expiry/old revision refusal, draft preservation, and uncertain message bytes/key retained without replay.');
+}catch(error){
+ console.error((await browser('errors').catch(()=>({stdout:'Browser diagnostics unavailable'}))).stdout);
+ console.error(await evaluate('({connection:document.querySelector("#connection")?.textContent,error:document.querySelector("#error")?.textContent,editorError:document.querySelector("#editor-error")?.textContent})').catch(()=>null));
+ throw error;
 }finally{await browser('close').catch(()=>{});await new Promise(ok=>server.close(ok));}

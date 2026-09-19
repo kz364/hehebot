@@ -4,7 +4,36 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
-Latest07:30Z: trial80 still UNSENT, no additional reservation. Owner go-for-it resumed
+Latest: owner stopped the Mac/CDP/manual-refresh loop. Browser worker HOLD acknowledged:
+NO trial80 fill/click/POST under v5/v6/v7, no in-flight run. V7 was activated07:41Z
+after07:40 exact epoch10/no-new-command/no-new-run/$4 ledger reconciliation, with fixed
+08:11:17.458Z expiry and unchanged180s session/120s task/$10. It must expire naturally;
+do not ask another manual refresh or stage another policy merely to wait for laptop.
+Effective service/argv/config/profile/marker checks passed07:40:41Z, private
+`.local/trial80-{host,service}-v7-preflight.json`; no provider migration or new auth granted.
+
+Local UI now implements Review current session → fresh GET → explicit confirmation →
+fresh exact-policy check → local adoption, without document reload/commands/wake.
+Old revisions cannot renew; monotonic deadline and pending message custody remain.
+Unconfirmed message blocks adoption, preserving retry key/text and draft. Existing
+browser fixture expanded; desktop and narrow states inspected. Combined verifier exits0:
+backend1710/runtime550 plus Worker/browser/native/service/build, final status passed;
+`.local/session-adoption-combined.log`. Desktop16/16 passes in
+`.local/session-adoption-desktop.log`. No deploy or native trial with this UI yet.
+Next is exact delegated-auth scope approval, not another laptop refresh or grant cycle.
+
+Auth recommendation delivered to parent: narrow explicitly delegated test principal
+in same installation/DO, sharing existing lifecycle/locks/ledger/Sprite. One fixed
+synthetic-context text-only submission and its own run/result reads; no owner impersonation,
+global owner memory/history, connectors, export/config or second competing installation.
+Needs concrete approval for new finite named Access service identity/path policy and
+backend capability grant. Production exact owner JWT sub verification remains unchanged;
+service JWT has empty sub and common_name, so existing internal token is not owner auth.
+No auth implementation/provisioning performed. See IMPLEMENTATION for official sources
+and rejected alternatives. Owner openness to passcode/provider migration is not authority
+to expose data or create paid/new infrastructure. Local-only synthetic tests remain usable.
+
+Historical07:30Z: trial80 still UNSENT, no additional reservation. Owner go-for-it resumed
 passive access;07:25 authenticated state/export confirmed no new command/run after79,
 epoch10 unchanged/$4 baseline+holds. Exact service/process/manager/template/profile/
 marker checked again; manager null. V5 expired unused; V6 fixed expiry07:36:16.338Z.

@@ -4,6 +4,57 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Session adoption checkpoint (2026-09-19, local): existing portal offers an explicit
+Review current session action without page navigation. It reads authenticated state,
+shows exact persona/revision/fixed deadline/task bound and requires affirmation. A
+second state read must match reviewed fields and still allow admission; offline,
+changed selection, revoked admission, old adopted revision, wall/monotonic expiry
+and in-flight sends refuse. Adoption changes only local reviewed state and sends no
+command/wake. Drafts remain; any pending unconfirmed message blocks adoption without
+altering saved text/idempotency key. Existing expiry/retry guards remain in force.
+Browser fixture verifies changed task limit while modal open, revoked availability,
+cancel, wrong persona, clock rollback past monotonic deadline, offline confirmation,
+same/previous revision rejection, and preserved uncertain-message custody. Desktop
+review/adopted/pending and narrow review captures inspected. Combined credential-free
+verification exits0 (backend1710/runtime550 plus Worker/browser/native/service/build),
+with final status passed and operational/production/model-judgment flags false;
+`.local/session-adoption-combined.log`. Desktop16/16 passes separately in
+`.local/session-adoption-desktop.log`; focused browser check also passes.
+Initial browser run caught banner text replacement deleting new controls; corrected
+both banner render paths. Later fixture clicks now wait for loading guard to clear.
+No production auth changes, deployment or live result are implied by these checks.
+
+Owner-directed independent orb testing (research, no provisioning): trial80 was held
+before any send under v5/v6/v7.07:40 authenticated reconciliation retained epoch10,
+zero later commands/runs and$4 baseline+holds. V7 fixed expiry08:11:17.458Z is unchanged;
+no further manual-refresh request or timed-policy cycle. Shared provider remains one
+Sprite and one installation control authority. No new model call/reservation/result.
+
+Production `authenticateOwner` requires RS256 signature plus exact issuer/audience/
+OWNER_SUB; immutable installation binding prevents changing subject as a test shortcut.
+Official [Access JWT documentation](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/)
+distinguishes user `sub` from service-token empty `sub`/`common_name`. Existing runtime/
+manager credentials must never become owner credentials. [Supported agent authentication](https://developers.cloudflare.com/cloudflare-one/access-controls/authenticate-agents/)
+permits fresh orb-local user login, but this grants real owner authority, is not route-
+scoped and needs reauthentication at expiry; it is not persistent unattended testing.
+Never import personal cookies/OAuth caches or expose loopback auth publicly.
+
+Recommended minimal REAL-runtime path is a new narrowly delegated test principal in
+the current installation/DO: new finite named [Access Service Auth credential](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/),
+exact issuer/test-route audience/client identity validation and an explicit owner-issued
+test grant, separate audited service actor. Allow only one fixed synthetic-context
+text-only submission at a time plus that actor's own receipt/run/result reads. Exclude
+owner global memory/history, connectors/tools, exports/config and generic owner routes.
+Reuse lifecycle admission, immutable manifests, locks, uncertainty and cumulative$10
+ledger on the same Sprite. New code/grant must bind provenance and context rather than
+mapping service identity to OWNER_SUB. Requires approval for exact Access path policy,
+finite designated-orb credential and listed read/write capabilities before provisioning.
+This can prove actual bounded native wake/result and test-surface reload persistence,
+not real owner SSO or production owner composer. A separate synthetic-only installation
+does not close that gate; serially sharing the same Sprite with a second control plane
+would need additional explicit fencing/migration, so it is not the recommended shortcut.
+No auth platform, passcode bypass, new Worker/DO/Sprite or paid upgrade was created.
+
 Trial80 follow-up07:30Z: after owner go-for-it, passive access recovered. Authenticated
 07:25 no-send reconciliation found no new command/run since79, epoch10 and$4 ledger
 unchanged. Host exact service GET/process argv, manager/template/profile/marker hashes

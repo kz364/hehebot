@@ -18,7 +18,7 @@
  </aside>
  <main>
   <header class="conversation-header"><div><p class="eyebrow" id="conversation-type">ASSISTANT</p><h1 id="conversation-name">Your workspace</h1></div><div class="header-actions"><button id="edit-bot" class="quiet">Instructions</button><button id="show-details" class="quiet">Routines & memory</button></div></header>
-  <div id="runtime-banner" class="banner" role="status" hidden></div>
+  <div id="runtime-banner" class="banner" role="status" hidden><span id="runtime-banner-text"></span><button id="review-alpha-session" class="quiet" type="button" hidden>Review current session</button></div>
   <div id="error" class="error" role="alert" hidden></div>
   <details id="conversation-search-panel" class="task-strip"><summary>Search loaded messages</summary><div class="card"><label class="field" for="conversation-search"><span class="sr-only">Search message text</span><input id="conversation-search" type="search" placeholder="Search message text" maxlength="200" aria-describedby="conversation-search-help" aria-controls="timeline"></label><button id="clear-conversation-search" type="button" class="quiet" disabled>Clear message search</button><p id="conversation-search-status" class="hint" role="status" aria-live="polite" aria-atomic="true"></p><details class="hint"><summary>Search scope & limits</summary><p id="conversation-search-help">Only loaded sent messages and recorded results in this conversation. Literal, case-insensitive; outer spaces ignored. No older history, sources or inference fetched. Questions, tasks and safety notices stay visible.</p></details></div></details>
   <div id="timeline" class="timeline" role="log" aria-label="Conversation" aria-live="polite"><div class="empty"><h2>Loading your workspace…</h2></div></div>
