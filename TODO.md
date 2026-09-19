@@ -20,7 +20,8 @@ V2 producer and per-launch managed/input validation are integrated and installed
 source backup/hash verification. Host focused80/80 and original-binding7/7 pass;
 combined verification passes backend1710/runtime550 plus Worker/browser/native/
 service/build; desktop16/16 passes. Worker code deployed with expired policy unchanged,
-authenticated manager06:13:38Z returns null. New profile template is staged, not activated.
+authenticated manager06:13:38Z returns null. New profile template and separate manager
+config are staged, not activated; predecessor manager/template hashes remain unchanged.
 Supported same-Sprite restart returned202, changed kernel observed stable over two
 minutes with all seven retained files unchanged. Directory inodes changed; post-cut
 pins are required. Listener auto-started despite its earlier stop and was stopped

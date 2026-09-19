@@ -48,6 +48,11 @@ Worker deployed with keep-vars and expired policy unchanged, version
 e52e649b-a54d-472c-9c6a-f7585665aa27; authenticated manager06:13:38Z returns null.
 New template `.local/template-forward-isolation.json` staged on Sprite, manager and
 old template unchanged; new profile hash654c727f3194ce1d4b192fbc507d5b0f24124840d335f38925a6f51e4fb2f91c.
+Separate `.local/manager-forward-isolation.json` staged on Sprite; future supported
+Service PUT uses host `.local/forward-isolation-service.json`, changing only the manager
+argument. Neither definition update nor start performed. Retained-file recheck after
+staging confirms all seven pins unchanged, same kernel and zero named Codex processes
+(`.local/forward-isolation-retained-after-staging.json`).
 Private request-builder `.local/forward-isolation-request.mjs` prepared but not run;
 needs exact manifest from passive browser export and fresh readback (<60s).
 

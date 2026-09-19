@@ -75,7 +75,11 @@ verifier exits0: backend1710/runtime550 plus Worker/browser/native/service/build
 Worker source deployed with keep-vars and expired policy unchanged, version
 e52e649b-a54d-472c-9c6a-f7585665aa27. Authenticated manager06:13:38Z returns null.
 New profile template staged separately, old template/manager unchanged; no marker/grant
-or fresh message. Exact epoch9 custody and browser readiness review pending. Schedule
+or fresh message. Separate new manager config is also staged, with the future Service
+definition prepared locally but not applied. All seven predecessor file pins remain
+identical after staging; kernel unchanged and no named Codex process observed. Evidence
+`.local/forward-isolation-{manager-report,retained-after-staging}.json`.
+Exact epoch9 custody and browser readiness review pending. Schedule
 resumed: the previous pause incorrectly treated historical absence proof as exhaustion
 of all useful authorized work. No new message, replay, settlement or budget reset.
 
