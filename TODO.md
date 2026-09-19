@@ -45,9 +45,22 @@ exhausted submit were exercised after scrolling. Representative captures inspect
 Warm browser suite is now in the combined verifier; integrated rerun exited 0:
 1,782 backend/550 runtime tests, browser/native/service fixtures and build pass.
 Desktop rerun passes 16/16. Final narrow exhausted capture re-inspected after the run.
-Runtime worker remains active; one-process native warm acceptance is still unproved.
+Corrected runtime is integrated locally at e813bbf. Manager intent now persists
+the exact session identity, and the native fixture honestly reports explicit
+post-expiry stop rather than automatic shutdown. The initial parent rerun passed
+14 warm tests, typecheck and the one-process/two-turn native HTTP fixture.
+Runtime combined verifier exited 0 with 1,782 backend/564 runtime tests and all
+browser/native/service/build checks. Desktop rerun passes 16/16. Warm composer work
+is integrated at d76a074: parent real-browser run passes one process/two canonical
+turns, passive refresh, same-generation Send re-enablement, exact receipt replay,
+and pre-expiry reload with exhausted composer. Representative screenshot inspected.
+Both warm HTTP/browser modes are in the verifier; final combined rerun exited 0
+with 1,782 backend/564 runtime tests and all browser/native/service/build checks.
+Fresh combined-run screenshot was re-inspected; all report gates remain false.
+Automatic warm entrypoint expiry/grace remains separate verification; these fixtures
+explicitly call service.stop() after expiry. No implementation worker remains active.
 No live state changed. Evidence is in docs/IMPLEMENTATION.md.
-Next checkpoint: one-process native and portal integration before separately
+Next checkpoint: automatic warm entrypoint/grace coverage before separately
 opting into background capabilities. No live rollout,
 campaign, spending, push or schedule enablement; owner SSO/provider gates remain separate.
 

@@ -4,6 +4,55 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stage A warm composer integration (2026-09-19, local d76a074): parent reviewed
+patch 79ff88a29b9df9283ef37d83dc7b4e1012397bb2862c84b57e6f57aef83830e6
+and added actual passive-refresh observation and pre-expiry reload assertions.
+`node scripts/test-codex-warm-manager.mjs --browser` exits 0: nativeStarts 1,
+modelRequests 2, exact two composer commands and canonical replies, independent
+task credentials/roots, prior canonical context, same-generation Send reopening,
+exhaustion and reload retention. Authenticated assets return 200; unauthenticated
+and wrong-owner assets return 401. Zero passive commands, zero page errors and no
+pending send storage. Screenshot `.amp/in/artifacts/warm-manager-browser-portal.png`
+inspected at 2x: Connected, Chief of Staff, exact four messages, exhausted banner,
+empty disabled composer. Evidence `.local/warm-browser-parent.log`.
+The runtime combined verifier exited 0 with 1,782 backend/564 runtime tests plus
+browser/native/service/build checks (`.local/warm-runtime-integrated-verify.log`).
+Desktop rerun 16/16. Final combined verification with both warm HTTP and browser
+modes exited 0 in `.local/warm-browser-integrated-verify.log`: 1,782 backend and
+564 runtime tests, browser/native/service fixtures and build passed. Fresh final
+screenshot re-inspected. assistantOperational, productionAdmission and
+modelJudgmentVerified all remain false in the final report.
+Fixture identity/model/Sprite/wake seams remain synthetic/manual; explicit
+post-expiry stop does not prove automatic warm entrypoint/grace. No live gates changed.
+
+Stage A runtime correction integration (2026-09-19, local): replacement SHA256
+31e9722afe28904348a6f449d9da2cd760ccd80d18279e5696d4f0ead670e607
+is integrated at e813bbf. Exact manager intent now includes generation.session_id,
+tested by full deep equality. Native report uses explicitPostExpiryStop and states
+that automatic warm entrypoint/grace needs separate verification. No shutdown
+semantics changed. Trailing blank EOF removed. The combined verifier now includes
+the warm native HTTP script; parent run is in progress in
+`.local/warm-runtime-integrated-verify.log`. Actual warm composer/native work is
+assigned separately from the exact integrated bundle, not origin/main. No live
+operations or production gates changed.
+
+Stage A runtime first review (2026-09-19, local/uncommitted): imported patch
+9aa6dcfc2ca5f7d85cd5907df5a3adfe017ecab006e7fb656a6e899e76adfac7.
+Parent `node --test tests/runtime-owner-alpha-warm.mjs` passes14/14 and
+`npx tsc --noEmit` is clean. `node scripts/test-codex-warm-manager.mjs` exits0,
+nativeStarts1/modelRequests2, with both canonical replies, distinct task credentials,
+same generation, replay exclusion and dual-lock retirement checks. This rerun exits
+normally; no post-report hang observed. Evidence is in
+`.local/warm-runtime-parent-{unit,native}.log`.
+Review found manager intent session_id reads the nonexistent policy.session_id,
+so JSON serialization omits it; generation.session_id is the correct source.
+The reported fixedExpiryStop flag follows a test-owned wait and service.stop(),
+not the real entrypoint's automatic expiry+30s stop path. Both corrections were
+returned to the runtime worker; no change to established shutdown semantics asked.
+The HTTP fixture manually delivers wake and uses scripted loopback model/Sprite
+responses. It is not browser-composer, automatic expiry, live provider or account
+acceptance. Imported runtime changes remain under review pending replacement.
+
 Stage A portal round-2 integration (2026-09-19, local): replacement SHA256
 e6aa804f4eeda6311e8e25cc6b08ea0236d3ab54381da688dbfc36c61a832169
 fixes the review findings below and is integrated at ebe78e1. Parent reran the

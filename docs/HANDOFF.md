@@ -4,6 +4,52 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
+Warm composer patch is integrated at d76a074. Source patch
+`.local/warm-browser-composer.patch` SHA256
+79ff88a29b9df9283ef37d83dc7b4e1012397bb2862c84b57e6f57aef83830e6.
+Parent tightened the test to observe an additional completed passive state read,
+assert reload finishes pre-expiry, and wait for rendering before the screenshot.
+Parent browser run exits 0 with nativeStarts 1/modelRequests 2 and all composer flags
+true (`.local/warm-browser-parent.log`); representative 2x capture inspected at
+`.amp/in/artifacts/warm-manager-browser-portal.png`. Composer worker is complete.
+Runtime combined run exited 0 (`.local/warm-runtime-integrated-verify.log`), 1,782
+backend/564 runtime, all browser/native/service/build checks. Desktop 16/16 passes.
+Both warm modes are now in the verifier. Final combined rerun exited 0 in
+`.local/warm-browser-integrated-verify.log`: 1,782 backend/564 runtime tests and all
+browser/native/service/build checks pass. Fresh final screenshot re-inspected.
+No running verifier or implementation worker remains. No live operations or flag changes.
+Automatic warm entrypoint/grace coverage remains separate from explicit stop proof.
+Earlier assignment/review notes below are historical, not active work.
+
+Runtime correction patch is integrated at e813bbf on local source-custody.
+Replacement `.local/stage-a-runtime-round2.patch` SHA256
+31e9722afe28904348a6f449d9da2cd760ccd80d18279e5696d4f0ead670e607
+fixes persisted intent identity, exact-identity test and honest explicit-stop flag.
+Parent clarified that automatic warm entrypoint expiry/grace requires separate
+verification, rather than asserting it already verified. Warm HTTP script is now
+in the combined verifier, running in `.local/warm-runtime-integrated-verify.log`.
+New composer worker T-01a0ba52-3ffc-757a-8982-e3f22474c602 owns only the warm
+script's --browser mode and necessary hosted fixture changes. It receives bundle
+`.local/stage-a-runtime-integrated.bundle` at e813bbf, SHA256
+35c49adc7dd62a53570822a83256880e44b3f8917638a8dd7fee594cdd0be04a.
+Do not duplicate its implementation. Parent owns combined verification/tracking.
+The following first-review notes are historical; the old patch is superseded.
+
+Runtime patch `.local/stage-a-runtime.patch` (SHA256
+9aa6dcfc2ca5f7d85cd5907df5a3adfe017ecab006e7fb656a6e899e76adfac7)
+is applied uncommitted on source-custody for review. Do not apply it again.
+Parent warm unit14/14 and typecheck pass; native HTTP fixture exits0 with
+nativeStarts1/modelRequests2 and two canonical replies. Logs:
+`.local/warm-runtime-parent-unit.log`, `.local/warm-runtime-parent-native.log`.
+Runtime worker received a narrow correction request: persist generation.session_id
+instead of nonexistent policy.session_id in the manager intent, test that identity,
+and rename the fixedExpiryStop claim to explicit post-expiry stop evidence.
+The fixture bypasses runHostedOwnerAlpha and explicitly calls service.stop(); it
+does not exercise that entrypoint's automatic expiry+30s grace timer. Remove the
+new binding module's trailing blank line as well. Await replacement export from
+the existing runtime worker; preserve this imported diff until then. No runtime
+verifier entry added yet; actual warm composer/native integration remains next.
+
 Portal round-2 patch is integrated locally at ebe78e1, including the new browser
 script in scripts/verify-codex.sh. Source `.local/stage-a-portal-round2.patch` SHA256
 e6aa804f4eeda6311e8e25cc6b08ea0236d3ab54381da688dbfc36c61a832169.
