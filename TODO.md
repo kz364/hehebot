@@ -19,13 +19,21 @@ Focused Chromium and combined credential-free checks pass (backend1710/runtime55
 Worker/browser/native/service/build); desktop16/16 passes. Desktop and narrow review
 captures inspected, alongside adopted/pending states. Not deployed or a live-message success.
 
-Recommended next live-testing boundary: narrow delegated test principal in the CURRENT
+Approved next live-testing boundary: narrow delegated test principal in the CURRENT
 installation/DO and same single-authority Sprite. New named Access service identity
 may submit only a fixed synthetic text-only test and read its own run/result under an
 explicit owner-issued bounded grant; no owner impersonation, history/global memory,
-connectors, export/config or separate competing executor. Requires exact new credential/
-path-policy/capability approval before shared changes. No auth code/policy/provisioning
-change yet. Separate synthetic-only deployment would not close the actual native gate.
+connectors, export/config or separate competing executor. Owner explicitly approved
+one finite24h revocable named credential, exact `/v1/test/*` Access policy and backend
+grant; no renewed scope/spend approval is needed. Dashboard provisioning completed:
+one named token expires2026-09-20T08:23:19Z, exact path app/token-only policy read back,
+owner/internal apps unchanged; secret transferred privately and host0600 verified.
+Core/HTTP isolation and admission integrated;1752 backend and550 runtime tests pass,
+combined native/browser checks continuing. Effective Sprite argv/manager/template/
+seven source pins and retained epoch10 marker verified08:47Z; zero native processes.
+No live delegated message yet. Host owns deployment and single sender; browser HOLD.
+Existing API/dashboard visibility discrepancy remains, not a reason to broaden token
+permissions again. New wake diagnostic retention passes121 focused tests, preserving UNKNOWN.
 Keep production exact owner JWT subject checks and cumulative budget unchanged.
 Schedule remains enabled; previous manual-refresh and approval notes below are historical.
 

@@ -1,4 +1,4 @@
-import { ControlError, requireThat } from './errors';
+import { ControlError, HostedWakeDeliveryError, requireThat } from './errors';
 import { Store } from './store';
 import type { ControlCore } from './control';
 import { nativeDescendantsSettledSql } from './native-tasks';
@@ -160,7 +160,15 @@ export class LifecycleCore {
    return {key,value,valueJson};
   });
   if(!intent)return;
-  await send({epoch:intent.value.epoch,operationId:intent.value.transition_id});
+  try{await send({epoch:intent.value.epoch,operationId:intent.value.transition_id});}
+  catch(error){
+   if(error instanceof HostedWakeDeliveryError){
+    // Preserve UNKNOWN and the exact intent; diagnostics never authorize replay.
+    this.store.db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=? AND value_json=?',JSON.stringify({...intent.value,
+     error_code:'HOSTED_WAKE_OUTCOME_UNKNOWN',request_phase:error.phase,upstream_status:error.upstreamStatus}),intent.key,intent.valueJson);
+   }
+   throw error;
+  }
   this.store.db.transaction(()=>{
    this.store.db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=? AND value_json=?',JSON.stringify({...intent.value,status:'queued'}),intent.key,intent.valueJson);
   });

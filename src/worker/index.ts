@@ -2,6 +2,7 @@ import { unwrap } from './rpc';
 import { PersonalControl } from './control-object';
 import { assertBootstrapSecrets, authenticateOwner, assertSameOrigin, runtimeGenerationAuthority, verifyRuntimeTaskToken, verifyRuntimeToken, verifyWebhook } from './auth';
 import {parseOwnerAlphaBootstrap} from '../core/owner-alpha-bootstrap';
+import {authenticateTestPrincipal,parseTestAuthConfig} from './test-auth';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { digest, json, parseJson, readBounded } from './http';
 export { PersonalControl };
@@ -11,6 +12,25 @@ export default {
   try{
    const url=new URL(request.url),path=url.pathname;
    const control=env.CONTROL.getByName(env.INSTALLATION_ID);
+   if(path==='/v1/test'||path.startsWith('/v1/test/')){
+    const config=parseTestAuthConfig(env.HEHEBOT_TEST_ACCESS,env);
+    requireThat(!!config,'NOT_FOUND','Route unavailable.',404);
+    const actor=await authenticateTestPrincipal(request,config);
+    requireThat(!url.search,'INVALID_INPUT','Query parameters are not supported.',422);
+    if(path==='/v1/test/commands'&&request.method==='POST'){
+     // Service callers have no browser cookies. A browser caller still has to
+     // originate here; this route grants no authority to an Origin header.
+     if(request.headers.has('Origin'))assertSameOrigin(request);
+     requireThat(request.headers.get('Content-Type')?.split(';')[0]==='application/json','INVALID_INPUT','Use application/json.',422);
+     const input=parseJson(await readBounded(request,1024));
+     requireThat(input&&typeof input==='object'&&!Array.isArray(input)&&Object.keys(input).join(',')==='campaign_id'&&
+      typeof (input as {campaign_id:unknown}).campaign_id==='string','INVALID_INPUT','Submit only the selected campaign ID.',422);
+     return json(unwrap(await control.submitTest(actor,(input as {campaign_id:string}).campaign_id,request.headers.get('Idempotency-Key')??'')),202);
+    }
+    const own=path.match(/^\/v1\/test\/(receipts|runs)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/);
+    if(own&&request.method==='GET')return json(unwrap(await control.readTest(actor,own[1] as 'receipts'|'runs',own[2])));
+    throw new ControlError('NOT_FOUND','Route unavailable.',404);
+   }
    if(path.startsWith('/internal/')){
     requireThat(request.method==='POST','NOT_FOUND','Route unavailable.',404);
     const bootstrap=parseOwnerAlphaBootstrap(env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP);

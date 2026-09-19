@@ -4,6 +4,33 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Delegated test implementation checkpoint (2026-09-19): owner explicitly approved one
+24h revocable named Access Service Auth credential, exact `/v1/test/*` path app/policy,
+bounded backend grant in current installation/DO and same Sprite. No owner impersonation,
+private memory/history, tools/connectors, generic routes or new infrastructure. Existing
+Browser worker completed one-time provisioning/readback08:24Z: token
+9096f9fe-ed91-4216-ad77-91ab6e419a59 expires2026-09-20T08:23:19Z; app
+5f8a728b-ed42-4eba-93e8-6734910ae50c and specific-token Service Auth policy
+1842fb70-85e1-432e-a95e-be1fc8caea84, owner/internal apps unchanged. Private new
+credential file transferred to host and chmod0600 verified; no personal session copied.
+API403/list-empty discrepancy is not evidence known apps are absent; no token broadening.
+Host integrated core context isolation/admission and real DO/HTTP test:1752 backend,
+550 runtime pass so far, combined suite continuing; desktop16/16 passes. This is not
+live native acceptance. Delegated grant permits3 submissions, fixed persona,180s
+session/120s task, existing$1 reservation and$10 lifetime ledger. Exact operator-reviewed
+unused epoch10 evidence remains unchanged; service principal cannot provide it.
+Separate manager/template staged on same Sprite; old configs preserved. Effective
+service GET and actual argv, manager/template/profile/seven source hashes and retained
+marker checked08:47:32Z; native process count0. Private evidence:
+`.local/delegated-{template-report,effective-preflight,services-effective}.json`.
+
+Wake diagnostic retention: typed sanitized delivery failure now records fixed
+HOSTED_WAKE_OUTCOME_UNKNOWN, request_phase and numeric/null upstream_status on the
+exact pre-dispatch UNKNOWN intent using compare-and-swap; no upstream text, retries,
+settlement or budget release.121 focused bootstrap/successor/wake tests pass in
+`.local/wake-diagnostics-tests.log`, including reconstruction/no replay/custody checks.
+This cannot recover historical trial79 diagnostics that were never retained.
+
 Session adoption checkpoint (2026-09-19, local): existing portal offers an explicit
 Review current session action without page navigation. It reads authenticated state,
 shows exact persona/revision/fixed deadline/task bound and requires affirmation. A

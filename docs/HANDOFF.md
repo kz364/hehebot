@@ -4,6 +4,29 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
+Owner explicitly approved delegated orb test route/credential: finite24h, revocable,
+current installation/DO and same Sprite, fixed synthetic context/text only, one active
+test, own receipt/run/result reads, no owner impersonation or private context/tools.
+Production OWNER_SUB and$10 cumulative allowance unchanged. Browser thread
+T-01a0aea2-0f37-71de-a34b-6b2b48285430 exclusively owns one-time Access dashboard
+provisioning for `/v1/test/*`; completed08:24Z, owner/internal apps unchanged. Token
+expires2026-09-20T08:23:19Z, privately transferred host0600; revoke at campaign end.
+Host owns code/deploy/native trial. No generic token broadening: previous API403/list-empty
+persisted after owner broadened original credential. Core worker source transferred,
+reviewed/integrated; host owns all source now. Core permits exact operator-configured
+unused recovery through existing custody checks, but not caller-provided evidence or
+claimed-pre-turn recovery. Bootstrap expiry cannot exceed campaign expiry.
+Backend1752/runtime550 and desktop16/16 pass; full combined check still running in
+`.local/delegated-combined.log`. No live delegated message yet. Campaign bindings at
+`.local/delegated-test-bindings.json`, new token at `.local/secrets/hehebot-orb-native-test.json`.
+Same-Sprite listener now uses manager-delegated-test.json; exact GET/argv/template/
+profile/seven sources/old epoch10 marker verified08:47Z, zero native processes. Old
+manager/template files preserved; no new historical absence proof produced.
+Wake diagnostics preserve sanitized phase/status
+on UNKNOWN metadata,121 focused tests passed; historical trial79 error cannot be recovered.
+Session-adoption UI deployment is authorized alongside verified alpha follow-through.
+Earlier approval-needed notes below are superseded by this explicit scope approval.
+
 Latest: owner stopped the Mac/CDP/manual-refresh loop. Browser worker HOLD acknowledged:
 NO trial80 fill/click/POST under v5/v6/v7, no in-flight run. V7 was activated07:41Z
 after07:40 exact epoch10/no-new-command/no-new-run/$4 ledger reconciliation, with fixed

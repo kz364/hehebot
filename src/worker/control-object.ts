@@ -29,6 +29,8 @@ import {parseWhatsAppReadPolicies,WhatsAppReadAccess} from '../core/whatsapp-acc
 import {parseHostedOwnerAlpha,parseOwnerAlpha,parseOwnerAlphaSuccessor} from '../core/owner-alpha';
 import {parseOwnerAlphaBootstrap,type OwnerAlphaRetirement} from '../core/owner-alpha-bootstrap';
 import {HostedWakeDeliveryError,parseHostedOwnerWake,sendHostedOwnerWake,type HostedOwnerWake} from './hosted-owner-wake';
+import {TestCampaign,parseTestCampaignGrant} from '../core/test-campaign';
+import {parseTestAuthConfig} from './test-auth';
 export type TriggerPolicy={routine_id:string;event_types:string[]};
 function stringList(value:string):string[]{const parsed:unknown=JSON.parse(value);if(!Array.isArray(parsed)||!parsed.every(x=>typeof x==='string'))throw new Error('Invalid policy configuration');return parsed;}
 function delegationMap(value:string):Record<string,string[]>{
@@ -57,14 +59,19 @@ export class PersonalControl extends DurableObject<Env> {
   const hosted=parseHostedOwnerAlpha(env.HEHEBOT_HOSTED_OWNER_ALPHA,env);
   const successor=parseOwnerAlphaSuccessor(env.HEHEBOT_OWNER_ALPHA_SUCCESSOR);
   const bootstrap=parseOwnerAlphaBootstrap(env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP);
-  requireThat(!bootstrap||!!hosted&&bootstrap.installation_id===env.INSTALLATION_ID&&bootstrap.owner_id===env.OWNER_SUB,
+  const testAccess=parseTestAuthConfig(env.HEHEBOT_TEST_ACCESS,env),testGrant=parseTestCampaignGrant(env.HEHEBOT_TEST_CAMPAIGN);
+  requireThat(!!testAccess===!!testGrant&&(!testGrant||testAccess&&testGrant.actor_id===`test-service:${testAccess.client_id}`&&
+   testGrant.expires_at===testAccess.expires_at&&bootstrap&&bootstrap.owner_id===testGrant.actor_id&&
+   bootstrap.persona_id===testGrant.persona_id&&bootstrap.owner_binding_sha256===testGrant.owner_binding_sha256&&bootstrap.expires_at<=testGrant.expires_at),
+   'INVALID_CONFIGURATION','Test service identity and bounded capability grant must match.',503);
+  requireThat(!bootstrap||!!hosted&&bootstrap.installation_id===env.INSTALLATION_ID&&bootstrap.owner_id===(testGrant?.actor_id??env.OWNER_SUB),
    'INVALID_CONFIGURATION','Automatic owner alpha requires the authenticated hosted installation.',503);
   if(bootstrap)assertBootstrapSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
   requireThat(!successor||!!hosted,'INVALID_CONFIGURATION','Owner-alpha successor requires the original hosted owner-alpha configuration.',503);
   this.hostedOwnerAlpha=!!hosted;
   this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN,!!bootstrap);
   requireThat(!bootstrap||!!this.hostedWake,'INVALID_CONFIGURATION','Automatic owner alpha requires its private wake destination.',503);
-  this.core=new ControlCore(this.store,{ownerAlphaBootstrap:bootstrap,ownerAlpha:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
@@ -89,6 +96,7 @@ export class PersonalControl extends DurableObject<Env> {
    const desiredRef=(config.ref??{}) as unknown as Record<string,unknown>;
    requireThat(Object.keys({...savedRef,...desiredRef}).every(key=>savedRef[key]===desiredRef[key]),'PROVIDER_MIGRATION_REQUIRED','Runtime identity changed; perform an explicit stopped-state migration.',503);
    this.core.seed();
+   new TestCampaign(this.core).initialize();
    const triggers=JSON.parse(env.TRIGGER_CONFIG) as Record<string,TriggerPolicy>;
    for(const [id,policy] of Object.entries(triggers)){
     const existing=db.all<{revision:number;body_json:string}>('SELECT revision,body_json FROM objects WHERE id=?',id)[0];
@@ -129,6 +137,17 @@ export class PersonalControl extends DurableObject<Env> {
   const result=this.core.accept(owner,key,hash,input);
   if(!activation||result.status==='applied')await this.arm();
   return result;
+ });}
+ submitTest(actor:string,campaignId:string,key:string){return rpcResult(async()=>{
+  requireThat(this.core.options.testCampaignGrant?.campaign_id===campaignId,'FORBIDDEN','Test campaign is unavailable.',403);
+  this.rate(actor+':test-write',2);
+  const result=new TestCampaign(this.core).submit(actor,key);
+  await this.arm();return result;
+ });}
+ readTest(actor:string,kind:'receipts'|'runs',id:string){return rpcResult(()=>{
+  this.rate(actor+':test-read',60);
+  const campaign=new TestCampaign(this.core);
+  return kind==='receipts'?campaign.receipt(actor,id):campaign.run(actor,id);
  });}
  getConnectorCatalog(owner:string){return rpcResult(()=>{
   this.rate(owner+':read',120);

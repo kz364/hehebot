@@ -18,6 +18,7 @@ import {TokenUsageSnapshots} from './token-usage';
 import {captureWhatsAppReadPolicies} from './whatsapp-access';
 import {OwnerAlpha,ownerAlphaSuccessorSha256} from './owner-alpha';
 import {OwnerAlphaBootstrap} from './owner-alpha-bootstrap';
+import {TestCampaign} from './test-campaign';
 import {timelineExpirySql} from './timeline-retention';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
@@ -470,6 +471,8 @@ export class ControlCore {
    truncated:rows.length>20||this.store.retentionFloor(now,personaId)>0||messages.some(message=>message.truncated||message.provisional_reply?.truncated),messages};
  }
  context(personaId:string,instruction:string,routineId:string|null,roomId:string|null,commandId:string|null=null):ContextSnapshot {
+  const actor=commandId?this.store.db.all<{owner_id:string}>('SELECT owner_id FROM commands WHERE id=?',commandId)[0]?.owner_id:undefined;
+  if(actor?.startsWith('test-service:'))return new TestCampaign(this).context(commandId!,personaId,instruction,routineId,roomId);
   const persona=this.activePersona(personaId);
   const routine=routineId?this.store.get<RoutinePut>(routineId,'routine'):null;
   const now=this.now();

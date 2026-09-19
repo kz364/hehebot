@@ -10,6 +10,7 @@ import {LifecycleCore} from '../src/core/lifecycle';
 import {Store,type Database} from '../src/core/store';
 import type {OwnerAlphaPolicy} from '../src/core/owner-alpha';
 import {ownerAlphaManifestSha256,parseOwnerAlphaBootstrap,parseOwnerAlphaClaimedPreTurnQuarantine,type OwnerAlphaBootstrapConfig,type OwnerAlphaRetirement} from '../src/core/owner-alpha-bootstrap';
+import {sendHostedOwnerWake} from '../src/worker/hosted-owner-wake';
 
 function setup(overrides:Partial<OwnerAlphaBootstrapConfig>={}){
  const f=fixture(),original:OwnerAlphaPolicy={session_id:randomUUID(),persona_id:bot,expires_at:'2026-09-10T00:01:00.000Z',max_runs:1,max_task_seconds:45};
@@ -173,6 +174,25 @@ it.each([999,1000])('requires at least one second remaining before reserving (%i
  const f=setup({expires_at:new Date(Date.parse('2026-09-10T00:02:00.000Z')+remaining).toISOString()});try{
   f.retire();const receipt=f.send();expect(f.store.run(receipt.resource_id!).status).toBe(remaining===1000?'queued':'waiting');
   expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'")).toHaveLength(remaining===1000?1:0);
+ }finally{f.close();}
+});
+
+it('persists sanitized failed-wake diagnostics without replay or changing retained custody',async()=>{
+ const f=setup();try{
+  f.retire();f.send();const m=f.core.bootstrap.assignedManifest()!;
+  let calls=0;
+  const send=(command:{epoch:number;operationId:string})=>sendHostedOwnerWake({url:'https://test.sprites.app'},command,'p'.repeat(40),'w'.repeat(40),async()=>{
+   calls++;return new Response('secret upstream body',{status:503});
+  });
+  await expect(f.lifecycle.deliverOwnerAlphaWake(m.transition_id,send)).rejects.toMatchObject({code:'HOSTED_WAKE_OUTCOME_UNKNOWN'});
+  const read=()=>f.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_wake:${m.epoch}`)[0].value_json;
+  const saved=read();
+  expect(JSON.parse(saved)).toEqual({epoch:m.epoch,boot_id:m.boot_id,transition_id:m.transition_id,status:'unknown',error_code:'HOSTED_WAKE_OUTCOME_UNKNOWN',request_phase:'response',upstream_status:503});
+  expect(saved).not.toContain('secret');
+  f.reopen();await f.lifecycle.deliverOwnerAlphaWake(m.transition_id,send);
+  expect(calls).toBe(1);expect(read()).toBe(saved);expect(f.retained()).toBe(f.before);
+  expect(f.core.bootstrap.assignedManifest()).toEqual(m);
+  expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'")).toHaveLength(1);
  }finally{f.close();}
 });
 

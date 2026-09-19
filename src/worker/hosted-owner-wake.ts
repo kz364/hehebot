@@ -1,14 +1,8 @@
-import {ControlError,requireThat} from '../core/errors';
+import {ControlError,HostedWakeDeliveryError,requireThat} from '../core/errors';
+export {HostedWakeDeliveryError} from '../core/errors';
 
 export type HostedOwnerWake={transition_id?:string;url:string};
 const secret=(value:unknown):value is string=>typeof value==='string'&&value.length>=32&&value.length<=16384&&!/[\r\n\0]/.test(value);
-
-/** Only locally assigned stages and numeric status are safe to log, never upstream text. */
-export class HostedWakeDeliveryError extends ControlError {
- constructor(public phase:'request'|'response'|'receipt'|'timeout',public upstreamStatus:number|null){
-  super('HOSTED_WAKE_OUTCOME_UNKNOWN','Hosted wake delivery is unconfirmed; it will not be retried.',503);
- }
-}
 
 /** Operator-pinned destination, never provider provisioning. Automatic mode gets
  * its transition from the exact durable assignment rather than deployment env. */
