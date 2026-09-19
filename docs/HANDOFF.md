@@ -2,7 +2,27 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies, including one Worker-triggered staged wake, have canonical completion and full-reload persistence. Historical failed work remains recovery-required. Bounded policies expired and launchers stopped; this is not ongoing chat availability or production readiness. Production execution/native gates remain false.
 
-## Active follow-up (2026-09-18 Asia/Jakarta)
+## Active follow-up (2026-09-19 Asia/Jakarta)
+
+Owner “Keep going” verified against parent thread's immediately preceding disclosed
+scope: managed alpha restrictions, conservative quarantine, one fresh message only
+if evidence permits; existing $10 total, no push or unrelated effects. Installed
+`config/codex-owner-alpha-requirements.toml` on dedicated Sprite at
+`/etc/codex/requirements.toml`, previously absent, exclusively under both locks.
+SHA2560cb20d85e00b1c4ff62cb3c4e98c597273eaf541bbb2f64c170ae7ef7c35abbf.
+Corrected inherited umask modes after pre-launch read refusal: root-owned0644 file,
+0755 directory containing only this file. Pinned0.154.0 same-process initialize,
+configRequirements/read, config/read and remoteControl/status/read verify managed
+allowRemoteControl=false, required/effective memories=false, status RPC denied.
+Omitted subordinate memory values remain null/unknown. Native exited; final count0;
+temporary helper/staging copy removed. No thread/turn/account/model RPC, grant or send.
+Evidence `.local/managed-alpha-fence-{before,install,readback,mode,directory-mode,
+readback-recheck,final}.jsonl`; first readback failure retained, successful recheck exits0.
+Historical audit still cannot establish either required memory/alternate-ingress
+assertion for78. Defaults do not prove history; no supported persisted-ingress read
+RPC fills this gap. Do not issue a marker or grant by asserting missing evidence.
+Approval is no longer the blocker. Local quarantine implementation remains integrated
+and tested but undeployed. Recurring schedule remains paused; no automatic live retry.
 
 New startup defect confirmed synthetically on same Sprite: deployed listener
 PID20242 inherited CapInh/Prm/Eff/Bnd/Amb=a82435fb, NoNewPrivs0. Saved Service config
@@ -46,7 +66,7 @@ quarantine issued. Corrected core worker instruction: run recovery_required but
 attempt exactly claimed (watchdog does not mutate attempt); no status normalization.
 Runtime worker finished supported fence research: managed /etc/codex/requirements.toml
 allow_remote_control=false and [features] memories=false act at startup. Changing
-shared native access controls awaits explicit owner approval; do not install yet.
+these managed Sprite controls was approved and completed as recorded above.
 No read-only RPC exposes persisted ingress preference, and status can race startup;
 do not launch shared-home diagnostics before managed fence. Historical custody/ingress
 review remains necessary; prospective config does not prove past conditions.

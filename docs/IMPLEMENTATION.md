@@ -4,6 +4,43 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Managed-alpha restrictions (2026-09-19): verified owner “Keep going” in parent
+thread after its disclosed restrictions/recovery/fresh-message scope. On the same
+dedicated Sprite, initial metadata check found no requirements file and zero Codex
+processes. Installed tracked `config/codex-owner-alpha-requirements.toml` exclusively
+under native-home and old-session flocks at `/etc/codex/requirements.toml`:
+`allow_remote_control=false`, `[features] memories=false`. No prior fields existed;
+auth and unrelated machines/installations were untouched. Exact SHA256
+`0cb20d85e00b1c4ff62cb3c4e98c597273eaf541bbb2f64c170ae7ef7c35abbf`.
+Inherited private umask initially made root-owned file/directory0600/0700, so the
+first readback failed before native launch. Checked content and only approved file
+present, corrected to0644/0755, then successfully rechecked. Bounded pinned0.154.0
+diagnostic under both locks and full capability drop initialized the supported
+stdio transport, then used only configRequirements/read, config/read and
+remoteControl/status/read. Same-process results: required allowRemoteControl=false,
+required memories=false, effective config.features.memories=false, status RPC denied;
+subordinate memory settings omitted (null/unknown, not false). Native exited; final
+process count0. No thread/start, turn/start, account/read or model/list request.
+Private logs `.local/managed-alpha-fence-{before,install,readback,mode,directory-mode,
+readback-recheck,final}.jsonl`; recheck exited0 and temporary helpers were removed.
+Rollback, if separately chosen, must first verify this exact installed digest and
+restore prior absence of this file only, not overwrite unrelated future settings.
+No rollback was performed. This is prospective verification, not historic settlement
+or billing evidence; the existing $10 cumulative allowance is unchanged and actual
+billing remains unverified. No quarantine deployment, marker/grant or fresh message.
+
+Residual historical gate: pinned source review says memories feature defaults false,
+but config/profile overrides can enable it; subordinate generate/use defaults true
+do not alone show execution. Stdio starts remote supervision with persisted desired
+state unless managed denial applies; it is not an ingress fence. No contemporaneous
+effective-memory/requirements readback or complete scoped ingress-transition history
+is available for78. Neither required historical assertion is established, nor is
+either proven false just by defaults. New fences cannot fill those gaps. The producer
+must refuse issuance rather than fabricate assertions; fresh completion/reload remains
+unverified. Source: tagged [feature defaults](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/features/src/lib.rs),
+[memory startup](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/memories/write/src/start.rs),
+and [remote desired state](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-transport/src/transport/remote_control/desired_state.rs).
+
 Hosted capability-drop defect (2026-09-18): earlier successful manual Sprite
 launches used setpriv, but the automatic listener Service registered Node directly.
 Live listener PID20242 showed CapInh/Prm/Eff/Bnd/Amb=a82435fb and NoNewPrivs0.
@@ -69,8 +106,8 @@ supports managed `/etc/codex/requirements.toml` allow_remote_control=false plus
 read-only RPC exposes persisted remote-control preference; status can race startup.
 Current readback does not prove historical disablement. Do not restart shared-home
 app-server just to inspect status before a managed startup fence is established.
-No managed requirements/access-control mutation has been performed; installing the
-prospective managed fence awaits explicit owner approval for shared native controls.
+This checkpoint originally awaited approval for managed access-control changes;
+the owner subsequently approved and the prospective fence is now verified above.
 
 V3 live staging (2026-09-18): owner returned home/requested retry; existing Mac
 Chrome/CDP and SSO passive readiness succeeded15:11:28Z with six runs unchanged.

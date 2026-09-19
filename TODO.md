@@ -1,8 +1,22 @@
 # Hehebot progress and TODO
 
-**Last reviewed: 2026-09-18 (Asia/Jakarta). Not operational; production gates remain false.**
+**Last reviewed: 2026-09-19 (Asia/Jakarta). Not operational; production gates remain false.**
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
+
+**Managed alpha restrictions installed and verified (2026-09-19):** owner “Keep going”
+after the disclosed scope authorizes the dedicated Sprite changes. Created the
+previously absent `/etc/codex/requirements.toml` exclusively; no existing fields,
+auth data or unrelated installations changed. Pinned0.154.0 readback under both
+locks/capability drop confirms allowRemoteControl=false, required/effective memories
+feature=false and remote-control RPC denial. Native diagnostic exited; final process
+count0. No thread/turn/account/model RPC was submitted. Template is tracked; details
+and private evidence paths are in IMPLEMENTATION. Initial private umask blocked
+readback before launch; corrected config0644/directory0755 and rechecked successfully.
+**Residual blocker is historical evidence, not approval:** neither memory disablement
+nor alternate-ingress denial throughout trial78 is established. Tagged defaults
+do not prove either historical assertion. No quarantine marker/grant, fresh message,
+completion or reload verification; retained UNKNOWN/reservations are unchanged.
 
 **Hosted startup defect reproduced and fixed (2026-09-18):** the automatic listener
 omitted the capability-drop wrapper required by earlier manual Sprite launches.
@@ -15,8 +29,8 @@ diagnostics installed after supported Service stop; hashes/imports verified and
 Service start completed. Fresh full combined recheck exits0:1669 backend/515 runtime
 plus Worker/browser/native/service/build.16:25 authenticated manager assignment null.
 No new policy/message, replay or settlement.
-Next: review historical custody and obtain approval for the prospective managed
-fence before any claimed-pre-turn quarantine issuance. Core and runtime evidence
+Next: resolve the historical-custody evidence gap before any claimed-pre-turn
+quarantine issuance. The prospective managed fence is now verified above. Core and runtime evidence
 producer are integrated locally, default-off, preserving UNKNOWN and reservations:
 exact expired claimed attempt, fresh-message-only consumption, immutable disposition,
 reopen validation after config removal, real dual locks and permanent entry refusal.
@@ -28,8 +42,7 @@ metadata and send generate:false prewarm/auth/catalog requests before turn/start
 no-turn is not no-effects/zero-cost. Evidence producer refuses missing historical
 review assertions; hashes/current settings do not prove them. Supported prospective
 fence is managed allow_remote_control=false
-and [features] memories=false on the dedicated Sprite. This changes shared native
-access controls and awaits explicit approval; no managed file has been changed.
+and [features] memories=false on the dedicated Sprite, now installed with approval.
 Historical ingress/custody still needs operator review. No quarantine authority or
 new live trial has been issued.
 

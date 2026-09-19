@@ -1,0 +1,7 @@
+# Managed alpha Sprite only; do not install on unrelated user environments.
+# Codex app-server 0.154.0 loads this at /etc/codex/requirements.toml on Unix.
+# Merge these restrictions without replacing unrelated existing requirements.
+allow_remote_control = false
+
+[features]
+memories = false
