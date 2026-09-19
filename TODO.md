@@ -4,15 +4,37 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
-**Current checkpoint: ordinary owner HTTP session continuation verified locally.**
+**Current checkpoint: two-turn native owner continuation passes; two bugs fixed locally.**
+Real manager/wake listener/pinned Codex/local Worker fixture now completes two distinct
+owner sessions, with prior owner text AND canonical reply reaching the second model
+request. Exactly two native starts/model requests; receipt replay launches nothing;
+both retirements pass actual stopped-journal/dual-lock inspection. Inference and Sprite
+responses are scripted local fixtures, not live owner SSO/provider/model judgment.
+The fixture exposed heartbeat leases extending beyond fixed session expiry and
+completed replies missing from history. Generation heartbeats now cap at session
+expiry; bounded current canonical replies obey same-persona/current-attempt/90-day
+retention and invalidation guards. Focused tests/typecheck pass. Source combined check
+exited1 after1756 backend/550 runtime passes: alpha-session browser fixture timed out
+opening the editor; that run's remaining stages were unverified. Exact source history and ten-file
+unstaged delta transferred and hash-verified on local `source-custody`; origin/main
+unchanged. Fresh full `bash scripts/verify-codex.sh` exited0:1756 backend/550 runtime,
+browser/native/service/build, including two-turn continuation. Unchanged alpha-session
+fixture also passed separately; source timeout cause remains unproven. Desktop16/16
+and104 focused tests pass; logs `.local/custody-{combined,desktop,focused}.log`.
+Desktop install reports14 dependency vulnerabilities (13 high/1 critical), not fixed
+by this checkpoint. Schedule disabled. Local commit only, no deployment/new campaign/
+live send; test revocation intact. Next: explicitly assigned owner SSO/composer and
+live continuation acceptance on the existing installation/Sprite, not another marker trial.
+
+Previous control-plane checkpoint:
 Signed owner HTTP → real control object/SQLite now has an integrated two-message
 regression: completion/expiry alone stays unavailable, stale retirement refuses,
 exact manager retirement reopens readiness, reconstruction retains receipts, replay
 creates no run, and the next claim retains prior owner text with a distinct session.
 Both synthetic completions persist; two reservations share one cost baseline.
 Typecheck and full backend suite pass:86 files/1754 tests. No live model/provider call,
-owner SSO proof, deployment or push. Next: native/service integration of this same
-ordinary-owner continuation path; live activation still requires explicit assignment.
+owner SSO proof, deployment or push. Native/service continuation is now verified above;
+live activation still requires explicit assignment.
 
 Local regression reproduced service-only grant advertising ordinary owner admission.
 Owner summary now remains read-only during a delegated campaign; actual service

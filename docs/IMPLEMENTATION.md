@@ -4,6 +4,41 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native ordinary-owner continuation (2026-09-19, local): existing hosted-manager fixture
+now runs two ordinary owner sessions through actual signed local HTTP, real Worker,
+manager staging/wake listener, pinned Codex0.154.0, canonical completion and manager
+retirement. Exactly2 native starts/2 loopback model requests; second request contains
+first owner text and completed reply. Same-key replay between sessions returns the
+old receipt without launch or manifest replacement. Both expiries/retirements use
+real clocks and stopped journal/dual-lock observations; no clock override for rollover.
+Scripted model/Sprite transport is not owner SSO, model judgment or provider acceptance.
+Evidence `.local/owner-continuation-native-final.log` (passed).
+
+This integration reproduced two bugs absent from the earlier HTTP-only fixture:
+heartbeat extended epoch2 lease past its fixed expiry, and completed assistant text
+was omitted because history only included provisional previews. Heartbeat now mirrors
+registration's generation-expiry cap. History adds `completed_reply` from the current
+canonical completed attempt only, original direct coordinator/same persona,2000 chars
+with truncation disclosure,90-day cutoff even before pruning, excluding invalidated
+or cancelled context and pruned results. No new authority or native reference is copied.
+Boundary regression reproduced00:06:28 lease vs00:05:00 expiry; focused162 lifecycle/
+bootstrap and6 history/HTTP tests pass, typecheck passes. Source combined verification
+exited1 after86 files/1756 backend and550 runtime tests passed: alpha-session browser
+wait for `#editor.open` timed out25s; remainder was not verified. Source desktop16/16
+passed. Exact full-history bundle plus unstaged patch restored on `source-custody`,
+with artifact hashes, ten changed-file hashes, HEAD and status verified; origin/main
+unchanged. Only sanitized verification facts and synthetic native output transferred.
+Destination typecheck/104 focused tests and unchanged alpha-session browser fixture
+pass; timeout cause remains unproven. Fresh full combined verification exited0 in
+`.local/custody-combined.log`:86 files/1756 backend,550 runtime, all browser/native/
+service checks and build dry run. Hosted-manager reports2 starts/2 requests, both
+canonical replies, priorConversationReachedNative/receiptReplayDidNotLaunch true,
+and both retirement checks pass. Final report keeps assistantOperational,
+productionAdmission and modelJudgmentVerified false. Desktop16/16 passed separately
+in `.local/custody-desktop.log`; install reported14 dependency vulnerabilities
+(13 high/1 critical), left outside this change. Review required no further runtime
+or browser fixture edits. Local checkpoint only, undeployed/unpushed; schedule disabled.
+
 Ordinary owner continuation integration (2026-09-19):
 `tests/owner-alpha-http-continuation.test.ts` exercises locally signed owner JWTs,
 normal `/v1/commands`, real PersonalControl/SQLite, separately authenticated manager

@@ -248,7 +248,8 @@ export class LifecycleCore {
     requireThat(old?.status!=='settled'||op.status==='settled','INVALID_INPUT','A settled operation cannot become active.',422);
     this.store.db.exec('INSERT INTO operations(id,run_id,attempt,kind,status,started_at,deadline_at,last_progress_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,started_at=excluded.started_at,deadline_at=excluded.deadline_at,last_progress_at=excluded.last_progress_at',op.id,run.id,op.attempt,op.kind,op.status,op.started_at,op.deadline_at,op.last_progress_at);
    }
-   const lease=new Date(this.core.options.now().getTime()+90000).toISOString();
+   const generation=this.core.ownerAlpha.activeGeneration(),renewed=this.core.options.now().getTime()+90000;
+   const lease=new Date(generation?Math.min(Date.parse(generation.policy.expires_at),renewed):renewed).toISOString();
    this.store.db.exec('UPDATE lifecycle SET lease_until=?,last_heartbeat=? WHERE singleton=1',lease,this.core.now());
    if(this.active())this.touch();
    return {lease_until:lease,cancellations:this.store.db.all<{id:string}>("SELECT id FROM runs WHERE status IN ('cancelling','recovery_required')").map(x=>x.id)};

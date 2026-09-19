@@ -28,6 +28,32 @@ it('captures only earlier same-persona messages and visible provisional replies 
  }finally{f.close();}
 });
 
+it('uses bounded current canonical replies, excluding foreign, invalidated and expired results',()=>{
+ const f=fixture();try{
+  const seed=(persona:string,text:string)=>{
+   const receipt=f.accept({schema_version:1,type:'message.send',payload:{conversation_id:persona,text:'Earlier question'}});
+   f.db.exec("UPDATE runs SET status='completed',current_attempt=1 WHERE id=?",receipt.resource_id!);
+   f.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,settled_at,result_json) VALUES(?,1,?,1,?,'completed',?,?,?)",receipt.resource_id!,randomUUID(),randomUUID(),f.core.now(),f.core.now(),JSON.stringify({status:'completed',text}));
+   return receipt;
+  };
+  const first=seed(bot,'x'.repeat(2001));seed(otherBot,'FOREIGN_CANONICAL_SECRET');
+  const current=f.accept({schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'Continue'}});
+  const history=()=>f.core.context(bot,'Continue',null,null,current.id).conversation_history!;
+  expect(history()).toMatchObject({truncated:true,messages:[{completed_reply:{run_id:first.resource_id,attempt:1,text:'x'.repeat(2000),truncated:true}}]});
+  expect(JSON.stringify(history())).not.toContain('FOREIGN_CANONICAL_SECRET');
+  f.db.exec("UPDATE runs SET error_code='CONTEXT_INVALIDATED' WHERE id=?",first.resource_id!);
+  expect(history().messages[0].completed_reply).toBeUndefined();
+  f.db.exec('UPDATE runs SET error_code=NULL,current_attempt=2 WHERE id=?',first.resource_id!);
+  expect(history().messages[0].completed_reply).toBeUndefined();
+  f.db.exec('UPDATE runs SET current_attempt=1 WHERE id=?',first.resource_id!);
+  // Isolate result retention from the independently enforced message cutoff.
+  f.db.exec('UPDATE attempts SET settled_at=? WHERE run_id=?','2026-06-12T00:00:00.001Z',first.resource_id!);
+  expect(history().messages[0].completed_reply).toBeDefined();
+  f.db.exec('UPDATE attempts SET settled_at=? WHERE run_id=?','2026-06-12T00:00:00.000Z',first.resource_id!);
+  expect(history().messages[0].completed_reply).toBeUndefined();
+ }finally{f.close();}
+});
+
 it('rebuilds history at claim but excludes later messages and never changes the admitted snapshot',()=>{
  const f=fixture(true);
  try{

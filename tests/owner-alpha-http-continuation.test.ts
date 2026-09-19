@@ -73,7 +73,8 @@ it('continues ordinary owner messages only after exact retirement, across DO rec
   const secondIdentity={epoch:successor.epoch,boot_id:successor.boot_id};lifecycle!.registerBoot(secondIdentity.boot_id);lifecycle!.ready(secondIdentity);
   const secondClaim=lifecycle!.claim(secondIdentity)!;
   expect(secondClaim.run.id).toBe(second.resource_id);
-  expect(JSON.parse(secondClaim.run.context_json).conversation_history.messages).toMatchObject([{command_id:first.id,text:'Remember the blue notebook.'}]);
+  expect(JSON.parse(secondClaim.run.context_json).conversation_history.messages).toMatchObject([{command_id:first.id,text:'Remember the blue notebook.',
+   completed_reply:{run_id:first.resource_id,attempt:1,text:'The notebook is blue.',truncated:false}}]);
   lifecycle!.submitted(secondIdentity,second.resource_id,1,'turn-two');lifecycle!.coordinatorRelease(secondIdentity,second.resource_id,1,'turn-two','completed');
   lifecycle!.complete(secondIdentity,second.resource_id,1,{status:'completed',text:'Blue.'},{...successor.text_only,thread_id:'thread-two',turn_id:'turn-two',output_sha256:createHash('sha256').update('Blue.').digest('hex')});
   await reopen();

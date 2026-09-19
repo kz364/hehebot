@@ -225,6 +225,20 @@ it('reopens disk-backed SQLite with identical assignment, expiry, reservation an
  }finally{disk?.close();f.close();rmSync(dir,{recursive:true,force:true});}
 });
 
+it('caps generation heartbeat leases at fixed session expiry without renewing admission',()=>{
+ const f=setup();try{
+  f.retire();f.send();const m=f.core.bootstrap.assignedManifest()!,identity={epoch:m.epoch,boot_id:m.boot_id};
+  f.lifecycle.registerBoot(m.boot_id);f.lifecycle.ready(identity);
+  expect(f.lifecycle.heartbeat(identity,[]).lease_until).toBe('2026-09-10T00:03:30.000Z');
+  f.setNow('2026-09-10T00:03:29.000Z');f.lifecycle.heartbeat(identity,[]);
+  f.setNow('2026-09-10T00:04:58.000Z');
+  expect(f.lifecycle.heartbeat(identity,[]).lease_until).toBe(m.expires_at);
+  f.setNow(m.expires_at);expect(()=>f.lifecycle.heartbeat(identity,[])).toThrow();
+  f.lifecycle.watchdog();expect(f.lifecycle.get().phase).toBe('RECOVERY_REQUIRED');
+  expect(f.core.bootstrap.summary()?.message_admission_available).toBe(false);
+ }finally{f.close();}
+});
+
 it('publishes only a read-only overall-trial summary and does not persist seed evidence on reads',()=>{
  const f=setup();try{
   expect(f.core.bootstrap.summary()?.message_admission_available).toBe(false);

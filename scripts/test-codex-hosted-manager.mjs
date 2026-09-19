@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// One credential-free positive handoff: real manager staging -> Sprite service
-// -> pinned Codex -> scripted loopback text -> Worker canonical completion.
+// Two credential-free owner sessions: real manager staging -> Sprite service
+// -> pinned Codex -> scripted loopback text -> canonical completion/retirement.
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { EventEmitter, once } from 'node:events';
@@ -18,7 +18,7 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { createCodexTextOnlyProfile, codexTextOnlyProfileSha256 } from '../runtime/codex-text-only.mjs';
 
 const persona = '11111111-1111-4111-8111-111111111111';
-const reply = 'MANAGER_TEXT_ONLY_CANONICAL_47';
+const replies = ['The notebook is cobalt blue, reference 47.', 'Cobalt blue.'];
 const pause = ms => new Promise(ok => setTimeout(ok, ms));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const directory = await mkdtemp(join(tmpdir(), 'hehe-hosted-manager-'));
@@ -69,9 +69,23 @@ try {
   assert.equal(report.nativeStarts, 0); assert.deepEqual(await readdir(sessionsDirectory), []);
 
   const ownerHeaders = { 'Cf-Access-Jwt-Assertion': fixture.ownerJwt };
-  const response = await fixture.fetchImpl('/v1/commands', { method: 'POST', headers: { ...ownerHeaders,
+  let prior;
+  for (let turn = 1; turn <= 2; turn++) {
+  const reply = replies[turn - 1];
+  const ready = await (await fixture.fetchImpl('/v1/state', { headers: ownerHeaders })).json();
+  assert.equal(ready.summary.owner_alpha_bootstrap.message_admission_available, true);
+  if (prior) {
+    const replay = await fixture.fetchImpl('/v1/commands', prior.request);
+    assert.equal(replay.status, 202); assert.deepEqual(await replay.json(), prior.receipt);
+    assert.deepEqual(await fixture.retainedManifest(), prior.retained);
+    assert.equal(await control.request('manifest', {}), null);
+    assert.equal(report.nativeStarts, 1); assert.equal(report.modelRequests, 1);
+  }
+  const ownerRequest = { method: 'POST', headers: { ...ownerHeaders,
     Origin: fixture.origin, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() },
-  body: JSON.stringify({ schema_version: 1, type: 'message.send', payload: { conversation_id: persona, text: 'One manager text-only fixture message.' } }) });
+    body: JSON.stringify({ schema_version: 1, type: 'message.send', payload: { conversation_id: persona,
+      text: turn === 1 ? 'Remember the cobalt blue notebook, reference 47.' : 'What color was the notebook?' } }) };
+  const response = await fixture.fetchImpl('/v1/commands', ownerRequest);
   assert.equal(response.status, 202);
   const receipt = await response.json(); assert.equal(receipt.status, 'applied');
   const assignment = await control.request('manifest', {}); assert.ok(assignment);
@@ -79,12 +93,18 @@ try {
   const retained = await fixture.retainedManifest();
   for (const [key, value] of Object.entries(assignment.grant)) assert.deepEqual(retained[key], value);
   assert.equal(retained.session_id, assignment.policy.session_id);
+  assert.equal(assignment.grant.epoch, turn + 1);
+  if (prior) assert.notEqual(retained.session_id, prior.retained.session_id);
   model = createServer(async (request, response) => {
     try {
       assert.equal(request.url, '/v1/responses');
       const chunks = []; for await (const chunk of request) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks));
-      report.modelRequests++; assert.equal(report.modelRequests, 1); assert.deepEqual(body.tools, []);
+      report.modelRequests++; assert.equal(report.modelRequests, turn); assert.deepEqual(body.tools, []);
+      if (turn === 2) {
+        assert.ok(JSON.stringify(body.input).includes('Remember the cobalt blue notebook, reference 47.'), 'prior owner text absent from next native request');
+        assert.ok(JSON.stringify(body.input).includes(replies[0]), 'prior reply absent from next native request');
+      }
       const item = { id: `msg_${randomUUID()}`, type: 'message', status: 'completed', role: 'assistant',
         content: [{ type: 'output_text', text: reply, annotations: [] }] };
       const result = { id: `resp_${randomUUID()}`, object: 'response', created_at: 1, status: 'completed', error: null,
@@ -127,7 +147,7 @@ try {
   const wakeFinished = new Promise(resolve => { finishWake = resolve; });
   listener = createHostedOwnerWakeService({ configPath, wakeTokenFile, port: 8080 }, {
     control, spriteRequest, report: value => finishWake(value.code), launch: async (path, { expectedSha256 }) => {
-      assert.deepEqual(report.spriteRequests, ['PUT', 'GET'], 'bootstrap hold must be confirmed before launch');
+      assert.deepEqual(report.spriteRequests.slice((turn - 1) * 4), ['PUT', 'GET'], 'bootstrap hold must be confirmed before launch');
       assert.deepEqual(taskNames, [`hehe-bootstrap-${assignment.grant.transition_id}`]);
       const { config } = await readOwnerAlphaConfig(path, expectedSha256);
       assert.deepEqual(config.ownerAlpha, assignment.policy);
@@ -177,11 +197,16 @@ try {
     wakeDeadline = setTimeout(() => reject(new Error('Wake callback did not settle')), 70000);
   })]);
   clearTimeout(wakeDeadline);
-  assert.equal(result, 'RETIREMENT_REPORTED'); assert.equal(report.nativeStarts, 1); assert.equal(report.modelRequests, 1);
-  assert.deepEqual(report.spriteRequests, ['PUT', 'GET', 'PUT', 'GET']);
+  assert.equal(result, 'RETIREMENT_REPORTED'); assert.equal(report.nativeStarts, turn); assert.equal(report.modelRequests, turn);
+  assert.deepEqual(report.spriteRequests.slice((turn - 1) * 4), ['PUT', 'GET', 'PUT', 'GET']);
   assert.deepEqual(taskNames, [`hehe-bootstrap-${assignment.grant.transition_id}`, `hehe-${assignment.grant.epoch}-${assignment.grant.boot_id}`]);
+  prior = { request: ownerRequest, receipt, retained };
+  listener.stop(); listener = null;
+  model.closeAllConnections(); await new Promise(ok => model.close(ok)); model = null;
+  }
   assert.ok(fixture.outboundRequests.every(request => request.method === 'GET' && request.url.endsWith('/cdn-cgi/access/certs')));
-  Object.assign(report, { status: 'passed', canonicalReply: reply, immutableAssignment: true, noNativeBeforeAssignment: true,
+  Object.assign(report, { status: 'passed', canonicalReplies: replies, ownerContinuation: true, priorConversationReachedNative: true,
+    receiptReplayDidNotLaunch: true, immutableAssignment: true, noNativeBeforeAssignment: true,
     bootstrapHoldBeforeLaunch: true, httpWakeVerified: true, productionEnabled: false, providerOrAccountVerified: false });
 } catch (error) {
   report.error = error.code ?? error.name;

@@ -4,6 +4,28 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-19 Asia/Jakarta)
 
+10:05Z native continuation: extended existing hosted-manager script passes2 ordinary
+owner sessions with2 actual Codex launches/2 scripted model requests. Prior owner
+message AND canonical reply reach second request; old receipt replay launches nothing;
+both manager retirements pass real journal/lock inspection. Found/fixed generation
+heartbeat renewing beyond fixed expiry and completed replies absent from history.
+Canonical reply projection is same-scope/current-attempt, bounded2000 chars/90 days,
+no native refs/authority. Focused tests/typecheck pass; source combined verifier exited1
+after1756 backend/550 runtime passes, timing out opening the alpha-session editor.
+Exact source bundle/unstaged patch transferred to `source-custody` and verified against
+all artifact/changed-file hashes, HEAD and status. Sanitized source evidence is in
+`.local/continuation-custody/verification.sanitized.json`; no raw private logs copied.
+Unchanged browser fixture passes separately and in the fresh combined verifier:
+exit0,1756 backend/550 runtime, browser/native/service/build, including two native
+owner sessions and exact replay fencing. Source timeout cause remains unproven.
+Evidence `.local/custody-combined.log`; typecheck/104 focused and desktop16/16 pass
+in `.local/custody-{focused,desktop}.log`. Desktop install reported14 dependency
+vulnerabilities (13 high/1 critical); no dependency upgrade in this scope. Work is
+checkpointed locally on `source-custody`, not origin/main. Schedule disabled.
+No live calls/deployment/campaign activation; test revoke remains. Next acceptance
+requires explicit owner SSO/composer/live-continuation assignment on the same
+installation/Sprite. Local scripted integration does not satisfy those live gates.
+
 09:29Z local continuation checkpoint: new ordinary owner HTTP/real DO/SQLite regression
 passes two successive sessions with distinct message text and retained context.
 Completion/expiry does not reopen readiness without exact manager retirement; stale
@@ -12,7 +34,7 @@ Two synthetic completions persist and keep two reservations on one baseline. Own
 JWT and manager bearer are separate request principals. Full backend86 files/1754
 tests plus typecheck pass; `.local/owner-continuation-backend.log`. No production code
 change in this checkpoint, no live calls/deploy/push or new campaign assignment.
-Next: native/service integration for ordinary owner continuation; preserve test revoke.
+Native/service integration is now exercised above; preserve test revoke.
 
 09:15Z scheduled continuation: single provider GET reports cold; no guest exec/wake.
 Local owner readiness fix: service-only bootstrap grant previously advertised owner
