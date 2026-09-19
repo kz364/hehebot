@@ -9,7 +9,11 @@ c7dae83f1624b40665ae20203aa009b67db71ea2d2f352f9039b26b32c58503b
 addresses all eight findings below and is integrated locally at 63c1421. Parent
 typecheck and nine focused suites pass 274 tests. Integrated full backend suite
 passes 89 files / 1,782 tests; desktop passes 16/16. Combined browser/native/build
-verification is still running in `.local/warm-stage-a-integrated-verify.log`.
+verification exited 0 in `.local/warm-stage-a-integrated-verify.log`: 550 runtime
+tests, all browser/native/service fixtures, typecheck and dry-run build passed.
+Final report retains assistantOperational, productionAdmission and modelJudgmentVerified
+false. Existing hosted-manager browser regression retains two canonical replies,
+zero passive launches and reload persistence; this is not the new warm runtime proof.
 Focused evidence: `.local/warm-round2-focused.log`; desktop evidence:
 `.local/warm-stage-a-desktop.log`. Review worktree initially lacked generated
 Cloudflare declarations; `npm run types` resolved that prerequisite failure.
@@ -21,7 +25,8 @@ broader legacy initialization semantics are deliberately unchanged. Host launch
 credentials are activation-bound and stable across reads. Parent fixed one doc
 sentence about repeated command-body hashes; code/tests already used the correct rule.
 The contract remains default-off, one finite warm revision, two text-only tasks and
-no rollover. Runtime/portal consumers and one-process native acceptance remain next;
+no rollover. New disjoint runtime/portal workers consume the exact transferred
+fd6f503 source bundle; one-process native acceptance remains next.
 control fixtures do not prove live provider/model behavior. Nothing was published.
 
 Stage A control draft review (2026-09-19, local): received154482-byte patch SHA256

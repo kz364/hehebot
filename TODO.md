@@ -25,22 +25,25 @@ scoped reads; admission freezes task deadlines. Legacy-token downgrade, historic
 reconstruction and first-message-only wake require explicit tests before integration.
 Corrected authority split approved for implementation; final manifest hash must cover
 warm version/admission identity, and public summary must distinguish fixed policy expiry
-from generation expiry. Legacy composer remains read-only for warm mode pending its
-separate new consumer; runtime/UI workers follow the reviewed control patch.
+from generation expiry. The existing portal does not yet recognize warm metadata;
+its separately owned consumer must implement composer and action gating.
 Stage A control contract is now integrated locally after all eight review corrections.
 Parent typecheck and 274 focused tests pass, including repeated text, exact deadline
 boundaries, immutable custody, lost lease, config removal and a real legacy-bootstrap
 transition. Integrated backend suite passes 1,782 tests; desktop passes 16/16.
-Combined browser/native verification is running; no completion claim yet. Owner-binding
+Combined verifier exited 0 with 550 runtime tests, browser/native/service fixtures,
+typecheck and dry-run build. Operational/production/model-judgment flags stay false. Owner-binding
 initialization failures are fenced without broadening other initialization behavior.
-Runtime and portal consumers are the next independently owned implementations against
-the frozen default-off contract; one warm revision admits two tasks, with no rollover.
+New GLM5.3 runtime and portal workers are implementing the independently owned
+consumers against the frozen contract and exact transferred source bundle. Runtime
+owns one-process native integration; portal owns composer/status gating. One warm
+revision admits two tasks, with no rollover. Parent owns combined integration.
 No live state changed. Evidence is in docs/IMPLEMENTATION.md.
-Next checkpoint: integrate composer evidence and Stage A control contract, then one-process
-native integration before separately opting into background capabilities. No live rollout,
+Next checkpoint: one-process native and portal integration before separately
+opting into background capabilities. No live rollout,
 campaign, spending, push or schedule enablement; owner SSO/provider gates remain separate.
 
-**Current checkpoint: two-turn native owner continuation passes; two bugs fixed locally.**
+**Previous checkpoint: two-turn native owner continuation passes; two bugs fixed locally.**
 Real manager/wake listener/pinned Codex/local Worker fixture now completes two distinct
 owner sessions, with prior owner text AND canonical reply reaching the second model
 request. Exactly two native starts/model requests; receipt replay launches nothing;

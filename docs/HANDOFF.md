@@ -12,7 +12,10 @@ All eight earlier findings are corrected: repeated text/same clock, pre-write
 sub-second claim rejection, actual owner binding, separate immutable manifests,
 removal-time rejection, live lease, stable host token, historical bootstrap entry.
 Parent typecheck and 274 focused tests pass; integrated backend 1,782 and desktop
-16/16 pass. Full verifier is running in `.local/warm-stage-a-integrated-verify.log`;
+16/16 pass. Full verifier exited 0 in `.local/warm-stage-a-integrated-verify.log`:
+550 runtime tests, browser/native/service fixtures, typecheck and dry-run build pass;
+operational/production/model-judgment report flags remain false. Legacy browser
+composer/native regression still passes; new warm runtime is not implemented yet.
 desktop evidence is `.local/warm-stage-a-desktop.log`. The initial typecheck failure
 in isolated review was missing generated Cloudflare types; `npm run types` fixed it.
 Keep the owner-binding-only initialization guard; general initialization changes are
@@ -20,6 +23,17 @@ out of scope. Parent corrected one wire-doc sentence: repeated bodies keep the s
 command digest despite distinct idempotency keys. New runtime/UI threads must receive
 an exact bundle of this local state, not origin/main. Stage A supports one warm revision,
 two text-only tasks, no rollover or background profile. No live operations occurred.
+
+Active new GLM5.3 assignments: runtime
+`T-01a0b9d5-cf3b-76c9-913f-4fa057ed32ca` owns runtime/service/manager integration,
+its unit tests and hosted native fixture (including tests/fixtures/hosted-control.mjs).
+Portal `T-01a0b9d5-ea87-7623-8ba3-1bd72c1462b5` owns public/ and portal-only browser
+tests. Neither owns core/worker contracts, verifier or tracking docs. Parent owns
+combined integration. Both were instructed to download `.local/stage-a-control.bundle`
+from this thread: SHA256
+0feaea34b6814cfd30d2fd98736a1b1282233fce068e3b64804dfc5c0a473534,
+ref source-custody at fd6f5038a41560407563bcb2ffa69d80d24e3c2d. Require patches
+relative to that baseline and no live operations. Do not start duplicate workers.
 
 Owner requested all further implementation in new threads. Composer/native worker
 `T-01a0b94d-7913-71ff-aba8-8ed10ec336fa` delivered the hosted-manager browser mode
