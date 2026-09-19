@@ -18,6 +18,21 @@ implementation is dependent and must start in a new thread after contract review
 All workers use the verified bundle baseline through dd3808b; parent owns tracking
 and integration. Legacy grants unchanged; no live assignment, push or schedule activation.
 
+Initial Stage A contract review requires corrections before runtime assignment:
+count legacy and warm reservations once in the lifetime ledger (prefer the existing
+reservation prefix); output-preview/token-usage belong to host observations, not task
+tokens. Stage A task allowlist is only existing scoped agent-routines/agent-skill;
+no agent mutations/catalog discovery/questions/telemetry or new native tools. Host
+steer-pending may retain its existing scoped read if service maintenance needs it;
+no new steering authority. Host JWT binds immutable generation/profile/policy digest;
+legacy credentials cannot enter warm custody. Preserve contiguous historical generation
+validation without rewriting old records, fail closed on configuration removal/change,
+and test actual legacy-bootstrap-to-warm reconstruction. Freeze task deadline at
+message admission, cap token expiry to it, and reject sub-second rounded lifetime.
+Specify first-message-only UNKNOWN wake, READY manager no-launch response, stable
+composer summary/status kind, and manager-authenticated retirement after expiry.
+Worker received all corrections and will return the revised contract with its patch.
+
 10:05Z native continuation: extended existing hosted-manager script passes2 ordinary
 owner sessions with2 actual Codex launches/2 scripted model requests. Prior owner
 message AND canonical reply reach second request; old receipt replay launches nothing;

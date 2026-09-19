@@ -13,6 +13,10 @@ A new GLM5.3 control-plane worker owns Stage A: separate versioned/default-off f
 text-only generation, two sequential ordinary messages with immutable per-task grants,
 host/model capability separation and unchanged cumulative reservations. Runtime work
 follows contract review in another new thread; existing one-message grants stay unchanged.
+Initial wire review returned corrections: lifetime accounting must include old and new
+reservations; output/usage observations are host-only; task tokens retain only existing
+scoped reads; admission freezes task deadlines. Legacy-token downgrade, historical
+reconstruction and first-message-only wake require explicit tests before integration.
 Next checkpoint: integrate composer evidence and Stage A control contract, then one-process
 native integration before separately opting into background capabilities. No live rollout,
 campaign, spending, push or schedule enablement; owner SSO/provider gates remain separate.
