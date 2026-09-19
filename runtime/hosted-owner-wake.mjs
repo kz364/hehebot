@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { ControlClient } from './control-client.mjs';
 import { launchHostedOwnerAlpha } from './hosted-owner-launcher.mjs';
 import { prepareHostedOwnerManager } from './hosted-owner-manager.mjs';
+import { prepareHostedOwnerWarmManager } from './hosted-owner-warm-manager.mjs';
 import { readOwnerAlphaConfig } from './owner-alpha-entry.mjs';
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 import { createSpritesWakeHandler } from './sprites-wake-service.mjs';
@@ -101,6 +102,17 @@ export function createHostedOwnerWakeService({ configPath, wakeTokenFile, port }
         try { initial = await readConfig(configPath); }
         catch { return async () => { fail('HOSTED_WAKE_REFUSED'); }; }
         const config = initial.config;
+        if (config?.kind === 'owner-alpha-warm-manager-v1') {
+          const { SpritesTasksClient } = await import('../.local/codex-service/sprites.mjs');
+          const tasks = new SpritesTasksClient(createSpritesTaskTransport({ request: deps.spriteRequest, timeoutMs: 3000 }), now);
+          const resume = await prepareHostedOwnerWarmManager(config, request, { readSecret, launch, tasks,
+            control: deps.control, now, signal: AbortSignal.any([signal, controller.signal]) });
+          if (!resume) fail('HOSTED_WAKE_NO_ASSIGNMENT');
+          return async () => {
+            const code = await resume();
+            report({ event: 'hosted-owner-wake', code, ready: false });
+          };
+        }
         if (config?.kind === 'owner-alpha-manager-v1') {
           const { SpritesTasksClient } = await import('../.local/codex-service/sprites.mjs');
           const tasks = new SpritesTasksClient(createSpritesTaskTransport({ request: deps.spriteRequest, timeoutMs: 3000 }), now);

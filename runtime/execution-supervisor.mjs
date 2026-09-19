@@ -11,10 +11,12 @@ export class ExecutionSupervisor {
     operations, events = /** @type {{bind: (attemptId: string) => Promise<void>} | null} */ (null),
     children = /** @type {{sync: () => Promise<unknown>, cancel: (runIds: string[]) => Promise<unknown>, steer?: () => Promise<unknown>, publishOutputs?: () => Promise<unknown>} | null} */ (null),
     admission = /** @type {null | (() => Promise<unknown>)} */ (null),
+    claimStage = /** @type {null | ((claim: unknown) => Promise<unknown>)} */ (null),
     now = Date.now, intervalMs = 20000, onRecovery = () => {} }) {
     if (!activity?.ensure || !activity?.releaseAfterDrain || typeof operations !== 'function' ||
         (events && typeof events.bind !== 'function') ||
         (children && (typeof children.sync !== 'function' || typeof children.cancel !== 'function')) ||
+        (claimStage !== undefined && claimStage !== null && typeof claimStage !== 'function') ||
         !Number.isInteger(intervalMs) || intervalMs < 1 || intervalMs > 30000) fail('INVALID_SUPERVISOR_CONFIGURATION');
     Object.assign(this, { control, native, journal, identity, activity, operations, children, admission, now, intervalMs, onRecovery });
     this.phase = 'stopped';
@@ -39,7 +41,8 @@ export class ExecutionSupervisor {
         return submitted;
       },
     };
-    this.bridge = new ExecutionBridge({ control, native: guardedNative, journal, identity, installationId, personas });
+    this.bridge = new ExecutionBridge({ control, native: guardedNative, journal, identity, installationId, personas,
+      ...(claimStage ? { claimStage } : {}) });
   }
 
   assertLease() {

@@ -1,5 +1,18 @@
 const TYPES = Object.freeze(['whatsapp-read-authorize', 'agent-command', 'agent-routines', 'agent-skill', 'agent-skill-search', 'question-record', 'question-take', 'question-resolve', 'output-preview', 'token-usage', 'steer-pending', 'steer-result', 'budget-report', 'flight-register', 'flight-confirm', 'flight-reconcile', 'native-child', 'resource-acquire', 'resource-release', 'status', 'boot', 'ready', 'claim', 'heartbeat', 'submitted', 'coordinator-release', 'complete', 'prepare-sleep', 'commit-sleep', 'effect-intent', 'effect-result', 'root-child-effect-intent', 'root-child-effect-result']);
 export const RUNTIME_ENDPOINT_TYPES = TYPES;
+const MANAGER_TYPES = Object.freeze(['manifest', 'retirement']);
+const WARM_MANAGER_TYPES = Object.freeze(['generation', 'retirement']);
+const WARM_HOST_TYPES = Object.freeze(['boot', 'ready', 'claim', 'heartbeat', 'submitted', 'coordinator-release', 'complete', 'status', 'output-preview', 'token-usage', 'steer-pending']);
+const WARM_TASK_TYPES = Object.freeze(['agent-routines', 'agent-skill']);
+/** Route selection is not authentication; the Worker checks separate keys and
+ * token kinds per principal. Warm principals never widen legacy route meaning. */
+const PRINCIPALS = Object.freeze({
+  runtime: Object.freeze({ path: '/internal/', types: TYPES }),
+  manager: Object.freeze({ path: '/internal/manager/', types: MANAGER_TYPES }),
+  'warm-manager': Object.freeze({ path: '/internal/warm/manager/', types: WARM_MANAGER_TYPES }),
+  'warm-host': Object.freeze({ path: '/internal/warm/host/', types: WARM_HOST_TYPES }),
+  'warm-task': Object.freeze({ path: '/internal/warm/task/', types: WARM_TASK_TYPES }),
+});
 export class ControlClientError extends Error {
   constructor(code, outcomeUnknown = false, status) {
     super(code); this.name = 'ControlClientError'; this.code = code; this.outcomeUnknown = outcomeUnknown;
@@ -14,7 +27,7 @@ export class ControlClient {
   constructor({ origin, token, accessClientId, accessClientSecret, fetchImpl = globalThis.fetch,
     timeoutMs = 15000, maxRequestBytes = 131072, maxResponseBytes = 1048576, principal = 'runtime' } = {}) {
     let url; try { url = new URL(origin); } catch { throw fail('INVALID_CONFIGURATION'); }
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/' || !secretValid(token) || typeof fetchImpl !== 'function' || !['runtime', 'manager'].includes(principal)) throw fail('INVALID_CONFIGURATION');
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/' || !secretValid(token) || typeof fetchImpl !== 'function' || !Object.hasOwn(PRINCIPALS, principal)) throw fail('INVALID_CONFIGURATION');
     const accessSet = accessClientId !== undefined || accessClientSecret !== undefined;
     if (accessSet && (!secretValid(accessClientId) || !secretValid(accessClientSecret))) throw fail('INVALID_ACCESS_CREDENTIALS');
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60000 ||
@@ -24,9 +37,8 @@ export class ControlClient {
     this.#headers = Object.freeze({ 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}`,
       ...(accessSet ? { 'CF-Access-Client-Id': accessClientId, 'CF-Access-Client-Secret': accessClientSecret } : {}) });
     this.#fetch = fetchImpl; this.#timeout = timeoutMs; this.#requestLimit = maxRequestBytes; this.#responseLimit = maxResponseBytes;
-    // Route selection is not authentication; the Worker checks separate keys.
-    this.#types = principal === 'manager' ? ['manifest', 'retirement'] : TYPES;
-    this.#path = principal === 'manager' ? '/internal/manager/' : '/internal/';
+    this.#types = PRINCIPALS[principal].types;
+    this.#path = PRINCIPALS[principal].path;
   }
   async request(type, payload) {
     if (!this.#types.includes(type)) throw fail('UNSUPPORTED_RUNTIME_ENDPOINT');

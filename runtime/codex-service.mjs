@@ -16,6 +16,7 @@ import { CodexQuestionBinding } from './codex-questions.mjs';
 import { ExecutionSupervisor } from './execution-supervisor.mjs';
 import { SpritesActivityGuard } from './sprites-activity-guard.mjs';
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
+import { stageWarmClaim, warmGenerationBinding } from './owner-alpha-warm-binding.mjs';
 import { codexTextOnlyProfileSha256, createCodexTextOnlyCompletionReceipt,
   createCodexTextOnlyProfile, verifyCodexTextOnlyProfile } from './codex-text-only.mjs';
 
@@ -52,7 +53,7 @@ export function createCodexService(config, dependencies) {
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
   let ownsIntent = false, stopping, questions, questionNotification, admission;
   let alpha = null, textOnlyProfile = null, textOnlyVerification = null, textOnlyCatalogContent = null, commandedConfigContent = null;
-  let alphaGeneration = null;
+  let alphaGeneration = null, alphaWarm = null;
   let verifyTextOnlyCurrent;
   const hosted = Object.hasOwn(config, 'hostedOwnerBindingSha256');
   const taskControllers = new Map();
@@ -167,9 +168,16 @@ export function createCodexService(config, dependencies) {
         alphaGeneration = ownerAlphaGeneration(config.ownerAlphaGeneration);
         if (!hosted || !alpha?.text_only || !textOnlyProfile) fail('INVALID_SERVICE_CONFIGURATION');
       }
+      // The warm binding is a separate explicit kind: it requires the hosted
+      // text-only generation composition and never widens the legacy contract.
+      if (config.ownerAlphaWarm !== undefined) {
+        alphaWarm = warmGenerationBinding(config.ownerAlphaWarm);
+        if (!hosted || !alphaGeneration || !alpha?.text_only || !textOnlyProfile ||
+            alpha.background_first_root === true) fail('INVALID_SERVICE_CONFIGURATION');
+      }
       if (config.textOnlyProfile !== undefined && !alpha?.text_only) fail('INVALID_SERVICE_CONFIGURATION');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile'].includes(key)) ||
         config.nativeHome !== undefined && (!alpha || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean') fail('INVALID_SERVICE_CONFIGURATION');
@@ -194,13 +202,15 @@ export function createCodexService(config, dependencies) {
         await starting(() => privatePath(config.runtimeTokenFile));
         const token = (await starting(() => readFile(config.runtimeTokenFile, 'utf8'))).trim();
         const access = await starting(() => readAccessCredentials(config));
-        const configuredControl = new ControlClient({ origin: config.portalOrigin, token, fetchImpl, ...access });
+        const configuredControl = new ControlClient({ origin: config.portalOrigin, token, fetchImpl,
+          ...(alphaWarm ? { principal: 'warm-host' } : {}), ...access });
         control = dependencies.control ?? configuredControl;
         journal = new FileJournal(join(config.stateDirectory, 'journal'));
         const bootId = alphaGeneration?.boot_id ?? randomUUID();
         assertStarting();
         if (await journal.putIfAbsent('service', { phase: 'boot_unknown', bootId, ...(alpha ? { ownerAlpha: alpha } : {}),
           ...(alphaGeneration ? { ownerAlphaGeneration: alphaGeneration } : {}),
+          ...(alphaWarm ? { ownerAlphaWarm: alphaWarm } : {}),
           ...(hosted ? { hostedOwner: { bindingSha256: config.hostedOwnerBindingSha256,
             origin: new URL(config.portalOrigin).origin } } : {}) })) fail('SERVICE_RECOVERY_REQUIRED');
         ownsIntent = true;
@@ -208,7 +218,15 @@ export function createCodexService(config, dependencies) {
         const status = await starting(() => control.request('status', {}));
         if (hosted && status?.owner_binding_sha256 !== config.hostedOwnerBindingSha256) fail('OWNER_BINDING_MISMATCH');
         if (hosted ? status?.owner_alpha_hosted !== true : Object.hasOwn(status ?? {}, 'owner_alpha_hosted')) fail('CONTROL_NOT_BOOTABLE');
-        if (alphaGeneration) {
+        if (alphaWarm) {
+          // A warm generation identifies itself only through the versioned warm
+          // discriminator; the legacy owner_alpha_generation summary must stay
+          // absent so no legacy credential can adopt this boot.
+          if (status?.phase !== 'BOOTING' || status.epoch !== alphaGeneration.epoch || status.execution_enabled !== false ||
+              JSON.stringify(ownerAlphaPolicy(status.owner_alpha)) !== JSON.stringify(alpha) ||
+              JSON.stringify(ownerAlphaGeneration(status.owner_alpha_warm_generation)) !== JSON.stringify(alphaGeneration) ||
+              Object.hasOwn(status ?? {}, 'owner_alpha_generation')) fail('CONTROL_NOT_BOOTABLE');
+        } else if (alphaGeneration) {
           if (status?.phase !== 'BOOTING' || status.epoch !== alphaGeneration.epoch || status.execution_enabled !== false ||
               JSON.stringify(ownerAlphaPolicy(status.owner_alpha)) !== JSON.stringify(alpha) ||
               JSON.stringify(ownerAlphaGeneration(status.owner_alpha_generation)) !== JSON.stringify(alphaGeneration)) fail('CONTROL_NOT_BOOTABLE');
@@ -251,7 +269,10 @@ export function createCodexService(config, dependencies) {
           const filesystem = { ':minimal': 'read', [workspace]: 'read',
             [join(config.stateDirectory, 'journal')]: 'deny', [home]: 'deny',
             ...Object.fromEntries([config.runtimeTokenFile, config.accessClientIdFile, config.accessClientSecretFile]
-              .filter(Boolean).map(path => [path, 'deny'])) };
+              .filter(Boolean).map(path => [path, 'deny'])),
+            // Warm task tokens live beside the journal: model-visible paths stay
+            // denied so the native sandbox can never read staged credentials.
+            ...(alphaWarm ? { [join(config.stateDirectory, 'task-tokens')]: 'deny' } : {}) };
           const digest = createHash('sha256').update(JSON.stringify({ base, filesystem, network: { enabled: false }, configOverrides })).digest('hex');
           const name = `hehebot-restricted-${digest}`;
           const contents = `default_permissions = ${JSON.stringify(name)}\n${base}\n[permissions.${name}.filesystem]\n` +
@@ -413,6 +434,11 @@ export function createCodexService(config, dependencies) {
         supervisor = new ExecutionSupervisor({ control, native, journal, identity, installationId: config.installationId,
           personas: config.personas, events: router, activity, operations, now, onRecovery: recover,
           admission: admit,
+          ...(alphaWarm ? { claimStage: claim => stageWarmClaim(claim, {
+            installationId: config.installationId, stateDirectory: config.stateDirectory,
+            generation: { epoch: alphaGeneration.epoch, boot_id: alphaGeneration.boot_id,
+              transition_id: alphaGeneration.transition_id, session_id: alpha.session_id, persona_id: alpha.persona_id },
+            generationSha256: alphaWarm.generation_sha256, textOnly: alpha.text_only, now }) } : {}),
           children: { sync: () => eachController(controller => controller.sync()), cancel: ids => eachController(controller => controller.cancel(ids)),
             steer: () => eachController(controller => controller.steer()), publishOutputs: () => eachController(controller => controller.publishOutputs()) } });
         await starting(() => control.request('ready', { identity }));

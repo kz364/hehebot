@@ -9,11 +9,12 @@ const hash = value => createHash('sha256').update(JSON.stringify(value)).digest(
  */
 export class ExecutionBridge {
   #busy = false;
-  constructor({ control, native, journal, identity, installationId, personas }) {
+  constructor({ control, native, journal, identity, installationId, personas, claimStage = null }) {
     if (!control?.request || !native?.submit || !native?.admissionReadiness || !journal?.putIfAbsent ||
         !Number.isSafeInteger(identity?.epoch) || typeof identity.boot_id !== 'string' ||
-        typeof installationId !== 'string' || !personas) fail('INVALID_BRIDGE_CONFIGURATION');
-    Object.assign(this, { control, native, journal, identity, installationId, personas });
+        typeof installationId !== 'string' || !personas ||
+        claimStage !== null && typeof claimStage !== 'function') fail('INVALID_BRIDGE_CONFIGURATION');
+    Object.assign(this, { control, native, journal, identity, installationId, personas, claimStage });
     this.cursor = `dispatch-${hash(identity)}`;
   }
   /** Released coordinators remain active families, not completed tasks. */
@@ -80,6 +81,10 @@ export class ExecutionBridge {
       const background = Object.hasOwn(claim, 'owner_alpha_background');
       if (claim.text_only !== undefined && (!claim.text_only || claim.owner_alpha_background ||
           claim.text_only.profile_version !== 'codex-text-only-v1' || !/^[0-9a-f]{64}$/.test(claim.text_only.profile_sha256 ?? ''))) fail('INVALID_CLAIM');
+      // Versioned claim staging runs after the base shape checks and before the
+      // journal takes custody: the staged claim is what gets journaled, so the
+      // raw task credential never reaches the journal or the native adapter.
+      if (this.claimStage) claim = await this.claimStage(claim);
       await this.journal.update(this.cursor, { phase: 'claimed', claim });
       const persona = this.personas[claim.run.persona_id];
       if (!persona?.agentId || !persona.model) fail('NATIVE_PERSONA_UNMAPPED');

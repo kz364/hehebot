@@ -16,9 +16,16 @@ const OWNER = 'fixture-owner';
 const INSTALLATION = 'hosted-fixture';
 const ROUTINE_MANAGE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 
-export async function startHostedControlFixture({ directory, ownerAlpha, ownerAlphaSuccessor, runtimeToken, accessClientId, accessClientSecret, manager, portalAssetsDirectory }) {
+export async function startHostedControlFixture({ directory, ownerAlpha, ownerAlphaSuccessor, runtimeToken, accessClientId, accessClientSecret, manager, warm, portalAssetsDirectory }) {
   if (![directory, runtimeToken, accessClientId, accessClientSecret].every(value => typeof value === 'string' && value)) {
     throw new TypeError('Hosted fixture requires a private directory and non-empty synthetic credentials.');
+  }
+  if (manager && warm) throw new TypeError('Hosted fixture admits one owner-alpha composition: bootstrap manager or warm generation, never both.');
+  if (warm !== undefined && (!warm || typeof warm !== 'object' ||
+      !warm.generation || typeof warm.generation !== 'object' || Array.isArray(warm.generation) ||
+      ![warm.token, warm.hostSigningKey, warm.taskSigningKey, warm.wakeToken].every(value => typeof value === 'string' && value) ||
+      new Set([warm.token, warm.hostSigningKey, warm.taskSigningKey, warm.wakeToken]).size !== 4)) {
+    throw new TypeError('Warm fixture requires a generation configuration and four distinct synthetic secrets.');
   }
   // Browser mode serves the actual portal assets from the real authenticated
   // Worker. The synthetic signed owner identity stays fixture-only; this is
@@ -31,7 +38,7 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
   let mf, server, dispatcher;
   try {
     await mkdir(root, { recursive: true, mode: 0o700 });
-    await build({ entryPoints: [resolve(manager ? 'tests/fixtures/hosted-manager-control.ts' : 'src/worker/index.ts')], outfile: bundle, bundle: true, format: 'esm',
+    await build({ entryPoints: [resolve(manager ? 'tests/fixtures/hosted-manager-control.ts' : warm ? 'tests/fixtures/hosted-warm-control.ts' : 'src/worker/index.ts')], outfile: bundle, bundle: true, format: 'esm',
       platform: 'browser', target: 'es2022', loader: { '.sql': 'text' },
       external: ['cloudflare:workers', 'node:*'] });
     await run('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '2', '-subj', '/CN=localhost',
@@ -56,7 +63,7 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
       // V4-style options: the assets converter reads snake_case keys and the
       // router config, so the user worker runs ahead of static assets.
       ...(portalAssetsDirectory ? { assets: { directory: portalAssetsDirectory, binding: 'ASSETS', run_worker_first: true, routerConfig: { has_user_worker: true } } } : {}), resourcePersistencePath: join(root, 'miniflare'),
-      durableObjects: { CONTROL: { className: manager ? 'HostedManagerControl' : 'PersonalControl', useSQLite: true } },
+      durableObjects: { CONTROL: { className: manager ? 'HostedManagerControl' : warm ? 'HostedWarmControl' : 'PersonalControl', useSQLite: true } },
       bindings: { INSTALLATION_ID: INSTALLATION, AUTH_MODE: 'access', ACCESS_ISSUER: ISSUER, ACCESS_AUD: AUDIENCE,
         OWNER_SUB: OWNER, EXECUTION_ENABLED: 'false', NATIVE_VERIFIED: 'false', PROVIDER_CONFIG: '{}',
         ACTION_POLICY_IDS: '[]', TOOL_POLICY_IDS: JSON.stringify([ROUTINE_MANAGE_POLICY]),
@@ -68,6 +75,11 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
         HEHEBOT_OWNER_ALPHA_WAKE: JSON.stringify({ url: 'https://synthetic-manager.sprites.app' }),
         HEHEBOT_OWNER_ALPHA_WAKE_TOKEN: 'synthetic-wake-' + 'w'.repeat(40), PROVIDER_TOKEN: 'synthetic-provider-' + 'p'.repeat(40),
         HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN: manager.token, HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY: manager.signingKey } : {}),
+        ...(warm ? { HEHEBOT_OWNER_ALPHA_WARM_GENERATION: JSON.stringify(warm.generation),
+        HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN: warm.token, HEHEBOT_OWNER_ALPHA_HOST_SIGNING_KEY: warm.hostSigningKey,
+        HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY: warm.taskSigningKey,
+        HEHEBOT_OWNER_ALPHA_WAKE: JSON.stringify({ url: 'https://synthetic-warm.sprites.app' }),
+        HEHEBOT_OWNER_ALPHA_WAKE_TOKEN: warm.wakeToken, PROVIDER_TOKEN: 'synthetic-provider-' + 'p'.repeat(40) } : {}),
         ...(successor === undefined ? {} : { HEHEBOT_OWNER_ALPHA_SUCCESSOR: JSON.stringify(successor) }) },
       outboundService: async request => {
         outboundRequests.push({ method: request.method, url: request.url });
@@ -120,15 +132,17 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
       if (mf) await mf.dispose();
       if (dispatcher) await dispatcher.close();
     };
-    const fixtureCall = async path => {
+    const fixtureCall = async (path, body = {}) => {
       const namespace = await mf.getDurableObjectNamespace('CONTROL');
-      const response = await namespace.get(namespace.idFromName(INSTALLATION)).fetch(`http://127.0.0.1/${path}`, { method: 'POST', body: '{}' });
+      const response = await namespace.get(namespace.idFromName(INSTALLATION)).fetch(`http://127.0.0.1/${path}`, { method: 'POST', body: JSON.stringify(body) });
       if (!response.ok) throw new Error(`Fixture inspection/seed failed: ${response.status}`);
       return response.json();
     };
     return { origin, caFile, fetchImpl, ownerJwt, otherOwnerJwt, ownerBindingSha256, outboundRequests, close,
       ...(portalAssetsDirectory ? { browserCommands } : {}),
-      ...(manager ? { retireUnusedPredecessor: () => fixtureCall('fixture-retire'), retainedManifest: () => fixtureCall('fixture-manifest') } : {}) };
+      ...(manager ? { retireUnusedPredecessor: () => fixtureCall('fixture-retire'), retainedManifest: () => fixtureCall('fixture-manifest') } : {}),
+      ...(warm ? { retirePredecessor: bootId => fixtureCall('fixture-retire', { boot_id: bootId }),
+        wakeIntent: () => fixtureCall('fixture-wake'), warmRows: () => fixtureCall('fixture-warm') } : {}) };
   } catch (error) {
     if (server) await new Promise(resolveClose => server.close(() => resolveClose()));
     if (mf) await mf.dispose();
