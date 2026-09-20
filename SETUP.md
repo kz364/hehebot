@@ -1,6 +1,6 @@
 # Hehebot setup
 
-No deployment has been performed. Credentials have been checked locally, but authenticated inference, provider lifecycle, connector effects, production Access, and Mac hardware acceptance remain unverified.
+The protected control plane has demonstrated bounded hosted replies and authenticated reload; this is not an operational assistant. Historical failed custody remains recovery-required. Current Stage A/Stage B local work is not automatically deployed. Provider containment, full lifecycle settlement, connector effects and Mac hardware acceptance remain open; see [current progress](TODO.md).
 
 ## Credential-free development
 
@@ -22,6 +22,11 @@ npm run dev
 The local owner-auth bypass accepts loopback only. Do not expose it through a tunnel or portal.
 
 ## Live setup order
+
+For an existing installation, inspect retained custody and use the [bounded owner
+trial procedure](docs/AUTH_SETUP.md#next-bounded-owner-trial-preparation-and-stop-conditions)
+before making changes. Do not repeat provisioning or reset an expired generation
+to follow the initial setup order below. Local preparation is not live authorization.
 
 1. Prepare one Fly Sprite and persistent private state; do not create one runtime per bot.
 2. Configure Cloudflare Worker/SQLite Durable Object and owner-only Access.

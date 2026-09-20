@@ -4,6 +4,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
+Owner said “Go do all that”; local F1–F6 follow-through continues without live
+authorization expansion. F3 worker T-01a0bdf0-6b4d-70ba-acb2-ce10eb4f9d29 owns
+only new scripts/test-codex-warm-auto-stop.mjs (plus a new fixture if required),
+from the exact c35e118 bundle below. It must prove actual runHostedOwnerAlpha
+automatic expiry/stop of a real native process, not test-owned stop. No overlapping
+runtime edits; worker reports completion/blocker directly, no polling.
+Parent extended scripts/test-codex-native.mjs with missed-child-interruption cold
+readback; focused native run passes, `.local/cold-child-recovery.log`. Cancellation
+is never replayed; crossed identity and duplicate-write negatives pass, effect
+settlement/sleep remain unproved. This uses graceful process restart, not crash
+takeover. Parent prepared F4 in AUTH_SETUP/SETUP without live operations.
+Combined verifier PID305807 runs to `.local/followthrough-integrated-verify.log`;
+check its exit before claiming combined success. Stage B runtime assignment below
+is unchanged. Existing two-hour follow-through schedule was read and retained.
+
 Stage B control implementation integrated at local c35e118 after reviewing patch
 SHA256 4d8b376fcb8e2da1ddf096430c76453b2a85789bc0d4b3092d15766d8845a9b9.
 Parent focused8/8/typecheck pass. Combined verifier PID 275220 finished exit0:

@@ -311,8 +311,13 @@ try {
   assert.equal(parentRow.childTurns[childKey], 'inProgress');
   assert.equal(heldClosed, 1);
   assert.equal(notifications.some(n => n.method === 'turn/completed' && n.params?.threadId === childThread && n.params.turn.id === childStarted.params.turn.id), false);
+  // Retain the actual pre-interrupt observations in a separate host journal.
+  // It records the cancellation ACK but receives no later live notifications:
+  // cold readback below must recover the missed exact-child terminal event.
+  const coldChildJournal = new FileJournal(join(home, 'cold-child-journal'));
+  await coldChildJournal.putIfAbsent('parent-proof', parentRow);
   let childInterrupts = 0;
-  const childCancellation = new CodexAdapter({ cwd: workspace, journal: new FileJournal(journalPath), rpc: (method, params) => {
+  const childCancellation = new CodexAdapter({ cwd: workspace, journal: coldChildJournal, rpc: (method, params) => {
     assert.equal(method, 'turn/interrupt');
     assert.deepEqual(params, { threadId: childThread, turnId: childStarted.params.turn.id });
     childInterrupts++;
@@ -413,6 +418,39 @@ try {
   report.missedCommandCompletionRecovered = true;
   assert.equal(restartedAdapter.sleepReadiness().allowed, false);
   report.nativeProcessRestartReadback = true;
+
+  // This is cold native history recovery after a missed event, not crash-time
+  // takeover or provider containment. No restart of inference is authorized.
+  const coldChildReads = [];
+  const reopenedChildJournal = new FileJournal(coldChildJournal.directory);
+  const childRecovery = new CodexAdapter({ cwd: workspace, journal: reopenedChildJournal, rpc: (method, params) => {
+    assert.equal(method, 'thread/read');
+    assert.deepEqual(params, { threadId: childTarget.threadId, includeTurns: true });
+    coldChildReads.push(params);
+    return transport.request(method, params);
+  } });
+  assert.deepEqual(await reopenedChildJournal.get('parent-proof'), parentRow);
+  assert.equal((await childRecovery.cancelChild('parent-proof', childTarget)).status, 'accepted');
+  assert.equal(coldChildReads.length, 0, 'accepted cancellation must not be replayed after restart');
+  await assert.rejects(childRecovery.reconcileChild('parent-proof', { ...childTarget, turnId: parentTurn }),
+    { code: 'SETTLEMENT_IDENTITY_MISMATCH' });
+  assert.equal(coldChildReads.length, 0, 'crossed root/child identity must reject before native read');
+  assert.deepEqual(await reopenedChildJournal.get('parent-proof'), parentRow);
+  const recoveredChild = await childRecovery.reconcileChild('parent-proof', childTarget);
+  assert.deepEqual(recoveredChild.childTurns, { ...parentRow.childTurns, [childKey]: 'interrupted' });
+  assert.equal(recoveredChild.threadId, parentThread);
+  assert.equal(recoveredChild.nativeRunId, parentTurn);
+  assert.equal(recoveredChild.nativeOutcome, parentRow.nativeOutcome);
+  assert.deepEqual(recoveredChild.spawns, parentRow.spawns);
+  assert.equal(recoveredChild.effectsSettled, undefined);
+  assert.equal(recoveredChild.childObligations?.[childKey]?.effectsSettled, undefined);
+  assert.equal(childRecovery.sleepReadiness().allowed, false);
+  reopenedChildJournal.update = () => assert.fail('identical cold child readback must not rewrite custody');
+  assert.deepEqual(await childRecovery.reconcileChild('parent-proof', childTarget), recoveredChild);
+  assert.equal(coldChildReads.length, 2);
+  assert.equal(childInterrupts, 1);
+  report.coldMissedChildInterruptionRecovered = true;
+  report.coldChildCancellationNotReplayed = true;
 
   assert.equal(requests, report.dynamicChildToolsAvailable ? 15 : 14);
   assert.equal(toolContinuations, 1);

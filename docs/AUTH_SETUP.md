@@ -1,6 +1,94 @@
 # Accounts, authentication, and deployment checklist
 
-The protected portal/control plane is deployed and authenticated SQLite reads work. One same-owner hosted ChatGPT reply persisted as provisional output, but task completion failed and custody remains recovery-required; see [implementation evidence](IMPLEMENTATION.md). This is not an operational chat service or proof of unattended refresh, provider containment, or connector effects. Never paste tokens, OAuth/device codes, QR codes, or personal data into documentation, prompts, or logs.
+The protected portal/control plane has demonstrated canonical bounded hosted replies, including a Worker-triggered wake and authenticated reload. Earlier failed trial custody remains recovery-required; later success does not clear it. See [implementation evidence](IMPLEMENTATION.md) and [TODO](../TODO.md) for current local versus deployed evidence. This is not an operational chat service or proof of unattended refresh, provider containment, or connector effects. Never paste tokens, OAuth/device codes, QR codes, or personal data into documentation, prompts, or logs.
+
+## Next bounded owner trial: preparation and stop conditions
+
+Prepared 2026-09-20; **not an authorization to execute**. The next candidate is
+Stage A's finite two-message, text-only warm generation. Stage B's three-role
+background generation is not a substitute: its runtime/native/browser integration
+must pass separately before a live trial can be proposed. Neither slice enables
+ongoing chat, connectors, routines, automatic rollover or production execution.
+TODO remains the progress checklist; this section is the trial procedure.
+
+1. **Freeze the release and its evidence.** Record the exact local source-custody
+   revision, artifact digest and target Worker/Sprite privately. Rerun
+   `bash scripts/verify-codex.sh` on the integrated revision; include the real
+   Worker-to-loopback wake and browser `--wake-first` evidence. Synthetic model,
+   Access and provider seams are not live checks. Require automatic real-native
+   expiry/stop evidence before claiming that shutdown property; it is still open
+   at this preparation checkpoint. Publication and deployment are separate actions.
+2. **Inspect predecessor custody before selecting any policy.** Read existing
+   generation, reservation, retirement and native journal records through their
+   supported interfaces. A retained Stage A generation is terminal in this slice:
+   no second warm revision and no warm-to-background transition. New Stage A
+   admission requires the supported expired legacy predecessor and exact trusted
+   retirement evidence, not an empty epoch-zero installation or invented seed
+   receipt. Unknown historical work blocks any claim that replacement is safe.
+   Do not erase records, edit Codex-owned databases or release locks to make a
+   trial eligible. Report an unsupported transition instead of attempting it.
+3. **Pin identity and access independently.** Privately record the existing
+   Worker hostname, installation/owner-binding digest and selected Sprite.
+   Verify owner Access login, internal service-auth policy, runtime bearer and
+   exact wake destination as separate boundaries. Missing/foreign owner tokens,
+   wrong runtime bearer, browser access to internal routes and service identity
+   on owner routes must reject. Never export browser cookies/JWTs. Do not expose
+   the local-auth bypass. Live verification itself needs the applicable grant.
+4. **Verify account and process custody.** On the authorized executing runtime,
+   verify pristine Codex 0.154.0, the supported same-owner ChatGPT login and the
+   selected visible model. Confirm one refresh owner, no inherited API-key or
+   provider fallback, private credential files and the existing dual-lock
+   launcher. Account/catalog discovery is not inference, subscription eligibility
+   or containment proof. Missing eligibility, quota or confirmed old-process
+   termination blocks launch; never copy an OAuth cache from the orb.
+5. **Review one immutable budget and deadline.** Use
+   `HEHEBOT_OWNER_ALPHA_WARM_GENERATION` with exactly two admissions, the reviewed
+   text-only profile and fixed UTC policy expiry. Generation expiry is capped at
+   admission one plus 300 seconds; each root deadline is also bounded by
+   `max_task_seconds`. Record current cumulative prior spend with its source and
+   every retained legacy/warm/background reservation, including UNKNOWN rows.
+   The existing lifetime total cap is not reset or refunded between attempts;
+   check capacity for both reservations before proposing the trial. Reservations
+   bound admission, not measured provider billing. Verify actual remaining budget
+   separately; never treat the historical $10 grant as a fresh $10 allowance.
+6. **Obtain one concrete execution grant.** Present the pinned release, named
+   Worker/Sprite, exact configuration diff and supported predecessor, fixed
+   deadline, remaining lifetime allowance and maximum incremental spend. List
+   proposed deployment, wake/process, account and inference actions explicitly.
+   Keep `EXECUTION_ENABLED`, `NATIVE_VERIFIED` and lifecycle verification false;
+   do not widen Access or connector permissions. Stop before any unapproved
+   action. An already-authorized action within its unchanged scope does not need
+   repeated approval; expired or ambiguous historical scope does not expand it.
+7. **Execute only the two reviewed ordinary messages.** First send a benign
+   text-only fact, then after canonical completion ask for that fact again. Use
+   the actual owner portal, not a direct claim or manual first `/wake` request.
+   Record command receipt/run/attempt identities, one generation/epoch and one
+   native process, the once-only Worker wake, canonical results and readback.
+   Reload/reconnect must retain both replies without a new admission or wake.
+   A timeout/UNKNOWN wake is a stop-and-reconcile result, never permission to
+   replay the wake or mint a replacement idempotency key. Do not submit a third
+   message to test quota; use the local denial fixture and exhausted portal state.
+8. **Observe expiry and retain honest shutdown evidence.** Verify that admission
+   closes at the fixed deadline and the entrypoint requests stop after its
+   existing 30-second grace. Record actual process termination separately from
+   journal state, locks, provider activity-hold state and billing. Root completion,
+   a free lock or HTTP 202 is not process/child/effect settlement. If termination
+   or provider state is unknown, retain recovery-required custody and prohibit
+   replacement/sleep claims. Operator emergency stop must be reported as manual,
+   not automatic-shutdown acceptance; no automatic replay follows it.
+9. **Record the result without promoting it.** Store sanitized evidence and
+   measured incremental/cumulative costs in IMPLEMENTATION/TODO; keep private
+   journals and identities out of Git. State each failure, unknown and untested
+   refresh/containment/settlement property. Retain the terminal generation and
+   reservations. Rollback closes new admission and preserves custody; it does not
+   reset quota, undo inference or restore permission to launch another session.
+
+Current external inputs still needed: approved release/targets and exact live
+actions; supported predecessor/retirement and process-containment evidence;
+verified remaining budget and account/model eligibility. No live operation was
+performed to prepare this procedure. Stage B, connectors, routine adoption, Mac
+permissions, signing/release and production promotion require their own evidence
+and applicable authorization, not inclusion in this text-only trial.
 
 ## Required boundaries
 

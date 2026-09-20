@@ -4,6 +4,27 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner follow-through (2026-09-20): `node scripts/test-codex-native.mjs` passes with
+`coldMissedChildInterruptionRecovered:true` and `coldChildCancellationNotReplayed:true`
+in `.local/cold-child-recovery.log`. A separate host journal captures actual
+pre-interrupt parent/child observations and persists the one cancellation ACK,
+but receives no later notifications. After confirmed graceful native exit and
+a new pristine 0.154.0 process, read-only `reconcileChild` recovers the exact
+interrupted child. Crossed root/child turn identity rejects before native read;
+duplicate history cannot write. Parent identity/spawn custody remain unchanged,
+effect settlement remains unproved and sleep stays denied. This verifies missed
+event recovery, not a process crash/takeover, live model, provider containment or
+recursive family settlement. No production runtime change was needed.
+
+Automatic real-native expiry/stop is independently assigned to a new-script-only
+worker from c35e118, disjoint from the active Stage B runtime implementor.
+AUTH_SETUP now contains the bounded two-message trial procedure and exact stop
+conditions; SETUP no longer incorrectly says deployment has never happened.
+The procedure preserves predecessor retirement, immutable generation/budget and
+all live authorization gates. It is not evidence that current targets are ready.
+Combined verifier runs in `.local/followthrough-integrated-verify.log`; no result
+is claimed until the process exits. No live operation or publication occurred.
+
 Stage B portal integration (2026-09-20, local befc7d0): patch SHA256
 7bef3d8fe2e5e04866d82c4708bd8c8c53f33c7f3a89582b2caeb310d05ee783
 reviewed. Parent regression reproduced enabled Send with conflicting legacy
