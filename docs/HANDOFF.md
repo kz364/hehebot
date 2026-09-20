@@ -2,7 +2,36 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies, including one Worker-triggered staged wake, have canonical completion and full-reload persistence. Historical failed work remains recovery-required. Bounded policies expired and launchers stopped; this is not ongoing chat availability or production readiness. Production execution/native gates remain false.
 
-## Active follow-up (2026-09-19 Asia/Jakarta)
+## Active follow-up (2026-09-20 Asia/Jakarta)
+
+F1b corrected replacement integrated at 0ecdc55. Patch
+`.local/warm-wake-listener-round2.patch` SHA256
+8eaca10d89070526a8f5210eb0b8d5c74439c5946d26ff6608c36739a82f1ad6.
+Parent negative2/2 and browser --wake-first pass; one process/two replies, real
+Worker alarm delivery through loopback, exact once-only wake, byte-stable envelope,
+no deadlock while alarm awaits ack. Fresh screenshot inspected. Full verifier exited
+0 in `.local/warm-wake-integrated-verify.log`: 1782 backend/570 runtime tests plus
+browser/native/service fixtures, typecheck and dry-run build. Browser entry now
+forces --wake-first. No live provider/account/model or automatic native-stop claim.
+Worker complete; original first-review notes below are historical/superseded.
+
+Stage B contract worker T-01a0bd0c-04b7-764b-9f80-41b19a4d44fe owns only proposed
+docs/BACKGROUND_GENERATION_WIRE_CONTRACT.md; no production implementation until
+parent reviews concrete capability/admission/authority contract. Baseline
+0ecdc55a9287992aecadfb7f0237c3c4be4c1588 from `.local/stage-b-source.bundle`, SHA256
+48ab9becd8d10c668b7e71b8755778d0c21ad095e2d294a09fa7a258cc73aea7.
+Selected A restricted V2 only; S/B fresh independent root-only tasks after trusted
+coordinator-release. Stage A remains terminal/text-only; no implicit upgrade.
+Read TODO.md for authoritative active statuses. Schedule remains enabled.
+
+Parent contract review returned a doc-only correction pass to that same worker.
+Do not apply the initial proposal from `.local/BACKGROUND_GENERATION_WIRE_CONTRACT.md`.
+A remains unsettled while descendants run; release is not logical completion.
+S/B require separate root-only completion proof. No successor after retained warm
+or background custody is authorized by this slice. Fixed ordinal roles are only
+the bounded fixture contract, not general intent routing. Correct first-admission
+ordering, actual runtime wire payloads, full durable claim context and default-denied
+effects/mutations before implementation. Worker must reply with revised patch/evidence.
 
 F1b first patch downloaded to `.local/warm-wake-listener.patch`, SHA256
 3eb7edd449b8d41fffdcf68c5d4a8351ea987563ede9a97cc8d4a8152bbc6d9d;

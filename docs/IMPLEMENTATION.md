@@ -4,6 +4,29 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+F1b replacement integration (2026-09-20, local 0ecdc55): reviewed replacement
+8eaca10d89070526a8f5210eb0b8d5c74439c5946d26ff6608c36739a82f1ad6.
+Callback expectations now read config and durable generation/manifest rows
+independently. The manager request seam checks byte-stability before staging;
+post-admission empty-session/nonnull-envelope timing assertions are removed.
+Parent `node --test tests/runtime-hosted-warm-wake.mjs` passes 2/2 and
+`node scripts/test-codex-warm-manager.mjs --browser --wake-first` exits 0.
+Forced receipt-observation delay lasts until real alarm wake and native staging;
+both turns still complete in one process with exact once-only wake, no duplicate
+on replay and reload retention. Pending-alarm manager callback completes without
+deadlock. Unknown receipt/delivery outcomes retain intent without retry. Logs:
+`.local/warm-wake-parent-{negative,browser}.log`. Representative 2x screenshot
+inspected: Connected, exact four messages, exhausted banner, empty disabled composer.
+Real Worker outbound fetch is routed to a disposable loopback listener; no live
+Sprite/Access/model is proved. Explicit stop still does not prove automatic real
+native termination. `bash scripts/verify-codex.sh` exited 0: 1782 backend/570 runtime
+tests, browser/native/service fixtures, typecheck and dry-run build. Evidence:
+`.local/warm-wake-integrated-verify.log`, with browser --wake-first now permanent.
+Stage B proposed wire contract was returned for correction: first-admission order,
+actual runtime payloads/full claim context, default-denied effects and preservation
+of unsettled A descendants and terminal Stage A custody. No Stage B authority is
+implemented or enabled yet. No live operations or production gates changed.
+
 F1b first review (2026-09-19): worker reports positive HTTP/browser real alarm
 delivery and two UNKNOWN/no-retry negative tests. Parent verified patch SHA256
 3eb7edd449b8d41fffdcf68c5d4a8351ea987563ede9a97cc8d4a8152bbc6d9d,
