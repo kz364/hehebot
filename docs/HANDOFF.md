@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
+Owner requested more independent parallel work. Reused backup worker
+T-01a0be08-b284-765f-b2c5-1aa35bb10799 for failure-safe pinned Codex setup:
+only scripts/setup-codex.sh, tests/setup-codex.test.mjs and at most one new
+setup-only fixture. Source local ed5360b03607cdeb9ec50d59de69cfdba35d6fff,
+`.local/setup-drill-source.bundle`, SHA256
+de980c10f68889d1dd93371fdf13f41dea4071763d64d41eff261e644d707307.
+Existing direct npm writes precede candidate validation; stage/validate before
+replacement, preserve working CLI on failures and unrelated config/auth sentinels.
+Require red/green failure tests and real disposable second installation/version
+check, no account calls or claims of safe concurrent/active upgrades. Worker
+reports patch/evidence directly. Stage B runtime ownership unchanged. Parent
+combined verifier is running, log `.local/followthrough-latest-combined.log`.
+
 Pending-maintenance follow-up COMPLETE and integrated. Verified delivered patch
 SHA256 eecf99c5e0db81725fa8810b718d5560c1eefe02d644ed7ea6848c8f76157776.
 Parent pending-mode rerun: timer stop expiry+30000ms, both PIDs absent before

@@ -30,6 +30,14 @@ Evidence `.local/warm-pending-{parent,normal-parent,contracts,typecheck}.log`.
 This closes the pending-maintenance backstop item in F3 below, not live network
 timeout, dual-lock or settlement acceptance. Stage B runtime remains the priority.
 
+**Parallel follow-through:** Stage B runtime remains assigned. The completed
+backup worker now owns F6/E13 failure-safe Codex setup in `scripts/setup-codex.sh`
+and `tests/setup-codex.test.mjs`, from local ed5360b: validate a staged pinned
+candidate before replacing the working CLI, preserve unrelated configuration,
+and test failed installation/version checks plus a real disposable second install.
+No active-runtime upgrade or power-loss transactionality claim. Parent is running
+the combined verifier in `.local/followthrough-latest-combined.log`; result pending.
+
 | Done | Order / status | Deliverable and exit evidence |
 | --- | --- | --- |
 | [x] | **F1a — Local entrypoint control flow verified** | Four tests exercise actual runHostedOwnerAlpha expiry plus 30-second grace, pending start/maintenance and operator abort, without test-owned stop. Parent rerun: 4/4 focused, 568/568 runtime and typecheck pass. Service/native termination is simulated; this proves automatic stop dispatch and honest pending-state reporting, not real native shutdown. Explicit-stop native journal/dual-lock proof remains separate; automatic real-native termination remains part of F3 lifecycle acceptance. [Worker](https://ampcode.com/threads/T-01a0ba7c-fad5-710c-a2e1-099b66e11fb5) complete; no production fix needed. |

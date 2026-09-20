@@ -4,6 +4,14 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+F6/E13 parallel assignment (2026-09-20): setup-codex.sh currently runs npm against
+the destination before validating package/CLI version. Assigned isolated staged
+candidate installation and failure-preservation checks to the completed backup
+worker, with synthetic config/auth canaries and a real disposable second install.
+No result claimed yet; active upgrade/concurrent install/power-loss acceptance
+remain separate. Parent combined verifier rerun is in progress, with Stage B
+runtime still assigned independently.
+
 F3 pending-maintenance integration (2026-09-20): verified patch SHA256
 eecf99c5e0db81725fa8810b718d5560c1eefe02d644ed7ea6848c8f76157776.
 Parent real-native run passed: production deadline stop at expiry+30000ms;
