@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-21 Asia/Jakarta)
 
+Latest checkpoint supersedes pending verification in the integration history below:
+full verifier PID505075 on local6a225a3 exited0, backend1792/runtime615 and all
+browser/native/shutdown/strict-launcher/service/build checks pass. Log
+`.local/shell-integrated-combined.log` SHA256
+27c46fd68186edee86a01092419bb24e4d9f83ebe559d0df011dca6c60447c1a.
+Warm pending+30001ms; strict launcher2256 lock probes, uid1000/all5 masks0/NNP1,
+authentic floor, retirement/no replay and unknown custody retained. No live or
+recursive containment/settlement/safe-sleep acceptance. No full verifier running.
+Corrected load script is integrated locally with parent pre-kill census retention
+and failure logging before readback. Eight focused harness fault checks pass;
+real `selfcheck` and `full` are the next independent acceptance steps. Worker
+latency evidence remains unaccepted pending parent measurement; no5writes/sec claim.
+
 Main T-01a0b925-c847-73b9-9713-e04b5f3b43d4 is now the sole user-facing
 project-owner, reporting directly to user (lifecycle revision4). ASK QUESTIONS
 HERE is retired/custody-transferred. Canonical uncommitted ledger:

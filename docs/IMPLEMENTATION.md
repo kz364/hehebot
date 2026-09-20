@@ -4,6 +4,23 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Full corrected-source acceptance (2026-09-21): `bash scripts/verify-codex.sh`
+on local 6a225a3 exited0 (PID505075). Backend1792/runtime615, all browser/native
+fixtures, both warm/background stop modes, real bootstrap/launcher boundary,
+remaining service modes and dry-run build pass. Warm normal stopped+482ms;
+warm pending backstop+30001ms. Background normal fenced582ms early, then the
+manager waited to exact expiry before retirement. Strict launcher recorded2256
+lock probes, non-root uid1000, all five capability masks zero, NoNewPrivs1,
+authentic root floor and retirement/no replay/unknown custody. Host `/etc/codex`
+and `/.sprite` are absent after cleanup. Log `.local/shell-integrated-combined.log`
+SHA25627c46fd68186edee86a01092419bb24e4d9f83ebe559d0df011dca6c60447c1a.
+This supersedes pending combined checks below, without erasing their failures or
+proving live accounts, recursive containment, settlement, safe resume or sleep.
+Production flags remain false. The new intake harness is a separate check, not
+included in this verifier run: parent review retained the process census before
+fault-injected kill and logged workload failures before readback. Eight focused
+fault checks pass (`.local/intake-parent-review.log`); real selfcheck/full pending.
+
 Retirement correction parent integration (2026-09-20): amended worker patch
 SHA256293b3a2b37b3d808bef4631c89ba55d3e24216bc88529365eca8620d7a1354cd
 applied to localfc60892. Parent requested supported abortable-delay listener cleanup,

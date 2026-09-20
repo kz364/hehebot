@@ -12,27 +12,22 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-21):** both authorized corrections are integrated
-locally at `aac8da0746c70889721ad15f57c2584ec68ac299`; targeted real-native and
-strict-launcher checks pass. The fresh combined verifier failed in the warm
-pending-maintenance fixture: its production timer stopped 1 ms before the exact
-expiry+30s boundary. Backend1790/runtime599 and the preceding fixtures passed;
-later Stage B/strict-launcher/service-tail checks did not run in this invocation.
-Log `.local/launcher-retirement-combined.log`, SHA256
-`c67aaf9314190296e47d8bbe7280ed49e699ba2a57803457c164a68b66d931f2`.
-Parent reproduced the early callback deterministically, then made the production
-timer recheck the frozen deadline before stopping. The strict native assertion is
-unchanged; focused5, runtime600 (no skips) and typecheck pass. Real warm pending
-backstop now passes at expiry+30001ms. Corrected native tail through strict
-launcher, 15 service modes and build passes; a fresh full combined result is still
-required. Parent integrated the opt-in host-declared shell window (up to 10 minutes).
-Operations/service tests96, SQLite watchdog tests10 and typecheck pass. Other tool,
-child and inference deadlines stay unchanged. A pending human question is not a
-restartable checkpoint and must not suppress sibling watchdogs.
-The corrected intake-load harness has returned with worker-reported selfcheck,
-smoke and full passes. Parent review and independent measurement remain required;
-initial flawed-harness numbers are not accepted. This tests 48 writes/minute, not
-the SPEC's 5 writes/second, and preserves the existing 60/minute owner limit.
+**Current checkpoint (2026-09-21):** full credential-free verifier passes on local
+`6a225a3`: backend1792/runtime615, native/browser fixtures, both warm/background
+shutdown modes, strict launcher, service modes and dry-run build. The earlier
+1ms-early backstop failure is retained in the implementation evidence; the
+production deadline recheck fixes it without changing the assertion. This run's
+warm backstop stopped at expiry+30001ms. Strict launcher:2256 lock probes,
+non-root owner, all five capability masks zero, NoNewPrivs1 and authentic floor.
+Log `.local/shell-integrated-combined.log`, SHA256
+`27c46fd68186edee86a01092419bb24e4d9f83ebe559d0df011dca6c60447c1a`.
+The opt-in shell window is integrated and capped by attempt deadlines; other
+operation bounds and grants are unchanged. Human questions do not park sibling
+watchdogs. No recursive containment, settlement or safe-resume/sleep claim.
+Corrected intake harness is locally integrated for parent verification. Eight
+focused harness fault checks pass; independent real selfcheck/full measurement
+remain required. Earlier flawed-harness numbers are not accepted. This measures
+48 writes/minute, not the SPEC's 5 writes/second; the 60/minute limit is unchanged.
 No additional approval is needed for these local checks; publication and live
 operations remain gated.
 Historical checkpoints below retain their original failures and restrictions;
@@ -878,7 +873,7 @@ Order is dependency-oriented, not a promise to complete an external gate before 
 
 | Done | ID / status | Remaining deliverable and exit evidence | External boundary |
 | --- | --- | --- | --- |
-| [ ] | **E01 — Partial; next** | Five-minute reasoning-item/initial-response/post-tool/post-message quiet and two-minute acknowledged-child startup bounds pass native/service fixtures; SQLite verifies exact watchdog expiry. Remaining: unknown-item and streaming coverage, human-wait interactions, explicit longer shell/transfer windows, progress-extension policy, recursive child/tool/transfer/node/flush coverage. Test exact cancellation, bounded retries and no sleep with any unsettled obligation; remove unknown-coverage blockers only with supported evidence. | Local/native fixtures first; actual provider termination and hardware operations separately. |
+| [ ] | **E01 — Partial; next** | Five-minute reasoning-item/initial-response/post-tool/post-message quiet and two-minute acknowledged-child startup bounds pass native/service fixtures; SQLite verifies exact watchdog expiry. Explicit host-declared clocked shell windows up to ten minutes now pass parent service/operation96 and SQLite10 tests, capped by attempt deadlines; grants and other operations are unchanged. Remaining: unknown-item and streaming coverage, human-wait interactions, unclocked legacy records, transfer windows, progress-extension policy, recursive child/tool/transfer/node/flush coverage. Test exact cancellation, bounded retries and no sleep with any unsettled obligation; remove unknown-coverage blockers only with supported evidence. | Local/native fixtures first; actual provider termination and hardware operations separately. |
 | [ ] | **E02 — Partial** | Offline clock diagnostics, post-await drain fencing and detached non-replayable checkpoint intent are verified locally; none authorizes resume. Complete safe service assembly, drain, warm/cold restart and crash recovery; retain one executor, task identity, questions, effects and locks. Four real subprocess-kill claim/submission boundaries preserve FileJournal custody without replay; simulated transport is not native/process takeover acceptance. 200 in-process SQLite drain/effect sequences also pass. Native cold readback now recovers a missed exact-child interruption without cancellation replay or sleep permission, alongside existing root-output/command readback; graceful restart is not crash takeover. Interrupted approvals, restored checkpoints and full native/provider service recovery remain open. | Selected Sprite lifecycle and authenticated native continuity require authorized live tests. |
 | [ ] | **E03 — Partial** | Keep coordinator responsive during background work; resolve status/new-task/ambiguous-steer/deferred-follow-up intent; independent admission, saturation and exact cancellation. Pass O01–O09, including two-task isolation and managed refresh ownership. | Synthetic routing/concurrency work now; model judgment and refresh require account access. |
 | [ ] | **E04 — Partial** | Finish quiet streaming/reconnect, approvals and attention, conversation search, attachments/previews/downloads, replies/reactions, stable references/mentions, read/unread, notification preferences and appearance. Verify desktop/mobile/keyboard/accessibility, stale/offline states and cross-bot isolation. | Most UI work is credential-free; push permissions/delivery and some device checks are external. |
