@@ -4,6 +4,28 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+F3 Stage B automatic-stop integration (2026-09-20): verified single-file patch
+SHA256 5481e845faca2281c2ebc50abc0c71e480cf80fd5b6984bc1a900f96d8bd03e0.
+Parent reviewed and ran both real-native modes. Normal production stop is
+expiry+139ms (ready/failed/stopped); pending-maintenance backstop is +30001ms,
+both executable/launcher PIDs absent before deferred release, finally +31263ms
+(ready/stopped). Both have one native start/three scripted model requests,
+exactly one real Worker wake, immutable generation/manifests, recovery_required
+STALE_EPOCH root custody, no second launch envelope and manager retirement using
+the actual dual-lock inspect subprocess. No test-owned stop satisfies success.
+Related47 tests, typecheck and syntax/diff checks pass. Logs:
+`.local/background-auto-stop-{parent,pending-parent,contracts,typecheck}.log`.
+
+Review changes: exact version check before staging/launch, strict POST path/body
+checks while retaining harmless GET404s, and acceptance of the genuine clean
+single-finally-stop path when the supervisor fences first. No runtime/auth change.
+The held child is observed active before expiry, not proof of family settlement
+at stop. Entry runs in-process (not the setpriv launcher); one configRequirements
+readback/floor is staged, account/model/provider seams synthetic; pending await
+is injected, not live I/O. Both modes are now in the verifier. Prior full1790/585
+pass predates these and crash-readback test additions; their focused runs pass,
+not a newly claimed full-suite rerun. All delegated fixtures are integrated.
+
 F3/E02 native crash-readback integration (2026-09-20): verified delivered patch
 SHA256 e41568444223d80da4628869c29183bf1178e6eb4d9662f1e05fcc03c3b08307.
 Actual pinned executable SIGKILL occurs with a held synthetic child model request;

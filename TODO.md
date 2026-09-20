@@ -24,8 +24,15 @@ Combined verifier exits 0 in `.local/stage-b-integrated-combined.log`: 1790 back
 585 runtime, setup safety, backup, both warm F3 modes, Stage B browser/native,
 remaining service checks, typecheck and build dry run all pass. Latest regenerated
 Stage B exhausted capture inspected. Integration committed locally at `6574cf4`.
-F3 implementor now owns a separate Stage B automatic-stop fixture from that exact
-source (existing explicit-stop browser/HTTP modes must remain unchanged).
+Stage B automatic-stop delivery is now parent-reviewed and verified: production
+entrypoint normal stop at expiry+139ms; injected pending-maintenance timer stop
+at +30001ms, both PIDs gone before release, idempotent finally at +31263ms.
+Both retain recovery-required root custody and record dual-lock retirement without
+relaunch. Related contracts 47/47 and typecheck pass. Logs
+`.local/background-auto-stop-{parent,pending-parent,contracts,typecheck}.log`.
+No production source changed; in-process entrypoint/staged floor/synthetic account
+seams remain explicit. Both modes added to verifier; preceding full result predates
+these test-only additions. All implementors have returned and are integrated.
 Crash-readback delivery is now reviewed and locally rerun: actual native SIGKILL
 with a held child, both original PIDs gone before replacement, supported history
 reports interrupted, exactly three model POSTs/four read-only RPCs, no replay or
@@ -33,9 +40,10 @@ sleep authority. Parent tightened blocked-readback failure and replacement-nativ
 cleanup; new fixture and 121 related tests/typecheck pass. Added to verifier;
 the full combined result above predates this test-only addition. Evidence:
 `.local/crash-readback-{parent-final,contracts,typecheck}.log`.
-Automatic Stage B stop remains assigned and unverified; it reports back directly.
 Electron reference-shell reinstall/tests also pass 16/16; not Mac acceptance.
-No push, deployment, live account calls, automatic Stage B stop or production claim.
+Next: reconcile remaining recovery/live-trial boundaries with the Hehebot owner;
+local stop/readback is not safe resume, recursive settlement or sleep acceptance.
+No push, deployment, live account calls or production claim.
 
 **F3 pending-maintenance integrated:** parent rerun passes: production timer stop
 at expiry+30000ms, both launcher/native PIDs absent before deferred release, then
@@ -58,8 +66,8 @@ run in `.local/stage-b-integrated-combined.log` includes these setup changes.
 | --- | --- | --- |
 | [x] | **F1a — Local entrypoint control flow verified** | Four tests exercise actual runHostedOwnerAlpha expiry plus 30-second grace, pending start/maintenance and operator abort, without test-owned stop. Parent rerun: 4/4 focused, 568/568 runtime and typecheck pass. Service/native termination is simulated; this proves automatic stop dispatch and honest pending-state reporting, not real native shutdown. Explicit-stop native journal/dual-lock proof remains separate; automatic real-native termination remains part of F3 lifecycle acceptance. [Worker](https://ampcode.com/threads/T-01a0ba7c-fad5-710c-a2e1-099b66e11fb5) complete; no production fix needed. |
 | [x] | **F1b — Integrated and locally verified** | Corrected real Worker alarm-to-listener patch integrated at 0ecdc55. Parent two UNKNOWN/no-retry negatives and browser --wake-first pass: launch precedes receipt observation, one native process/two replies, exact one wake and idempotent replay. Full verifier exited 0: 1782 backend/570 runtime tests, browser/native/service fixtures, typecheck and dry-run build. Fresh exhausted-composer screenshot inspected. Evidence: `.local/warm-wake-integrated-verify.log`. Loopback routing/scripted model remains non-live; explicit-stop limitation unchanged. |
-| [x] | **F2 — Finite Stage B locally integrated / P0.3 / E03 remains partial** | Control, portal and runtime now compose through actual Chromium, signed Worker/SQLite and one pristine Codex process. Parent HTTP/browser runs verify A/S/B, active child through S, separate B context/grant, exact portal A-family cancellation, canonical reload, no passive/replay relaunch, immutable envelope and explicit-stop dual-lock retirement. Focused 15/15 and runtime 585/585 pass; combined verifier exits0. Two final DPR2 screenshots inspected; latest exhausted capture re-inspected after combined run. Prior wave complete; new stop/crash checks active. Fixed ordinals are not natural-language routing; no live-account, automatic Stage B stop, recursive settlement or safe-sleep acceptance. |
-| [ ] | **F3 — Automatic native expiry stop integrated; lifecycle acceptance partial** | Cold exact-child recovery passes without replay or sleep permission. Parent checks native executable and launcher separately. Normal expiry stop and injected pending-maintenance +30s timer both pass with retained recovery custody; related tests 46/46. Responsive Worker maintenance fences near expiry; JWT exp floors to seconds and can reject early. No auth behavior changed. Evidence `.local/warm-pending-{parent,normal-parent,contracts,typecheck}.log`. Remaining: crash/reconnect recovery, unknown effects/locks and recursive settlement before safe sleep/replacement. Stage B native manager currently proves explicit stop/dual-lock retirement, not automatic stop. |
+| [x] | **F2 — Finite Stage B locally integrated / P0.3 / E03 remains partial** | Control, portal and runtime now compose through actual Chromium, signed Worker/SQLite and one pristine Codex process. Parent HTTP/browser runs verify A/S/B, active child through S, separate B context/grant, exact portal A-family cancellation, canonical reload, no passive/replay relaunch, immutable envelope and explicit-stop dual-lock retirement. Focused 15/15 and runtime 585/585 pass; combined verifier exits0. Two final DPR2 screenshots inspected; latest exhausted capture re-inspected after combined run. Stop/crash fixtures are also integrated; separate automatic-stop evidence is recorded in F3. Fixed ordinals are not natural-language routing; no live-account, recursive settlement or safe-sleep acceptance. |
+| [ ] | **F3 — Warm/background automatic stop and crash readback verified; lifecycle acceptance partial** | Actual warm and Stage B entrypoints automatically stop native executable/launcher on normal expiry and an injected pending-maintenance +30s backstop; Stage B manager records retirement under both kernel locks. One abrupt native kill with active child recovers interrupted history without inference/cancel replay. Related crash121 and background-stop47 tests/typecheck pass. JWT exp floors to seconds and can fence early; no auth behavior changed. Remaining: production launcher/containment composition, crash takeover/safe resume, unknown effects/locks and recursive settlement before safe sleep/replacement. Process exit and root readback do not close those gates. |
 | [ ] | **F4 — Procedure prepared; live trial externally gated / P0.2 / E14** | [Bounded trial procedure](docs/AUTH_SETUP.md#next-bounded-owner-trial-preparation-and-stop-conditions) covers exact release/targets, supported predecessor retirement, separate Access/runtime/wake/account checks, two canonical messages/reload, automatic stop, cumulative reservations/billing and retained rollback custody. No empty-install seed fabrication, warm rollover or warm→background transition. Still need actual target/retirement/containment, budget and eligibility evidence plus applicable deployment/account/live-operation authorization; procedure preparation is not readiness or a trial. Local commits are unpushed; publication is separate. |
 | [ ] | **F5 — After usable slice; E05/E07/E09** | Complete required Google/WhatsApp/Messages integrations, adopted routine workflows and browser/computer tasks. Track permissions, per-effect authority, watermarks/dedupe and uncertain effects. Sep20 upstream source recheck found default branch still at the selected wappmcp revision: no newer source fix for array-shaped recent-message results. [Source evidence](docs/CONNECTOR_READINESS.md) retains the SDK blocker; no validation bypass, search substitution or unapproved patch. Connector account access and routine activation remain gated. |
 | [ ] | **F6 — After usable slice; E10–E15** | Complete Mac build/render/device acceptance, coordinated backups and restore, clean installation/upgrade, measured cost/reliability and remaining product acceptance. Use the detailed E01–E15 rows below for scope; keep optional polish behind P0/P1. Sep20 runner discovery found no connected runner; actual Apple-framework/device acceptance needs a Mac runner. Electron reference-shell rerun passes16/16, not Mac acceptance. Account/billing data, signing/release and live infrastructure measurements require their own access/approval. |
@@ -73,16 +81,16 @@ and simulated 2027 clocks pass. Related tests 95/95, typecheck and shell syntax 
 The drill now also passes in the full combined verifier recorded above.
 Evidence `.local/backup-restore-{parent,contracts,typecheck,future-clock}.log`.
 This advances F6/E10 only for application snapshots, not native/browser restoration
-or safe activation. Prior deliveries are integrated; the new stop/crash checks remain assigned.
+or safe activation. All delivered stop/crash checks are also integrated.
 
 **Ownership and scheduling:** this thread is implementation workstream-owner,
 reporting to the Hehebot product owner. It owns local review, integration, combined
 verification and tracking; product priorities and external approvals remain above.
-Current workers use disjoint files and exact local source-custody `6574cf4`, not
-origin/main. They report directly; do not poll or duplicate their assignments.
+All workers have returned; no implementation descendants remain active. Their
+fixtures used exact local source-custody `6574cf4`, not origin/main.
 The uncommitted coordination ledger records ownership/lifecycle separately from
-this sole product checklist. Direct management is simpler for these two independent
-fixtures; reconsider a coordinator when dependencies or decision traffic grow.
+this sole product checklist. No coordinator is needed for parent-only verification;
+reconsider when dependent work is dispatched or decision traffic grows.
 
 An **Amp development follow-through schedule is enabled every two hours** in this
 thread (schedule ID `b05eb8f2-8407-53d6-a253-e01637ba8f38`). It advances ready local

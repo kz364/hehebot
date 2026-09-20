@@ -4,6 +4,22 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
+All dispatched background/stop/crash workers have returned and are integrated.
+Latest Stage B automatic-stop patch SHA256
+5481e845faca2281c2ebc50abc0c71e480cf80fd5b6984bc1a900f96d8bd03e0.
+Parent normal run stops at expiry+139ms; pending-maintenance production timer
+at +30001ms, both PIDs absent before deferred release, finally +31263ms. One
+native start/three model requests, real Worker wake, dual-lock retirement,
+recovery_required STALE_EPOCH root and no relaunch in both modes.47 contracts,
+typecheck and syntax pass. Parent tightened pre-launch version/HTTP checks and
+allowed supervisor-first clean single-stop exit without weakening time/custody checks.
+Logs `.local/background-auto-stop-{parent,pending-parent,contracts,typecheck}.log`.
+Both modes added to verifier; last full1790/585 predates these test-only additions.
+No production/runtime/auth change, setpriv-launcher proof, live account evidence,
+recursive settlement, safe resume or sleep claim. No child is still assigned.
+Next: report integrated evidence and reconcile remaining scope with Hehebot owner.
+This supersedes pending-assignment language in the historical entries below.
+
 Crash-readback worker returned; parent reviewed/integrated and reran it, then
 strengthened blocked-readback failure and replacement-native PID cleanup.
 Patch SHA256 e41568444223d80da4628869c29183bf1178e6eb4d9662f1e05fcc03c3b08307.
