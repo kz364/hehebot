@@ -14,6 +14,7 @@ node --test tests/setup-codex.test.mjs
 node scripts/probe-codex.mjs
 npm test
 npm run test:runtime
+node scripts/test-control-backup-restore-drill.mjs
 node --test tests/audit-wappmcp-licenses.mjs
 node --test macos/tests/*.test.mjs
 node scripts/verify-wappmcp.mjs

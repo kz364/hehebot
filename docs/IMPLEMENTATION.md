@@ -4,6 +4,20 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+F6/E10 backup drill integration (2026-09-20): verified worker patch SHA256
+762dad71f08e3342326342eb7bf2045fb5edf85505364bd801bbd04d02362c9a and inspected
+the public-API composition. Real SQLite snapshot and pinned age encryption/decrypt
+retain byte-identical snapshot files and exact recovery/effect/lock/operation
+blockers; wrong-key and tampered-ciphertext refusals publish no staging result.
+API/CLI inspection is read-only and reports external readiness unverified and
+coordinated restore false. Parent corrected the fixed October 1 retention clock
+and removed optional raw-error debug logging. Current-clock and simulated
+2027-02-03 drill runs pass, plus 95 related tests, typecheck, shell syntax and
+diff checks. Logs `.local/backup-restore-{parent,contracts,typecheck,future-clock}.log`.
+The drill is now in verify-codex.sh. Full verifier not rerun for this test-only
+addition; preceding full result remains separately dated below. No production
+code change, native/browser restore, external key-custody or activation acceptance.
+
 Parallelism checkpoint (2026-09-20): owner requested continued implementor progress.
 Existing runtime/automatic-stop assignments received continuation instructions.
 Source inspection found separate backup creation/decrypt and semantic-inspector

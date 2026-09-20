@@ -13,8 +13,14 @@ with real age and disposable SQLite, retaining unknown custody and denying activ
 Source is local 2713a381dca61e00ebb8a1c487e45cbd8db50f25, transferred through
 `.local/followthrough-source.bundle`, SHA256
 b3a6c67c3fd3a63cfd99c5ecf97bc99eecad6e1019ede5290fe21cf72a56505c.
-No shared implementation/verifier/tracking edits. Completion/blockers arrive by
-reply; no polling or nested delegation. Parent integrates and runs combined checks.
+Delivery COMPLETE and integrated: patch SHA256
+762dad71f08e3342326342eb7bf2045fb5edf85505364bd801bbd04d02362c9a verified.
+Parent fixed the drill's hardcoded October 1 clock and removed raw-error debug
+output. Drill passes with current and simulated 2027 clock; related tests 95/95,
+typecheck and verifier shell syntax pass. Parent added the drill to verify-codex.sh;
+full suite not rerun for this test-only integration. Evidence
+`.local/backup-restore-{parent,contracts,typecheck,future-clock}.log`. No production
+code changed; successful application decrypt remains no activation authority.
 
 Owner said “Go do all that”; local F1–F6 follow-through continues without live
 authorization expansion. F3 worker T-01a0bdf0-6b4d-70ba-acb2-ce10eb4f9d29 owns
