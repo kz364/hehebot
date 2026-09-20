@@ -16,11 +16,13 @@ through the task card/dialog. HTTP and final browser runs pass; two DPR2 capture
 inspected. Logs `.local/stage-b-{native-parent,browser-final,runtime-all-final,typecheck-final}.log`.
 The fixture explicitly stops after expiry; it does not claim automatic Stage B stop,
 live account/provider evidence, natural-language routing or recursive settlement.
-Combined verifier PID 373109 is running in `.local/stage-b-integrated-combined.log`;
-includes setup safety, backup, both F3 modes and the new Stage B browser mode.
+Combined verifier PID 373109 finished exit0 in `.local/stage-b-integrated-combined.log`:
+1790 backend/585 runtime, setup safety, backup, both warm F3 modes, Stage B browser,
+remaining service fixtures, typecheck and build dry run all pass. Latest regenerated
+exhausted screenshot re-inspected. No new Stage B automatic-stop/crash proof yet.
 Integration committed locally at 6574cf4b1d20c0f4c7456ae00f003aee86c71652.
-Finish that process without restarting and record outcome. Desktop reinstall/tests
-pass 16/16. Reused F3 worker T-01a0bdf0-6b4d-70ba-acb2-ce10eb4f9d29 for Stage B
+Desktop reinstall/tests pass 16/16. Reused F3 worker
+T-01a0bdf0-6b4d-70ba-acb2-ce10eb4f9d29 for Stage B
 automatic-stop native verification through runHostedOwnerAlpha, preserving existing
 explicit-stop HTTP/browser modes. Owns Stage B script and at most new dedicated
 script/floor fixture only; no runtime/src/shared fixture/verifier/tracking edits.
@@ -37,6 +39,12 @@ cancellation/effect replay or sleep permission. Same bundle/hash uploaded as
 `.local/recovery-native-source.bundle`. No production/shared-file changes allowed;
 unsupported readback must be reported, not bypassed. These assignments are not
 evidence. Workers report directly; two-hour parent schedule retained.
+Personalization migrated: this thread is workstream-owner reporting directly to
+Hehebot owner T-01a09f7d-1a1e-766d-acc8-33e6aaaf47d2, who confirmed that route.
+Uncommitted ledger `.amp/coordination/hehebot-background-agents.md`, outcome revision1;
+local Git exclusion verified, shared ignore unchanged. Lifecycle enrolled; contract
+cascaded only to the two active assignments. Direct management retained because
+bounded disjoint fixtures have no mutual dependencies; revisit on material events.
 The older assignment/status paragraphs below are historical, superseded by this entry.
 
 Setup worker delivery COMPLETE/integrated, patch SHA256

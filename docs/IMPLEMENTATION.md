@@ -23,14 +23,19 @@ aria-describedby and role=status. Both final DPR2 captures were inspected:
 `.amp/in/artifacts/background-manager-{status,exhausted}.png`.
 HTTP and browser runs exit 0; logs `.local/stage-b-{native-parent,browser-final}.log`.
 The combined verifier now includes `test-codex-background-manager.mjs --browser`
-and is running in `.local/stage-b-integrated-combined.log`.
+and exits0 in `.local/stage-b-integrated-combined.log`: 1790 backend and 585 runtime
+tests, setup13, backup drill, warm normal/pending-maintenance shutdown, Stage B
+browser/native, remaining service fixtures, typecheck and dry-run build all pass.
+The latest regenerated exhausted capture was re-inspected. Electron clean install
+and tests separately pass16/16. Integration commit is local 6574cf4; nothing pushed.
 
 Evidence boundary: loopback model/Sprite seams and staged floor readback are
 synthetic; authenticated real accounts/providers are unverified. Fixed A/S/B
 ordinals are not general intent routing. Post-expiry stop is explicit in this
 fixture, not an automatic timer claim. Retained A/child uncertainty blocks sleep;
 S/B root receipts do not settle A's family. No production gates or live authority
-changed. All implementors delivered; parent owns remaining verification/commit.
+changed. Prior implementor wave is integrated; two new bounded stop/crash fixture
+assignments remain unverified. Their return alone will not close acceptance.
 
 F6/E13 setup integration (2026-09-20): verified worker patch SHA256
 b1a29ecbc50a5875108424885b0e8e506385318bac4249554e7b1dad18e522c1.
