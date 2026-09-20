@@ -16,6 +16,12 @@ immediate manager inspect refused before expiry. Later read-only inspection
 under both locks passes; no retirement replay or runtime fix made. Finite wave
 remains open despite earlier targeted passes. Backend1790/runtime585, crash,
 warm stop modes and Stage B browser passed; subsequent steps did not run.
+Those subsequent steps now pass in a separate tail-only run on local61d6198:
+pending-maintenance (timer +30001ms/finally +31257ms),15 service modes and build
+dry run; exit0. Log `.local/stage-b-verifier-tail.log`, SHA256
+d7a0bc1d5b17edd47563d90d10580e7a3d46787bb61c9f28027397117a1ed263.
+No normal-expiry retry or runtime change; full combined remains failed. Both
+strict-boundary blockers below still need a scope decision before corrections.
 Next independently approved local implementation: real launcher/default entry,
 setpriv, dual locks, real floor/readback, pinned native, namespace-local Tasks
 socket and explicitly labelled supported-CLI loopback/catalog wrapper. No

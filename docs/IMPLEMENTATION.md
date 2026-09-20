@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Partial verifier continuation (2026-09-20), source
+61d6198036f5abd9ceee1f0557e3a7f59f8e0346: extracted only the commands from
+`node scripts/test-codex-background-auto-stop.mjs --pending-maintenance` through
+`npm run build` in scripts/verify-codex.sh and ran them with `bash -ex`.
+Exit0; pending-maintenance, all15 service modes and dry-run build pass. The full
+verifier's final success banner was deliberately excluded. Log
+`.local/stage-b-verifier-tail.log`, SHA256
+d7a0bc1d5b17edd47563d90d10580e7a3d46787bb61c9f28027397117a1ed263.
+Pending mode records one native start, three model POSTs, timer stop at
+expiry+30001ms, deferred release at +30256ms and production finally at +31257ms;
+both PIDs absent before release, retirement reported, no replay or settlement.
+This fills the unexecuted tail after the failed combined run below, without
+retrying its normal-expiry failure or changing runtime source. It does not close
+the finite wave, launcher acceptance, F3, containment, safe resume or sleep.
+
 Real launcher slice (2026-09-20), based on local2a33854: standalone
 `scripts/test-codex-launcher-boundary.{sh,mjs}` is implemented but NOT accepted.
 Private mount/network namespaces with tmpfs root/pivot_root supply actual root-owned

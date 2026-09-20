@@ -24,6 +24,12 @@ Log `.local/stage-b-final-combined.log`, SHA256
 `c83ee88de94784dd5d83929366de6ec4bbb6b0882a4b6656d8f3a583e240fe0b`.
 The later Stage B pending mode and remaining service/build steps did not run in
 this invocation. Earlier targeted passes below remain valid but do not erase it.
+Separate tail-only continuation on local `61d6198036f5abd9ceee1f0557e3a7f59f8e0346`
+now exits 0: pending-maintenance backstop, all 15 remaining service modes and build
+dry run pass. Timer stop at expiry+30001ms; production finally at +31257ms.
+Log `.local/stage-b-verifier-tail.log`, SHA256
+`d7a0bc1d5b17edd47563d90d10580e7a3d46787bb61c9f28027397117a1ed263`.
+This completes the previously unexecuted checks, not the failed combined acceptance.
 Next approved bounded wave: real launcher/default entry/setpriv/dual-lock/floor
 and namespace-local Tasks fixture, with an explicitly labelled supported-CLI
 loopback/catalog wrapper; no runtime patch, softened validation, host mounts or
