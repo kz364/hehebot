@@ -43,7 +43,7 @@ The original unit was tested against transport v2 SHA256 `d78bd2fcd33a1e24f91f50
 
 ## Wire and validation
 
-- record: `{identity,run_id,attempt,question:{id,connection_id,request_id,params}}` → `{id}`.
+- record: `{identity,run_id,attempt,question:{id,connection_id,request_id,callback_deadline_at,params}}` → `{id}`. The host supplies the frozen attempt-clamped callback deadline, not native params.
 - take: `{identity,question_id,connection_id}` → `{state,answer:{answers:map}|null}`. Only `pending/null` polls again. Only `response_unknown` plus a validated answer can return once. Known response_unknown/resolved with null stops, never fabricates an answer. Other shapes fail closed.
 - resolve: same identity fields as take → `{ok:true}`.
 
@@ -66,8 +66,12 @@ still finish; its late result cannot trigger a take or synthesize resolution.
 Offline inspection validates and exposes timing
 and phase without question/connection IDs or content; old records remain readable
 without invented timing. The reusable binding still permits explicit fixture
-limits up to 15 minutes, but service assembly uses five. Worker custody expiry
-remains separate and may be later; this metadata is not an extension of authority.
+limits up to 15 minutes, but service assembly uses five. New Worker custody expiry
+is capped by this same deadline through `callback_deadline_at`; recording latency
+cannot restart the window. Legacy records without that optional field retain
+their old cap. Update the tested runtime/Worker pair together; older Workers reject
+the field and no metadata-stripping fallback is attempted. Clocks must agree,
+and earlier disconnect/cancellation can still stop the callback before expiry.
 Callback expiry neither resolves that custody nor proves native termination.
 Restart-required UI, durable checkpoint parking, reconciled cancellation and safe
 compute release remain unimplemented; existing inference deadlines may stop the

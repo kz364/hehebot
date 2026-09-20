@@ -43,6 +43,17 @@ async function fixture(t, options = {}) {
     notify(m = resolved()) { child.stdout.write(JSON.stringify(m) + '\n'); } };
 }
 
+test('records the same host callback deadline as its journal, clamped to the admitted attempt', async t => {
+  const f = await fixture(t, { timeoutMs: 5000 });
+  f.claim.deadline_at = new Date(Date.now() + 2000).toISOString();
+  f.send(); await until(() => f.records.size === 1);
+  const recorded = [...f.records.values()][0].question;
+  assert.equal(recorded.callback_deadline_at, f.claim.deadline_at);
+  assert.equal((await f.rows())[0].wait.deadlineAt, recorded.callback_deadline_at);
+  assert.equal(Object.hasOwn(recorded.params, 'callback_deadline_at'), false);
+  f.notify(); await until(async () => (await f.rows())[0].phase === 'resolved');
+});
+
 test('real transport returns exact answers only after durable handoff; later resolved uses original custody after terminal', async t => {
   const f = await fixture(t); let polls = 0;
   f.setTake(async () => ++polls === 1 ? { state: 'pending', answer: null } : { state: 'response_unknown', answer: answer() });

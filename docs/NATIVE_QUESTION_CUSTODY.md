@@ -19,7 +19,7 @@ nextExpiry(): string | null
 prune(): number
 ```
 
-`NativeQuestionInput` is `{id,connection_id,request_id,params:{threadId,turnId,itemId,isBlocking,questions,autoResolutionMs?}}`. `NativeQuestion` is `{id,header,question,isOther?,isSecret?,options?:{label,description}[]|null}`. `NativeQuestionAnswers` is `Record<string,{answers:string[]}>`. `NativeQuestionAnswerCommand` is `{question_id,expected_revision,answers}`. Unknown object fields are rejected.
+`NativeQuestionInput` is `{id,connection_id,request_id,callback_deadline_at?,params:{threadId,turnId,itemId,isBlocking,questions,autoResolutionMs?}}`. `NativeQuestion` is `{id,header,question,isOther?,isSecret?,options?:{label,description}[]|null}`. `NativeQuestionAnswers` is `Record<string,{answers:string[]}>`. `NativeQuestionAnswerCommand` is `{question_id,expected_revision,answers}`. Unknown object fields are rejected.
 
 `NativeQuestionRecord` extends normalized input with `version:1`, `revision`, `state`, `run_id`, `attempt`, `epoch`, `boot_id`, `persona_id`, `conversation_id`, `created_at`, `expires_at`, and nullable `answers`, `answer_owner_id`, `answer_command_id`, `answered_at`, `response_taken_at`, `resolved_at`. `NativeQuestionView` adds `answerable:boolean`; it is not stored. Missing flags normalize to false, options and autoResolutionMs to null. No text trimming or native-ID rewriting occurs.
 
@@ -36,7 +36,23 @@ prune(): number
 
 ## Fencing and uncertainty
 
-Record and answer require `LifecycleCore.authorizeAttempt`, the current original attempt, coordinator without a parent, running/finishing state, no OWNER_CANCELLED/CONTEXT_INVALIDATED error, exact attempt native_run_ref matching turnId, and future canonical attempt deadline. Scope comes from captured context.persona.id and context.room_id (fallback run.persona_id), not native text. Expiry is min(created_at + 15 minutes, original attempt deadline); the exact expiry instant is closed. The injected clock must be canonical UTC milliseconds and consistent with the lifecycle clock.
+Record and answer require `LifecycleCore.authorizeAttempt`, the current original attempt, coordinator without a parent, running/finishing state, no OWNER_CANCELLED/CONTEXT_INVALIDATED error, exact attempt native_run_ref matching turnId, and future canonical attempt deadline. Scope comes from captured context.persona.id and context.room_id (fallback run.persona_id), not native text. Expiry is min(created_at + 15 minutes, original attempt deadline, callback_deadline_at when present); the exact expiry instant is closed. The injected clock must be canonical UTC milliseconds and consistent with the lifecycle clock.
+
+`callback_deadline_at` is canonical UTC millisecond metadata computed by the host,
+outside native `params`. The service binding records its frozen five-minute,
+attempt-clamped callback deadline in both private journal and Worker input.
+Delayed recording cannot restart that window. The declaration survives reload;
+changing it on replay conflicts. Fresh expired declarations reject, and stored
+expiry beyond the declaration is corruption. Host/Worker clocks must agree;
+this is an upper bound on answerability, not a promise that a connection remains
+available until then. Cancellation or an earlier callback failure can stop it.
+
+Legacy inputs and records without the field retain their shape and prior cap.
+No database migration is needed; `SCHEMAS/runtime.json` and its generated validator
+accept the optional field. Update the tested Worker/runtime pair together: an old
+Worker rejects the new metadata, and the runtime does not strip it and retry.
+This does not introduce parked waits, suppress sibling watchdogs, persist a new
+restart-required timeout state, settle custody or authorize resume.
 
 Trusted runtime **must independently bind threadId to its native journal**. The application attempt row independently checks only native turn identity, not native thread identity. This ledger does not invent a task-owner ACL; authenticated owner ingress and owner-matching accepted command receipts are the authority boundary. Parent ControlCore.accept owns receipt replay/dedupe. Model/imported question text grants no authority.
 

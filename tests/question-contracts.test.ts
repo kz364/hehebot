@@ -15,6 +15,19 @@ const record = { type: 'question-record', payload: {
   } },
 } };
 
+it('accepts optional canonical host callback deadlines but not native-text declarations', () => {
+  const request = record.payload.question;
+  const withDeadline = (callback_deadline_at: unknown) => ({ ...record, payload: { ...record.payload,
+    question: { ...request, callback_deadline_at } } });
+  expect(validateRuntime(record)).toBe(true);
+  expect(validateRuntime(withDeadline('2026-09-10T00:05:00.000Z'))).toBe(true);
+  for (const value of [null, 300000, '2026-09-10T00:05:00Z', '2026-09-10T07:05:00.000+07:00', '2026-02-30T00:05:00.000Z']) {
+    expect(validateRuntime(withDeadline(value))).toBe(false);
+  }
+  expect(validateRuntime({ ...record, payload: { ...record.payload, question: { ...request,
+    params: { ...request.params, callback_deadline_at: '2026-09-10T00:05:00.000Z' } } } })).toBe(false);
+});
+
 it('requires explicit stopped-custody consent and excludes closure from the model command surface', () => {
   const close = { schema_version: 1, type: 'question.close', payload: {
     question_id: bot, expected_revision: 3, confirm_stopped_closure: true,

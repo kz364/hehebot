@@ -35,6 +35,46 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it('keeps the declared callback deadline through delayed recording and rejects answers at its exact boundary', () => {
+  const request = { ...input(), callback_deadline_at: '2026-09-10T00:05:00.000Z' };
+  f.setNow('2026-09-10T00:00:12.000Z');
+  const before = protectedRows(), id = f.core.questions.record(identity, runId, 1, request);
+  expect(f.core.questions.get(id)).toMatchObject({ created_at: '2026-09-10T00:00:12.000Z',
+    expires_at: request.callback_deadline_at, callback_deadline_at: request.callback_deadline_at });
+  f.setNow('2026-09-10T00:04:59.999Z');
+  expect(f.core.questions.list()).toMatchObject([{ id, state: 'pending', answerable: true }]);
+  expect(f.core.questions.record(identity, runId, 1, request)).toBe(id);
+  expect(() => f.core.questions.record(identity, runId, 1, { ...request, callback_deadline_at: '2026-09-10T00:06:00.000Z' }))
+    .toThrowError(expect.objectContaining({ code: 'IDEMPOTENCY_CONFLICT' }));
+  f.setNow(request.callback_deadline_at);
+  expect(f.accept(answer(id))).toMatchObject({ status: 'rejected', error: { code: 'NATIVE_QUESTION_EXPIRED' } });
+  expect(new ControlCore(f.store, f.core.options).questions.list()).toMatchObject([{ id, state: 'pending', answerable: false }]);
+  expect(protectedRows()).toEqual(before);
+});
+
+it.each([
+  ['2026-09-10T00:20:00.000Z', '2026-09-10T00:15:00.000Z'],
+  ['2026-09-10T00:04:00.000Z', '2026-09-10T00:04:00.000Z'],
+])('a callback deadline cannot exceed the ledger cap or attempt deadline %s', (attemptDeadline, expected) => {
+  f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?', attemptDeadline, runId);
+  const id = f.core.questions.record(identity, runId, 1, { ...input(), callback_deadline_at: '2026-09-10T00:30:00.000Z' });
+  expect(f.core.questions.get(id).expires_at).toBe(expected);
+});
+
+it('rejects expired or malformed callback declarations without recording custody', () => {
+  for (const callback_deadline_at of ['2026-09-10T00:00:00.000Z', '2026-09-09T23:59:59.999Z', '2026-09-10T00:05:00Z']) {
+    expect(() => f.core.questions.record(identity, runId, 1, { ...input(), callback_deadline_at })).toThrow();
+  }
+  expect(f.core.questions.list()).toEqual([]);
+});
+
+it('refuses stored expiry beyond its declared callback deadline', () => {
+  const id = f.core.questions.record(identity, runId, 1, { ...input(), callback_deadline_at: '2026-09-10T00:05:00.000Z' });
+  f.db.exec("UPDATE runtime_metadata SET value_json=json_set(value_json,'$.expires_at',?) WHERE key=?",
+    '2026-09-10T00:05:00.001Z', `native-question:${id}`);
+  expect(() => f.core.questions.get(id)).toThrowError(expect.objectContaining({ code: 'NATIVE_QUESTION_CORRUPT' }));
+});
+
 it('routes owner answers through durable receipts and projects current questions without task or event writes', () => {
   const protectedBefore = protectedRows(), id = f.core.questions.record(identity, runId, 1, input());
   expect(protectedRows()).toEqual(protectedBefore);

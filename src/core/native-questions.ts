@@ -6,6 +6,7 @@ export const NATIVE_QUESTION_PREFIX = 'native-question:';
 export type NativeQuestion = { id: string; header: string; question: string; isOther?: boolean; isSecret?: boolean;
   options?: { label: string; description: string }[] | null };
 export type NativeQuestionInput = { id: string; connection_id: string; request_id: string | number;
+  callback_deadline_at?: string;
   params: { threadId: string; turnId: string; itemId: string; isBlocking: boolean; questions: NativeQuestion[]; autoResolutionMs?: number | null } };
 export type NativeQuestionAnswers = Record<string, { answers: string[] }>;
 export type NativeQuestionAnswerCommand = { question_id: string; expected_revision: number; answers: NativeQuestionAnswers };
@@ -30,7 +31,8 @@ const timestamp = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-
 const invalid = (condition: unknown) => requireThat(condition, 'INVALID_INPUT', 'The native question data is invalid.', 422);
 
 function normalize(input: NativeQuestionInput): NativeQuestionInput {
-  invalid(fields(input, ['id', 'connection_id', 'request_id', 'params']) && bytes(input) <= 65536 && uuid(input.id) && uuid(input.connection_id) &&
+  invalid(fields(input, ['id', 'connection_id', 'request_id', 'params'], ['callback_deadline_at']) && bytes(input) <= 65536 && uuid(input.id) && uuid(input.connection_id) &&
+    (!Object.hasOwn(input, 'callback_deadline_at') || timestamp(input.callback_deadline_at)) &&
     (typeof input.request_id === 'number' ? Number.isSafeInteger(input.request_id) : text(input.request_id, 1, 128)));
   const p = input.params;
   invalid(fields(p, ['threadId', 'turnId', 'itemId', 'isBlocking', 'questions'], ['autoResolutionMs']) &&
@@ -48,6 +50,7 @@ function normalize(input: NativeQuestionInput): NativeQuestionInput {
       options: q.options?.map(o => ({ label: o.label, description: o.description })) ?? null };
   });
   const normalized = { id: input.id, connection_id: input.connection_id, request_id: input.request_id,
+    ...(input.callback_deadline_at !== undefined ? { callback_deadline_at: input.callback_deadline_at } : {}),
     params: { threadId: p.threadId, turnId: p.turnId, itemId: p.itemId, isBlocking: p.isBlocking, questions, autoResolutionMs: p.autoResolutionMs ?? null } };
   invalid(bytes(normalized) <= 65536); return normalized;
 }
@@ -60,7 +63,8 @@ function answersFor(questions: NativeQuestion[], value: unknown): NativeQuestion
     return [q.id, { answers: (row as { answers: string[] }).answers.slice() }];
   }));
 }
-const inputOf = (r: NativeQuestionRecord): NativeQuestionInput => ({ id: r.id, connection_id: r.connection_id, request_id: r.request_id, params: r.params });
+const inputOf = (r: NativeQuestionRecord): NativeQuestionInput => ({ id: r.id, connection_id: r.connection_id, request_id: r.request_id, params: r.params,
+  ...(Object.hasOwn(r, 'callback_deadline_at') ? { callback_deadline_at: r.callback_deadline_at } : {}) });
 
 // Question bodies/answers are content (90d), not merely delivery metadata.
 // Resolution alone never establishes task/effect settlement.
@@ -107,11 +111,12 @@ export class NativeQuestionLedger {
       const r = JSON.parse(row.value_json) as NativeQuestionRecord;
       invalid(fields(r, ['version', 'id', 'connection_id', 'request_id', 'params', 'revision', 'state', 'run_id', 'attempt', 'epoch', 'boot_id', 'persona_id',
         'conversation_id', 'created_at', 'expires_at', 'answers', 'answer_owner_id', 'answer_command_id', 'answered_at', 'response_taken_at', 'resolved_at',
-        ...(r.version === 2 ? ['closed_at', 'close_owner_id', 'close_command_id'] : [])]));
+        ...(r.version === 2 ? ['closed_at', 'close_owner_id', 'close_command_id'] : [])], ['callback_deadline_at']));
       normalize(inputOf(r));
       invalid((r.version === 1 || r.version === 2 && r.state === 'closed') && r.id === id && uuid(r.run_id) && uuid(r.persona_id) && uuid(r.conversation_id) && uuid(r.boot_id) &&
         Number.isSafeInteger(r.attempt) && r.attempt > 0 && Number.isSafeInteger(r.epoch) && r.epoch >= 0 &&
-        timestamp(r.created_at) && timestamp(r.expires_at) && r.expires_at > r.created_at && Date.parse(r.expires_at) - Date.parse(r.created_at) <= 900000);
+        timestamp(r.created_at) && timestamp(r.expires_at) && r.expires_at > r.created_at && Date.parse(r.expires_at) - Date.parse(r.created_at) <= 900000 &&
+        (r.callback_deadline_at === undefined || r.expires_at <= r.callback_deadline_at));
       const answered = r.answers !== null, taken = r.response_taken_at !== null, resolved = r.state === 'resolved', closed = r.state === 'closed';
       invalid((r.version === 1 ? ['pending', 'answered', 'response_unknown', 'resolved'].includes(r.state) : closed) &&
         (answered ? text(r.answer_owner_id, 1, 256) && uuid(r.answer_command_id) && timestamp(r.answered_at) && r.answered_at >= r.created_at && r.answered_at < r.expires_at :
@@ -203,7 +208,11 @@ export class NativeQuestionLedger {
         return prior.id;
       }
       requireThat(total < 4096 && unresolved < 64, 'NATIVE_QUESTION_CAPACITY', 'Native question capacity requires review.');
-      const now = this.clock(), expires_at = new Date(Math.min(Date.parse(now) + 900000, Date.parse(native.deadline_at))).toISOString();
+      // Older records keep their existing window. New host-declared callback
+      // deadlines can only shorten it, never extend the attempt or ledger cap.
+      const now = this.clock(), expires_at = new Date(Math.min(Date.parse(now) + 900000, Date.parse(native.deadline_at),
+        normalized.callback_deadline_at === undefined ? Infinity : Date.parse(normalized.callback_deadline_at))).toISOString();
+      requireThat(expires_at > now, 'NATIVE_QUESTION_EXPIRED', 'The native question has expired.');
       const r: NativeQuestionRecord = { ...normalized, version: 1, revision: 1, state: 'pending', run_id: runId, attempt, epoch: identity.epoch, boot_id: identity.boot_id,
         persona_id: run.persona_id, conversation_id: conversation, created_at: now, expires_at, answers: null, answer_owner_id: null, answer_command_id: null,
         answered_at: null, response_taken_at: null, resolved_at: null };

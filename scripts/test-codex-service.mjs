@@ -613,6 +613,8 @@ try {
     const question = await wait(async () => (await (await trustedFetch(`${origin}/v1/state`)).json()).questions?.[0], 'durable native question');
     assert.equal(question.run_id, queued.resource_id); assert.equal(question.attempt, dispatched.claim.run.current_attempt);
     assert.equal(question.state, 'pending'); assert.equal(question.answerable, true);
+    assert.equal(question.expires_at, question.callback_deadline_at);
+    report.questionAnswerDeadline = question.expires_at;
     assert.equal(report.modelRequests, 2);
     const response = await trustedFetch(`${origin}/v1/commands`, { method: 'POST', headers: {
       'content-type': 'application/json', Origin: origin, 'idempotency-key': randomUUID(),
@@ -1210,6 +1212,8 @@ try {
     assert.equal(waits.length, 1); assert.equal(waits[0].phase, 'resolved');
     assert.equal(Date.parse(waits[0].deadlineAt) - Date.parse(waits[0].startedAt), 300000);
     assert.ok(waits[0].deadlineAt <= dispatched.claim.deadline_at);
+    assert.equal(waits[0].deadlineAt, report.questionAnswerDeadline);
+    report.questionCallbackDeadlineAligned = true;
     report.questionWaitBounded = true;
   } else assert.equal(waits, undefined);
   assert.deepEqual(questionCounts, { complete: true, total: questionsMode ? 1 : 0, unresolved: 0,

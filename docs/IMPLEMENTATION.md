@@ -4,6 +4,40 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Connected question deadline (2026-09-21): host-generated `callback_deadline_at`
+now carries the frozen, attempt-clamped callback deadline through the runtime
+wire contract into Worker question custody. Expiry is the minimum of that value,
+record time +15min and attempt deadline. Native text cannot declare it; delayed
+recording does not restart it. Reload/idempotency preserve it, fresh expired or
+malformed declarations reject, and stored expiry +1ms beyond it is corrupt.
+Legacy records retain their shape/window; no database migration. Update the
+tested Worker/runtime pair together: older Workers reject the field, with no
+stripping/retry fallback. Host/Worker clock agreement is required. This bounds
+answerability, not connection availability, settlement, restart or safe sleep.
+No sibling watchdog suppression or new timeout recovery state is implemented.
+
+Verification: runtime/core red discriminators preceded implementation. Initial
+broad run passed backend1797/runtime616 and typecheck, then native questions
+failed HTTP422 due to the omitted wire-schema field. Retained failure:
+`.local/question-deadline-native.log`, SHA256
+8ce76ff71453fc7ecc4739d94007fe7122427216f367bd48e0afab21c67f85c3.
+A contract red test reproduced it; `npm run generate:contracts` updated the
+validator. Contracts/core35 and both pristine0.154.0 native question modes now
+pass (PID553591 exit0), proving public expiry equals the private five-minute
+deadline in answer and cancel paths. Actual HTTPS Worker question checks pass.
+Final `npm test` passes1798, `npm run typecheck` passes, and Chromium question
+regression passes (PID554281 exit0): exact scoped answer/skip, expired controls,
+stale/offline rejection, unknown/reload and explicit stopped closure. Inspected
+stale-editor capture shows refusal, not successful delivery. No UI styling change.
+
+Private evidence hashes:
+- `.local/question-deadline-broad.log` (runtime616): def263eff47e46726b21f520192a78b972ad2d92714582aa6119740881b7afbe.
+- `.local/question-deadline-final-backend.log`: 3c9393cada51ad798aaa4ea79d98e8b3e7da1184e99b145bbaa8121f9666c840.
+- `.local/question-deadline-native-final.log`: 66f9b26cc129ef8e92600b6f94929cf75956eda9d503cd6cc6e788375ee6358c.
+- `.local/question-deadline-native-cancel.log`: 5247c885583bb3cb8160cdf779fcd454dc772771fd890540ec29ebbc850d7758.
+- `.local/question-deadline-http.log`: ec7f9e39cddf31053dff851f8b5a62e3ae03faa54bfbe6edf5c0fac58225ed64.
+- `.local/question-deadline-browser.log`: d2746eca25d0b7db350b2ca6a2524912cdbb1c3cb6e28ee2e4dee8bd7d034dae.
+
 Full corrected-source acceptance (2026-09-21): `bash scripts/verify-codex.sh`
 on local 6a225a3 exited0 (PID505075). Backend1792/runtime615, all browser/native
 fixtures, both warm/background stop modes, real bootstrap/launcher boundary,

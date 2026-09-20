@@ -37,6 +37,15 @@ the 60/min limit is unchanged. Earlier failed/deleted worker evidence is disclos
 in IMPLEMENTATION.md, not hidden by these passes. Next priority: remaining
 supported recovery/containment and per-operation timing contracts; memory budgets
 still need a connected selected-model/constraint contract, not a mock tokenizer.
+Connected question-deadline follow-through is verified: the host callback's exact
+attempt-clamped deadline now caps Worker answerability, without changing legacy
+records, watchdogs, settlement or resume. Runtime616, backend1798, typecheck,
+both native question modes, HTTPS and Chromium question fixtures pass. The first
+native run exposed missing wire-schema metadata and failed422; that retained
+failure led to the contract/validator correction and successful reruns. Chromium
+rejects stale edits and disables expired answers; its stale-editor capture was
+inspected. These focused integrated checks cover the new change separately from
+the earlier full verifier. Restart-required state and safe recovery remain open.
 No additional approval is needed for these local checks; publication and live
 operations remain gated.
 Historical checkpoints below retain their original failures and restrictions;
@@ -872,7 +881,7 @@ These are useful foundations that should not be rebuilt simply because their ful
 - [x] First effect dispatch rechecks task/ancestor state after intent creation; cancellation blocks unsent effects while late outcomes remain recordable. Evidence: `tests/effect-workflow.test.ts`, `tests/root-child-effects.test.ts`, four red/green cancellation cases with lock/sibling preservation. This does not retract already dispatched actions or prove native termination.
 - [x] New shared-resource locks require an unexpired attempt; held-lock replay and release preserve existing custody semantics. Evidence: `tests/lifecycle.test.ts`, three red/green task-state cases and exact deadline boundaries. A retained lock grants no connector authority and expiry does not release unresolved effects.
 - [x] Terminal owner cancellation checks previously queued follow-ups, delivering once after descendant settlement without steering unrelated work. Evidence: `tests/orchestration.test.ts`, waiting checkpoint and live-grandchild cases, plus retention fixtures. Native checkpoint/restart and full intent-aware E03 behavior remain unverified.
-- [x] Five-minute non-checkpointed service question callback ceiling and private persisted wait deadline. Evidence: question/service/inspection tests and native answer/cancel fixtures. Worker custody can outlive the callback; restart-required UI, checkpoint parking and safe compute release remain E01/E02.
+- [x] Five-minute non-checkpointed service question callback ceiling, private wait deadline and matching Worker answerability cap. Evidence: question/service/inspection tests, native answer/cancel fixtures, HTTPS and Chromium checks. Expired custody remains unresolved; restart-required UI, checkpoint parking and safe compute release remain E01/E02.
 - [x] Unsupported live native item boundaries trigger recovery rather than silently evading operation accounting. Evidence: `tests/runtime-codex-events.mjs`; complete supported coverage remains E01, and recovery does not prove native termination.
 - [x] Content-free plan-item lifetime/deadline projection and offline inspection, plus actual root Plan emission, unchanged clocks across native text deltas and accepted active Worker heartbeat under scripted loopback inference. Evidence: `scripts/test-codex-service.sh --plan` and synthetic event/operation/recovery fixtures. Native child Plan emission, held-stream expiry, rendering and full operation coverage remain E01/E04.
 

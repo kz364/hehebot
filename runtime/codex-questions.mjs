@@ -117,7 +117,8 @@ export class CodexQuestionBinding {
       const startedAt = Date.now();
       const e = { params: structuredClone(params), requestId, id: randomUUID(), controller: new AbortController(),
         deadline: startedAt + this.timeoutMs, tail: Promise.resolve(), blocked: false, recorded: false, resolutionObserved: false };
-      const input = { id: e.id, connection_id: this.connectionId, request_id: requestId, params: e.params };
+      const input = { id: e.id, connection_id: this.connectionId, request_id: requestId, params: e.params,
+        callback_deadline_at: new Date(e.deadline).toISOString() };
       check(Buffer.byteLength(JSON.stringify(input)) <= 65536);
       this.#entries.set(requestId, e);
       const abort = () => e.controller.abort();
@@ -125,6 +126,9 @@ export class CodexQuestionBinding {
       e.timer = setTimeout(abort, this.timeoutMs);
       e.initialized = this.#serial(e, async () => {
         this.#alive(e); e.binding = await this.#binding(e, true); this.#alive(e);
+        // Host clock metadata, not native question text. Record the same frozen
+        // attempt-clamped deadline used by the callback and private journal.
+        input.callback_deadline_at = new Date(e.deadline).toISOString();
         e.key = `question_${hash([e.binding.attemptId, e.params.threadId, e.params.turnId, e.params.itemId])}`;
         const existing = await bounded(this.journal.putIfAbsent(e.key, { version: 1, questionId: e.id, connectionId: this.connectionId,
           requestId, binding: e.binding, threadId: e.params.threadId, turnId: e.params.turnId, itemId: e.params.itemId,

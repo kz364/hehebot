@@ -20,9 +20,22 @@ zero inference/controller records; burst60 accepted/10 RATE_LIMITED, first at61,
 one minute, zero network/other errors. Children stopped, temporary data removed.
 Full log `.local/intake-parent-full.log` SHA256
 f0d55f8f600efa83b66875b0b32727670eef0cade771c794ce634b514a1c2648.
-No parent commands remain running. No5writes/sec or cold/deployed reliability claim.
-Next owner action: resolve the next supported recovery/operation-timing contract
-from TODO without question-based sibling watchdog suppression or settlement claims.
+No5writes/sec or cold/deployed reliability claim.
+Connected E01 slice is verified after local e41cc34: optional host-computed
+callback_deadline_at in the existing question input/record caps Worker answerability
+to the callback's exact attempt-clamped deadline. Existing records keep their
+shape/window. No watchdog, parking, timeout-recovery, settlement or resume change.
+Initial two red discriminators passed after implementation. Broad runtime616 and
+backend1797 passed, but PID548025 failed native questions with HTTP422 because the
+wire schema was missing the optional field. Retained failure log
+`.local/question-deadline-native.log`; contract red test then schema regeneration
+fixed it. PID553591 passed contracts/core35, native answer/cancel and HTTP checks.
+PID554281 passed final backend1798, typecheck and Chromium questions; stale-editor
+capture inspected (visible refusal, no success). No process remains from these
+checks. Logs/hashes are in IMPLEMENTATION.md. Upgrade Worker/runtime together;
+old Workers reject the metadata and no fallback strips it. Next: inspect the
+remaining explicit question-timeout recovery contract without suppressing sibling
+watchdogs or assuming a pending callback is a durable checkpoint.
 Memory work requires a connected selected-model/constraint contract; no mock-only
 tokenizer or truncation-only completion. All workers returned; direct management
 is simpler until another independently owned work unit is ready.
