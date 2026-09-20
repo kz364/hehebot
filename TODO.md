@@ -30,6 +30,14 @@ Stage B browser/native composition. No new live authorization or production clai
 | [ ] | **F5 — After usable slice; E05/E07/E09** | Complete required Google/WhatsApp/Messages integrations, adopted routine workflows and browser/computer tasks. Track permissions, per-effect authority, watermarks/dedupe and uncertain effects. Sep20 upstream source recheck found default branch still at the selected wappmcp revision: no newer source fix for array-shaped recent-message results. [Source evidence](docs/CONNECTOR_READINESS.md) retains the SDK blocker; no validation bypass, search substitution or unapproved patch. Connector account access and routine activation remain gated. |
 | [ ] | **F6 — After usable slice; E10–E15** | Complete Mac build/render/device acceptance, coordinated backups and restore, clean installation/upgrade, measured cost/reliability and remaining product acceptance. Use the detailed E01–E15 rows below for scope; keep optional polish behind P0/P1. Sep20 runner discovery found no connected runner; actual Apple-framework/device acceptance needs a Mac runner. Electron reference-shell rerun passes16/16, not Mac acceptance. Account/billing data, signing/release and live infrastructure measurements require their own access/approval. |
 
+**Additional independent work (2026-09-20):** the [backup/restore drill implementor](https://ampcode.com/threads/T-01a0be08-b284-765f-b2c5-1aa35bb10799)
+owns a new test script composing actual SQLite snapshot, real age encryption,
+decrypt and semantic inspection. It must retain unknown effects/locks and refuse
+activation, wrong keys and tampered ciphertext. Exact baseline is local 2713a38;
+no runtime/source/shared-fixture edits. This advances F6/E10 without waiting for
+Stage B. Existing runtime and automatic-stop workers received continuation
+instructions; all report deliveries or concrete blockers directly to this parent.
+
 **Ownership and scheduling:** this parent owns review, integration, combined verification,
 tracking and user decisions. F1 workers use disjoint files and the exact local
 source-custody bundle at `5d45262`, not origin/main. They report completion directly;

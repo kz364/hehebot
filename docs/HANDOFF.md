@@ -4,6 +4,18 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
+Owner requested continued implementor progress and feasible additional parallelism.
+Continuation instructions sent to Stage B runtime and automatic-stop workers.
+New F6/E10 worker T-01a0be08-b284-765f-b2c5-1aa35bb10799 owns only new
+scripts/test-control-backup-restore-drill.mjs and at most one new fixture/test.
+It composes snapshot → encrypted inventoried backup → decrypt → semantic inspection
+with real age and disposable SQLite, retaining unknown custody and denying activation.
+Source is local 2713a381dca61e00ebb8a1c487e45cbd8db50f25, transferred through
+`.local/followthrough-source.bundle`, SHA256
+b3a6c67c3fd3a63cfd99c5ecf97bc99eecad6e1019ede5290fe21cf72a56505c.
+No shared implementation/verifier/tracking edits. Completion/blockers arrive by
+reply; no polling or nested delegation. Parent integrates and runs combined checks.
+
 Owner said “Go do all that”; local F1–F6 follow-through continues without live
 authorization expansion. F3 worker T-01a0bdf0-6b4d-70ba-acb2-ce10eb4f9d29 owns
 only new scripts/test-codex-warm-auto-stop.mjs (plus a new fixture if required),

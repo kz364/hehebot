@@ -4,6 +4,14 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Parallelism checkpoint (2026-09-20): owner requested continued implementor progress.
+Existing runtime/automatic-stop assignments received continuation instructions.
+Source inspection found separate backup creation/decrypt and semantic-inspector
+tests, but no composed encrypted restore drill preserving unresolved custody.
+A third implementor owns only new test files for that F6/E10 path from verified
+local 2713a38 bundle. This is an assignment, not new backup/restore acceptance;
+native/browser state, external key custody and activation remain outside its scope.
+
 Owner follow-through (2026-09-20): `node scripts/test-codex-native.mjs` passes with
 `coldMissedChildInterruptionRecovered:true` and `coldChildCancellationNotReplayed:true`
 in `.local/cold-child-recovery.log`. A separate host journal captures actual
