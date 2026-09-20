@@ -12,6 +12,21 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
+**Authorized correction wave (2026-09-20):** owner approved local Hehebot launcher
+privilege-boundary and expiry/retirement corrections, superseding the fixture-only
+restriction below. Two disjoint implementers own those fixes; a third implements
+partial local intake latency evidence at48 writes/min for10min without changing
+the60/min limit or claiming the5writes/sec SPEC target. A completed source review
+also confirms unbounded context memories and missing explicit operation timing
+policies; those need separate contract design, not a test-tokenizer completion claim.
+Main owns entry/lock
+lifetime and integrated acceptance. Strict assertions, pristine Codex/dependencies,
+non-root native launch, private namespace floor/socket and external approval gates
+remain unchanged. Baseline `ba8d174caf4ba2fe95ea3b550e99afa380f8591c` transferred
+by verified bundle. Entry/floor contracts pass30; both lock observers reject an
+available lock with a live synthetic process (exit91), accept absent process (0),
+and detect held locks (73). These controls are not real-launcher acceptance.
+
 **Latest integrated check: FAILED, finite wave remains open.** On local source
 `11deb67817776d3be4775606c5f73f3d4dd48b24`, `bash scripts/verify-codex.sh`
 exited 1 in the Stage B normal auto-stop fixture. Backend1790/runtime585,

@@ -5,10 +5,25 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
 Main T-01a0b925-c847-73b9-9713-e04b5f3b43d4 is now the sole user-facing
-project-owner, reporting directly to user (lifecycle revision3). ASK QUESTIONS
+project-owner, reporting directly to user (lifecycle revision4). ASK QUESTIONS
 HERE is retired/custody-transferred. Canonical uncommitted ledger:
 `.amp/coordination/hehebot-product.md`; two-hour recovery schedule preserved.
-No active descendants. Current combined verification on local11deb67 exited1:
+Owner now authorizes both local Hehebot runtime corrections. This supersedes the
+fixture-only/no-runtime-patch approval blockers in the historical evidence below;
+Codex/dependency patches and live actions remain excluded. Active implementers:
+T-01a0bfae-c760-72c6-aaca-06a50ea28df3 (background retirement manager/tests),
+T-01a0bfaf-4b8b-7477-abdb-95ec1cda4f35 (launcher capability drop/tests).
+Advisor T-01a0bfaf-cc22-766f-a9ad-2802923e7fac assesses independent local work.
+Advisor now complete; parent source-checked memory/timing/limiter findings.
+Third implementer T-01a0bfb6-0ae9-7457-85ac-c029d51595ce owns only a new local
+intake-load script:48 writes/min for10min, durable readback,p95 and rate-limit
+negative evidence. No limit changes or full5writes/sec SPEC acceptance.
+All received exact localba8d174 source bundle SHA256
+3616a11201014201781d980ec01c3b6510c0af698316ed03196d63d92bd5a546.
+Parent owns strict fixture/entry/integration/tracking and reviews returns before
+acceptance; no overlapping writes or coordinator needed for this small topology.
+Parent entry/floor30 tests and synthetic lock-observer negative control pass.
+Current combined verification on local11deb67 exited1:
 `.local/stage-b-final-combined.log`, SHA256
 c83ee88de94784dd5d83929366de6ec4bbb6b0882a4b6656d8f3a583e240fe0b.
 Native stopped321ms before fractional policy expiry (whole-second JWT401);

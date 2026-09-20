@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Authorized correction wave (2026-09-20), exact sourceba8d174: owner permits local
+Hehebot launcher privilege-drop and expiry/retirement fixes, not dependency/Codex
+patches or relaxed assertions. Disjoint implementers received verified complete
+bundle SHA2563616a11201014201781d980ec01c3b6510c0af698316ed03196d63d92bd5a546.
+Parent ran entry/floor contracts30/30 (`node --test
+tests/runtime-owner-alpha-warm-entry.mjs tests/runtime-owner-alpha-launch-floor.mjs`),
+log `.local/runtime-corrections-entry-contracts.log` SHA256
+0411cf1ecadd6a1d0d506f4bfafa9c6c2267819bb14c79509e459fb5c19a42c8.
+An independent subprocess negative control executes the exact strict fixture
+lock-observer expression: each lock returns73 while held, returns91 when available
+but its monitored synthetic process survives, and returns0 only after that process
+exits. Log `.local/runtime-corrections-lock-negative.log`, SHA256
+5cd5b3f08848ac34ddf781ab4eba8429cbf75adbe487eda15ff7dae2a2498169.
+This validates the observer, not native cleanup or the full launcher. No runtime
+correction has yet been integrated; earlier failed results remain authoritative.
+
 Partial verifier continuation (2026-09-20), source
 61d6198036f5abd9ceee1f0557e3a7f59f8e0346: extracted only the commands from
 `node scripts/test-codex-background-auto-stop.mjs --pending-maintenance` through
