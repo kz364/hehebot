@@ -4,6 +4,19 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stage B control integration (2026-09-20, local c35e118): worker patch SHA256
+4d8b376fcb8e2da1ddf096430c76453b2a85789bc0d4b3092d15766d8845a9b9
+verified and reviewed. Parent reran 8 SQLite/signed-HTTP tests and typecheck;
+combined verifier's backend1790 passes, remaining verification still running in
+`.local/stage-b-integrated-verify.log`. Parent corrected pre-first next_role from
+null to background (the original test copied the wrong behavior) and restored
+legacy warm custody counting. New background custody uses manifest order, not UUID
+order, and excludes observed children from admission counts. Restricted enqueue/
+claim context and frozen-summary bytes preserve privacy across reconstruction.
+A remains unsettled; only S/B receive exact canonical root-only receipts. Retained
+configuration removal denies legacy fallback. Runtime/native and portal workers
+now own disjoint follow-through; this does not prove live/native Stage B behavior.
+
 Stage B contract review (2026-09-20): revised single-file delivery SHA256
 d511a446c7697af8c388160ab0fb16e8c7aa455a46eeb76af7d75949f1999ef7
 verified and applied; parent source review added necessary context and persistence
