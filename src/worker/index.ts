@@ -1,8 +1,9 @@
 import { unwrap } from './rpc';
 import { PersonalControl } from './control-object';
-import { assertBootstrapSecrets, assertWarmSecrets, authenticateOwner, assertSameOrigin, runtimeGenerationAuthority, verifyRuntimeTaskToken, verifyRuntimeToken, verifyWarmHostToken, verifyWarmTaskToken, verifyWebhook } from './auth';
+import { assertBackgroundSecrets, assertBootstrapSecrets, assertWarmSecrets, authenticateOwner, assertSameOrigin, runtimeGenerationAuthority, verifyBackgroundHostToken, verifyBackgroundTaskToken, verifyRuntimeTaskToken, verifyRuntimeToken, verifyWarmHostToken, verifyWarmTaskToken, verifyWebhook } from './auth';
 import {parseOwnerAlphaBootstrap} from '../core/owner-alpha-bootstrap';
 import {parseOwnerAlphaWarm} from '../core/owner-alpha-warm';
+import {parseOwnerAlphaBackground} from '../core/owner-alpha-background';
 import {authenticateTestPrincipal,parseTestAuthConfig} from './test-auth';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { digest, json, parseJson, readBounded } from './http';
@@ -37,10 +38,39 @@ export default {
     requireThat(request.method==='POST','NOT_FOUND','Route unavailable.',404);
     const bootstrap=parseOwnerAlphaBootstrap(env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP);
     const warm=parseOwnerAlphaWarm(env.HEHEBOT_OWNER_ALPHA_WARM_GENERATION);
+    const background=parseOwnerAlphaBackground(env.HEHEBOT_OWNER_ALPHA_BACKGROUND_GENERATION);
     if(bootstrap)assertBootstrapSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
     if(warm)assertWarmSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_HOST_SIGNING_KEY,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
+    if(background)assertBackgroundSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_BACKGROUND_HOST_SIGNING_KEY,env.HEHEBOT_OWNER_ALPHA_BACKGROUND_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
+    if(path.startsWith('/internal/background/')){
+     // Route exclusivity is fail-closed: exactly one control plane owns the
+     // Durable Object, and removing the configuration must not fall back to
+     // another generation's routes.
+     requireThat(!bootstrap&&!warm,'NOT_FOUND','Route unavailable.',404);
+     if(path.startsWith('/internal/background/manager/')){
+      // Retirement stays reachable for a retained generation even after its
+      // configuration was removed; other manager routes require configuration.
+      requireThat(!!background||(path==='/internal/background/manager/retirement'&&unwrap(await control.backgroundRetained())),'NOT_FOUND','Route unavailable.',404);
+      verifyRuntimeToken(request,env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN!);
+      const type=path.slice('/internal/background/manager/'.length);
+      return json(unwrap(await control.backgroundManager(type,parseJson(await readBounded(request)))));
+     }
+     if(path.startsWith('/internal/background/host/')){
+      requireThat(!!background,'NOT_FOUND','Route unavailable.',404);
+      const authority=await verifyBackgroundHostToken(request,env.HEHEBOT_OWNER_ALPHA_BACKGROUND_HOST_SIGNING_KEY!,env.INSTALLATION_ID);
+      const type=path.slice('/internal/background/host/'.length);
+      return json(unwrap(await control.backgroundRuntime(type,parseJson(await readBounded(request)),authority,'host')));
+     }
+     if(path.startsWith('/internal/background/task/')){
+      requireThat(!!background,'NOT_FOUND','Route unavailable.',404);
+      const authority=await verifyBackgroundTaskToken(request,env.HEHEBOT_OWNER_ALPHA_BACKGROUND_TASK_SIGNING_KEY!,{installation_id:env.INSTALLATION_ID,owner_binding_sha256:background.owner_binding_sha256});
+      const type=path.slice('/internal/background/task/'.length);
+      return json(unwrap(await control.backgroundRuntime(type,parseJson(await readBounded(request)),authority,'task')));
+     }
+     throw new ControlError('NOT_FOUND','Route unavailable.',404);
+    }
     if(path.startsWith('/internal/warm/')){
-     requireThat(!bootstrap,'NOT_FOUND','Route unavailable.',404);
+     requireThat(!bootstrap&&!background,'NOT_FOUND','Route unavailable.',404);
      if(path.startsWith('/internal/warm/manager/')){
       // Retirement stays reachable for a retained generation even after its
       // configuration was removed; other manager routes require configuration.
@@ -67,7 +97,7 @@ export default {
     // generation is configured or retained; verification happens there so the
     // production path gains no extra round trip.
     if(path.startsWith('/internal/manager/')){
-     requireThat(!!bootstrap,'NOT_FOUND','Route unavailable.',404);
+     requireThat(!!bootstrap&&!background&&!warm,'NOT_FOUND','Route unavailable.',404);
      verifyRuntimeToken(request,env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN!);
      const type=path.slice('/internal/manager/'.length);
      requireThat(type==='manifest'||type==='retirement','NOT_FOUND','Route unavailable.',404);

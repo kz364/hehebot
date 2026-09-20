@@ -32,7 +32,12 @@ export class NativeTaskLedger {
   return this.store.run(run.id);
  }
  register(identity:Identity,input:NativeChildReceipt,started=false):Run {
-  requireThat(!this.core.ownerAlpha.policy||this.core.ownerAlpha.policy.background_first_root,'CAPABILITY_UNAVAILABLE','Owner alpha does not admit native children.');
+  if(this.core.ownerAlpha.policy&&!this.core.ownerAlpha.policy.background_first_root){
+   // Stage B background generations admit native descendants for the role-
+   // `background` root only (§8); every other generation stays child-free.
+   const generation=this.core.ownerAlpha.activeGeneration();
+   requireThat(!!generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-background-generation','CAPABILITY_UNAVAILABLE','Owner alpha does not admit native children.');
+  }
   return this.store.db.transaction(()=>{
    this.lifecycle.authorizeAttempt(identity,input.parent_run_id,input.parent_attempt);
    const parent=this.store.run(input.parent_run_id);

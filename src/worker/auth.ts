@@ -303,3 +303,101 @@ export async function verifyWarmTaskToken(request:Request,secret:string,
   return grant;
  }catch{throw unauthorized();}
 }
+
+export interface BackgroundHostGrant {
+ installation_id:string;epoch:number;boot_id:string;transition_id:string;generation_sha256:string;
+ issued_at:string;expires_at:string;
+}
+const backgroundHostAudience='hehebot-background-generation';
+const backgroundHostTokenType='hehebot-background-generation+jwt';
+
+/** The background generation keeps four deployment secrets: manager bearer
+ * token, background host signing key, background task signing key and the
+ * retained legacy runtime token. None may overlap. */
+export function assertBackgroundSecrets(managerToken:string|undefined,hostSigningKey:string|undefined,backgroundTaskSigningKey:string|undefined,legacyToken:string|undefined):void {
+ if(!managerToken||!hostSigningKey||!backgroundTaskSigningKey||!legacyToken)throw configurationError();
+ taskSigningKey(managerToken);taskSigningKey(hostSigningKey);taskSigningKey(backgroundTaskSigningKey);taskSigningKey(legacyToken);
+ const values=[managerToken,hostSigningKey,backgroundTaskSigningKey,legacyToken];
+ if(new Set(values).size!==values.length)throw configurationError();
+}
+function backgroundHostGrant(value:unknown):BackgroundHostGrant {
+ if(!value||typeof value!=='object'||Array.isArray(value))throw configurationError();
+ const g=value as BackgroundHostGrant;
+ if(Object.keys(g).sort().join(',')!=='boot_id,epoch,expires_at,generation_sha256,installation_id,issued_at,transition_id'||
+  typeof g.installation_id!=='string'||!g.installation_id||g.installation_id.length>256||
+  typeof g.boot_id!=='string'||!grantIdentifier.test(g.boot_id)||typeof g.transition_id!=='string'||!grantIdentifier.test(g.transition_id)||
+  typeof g.generation_sha256!=='string'||!/^[a-f0-9]{64}$/.test(g.generation_sha256)||!Number.isSafeInteger(g.epoch)||g.epoch<1)throw configurationError();
+ warmTimestamps(g);
+ return {installation_id:g.installation_id,epoch:g.epoch,boot_id:g.boot_id.toLowerCase(),transition_id:g.transition_id.toLowerCase(),
+  generation_sha256:g.generation_sha256,issued_at:g.issued_at,expires_at:g.expires_at};
+}
+/** Background host executor authority: bound to the immutable generation
+ * digest, not model tasks. Issued only while the generation is BOOTING and
+ * live; identical bytes on repeated reads. */
+export async function issueBackgroundHostToken(grant:BackgroundHostGrant,secret:string):Promise<string> {
+ const g=backgroundHostGrant(grant),key=taskSigningKey(secret),{issued,expires}=warmTimestamps(g);
+ return new SignJWT({grant:g}).setProtectedHeader({alg:'HS256',typ:backgroundHostTokenType})
+  .setIssuer(`hehebot:${g.installation_id}`).setAudience(backgroundHostAudience).setSubject(g.boot_id)
+  .setIssuedAt(issued).setNotBefore(issued).setExpirationTime(expires).sign(key);
+}
+export async function verifyBackgroundHostToken(request:Request,secret:string,expectedInstallationId:string,now=new Date()):Promise<BackgroundHostGrant> {
+ const key=taskSigningKey(secret);
+ if(!expectedInstallationId)throw configurationError();
+ const authorization=request.headers.get('Authorization')??'';
+ if(!authorization.startsWith('Bearer ')||authorization.length>16384)throw unauthorized();
+ try{
+  const {payload}=await jwtVerify(authorization.slice(7),key,{algorithms:['HS256'],typ:backgroundHostTokenType,
+   issuer:`hehebot:${expectedInstallationId}`,audience:backgroundHostAudience,currentDate:now,clockTolerance:0,
+   requiredClaims:['iss','aud','sub','iat','nbf','exp','grant']});
+  const grant=backgroundHostGrant(payload.grant);
+  if(Object.keys(payload).sort().join(',')!=='aud,exp,grant,iat,iss,nbf,sub'||payload.sub!==grant.boot_id||
+   payload.iat!==warmTimestamps(grant).issued||payload.exp!==warmTimestamps(grant).expires||
+   grant.installation_id!==expectedInstallationId||!Number.isFinite(now.getTime())||
+   Date.parse(grant.issued_at)>now.getTime()||Date.parse(grant.expires_at)<=now.getTime())throw unauthorized();
+  return grant;
+ }catch{throw unauthorized();}
+}
+export interface BackgroundTaskGrant extends BackgroundHostGrant {
+ owner_binding_sha256:string;run_id:string;attempt:number;manifest_sha256:string;
+}
+const backgroundTaskAudience='hehebot-background-task';
+const backgroundTaskTokenType='hehebot-background-task+jwt';
+function backgroundTaskGrant(value:unknown):BackgroundTaskGrant {
+ if(!value||typeof value!=='object'||Array.isArray(value))throw configurationError();
+ const g=value as BackgroundTaskGrant;
+ if(Object.keys(g).sort().join(',')!=='attempt,boot_id,epoch,expires_at,generation_sha256,installation_id,issued_at,manifest_sha256,owner_binding_sha256,run_id,transition_id'||
+  typeof g.owner_binding_sha256!=='string'||!/^[a-f0-9]{64}$/.test(g.owner_binding_sha256)||
+  typeof g.manifest_sha256!=='string'||!/^[a-f0-9]{64}$/.test(g.manifest_sha256)||
+  typeof g.run_id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(g.run_id)||
+  !Number.isSafeInteger(g.attempt)||g.attempt!==1)throw configurationError();
+ const host=backgroundHostGrant({installation_id:g.installation_id,epoch:g.epoch,boot_id:g.boot_id,transition_id:g.transition_id,
+  generation_sha256:g.generation_sha256,issued_at:g.issued_at,expires_at:g.expires_at});
+ return {...host,owner_binding_sha256:g.owner_binding_sha256,run_id:g.run_id,attempt:g.attempt,manifest_sha256:g.manifest_sha256};
+}
+/** Model-facing background task authority: separately signed, bound to one
+ * exact persisted run/attempt/manifest/generation. Never reaches host
+ * lifecycle routes; host credentials never reach model reads. */
+export async function issueBackgroundTaskToken(grant:BackgroundTaskGrant,secret:string):Promise<string> {
+ const g=backgroundTaskGrant(grant),key=taskSigningKey(secret),{issued,expires}=warmTimestamps(g);
+ return new SignJWT({grant:g}).setProtectedHeader({alg:'HS256',typ:backgroundTaskTokenType})
+  .setIssuer(`hehebot:${g.installation_id}`).setAudience(backgroundTaskAudience).setSubject(g.run_id)
+  .setIssuedAt(issued).setNotBefore(issued).setExpirationTime(expires).sign(key);
+}
+export async function verifyBackgroundTaskToken(request:Request,secret:string,
+ expected:{installation_id:string;owner_binding_sha256:string},now=new Date()):Promise<BackgroundTaskGrant> {
+ const key=taskSigningKey(secret);
+ if(!expected.installation_id||!/^[a-f0-9]{64}$/.test(expected.owner_binding_sha256))throw configurationError();
+ const authorization=request.headers.get('Authorization')??'';
+ if(!authorization.startsWith('Bearer ')||authorization.length>16384)throw unauthorized();
+ try{
+  const {payload}=await jwtVerify(authorization.slice(7),key,{algorithms:['HS256'],typ:backgroundTaskTokenType,
+   issuer:`hehebot:${expected.installation_id}`,audience:backgroundTaskAudience,currentDate:now,clockTolerance:0,
+   requiredClaims:['iss','aud','sub','iat','nbf','exp','grant']});
+  const grant=backgroundTaskGrant(payload.grant);
+  if(Object.keys(payload).sort().join(',')!=='aud,exp,grant,iat,iss,nbf,sub'||payload.sub!==grant.run_id||
+   payload.iat!==warmTimestamps(grant).issued||payload.exp!==warmTimestamps(grant).expires||
+   grant.installation_id!==expected.installation_id||grant.owner_binding_sha256!==expected.owner_binding_sha256||
+   !Number.isFinite(now.getTime())||Date.parse(grant.issued_at)>now.getTime()||Date.parse(grant.expires_at)<=now.getTime())throw unauthorized();
+  return grant;
+ }catch{throw unauthorized();}
+}

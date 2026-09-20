@@ -13,6 +13,7 @@ import type {WhatsAppReadRequest} from './whatsapp-access';
 import type {TextOnlyProfile} from './owner-alpha';
 type Base={identity:Identity};type Attempt={run_id:string;attempt:number};
 export type TextOnlyReceipt=TextOnlyProfile&{thread_id:string;turn_id:string;output_sha256:string};
+export type BackgroundReceipt={thread_id:string;turn_id:string;output_sha256:string};
 export type RuntimePayloads={
  status:Record<string,never>;
  'whatsapp-read-authorize':WhatsAppReadRequest;
@@ -34,7 +35,7 @@ export type RuntimePayloads={
  heartbeat:Base & {operations:HeartbeatOperation[]};
  submitted:Base & Attempt & {native_ref:string};
  'coordinator-release':Base & Attempt & {native_ref:string;outcome:CoordinatorOutcome};
- complete:Base & Attempt & {result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>};text_only_receipt?:TextOnlyReceipt};
+ complete:Base & Attempt & {result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>};text_only_receipt?:TextOnlyReceipt;background_receipt?:BackgroundReceipt};
  'prepare-sleep':Base;
  'commit-sleep':Base & {stop_token:string;queue_sequence:number;checkpoint:Record<string,unknown>};
  'effect-intent':Base & {effect:EffectIntent};

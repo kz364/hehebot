@@ -709,6 +709,15 @@
                 "output_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"}
               },
               "required":["profile_version","profile_sha256","thread_id","turn_id","output_sha256"]
+            },
+            "background_receipt": {
+              "type":"object","additionalProperties":false,
+              "properties": {
+                "thread_id":{"type":"string","minLength":1,"maxLength":256},
+                "turn_id":{"type":"string","minLength":1,"maxLength":256},
+                "output_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"}
+              },
+              "required":["thread_id","turn_id","output_sha256"]
             }
           },
           "required": [

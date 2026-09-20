@@ -101,7 +101,7 @@ export function warmManifestSha256(m:Omit<WarmManifest,'manifest_sha256'>):strin
  * excluded so the digest survives the second admission without rewriting history. */
 export function warmGenerationSha256(g:Omit<WarmGenerationView,'authority'>&{authority:Pick<WarmMessageBoundAuthority,'kind'|'config_sha256'>}):string{
  return digest([g.epoch,g.boot_id,g.transition_id,g.policy.session_id,g.policy.persona_id,g.policy.expires_at,g.policy.max_runs,g.policy.max_task_seconds,
-  g.policy.text_only.profile_version,g.policy.text_only.profile_sha256,g.predecessor.epoch,g.predecessor.boot_id,g.predecessor.session_id,
+  g.policy.text_only!.profile_version,g.policy.text_only!.profile_sha256,g.predecessor.epoch,g.predecessor.boot_id,g.predecessor.session_id,
   g.activation_command_id,g.activation_command_sha256,g.activation_event_sequence,g.authority.kind,g.authority.config_sha256]);
 }
 
@@ -139,7 +139,7 @@ export function warmLedgerUsed(db:Store['db'],priorCostMicroUsd:number):number{
  const rows=db.all<{key:string;value_json:string}>("SELECT key,value_json FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'");
  let used=priorCostMicroUsd;
  for(const row of rows){
-  requireThat(/^owner_alpha_reservation:\d+(:[12])?$/.test(row.key),'INVALID_CONFIGURATION','Cost ledger key is invalid.',503);
+  requireThat(/^owner_alpha_reservation:\d+(:[123])?$/.test(row.key),'INVALID_CONFIGURATION','Cost ledger key is invalid.',503);
   let entry:{manifest_sha256:string;micro_usd:number};
   try{entry=JSON.parse(row.value_json);}catch{throw new ControlError('INVALID_CONFIGURATION','Cost ledger entry is unreadable.',503);}
   requireThat(!!entry&&typeof entry==='object'&&!Array.isArray(entry)&&Object.keys(entry).sort().join(',')==='manifest_sha256,micro_usd'&&
@@ -289,7 +289,7 @@ export function validateWarmGenerationView(store:Store,view:unknown):asserts vie
    retirement.observed_at>=custody.policy.expires_at,'INVALID_CONFIGURATION','Warm generation predecessor retirement is missing.',503);
  }else{
   const priorRow=readRow<OwnerAlphaGeneration>(db,`owner_alpha_generation:${w.epoch-1}`);
-  requireThat(priorRow&&priorRow.epoch===w.epoch-1&&'kind' in priorRow.authority&&priorRow.authority.kind!=='owner-message-warm-generation'&&
+  requireThat(priorRow&&priorRow.epoch===w.epoch-1&&'kind' in priorRow.authority&&priorRow.authority.kind!=='owner-message-warm-generation'&&priorRow.authority.kind!=='owner-message-background-generation'&&
    priorRow.boot_id===w.predecessor.boot_id&&priorRow.policy.session_id===w.predecessor.session_id,
    'INVALID_CONFIGURATION','Warm generation predecessor is missing.',503);
   requireThat(priorRow.authority.manifest.policy_revision!==c.policy_revision,
@@ -343,7 +343,7 @@ export class OwnerAlphaWarm {
      c.seed_retirement.observed_at>=prior.expires_at&&c.seed_retirement.observed_at<=now,'CAPABILITY_UNAVAILABLE','Trusted seed retirement is missing.');
    }else{
     const predecessor=this.core.ownerAlpha.activeGeneration();
-    requireThat(predecessor&&'kind' in predecessor.authority&&predecessor.authority.kind!=='owner-message-warm-generation'&&predecessor.epoch===state.epoch&&
+    requireThat(predecessor&&'kind' in predecessor.authority&&predecessor.authority.kind!=='owner-message-warm-generation'&&predecessor.authority.kind!=='owner-message-background-generation'&&predecessor.epoch===state.epoch&&
      predecessor.boot_id===state.boot_id&&predecessor.policy.expires_at<=now,
      'CAPABILITY_UNAVAILABLE','Warm entry requires its exact retired legacy predecessor.');
     requireThat(predecessor.authority.manifest.policy_revision!==c.policy_revision,
@@ -379,7 +379,7 @@ export class OwnerAlphaWarm {
    requireThat(state.phase==='READY'&&Date.parse(generation.policy.expires_at)>Date.parse(now),'CAPABILITY_UNAVAILABLE','Warm generation is not live for another message.');
    requireThat(state.lease_until!==null&&Date.parse(state.lease_until)>Date.parse(now),'CAPABILITY_UNAVAILABLE','Warm generation lease has expired.');
    const m1=generation.authority.admissions[0];
-   assertWarmRunSettled(this.core.store,m1,generation.policy.text_only,generation.epoch,generation.boot_id);
+   assertWarmRunSettled(this.core.store,m1,generation.policy.text_only!,generation.epoch,generation.boot_id);
    requireThat(!db.all("SELECT id FROM controller_operations WHERE status IN ('pending','submitted','unknown') LIMIT 1").length,
     'CAPABILITY_UNAVAILABLE','Controller activity blocks warm admission.');
    const used=warmLedgerUsed(db,c.prior_cost_micro_usd);

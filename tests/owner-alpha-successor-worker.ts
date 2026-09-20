@@ -5,6 +5,7 @@ import type {ControlCore} from '../src/core/control';
 import type {LifecycleCore} from '../src/core/lifecycle';
 import type {Store} from '../src/core/store';
 import {ownerAlphaSuccessorSha256} from '../src/core/owner-alpha';
+import type {OwnerAlphaSuccessor} from '../src/core/owner-alpha';
 import type {HostedOwnerWake} from '../src/worker/hosted-owner-wake';
 import worker from '../src/worker/index';
 
@@ -117,7 +118,7 @@ export class OwnerAlphaSuccessorWorker extends PersonalControl {
    if('kind' in prior.authority)throw Error('Legacy continuation fixture requires operator authority');
    const successor={...prior.authority,transition_id:randomUUID(),
     predecessor:{session_id:prior.policy.session_id,epoch:prior.epoch,boot_id:prior.boot_id},
-    successor:{policy:{...prior.policy,session_id:randomUUID(),expires_at:'2026-09-17T00:11:00.000Z'},boot_id:randomUUID()}};
+    successor:{policy:{...prior.policy,session_id:randomUUID(),expires_at:'2026-09-17T00:11:00.000Z'} as OwnerAlphaSuccessor['successor']['policy'],boot_id:randomUUID()}};
    core.options.ownerAlphaSuccessor=successor;core.options.ownerBindingSha256=successor.owner_binding_sha256;
    const command={schema_version:1 as const,type:'owner-alpha.activate' as const,payload:{transition_id:successor.transition_id,envelope_sha256:ownerAlphaSuccessorSha256(successor)}};
    const result=await this.accept('fixture-owner',randomUUID(),await digest(command),command);

@@ -1,7 +1,7 @@
 import {FlightRestoreIntegration} from '../core/flight-integration';
 import connectorCatalog from '../../config/connector-catalog.json';
 import { DurableObject } from 'cloudflare:workers';
-import {assertBootstrapSecrets,assertWarmSecrets,bindOwnerAuth,issueRuntimeTaskToken,issueWarmHostToken,issueWarmTaskToken,type RuntimeGenerationAuthority,type RuntimeTaskGrant,type WarmHostGrant,type WarmTaskGrant} from './auth';
+import {assertBackgroundSecrets,assertBootstrapSecrets,assertWarmSecrets,bindOwnerAuth,issueBackgroundHostToken,issueBackgroundTaskToken,issueRuntimeTaskToken,issueWarmHostToken,issueWarmTaskToken,type BackgroundHostGrant,type BackgroundTaskGrant,type RuntimeGenerationAuthority,type RuntimeTaskGrant,type WarmHostGrant,type WarmTaskGrant} from './auth';
 import {migrateApplication} from '../core/migrations';
 import {NativeTaskLedger} from '../core/native-tasks';
 import {ResourceLedger} from '../core/resources';
@@ -29,6 +29,7 @@ import {parseWhatsAppReadPolicies,WhatsAppReadAccess} from '../core/whatsapp-acc
 import {parseHostedOwnerAlpha,parseOwnerAlpha,parseOwnerAlphaSuccessor} from '../core/owner-alpha';
 import {parseOwnerAlphaBootstrap,type OwnerAlphaRetirement} from '../core/owner-alpha-bootstrap';
 import {parseOwnerAlphaWarm,type WarmGenerationView,type WarmManifest} from '../core/owner-alpha-warm';
+import {parseOwnerAlphaBackground,type BackgroundGenerationView,type BackgroundManifest} from '../core/owner-alpha-background';
 import {HostedWakeDeliveryError,parseHostedOwnerWake,sendHostedOwnerWake,type HostedOwnerWake} from './hosted-owner-wake';
 import {TestCampaign,parseTestCampaignGrant} from '../core/test-campaign';
 import {parseTestAuthConfig} from './test-auth';
@@ -61,6 +62,7 @@ export class PersonalControl extends DurableObject<Env> {
   const successor=parseOwnerAlphaSuccessor(env.HEHEBOT_OWNER_ALPHA_SUCCESSOR);
   const bootstrap=parseOwnerAlphaBootstrap(env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP);
   const warm=parseOwnerAlphaWarm(env.HEHEBOT_OWNER_ALPHA_WARM_GENERATION);
+  const background=parseOwnerAlphaBackground(env.HEHEBOT_OWNER_ALPHA_BACKGROUND_GENERATION);
   const testAccess=parseTestAuthConfig(env.HEHEBOT_TEST_ACCESS,env),testGrant=parseTestCampaignGrant(env.HEHEBOT_TEST_CAMPAIGN);
   requireThat(!!testAccess===!!testGrant&&(!testGrant||testAccess&&testGrant.actor_id===`test-service:${testAccess.client_id}`&&
    testGrant.expires_at===testAccess.expires_at&&bootstrap&&bootstrap.owner_id===testGrant.actor_id&&
@@ -70,13 +72,16 @@ export class PersonalControl extends DurableObject<Env> {
    'INVALID_CONFIGURATION','Automatic owner alpha requires the authenticated hosted installation.',503);
   requireThat(!warm||!!hosted&&!bootstrap&&!successor&&!env.HEHEBOT_OWNER_ALPHA&&warm.installation_id===env.INSTALLATION_ID&&warm.owner_id===(testGrant?.actor_id??env.OWNER_SUB),
    'INVALID_CONFIGURATION','Warm owner alpha requires its own authenticated hosted installation.',503);
+  requireThat(!background||!!hosted&&!bootstrap&&!successor&&!warm&&!env.HEHEBOT_OWNER_ALPHA&&background.installation_id===env.INSTALLATION_ID&&background.owner_id===(testGrant?.actor_id??env.OWNER_SUB),
+   'INVALID_CONFIGURATION','Background owner alpha requires its own authenticated hosted installation.',503);
   if(bootstrap)assertBootstrapSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
   if(warm)assertWarmSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_HOST_SIGNING_KEY,env.HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
+  if(background)assertBackgroundSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_BACKGROUND_HOST_SIGNING_KEY,env.HEHEBOT_OWNER_ALPHA_BACKGROUND_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
   requireThat(!successor||!!hosted,'INVALID_CONFIGURATION','Owner-alpha successor requires the original hosted owner-alpha configuration.',503);
   this.hostedOwnerAlpha=!!hosted;
-  this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN,!!bootstrap||!!warm);
-  requireThat(!(bootstrap||warm)||!!this.hostedWake,'INVALID_CONFIGURATION','Automatic owner alpha requires its private wake destination.',503);
-  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:warm?hosted?.policy:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaWarm:warm,ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN,!!bootstrap||!!warm||!!background);
+  requireThat(!(bootstrap||warm||background)||!!this.hostedWake,'INVALID_CONFIGURATION','Automatic owner alpha requires its private wake destination.',503);
+  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:warm||background?hosted?.policy:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaWarm:warm,ownerAlphaBackground:background,ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
@@ -92,6 +97,7 @@ export class PersonalControl extends DurableObject<Env> {
     requireThat(!successor||successor.owner_binding_sha256===digest,'OWNER_BINDING_MISMATCH','Successor owner binding differs from authenticated custody.',503);
     requireThat(!bootstrap||bootstrap.owner_binding_sha256===digest,'OWNER_BINDING_MISMATCH','Automatic owner binding differs from authenticated custody.',503);
     requireThat(!warm||warm.owner_binding_sha256===digest,'OWNER_BINDING_MISMATCH','Warm owner binding differs from authenticated custody.',503);
+    requireThat(!background||background.owner_binding_sha256===digest,'OWNER_BINDING_MISMATCH','Background owner binding differs from authenticated custody.',503);
     return digest;
    });
    this.core.options.ownerBindingSha256=this.ownerBindingSha256;
@@ -208,9 +214,9 @@ export class PersonalControl extends DurableObject<Env> {
   await this.arm();return result;
  });}
  async ownerAlphaManager(type:string,input:unknown){return this.rpc(async()=>{
-  // A warm generation never widens the legacy manager contract; when one is
-  // configured or retained, the legacy manager route stays unavailable.
-  requireThat(!this.core.options.ownerAlphaWarm&&!this.core.warm.retained(),'NOT_FOUND','Route unavailable.',404);
+  // A warm or background generation never widens the legacy manager contract;
+  // when one is configured or retained, the legacy manager route stays unavailable.
+  requireThat(!this.core.options.ownerAlphaWarm&&!this.core.warm.retained()&&!this.core.options.ownerAlphaBackground&&!this.core.background.retained(),'NOT_FOUND','Route unavailable.',404);
   requireThat(this.hostedOwnerAlpha&&this.core.bootstrap.config,'CAPABILITY_UNAVAILABLE','Automatic owner alpha is not configured.');
   this.rate('owner-alpha-manager',60);
   requireThat(input&&typeof input==='object'&&!Array.isArray(input),'INVALID_INPUT','Invalid manager request.',422);
@@ -230,9 +236,10 @@ export class PersonalControl extends DurableObject<Env> {
   requireThat(validateRuntime(input),'INVALID_INPUT','Invalid runtime envelope.',422);
   const command=input as RuntimeCommand;
   const generation=this.core.ownerAlpha.activeGeneration();
-  // Warm generations are reachable only through the versioned warm routes;
-  // legacy runtime credentials never become a bypass into a warm generation.
-  requireThat(!this.core.options.ownerAlphaWarm&&!(generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-warm-generation'),
+  // Warm and background generations are reachable only through their versioned
+  // routes; legacy runtime credentials never become a bypass into them.
+  requireThat(!this.core.options.ownerAlphaWarm&&!this.core.options.ownerAlphaBackground&&
+   !(generation&&'kind' in generation.authority&&(generation.authority.kind==='owner-message-warm-generation'||generation.authority.kind==='owner-message-background-generation')),
    'NOT_FOUND','Route unavailable.',404);
   if(this.core.bootstrap.config||generation&&'kind' in generation.authority){
    const manifest=this.core.bootstrap.assignedManifest();
@@ -261,8 +268,9 @@ export class PersonalControl extends DurableObject<Env> {
  private statusSummary(){
   const state=this.lifecycle.get(),alpha=this.core.ownerAlpha.policy,generation=this.core.ownerAlpha.activeGeneration();
   const warm=!!generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-warm-generation';
+  const background=!!generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-background-generation';
   return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{}),
-   ...(generation?warm?{owner_alpha_warm_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{owner_alpha_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{}),
+   ...(generation?background?{owner_alpha_background_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:warm?{owner_alpha_warm_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{owner_alpha_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{}),
    ...(this.hostedOwnerAlpha?{owner_alpha_hosted:true}:{}),...(this.ownerBindingSha256?{owner_binding_sha256:this.ownerBindingSha256}:{})};
  }
  private async execute(command:RuntimeCommand,allowed:boolean):Promise<unknown>{
@@ -334,7 +342,7 @@ export class PersonalControl extends DurableObject<Env> {
    case 'coordinator-release':{
     const p=command.payload;this.lifecycle.coordinatorRelease(p.identity,p.run_id,p.attempt,p.native_ref,p.outcome);result={};break;
    }
-   case 'complete':this.lifecycle.complete(command.payload.identity,command.payload.run_id,command.payload.attempt,command.payload.result,command.payload.text_only_receipt);break;
+   case 'complete':this.lifecycle.complete(command.payload.identity,command.payload.run_id,command.payload.attempt,command.payload.result,command.payload.text_only_receipt,command.payload.background_receipt);break;
    case 'prepare-sleep':result=this.lifecycle.prepareSleep(command.payload.identity);break;
    case 'commit-sleep':this.lifecycle.commitSleep(command.payload.identity,command.payload.stop_token,command.payload.queue_sequence,command.payload.checkpoint);break;
    case 'effect-intent':{
@@ -452,6 +460,130 @@ export class PersonalControl extends DurableObject<Env> {
    const admitted=new Set(generation.authority.admissions.map(m=>m.run_id));
    const check=(runId:unknown,attempt:unknown)=>requireThat(runId&&typeof runId==='string'&&admitted.has(runId)&&attempt===1,
     'FORBIDDEN','Host credential cannot address another run.',403);
+   const p=command.payload as {run_id?:unknown;attempt?:unknown;operations?:{run_id:unknown;attempt:unknown}[];targets?:{run_id:unknown;attempt:unknown}[]};
+   if('run_id' in p)check(p.run_id,p.attempt);
+   for(const op of p.operations??[])check(op.run_id,op.attempt);
+   for(const target of p.targets??[])check(target.run_id,target.attempt);
+  }
+  if(type==='status')return this.statusSummary();
+  return this.execute(command,true);
+ });}
+ /** Whether a background generation is retained in this Durable Object's custody. */
+ backgroundRetained():Promise<RpcResult<boolean>>{return this.rpc(()=>this.core.background.retained());}
+ /** Manager-only background endpoints: the launch envelope exists only while
+  * the generation is BOOTING and live; repeated reads produce identical bytes
+  * with zero writes. Retirement is manager-authenticated, valid after the
+  * generation expiry, idempotent, and settles nothing by itself. */
+ async backgroundManager(type:string,input:unknown){return this.rpc(async()=>{
+  requireThat(type==='generation'||type==='retirement','NOT_FOUND','Manager route unavailable.',404);
+  if(type==='retirement'){
+   // Retirement of a retained background generation stays available after its
+   // configuration was removed; persisted custody remains reconstructible.
+   requireThat(this.core.background.retained(),'CAPABILITY_UNAVAILABLE','Background generation retirement is unavailable.');
+   this.rate('owner-alpha-background-manager',60);
+   requireThat(input&&typeof input==='object'&&!Array.isArray(input),'INVALID_INPUT','Invalid manager request.',422);
+   this.core.background.recordRetirement(input as OwnerAlphaRetirement);
+   return {accepted:true};
+  }
+  requireThat(this.core.options.ownerAlphaBackground,'CAPABILITY_UNAVAILABLE','Background owner alpha is not configured.');
+  this.rate('owner-alpha-background-manager',60);
+  requireThat(input&&typeof input==='object'&&!Array.isArray(input)&&Object.keys(input).length===0,'INVALID_INPUT','Generation reads do not select work.',422);
+  const generation=this.core.ownerAlpha.activeGeneration() as BackgroundGenerationView|undefined;
+  const state=this.lifecycle.get(),now=this.core.now();
+  if(!generation||!('kind' in generation.authority&&generation.authority.kind==='owner-message-background-generation')||state.epoch!==generation.epoch||state.boot_id!==generation.boot_id||
+   state.phase!=='BOOTING'||Date.parse(generation.policy.expires_at)<=Date.parse(now)||state.lease_until===null||Date.parse(state.lease_until)<=Date.parse(now))return null;
+  const background=this.core.options.ownerAlphaBackground!;
+  // The host credential is deterministic: issued_at is frozen at the
+  // generation's first admission so repeated launch reads at different times
+  // produce the identical credential and zero writes.
+  const grant:BackgroundHostGrant={installation_id:background.installation_id,epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id,
+   generation_sha256:generation.authority.generation_sha256,issued_at:generation.authority.admissions[0].issued_at,expires_at:generation.policy.expires_at};
+  return {schema_version:1,kind:'owner-alpha-background-launch-v1',
+   generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id,session_id:generation.policy.session_id,
+    generation_sha256:generation.authority.generation_sha256,
+    policy:{persona_id:generation.policy.persona_id,expires_at:generation.policy.expires_at,max_runs:generation.policy.max_runs,max_task_seconds:generation.policy.max_task_seconds,background:generation.policy.background},
+    predecessor:{epoch:generation.predecessor.epoch,boot_id:generation.predecessor.boot_id,session_id:generation.predecessor.session_id}},
+   host_credential:{grant,token:await issueBackgroundHostToken(grant,this.env.HEHEBOT_OWNER_ALPHA_BACKGROUND_HOST_SIGNING_KEY!)}};
+ });}
+ /** Versioned background host/task routes. Host authority is bound to the
+  * immutable generation digest and reaches only the host allowlist; task
+  * authority is separately signed and reaches only model-facing task reads.
+  * Host payloads may target the admitted roots or A's registered direct
+  * descendants at attempt 1; nested or foreign targets are denied. Mutations
+  * and effects are default-denied: any type not on the allowlists is denied. */
+ async backgroundRuntime(type:string,input:unknown,authority:BackgroundHostGrant|BackgroundTaskGrant,mode:'host'|'task'){return this.rpc(async()=>{
+  requireThat(validateRuntime({type,payload:input}),'INVALID_INPUT','Invalid runtime envelope.',422);
+  const command={type,payload:input} as RuntimeCommand;
+  const generation=this.core.ownerAlpha.activeGeneration() as BackgroundGenerationView|undefined;
+  requireThat(generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-background-generation','STALE_EPOCH','Background generation is not active.',409);
+  const state=this.lifecycle.get();
+  requireThat(state.epoch===generation.epoch&&state.boot_id===generation.boot_id&&!['STOPPED','RECOVERY_REQUIRED'].includes(state.phase),'STALE_EPOCH','Background generation is no longer live.',409);
+  requireThat(authority.epoch===generation.epoch&&authority.boot_id.toLowerCase()===generation.boot_id&&
+   authority.transition_id.toLowerCase()===generation.transition_id&&authority.generation_sha256===generation.authority.generation_sha256,
+   'STALE_EPOCH','Credential is not bound to the active background generation.',409);
+  const manifestFor=(runId:string):BackgroundManifest|undefined=>generation.authority.admissions.find(item=>item.run_id===runId);
+  // The widened target set: the three admitted roots plus A's registered direct
+  // descendants at attempt 1. A nested child-of-child never enters this set.
+  const rootId=generation.authority.admissions.find(item=>item.role==='background')!.run_id;
+  const admitted=new Set<string>([...generation.authority.admissions.map(m=>m.run_id),
+   ...this.store.db.all<{run_id:string}>("SELECT n.run_id FROM native_task_links n JOIN runs r ON r.id=n.run_id WHERE n.parent_attempt=1 AND r.current_attempt=1 AND r.role='background' AND n.parent_run_id=?",rootId).map(row=>row.run_id)]);
+  const check=(runId:unknown,attempt:unknown)=>requireThat(runId&&typeof runId==='string'&&admitted.has(runId)&&attempt===1,
+   'FORBIDDEN','Background credential cannot address another run.',403);
+  if(mode==='task'){
+   requireThat(type==='agent-routines'||type==='agent-skill','FORBIDDEN','Background task credential cannot reach this route.',403);
+   const task=authority as BackgroundTaskGrant;
+   const p=command.payload as {identity?:{epoch?:number;boot_id?:string};run_id?:unknown;attempt?:unknown};
+   requireThat(p.identity?.epoch===generation.epoch&&p.identity.boot_id?.toLowerCase()===generation.boot_id,'STALE_EPOCH','Runtime payload is not bound to the active generation.',409);
+   requireThat(p.run_id===task.run_id&&p.attempt===1,'FORBIDDEN','Task credential cannot address another run.',403);
+   requireThat(manifestFor(task.run_id)?.manifest_sha256===task.manifest_sha256,'STALE_EPOCH','Task credential is not bound to an admitted manifest.',409);
+   return this.execute(command,true);
+  }
+  requireThat(['boot','ready','claim','heartbeat','submitted','coordinator-release','complete','status','output-preview','token-usage','steer-pending','steer-result','native-child'].includes(type),
+   'FORBIDDEN','Background host credential cannot reach this route.',403);
+  if(type==='boot'){
+   requireThat(state.phase==='BOOTING','STALE_EPOCH','No boot is expected.',409);
+   requireThat(command.payload&&typeof command.payload==='object'&&!Array.isArray(command.payload)&&Object.keys(command.payload).join(',')==='boot_id'&&
+    (command.payload as {boot_id:unknown}).boot_id===generation.boot_id,'STALE_EPOCH','Runtime boot identity is not authorized.',409);
+  }else if(type!=='status'){
+   const identity=(command.payload as {identity?:{epoch?:number;boot_id?:string}}).identity;
+   requireThat(identity?.epoch===generation.epoch&&identity.boot_id?.toLowerCase()===generation.boot_id,'STALE_EPOCH','Runtime payload is not bound to the active generation.',409);
+   if(type==='claim'){
+    // A claim in the frozen deadline's final partial second is rejected before
+    // any claim or attempt mutation.
+    const next=this.lifecycle.nextClaimableRun();
+    if(next){
+     const pending=manifestFor(next.id);
+     if(pending)requireThat(Date.parse(pending.expires_at)-Date.parse(this.core.now())>=1000,
+      'CAPABILITY_UNAVAILABLE','Less than one second remains for the background task.',409);
+     else{
+      const row=this.store.db.all<{deadline_at:string}>('SELECT deadline_at FROM attempts WHERE run_id=? AND attempt=1',next.id)[0];
+      requireThat(row&&Date.parse(row.deadline_at)-Date.parse(this.core.now())>=1000,
+       'CAPABILITY_UNAVAILABLE','Less than one second remains for the background task.',409);
+     }
+    }
+    const claimed=await this.execute(command,true) as {run:{id:string;current_attempt:number};submission_key:string;deadline_at:string}|null;
+    if(!claimed)return null;
+    const m=manifestFor(claimed.run.id);
+    requireThat(m,'STALE_EPOCH','Claimed run is not admitted by this background generation.',409);
+    const attempt=this.store.db.all<{started_at:string;attempt:number}>('SELECT started_at,attempt FROM attempts WHERE run_id=? AND attempt=?',m.run_id,claimed.run.current_attempt)[0];
+    requireThat(attempt&&attempt.attempt===1,'STALE_EPOCH','Claimed attempt is not the admitted background attempt.',409);
+    const grant:BackgroundTaskGrant={installation_id:m.installation_id,owner_binding_sha256:m.owner_binding_sha256,run_id:m.run_id,attempt:1,
+     manifest_sha256:m.manifest_sha256,epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id,
+     generation_sha256:generation.authority.generation_sha256,issued_at:attempt.started_at,expires_at:m.expires_at};
+    const envelope:{schema_version:1;kind:'owner-alpha-background-claim-v1';run:{id:string};submission_key:string;deadline_at:string;
+     role:BackgroundManifest['role'];background:BackgroundManifest['background'];manifest:{admission:number;role:string;manifest_sha256:string;expires_at:string};
+     task_credential:{grant:BackgroundTaskGrant;token:string};status_summary?:unknown;owner_alpha_background?:true}=
+     {schema_version:1,kind:'owner-alpha-background-claim-v1',run:claimed.run,submission_key:claimed.submission_key,deadline_at:m.expires_at,
+      role:m.role,background:m.background,manifest:{admission:m.admission,role:m.role,manifest_sha256:m.manifest_sha256,expires_at:m.expires_at},
+      task_credential:{grant,token:await issueBackgroundTaskToken(grant,this.env.HEHEBOT_OWNER_ALPHA_BACKGROUND_TASK_SIGNING_KEY!)}};
+    // Only the status root receives the frozen durable summary; only the
+    // background root reuses the existing V2 claim flag.
+    if(m.role==='status')envelope.status_summary=this.core.background.statusSummary(generation.epoch);
+    if(m.role==='background')envelope.owner_alpha_background=true;
+    return envelope;
+   }
+   // Every run reference in the payload — top level, heartbeat operations and
+   // steering targets — must be an admitted root or A's registered descendant.
    const p=command.payload as {run_id?:unknown;attempt?:unknown;operations?:{run_id:unknown;attempt:unknown}[];targets?:{run_id:unknown;attempt:unknown}[]};
    if('run_id' in p)check(p.run_id,p.attempt);
    for(const op of p.operations??[])check(op.run_id,op.attempt);

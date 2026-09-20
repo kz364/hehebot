@@ -60,7 +60,8 @@ it('sums the shared lifetime ledger prefix exactly once, including warm suffixes
   db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('owner_alpha_reservation:1',?)",JSON.stringify({manifest_sha256:'d'.repeat(64),micro_usd:1500}));
   db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('owner_alpha_reservation:2:1',?)",JSON.stringify({manifest_sha256:'e'.repeat(64),micro_usd:2000}));
   db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('owner_alpha_reservation:2:2',?)",JSON.stringify({manifest_sha256:'f'.repeat(64),micro_usd:2000}));
-  expect(warmLedgerUsed(db,1000)).toBe(6500);
+  db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('owner_alpha_reservation:2:3',?)",JSON.stringify({manifest_sha256:'a'.repeat(64),micro_usd:500}));
+  expect(warmLedgerUsed(db,1000)).toBe(7000);
  }finally{db.close();}
 });
 it('fails the lifetime ledger closed on corrupt, invalid or overflowing entries',()=>{
@@ -71,7 +72,7 @@ it('fails the lifetime ledger closed on corrupt, invalid or overflowing entries'
   ['a non-integer amount','owner_alpha_reservation:1',JSON.stringify({manifest_sha256:'d'.repeat(64),micro_usd:1.5})],
   ['a bad digest','owner_alpha_reservation:1',JSON.stringify({manifest_sha256:'dd',micro_usd:1})],
   ['a foreign key namespace','owner_alpha_reservation:x',JSON.stringify({manifest_sha256:'d'.repeat(64),micro_usd:1})],
-  ['a wrong suffix','owner_alpha_reservation:2:3',JSON.stringify({manifest_sha256:'d'.repeat(64),micro_usd:1})]
+  ['a wrong suffix','owner_alpha_reservation:2:4',JSON.stringify({manifest_sha256:'d'.repeat(64),micro_usd:1})]
  ] as const;
  for(const [label,key,value] of cases){
   const db=new TestDatabase();

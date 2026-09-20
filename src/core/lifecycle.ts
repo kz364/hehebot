@@ -5,10 +5,11 @@ import { nativeDescendantsSettledSql } from './native-tasks';
 import type { ContextSnapshot, Operation, Run } from './types';
 import type { RuntimeProvider, RuntimeRef, RuntimeObservation } from '../providers';
 import {createHash} from 'node:crypto';
-import type {TextOnlyReceipt} from './runtime-types';
+import type {TextOnlyReceipt,BackgroundReceipt} from './runtime-types';
 import {ownerAlphaSuccessorSha256,parseOwnerAlphaSuccessor,type OwnerAlphaGeneration,type OwnerAlphaSuccessor} from './owner-alpha';
 import {assertUnusedRecoveryCustody,assertClaimedPreTurnQuarantineCustody,type ClaimedPreTurnMessageBoundAuthority,type MessageBoundAuthority,type UnusedMessageBoundAuthority} from './owner-alpha-bootstrap';
 import type {Command} from './types';
+const hex64=/^[0-9a-f]{64}$/;
 export type Phase='STOPPED'|'START_REQUESTED'|'BOOTING'|'READY'|'DRAINING'|'STOP_COMMITTED'|'STOPPING'|'RECOVERY_REQUIRED'|'IDLE_PERMITTED';
 export type Lifecycle={singleton:number;provider_ref_json:string;boot_id:string|null;epoch:number;phase:Phase;desired_state:'RUN'|'STOP';lease_until:string|null;last_heartbeat:string|null;queue_sequence:number;stop_token:string|null;provider_operation_id:string|null;wake_after_stop:number};
 export type Identity={epoch:number;boot_id:string};
@@ -36,7 +37,7 @@ export class LifecycleCore {
  /** Separate owner-configured unused disposition; never a native retirement claim. */
  assignUnusedOwnerMessage(authority:UnusedMessageBoundAuthority,ownerId:string,commandId:string):void {
   const c=this.core.bootstrap.config!,grant=c.unused_recovery,prior=this.core.ownerAlpha.activeGeneration(),state=this.get(),now=this.core.now(),m=authority.manifest;
-  requireThat(grant&&prior&&'kind' in prior.authority&&prior.authority.kind!=='owner-message-warm-generation'&&state.phase==='RECOVERY_REQUIRED'&&state.epoch===grant.predecessor.epoch&&state.boot_id===grant.predecessor.boot_id&&
+  requireThat(grant&&prior&&'kind' in prior.authority&&prior.authority.kind!=='owner-message-warm-generation'&&prior.authority.kind!=='owner-message-background-generation'&&state.phase==='RECOVERY_REQUIRED'&&state.epoch===grant.predecessor.epoch&&state.boot_id===grant.predecessor.boot_id&&
    state.provider_ref_json==='{}'&&state.provider_operation_id===null&&state.lease_until!==null&&state.lease_until<=now&&prior.policy.expires_at<=now&&
    m.epoch===state.epoch+1&&m.command_id===commandId&&m.policy_revision===grant.successor_policy_revision&&m.policy_revision===c.policy_revision&&m.expires_at<=grant.expires_at&&m.expires_at<=c.expires_at&&ownerId===c.owner_id&&
    !this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',`owner_alpha_unused_disposition:${state.epoch}`).length,
@@ -56,7 +57,7 @@ export class LifecycleCore {
  /** Quarantine retains the predecessor's startup uncertainty; this never settles it. */
  assignClaimedPreTurnOwnerMessage(authority:ClaimedPreTurnMessageBoundAuthority,ownerId:string,commandId:string):void {
   const c=this.core.bootstrap.config!,grant=c.claimed_pre_turn_quarantine,prior=this.core.ownerAlpha.activeGeneration(),state=this.get(),now=this.core.now(),m=authority.manifest;
-  requireThat(grant&&prior&&'kind' in prior.authority&&prior.authority.kind!=='owner-message-warm-generation'&&state.phase==='RECOVERY_REQUIRED'&&state.epoch===grant.predecessor.epoch&&state.boot_id===grant.predecessor.boot_id&&
+  requireThat(grant&&prior&&'kind' in prior.authority&&prior.authority.kind!=='owner-message-warm-generation'&&prior.authority.kind!=='owner-message-background-generation'&&state.phase==='RECOVERY_REQUIRED'&&state.epoch===grant.predecessor.epoch&&state.boot_id===grant.predecessor.boot_id&&
    state.provider_ref_json==='{}'&&state.provider_operation_id===null&&state.lease_until!==null&&state.lease_until<=now&&prior.policy.expires_at<=now&&
    m.epoch===state.epoch+1&&m.command_id===commandId&&m.policy_revision===grant.successor_policy_revision&&m.policy_revision===c.policy_revision&&m.expires_at<=grant.expires_at&&m.expires_at<=c.expires_at&&ownerId===c.owner_id&&
    !this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',`owner_alpha_claimed_pre_turn_disposition:${state.epoch}`).length,
@@ -86,6 +87,10 @@ export class LifecycleCore {
  assertOwnerAlphaSettlement(automatic=false):void {
   const priorGeneration=this.core.ownerAlpha.activeGeneration();
   if(priorGeneration){
+   // A background generation is terminal: nothing may ever follow it, so a
+   // predecessor here is always a legacy or warm generation with a text-only profile.
+   const priorTextOnly=priorGeneration.policy.text_only;
+   requireThat(!!priorTextOnly,'CAPABILITY_UNAVAILABLE','A background generation has no successor.');
    const attempts=this.store.db.all<{status:string;attempt_status:string;result_json:string|null;proof:string|null;native_run_ref:string|null;coordinator_release_json:string|null}>(
     `SELECT r.status,a.status AS attempt_status,a.result_json,m.value_json AS proof,a.native_run_ref,a.coordinator_release_json FROM attempts a JOIN runs r ON r.id=a.run_id
      LEFT JOIN runtime_metadata m ON m.key='text_only_receipt:'||a.run_id||':'||a.attempt WHERE a.epoch=? AND a.boot_id=?`,priorGeneration.epoch,priorGeneration.boot_id);
@@ -93,8 +98,8 @@ export class LifecycleCore {
    requireThat(attempts.every(a=>{
     if(a.status!=='completed'||a.attempt_status!=='completed'||!a.result_json||!a.proof)return false;
     const result=JSON.parse(a.result_json),proof=JSON.parse(a.proof);
-    return result.status==='completed'&&typeof result.text==='string'&&proof.profile_version===priorGeneration.policy.text_only.profile_version&&
-     proof.profile_sha256===priorGeneration.policy.text_only.profile_sha256&&proof.turn_id===a.native_run_ref&&
+    return result.status==='completed'&&typeof result.text==='string'&&proof.profile_version===priorTextOnly!.profile_version&&
+     proof.profile_sha256===priorTextOnly!.profile_sha256&&proof.turn_id===a.native_run_ref&&
      proof.output_sha256===createHash('sha256').update(result.text).digest('hex')&&
      a.coordinator_release_json===JSON.stringify({native_ref:a.native_run_ref,outcome:'completed'});
    }),'CAPABILITY_UNAVAILABLE','Owner-alpha predecessor has not completed through matching stored text-only receipts.');
@@ -280,7 +285,12 @@ export class LifecycleCore {
    if(unresolved>=32)return null;
    const run=this.nextClaimableRun();if(!run)return null;
    const prior=JSON.parse(run.context_json) as ContextSnapshot;
-   const context=this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id,run.command_id);
+   // Background-generation admitted roots claim the restricted per-task snapshot
+   // (§9): no shared conversation history, task summaries, or WhatsApp grants
+   // may reach A/S/B through the generic context composition.
+   const backgroundRootRole=this.core.ownerAlpha.backgroundCompletionRole(run.id);
+   const context=backgroundRootRole?this.core.backgroundContext(run.persona_id,prior.instruction,run.id):
+    this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id,run.command_id);
    const command=run.command_id?this.store.db.all<{type:string}>('SELECT type FROM commands WHERE id=?',run.command_id)[0]:null;
    if(command?.type==='skill.run'||prior.skill_invocation){
     const selected=prior.skill_invocation;
@@ -336,10 +346,14 @@ export class LifecycleCore {
    this.store.db.exec('UPDATE attempts SET coordinator_release_json=? WHERE run_id=? AND attempt=?',receipt,runId,attempt);
   });
  }
- complete(identity:Identity,runId:string,attempt:number,result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>},textOnlyReceipt?:TextOnlyReceipt):void {
+ complete(identity:Identity,runId:string,attempt:number,result:{status:'completed'|'failed'|'cancelled'|'waiting';text:string;error_code?:string;checkpoint?:Record<string,unknown>},textOnlyReceipt?:TextOnlyReceipt,backgroundReceipt?:BackgroundReceipt):void {
   const textOnly=this.core.ownerAlpha.textOnly(runId);
-  requireThat(!this.core.ownerAlpha.policy||!!textOnly,'CAPABILITY_UNAVAILABLE','Owner alpha cannot assert family settlement.');
+  const backgroundRole=this.core.ownerAlpha.backgroundCompletionRole(runId);
+  const backgroundSettling=backgroundRole==='status'||backgroundRole==='independent';
+  requireThat(!this.core.ownerAlpha.policy||!!textOnly||backgroundSettling,'CAPABILITY_UNAVAILABLE','Owner alpha cannot assert family settlement.');
   requireThat(!textOnlyReceipt||!!textOnly,'CAPABILITY_UNAVAILABLE','Text-only completion is unavailable for this attempt.');
+  requireThat(!backgroundReceipt||backgroundSettling,'CAPABILITY_UNAVAILABLE','Background completion is unavailable for this attempt.');
+  requireThat(!textOnlyReceipt||!backgroundReceipt,'INVALID_INPUT','Choose exactly one completion receipt.',422);
   this.store.db.transaction(()=>{
    this.authorizeAttempt(identity,runId,attempt);const run=this.store.run(runId);
    requireThat(run.current_attempt===attempt,'REVISION_CONFLICT','Attempt has changed.');
@@ -359,6 +373,24 @@ export class LifecycleCore {
     const prior=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',proofKey)[0];
     requireThat(!prior||prior.value_json===proof,'RESULT_CONFLICT','Text-only receipt differs from committed evidence.');
    }
+   const backgroundProofKey=`owner_alpha_background_receipt:${runId}:1`;
+   if(backgroundSettling){
+    const row=this.store.db.all<{native_run_ref:string|null;coordinator_release_json:string|null}>('SELECT native_run_ref,coordinator_release_json FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
+    requireThat(!!backgroundReceipt&&typeof backgroundReceipt.thread_id==='string'&&backgroundReceipt.thread_id.length>=1&&backgroundReceipt.thread_id.length<=256&&
+     typeof backgroundReceipt.turn_id==='string'&&backgroundReceipt.turn_id.length>=1&&backgroundReceipt.turn_id.length<=256&&
+     typeof backgroundReceipt.output_sha256==='string'&&hex64.test(backgroundReceipt.output_sha256)&&
+     !!row&&backgroundReceipt.turn_id===row.native_run_ref&&row.native_run_ref!==null&&
+     row.coordinator_release_json===JSON.stringify({native_ref:row.native_run_ref,outcome:'completed'})&&
+     run.role==='coordinator'&&run.parent_run_id===null&&result.status==='completed'&&!Object.hasOwn(result,'error_code')&&!Object.hasOwn(result,'checkpoint')&&
+     createHash('sha256').update(result.text).digest('hex')===backgroundReceipt.output_sha256,
+     'CAPABILITY_UNAVAILABLE','Background completion receipt does not prove this exact result.');
+    requireThat(!this.store.db.all('SELECT id FROM runs WHERE parent_run_id=? LIMIT 1',runId).length&&!this.store.db.all('SELECT run_id FROM native_task_links WHERE run_id=? OR parent_run_id=? LIMIT 1',runId,runId).length,
+     'CANCEL_UNCONFIRMED','Background completion requires no child history.');
+    requireThat(!this.store.db.all('SELECT id FROM effects WHERE run_id=? LIMIT 1',runId).length,'OUTCOME_UNKNOWN','Background completion requires no effect history.');
+    const backgroundProof=JSON.stringify({thread_id:backgroundReceipt!.thread_id,turn_id:backgroundReceipt!.turn_id,output_sha256:backgroundReceipt!.output_sha256});
+    const priorBackground=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',backgroundProofKey)[0];
+    requireThat(!priorBackground||priorBackground.value_json===backgroundProof,'RESULT_CONFLICT','Background receipt differs from committed evidence.');
+   }
    if(['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code??'')){
     requireThat(result.status==='cancelled','CONTEXT_INVALIDATED','Cancellation must settle before any result is published.');
     result={status:'cancelled',text:'',error_code:run.error_code!};
@@ -369,6 +401,7 @@ export class LifecycleCore {
    if(receipt.result_json!==null){
     requireThat(receipt.result_json===JSON.stringify(result),'RESULT_CONFLICT','Attempt result differs from its committed receipt.');
     requireThat(!textOnly||this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',proofKey).length===1,'RESULT_CONFLICT','Text-only completion evidence is missing.');
+    requireThat(!backgroundSettling||this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',backgroundProofKey).length===1,'RESULT_CONFLICT','Background completion evidence is missing.');
     return;
    }
    requireThat(['claimed','running','finishing','cancelling','recovery_required'].includes(run.status),'REVISION_CONFLICT','Run is not active.');
@@ -379,6 +412,8 @@ export class LifecycleCore {
    requireThat(result.status!=='waiting'||result.checkpoint,'INVALID_INPUT','Waiting requires a durable checkpoint.',422);
    const now=this.core.now();
    if(proof)this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',proofKey,proof);
+   if(backgroundSettling)this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',backgroundProofKey,
+    JSON.stringify({thread_id:backgroundReceipt!.thread_id,turn_id:backgroundReceipt!.turn_id,output_sha256:backgroundReceipt!.output_sha256}));
    this.store.db.exec('UPDATE attempts SET status=?,settled_at=?,result_json=? WHERE run_id=? AND attempt=?',result.status,now,JSON.stringify(result),runId,attempt);
    this.store.db.exec('UPDATE runs SET status=?,error_code=?,checkpoint_json=?,updated_at=? WHERE id=?',result.status,result.error_code??null,result.checkpoint?JSON.stringify(result.checkpoint):null,now,runId);
    this.store.db.exec("INSERT INTO outbox(id,run_id,destination,payload_json,status,created_at,updated_at) VALUES(?,?,'portal',?,'delivered',?,?) ON CONFLICT(run_id,destination) DO UPDATE SET payload_json=excluded.payload_json,status='delivered',updated_at=excluded.updated_at",this.core.options.uuid(),runId,JSON.stringify(result),now,now);

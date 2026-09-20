@@ -156,7 +156,7 @@ export class OwnerAlphaBootstrap {
   const generation=this.core.ownerAlpha.activeGeneration();
   // Warm generations carry their own versioned manifests; never reinterpret them
   // as the bootstrap's single-run assignment.
-  return generation&&'kind' in generation.authority&&generation.authority.kind!=='owner-message-warm-generation'?structuredClone(generation.authority.manifest):undefined;
+  return generation&&'kind' in generation.authority&&generation.authority.kind!=='owner-message-warm-generation'&&generation.authority.kind!=='owner-message-background-generation'?structuredClone(generation.authority.manifest):undefined;
  }
  summary():OwnerAlphaBootstrapSummary|undefined {
   const c=this.config;if(!c)return undefined;
@@ -176,14 +176,14 @@ export class OwnerAlphaBootstrap {
   const recovery=this.configuredRecovery(),quarantine=this.configuredQuarantine();let retirement:OwnerAlphaRetirement|undefined;
   if(quarantine){
    const generation=this.core.ownerAlpha.activeGeneration();
-   requireThat(generation&&'kind' in generation.authority&&generation.authority.kind!=='owner-message-warm-generation'&&quarantine.predecessor.epoch===state.epoch&&quarantine.predecessor.boot_id===state.boot_id&&
+   requireThat(generation&&'kind' in generation.authority&&generation.authority.kind!=='owner-message-warm-generation'&&generation.authority.kind!=='owner-message-background-generation'&&quarantine.predecessor.epoch===state.epoch&&quarantine.predecessor.boot_id===state.boot_id&&
     quarantine.installation_id===c.installation_id&&quarantine.owner_binding_sha256===c.owner_binding_sha256&&quarantine.successor_policy_revision===c.policy_revision&&
     !this.read(`owner_alpha_bootstrap_policy:${c.policy_revision}`),'CAPABILITY_UNAVAILABLE','Quarantine requires its exact predecessor and one new policy revision.');
    assertClaimedPreTurnQuarantineCustody(this.core.store,quarantine,generation.authority.manifest,now);
    requireThat(!db.all("SELECT id FROM controller_operations WHERE status IN ('pending','submitted','unknown') LIMIT 1").length,'CAPABILITY_UNAVAILABLE','Controller activity blocks quarantine.');
   }else if(recovery){
    const generation=this.core.ownerAlpha.activeGeneration();
-   requireThat(generation&&'kind' in generation.authority&&generation.authority.kind!=='owner-message-warm-generation'&&recovery.predecessor.epoch===state.epoch&&recovery.predecessor.boot_id===state.boot_id&&
+   requireThat(generation&&'kind' in generation.authority&&generation.authority.kind!=='owner-message-warm-generation'&&generation.authority.kind!=='owner-message-background-generation'&&recovery.predecessor.epoch===state.epoch&&recovery.predecessor.boot_id===state.boot_id&&
     recovery.installation_id===c.installation_id&&recovery.owner_binding_sha256===c.owner_binding_sha256&&recovery.successor_policy_revision===c.policy_revision&&
     !this.read(`owner_alpha_bootstrap_policy:${c.policy_revision}`),'CAPABILITY_UNAVAILABLE','Unused recovery requires its exact predecessor and one new policy revision.');
    assertUnusedRecoveryCustody(this.core.store,recovery,generation.authority.manifest,now);
