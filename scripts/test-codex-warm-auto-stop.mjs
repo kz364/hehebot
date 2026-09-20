@@ -21,9 +21,21 @@
 // maintenance recovers the service phase first and the loop condition exits
 // cleanly. In both outcomes the production finally performs the automatic
 // native stop around expiry, and the expiry+30s deadline timer is a backstop
-// that does not fire in this run. Pending maintenance or account waits are not
-// covered here; their independent backstop is tested by warm-entry's simulated
-// service. No general claim that the backstop is unreachable is made.
+// that does not fire in normal mode. No general claim that the backstop is
+// unreachable is made; account waits remain outside this fixture's coverage.
+// The --pending-maintenance mode covers exactly that remaining gap with the
+// real composition: after genuine maintenance and canonical turn completion,
+// before expiry, the maintain instrumentation parks the entrypoint's own
+// service.maintain() await on an explicit test-owned deferred (composition-seam
+// fault injection, not live network-timeout evidence; the production timer
+// and the real service/native process are never altered). While that await is
+// pending, the production expiry+30s deadline timer must itself stop the real
+// native executable: the timer-owned stop is observed at expiry+30000 within
+// bounded scheduling tolerance, both observed PIDs disappear, and no stopped
+// report or resolved entrypoint promise exists before the deferred is
+// released. Releasing the deferred lets the production finally finish
+// idempotently: a second production stop call is expected, never a second
+// launch.
 // Seams are local and synthetic only: a loopback model server (the built-in
 // openai client's zstd bodies) routed through the supported openai_base_url
 // session override, a synthetic chatgpt-shaped auth.json in the native home, a
@@ -61,6 +73,10 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { createSpritesWakeHandler } from '../runtime/sprites-wake-service.mjs';
 import { createCodexTextOnlyProfile, codexTextOnlyProfileSha256 } from '../runtime/codex-text-only.mjs';
 
+// Pending-maintenance mode: --pending-maintenance parks the entrypoint's own
+// maintain await after genuine maintenance and canonical turn completion so the
+// production expiry+30s deadline backstop itself stops the real native process.
+const pendingMaintenance = process.argv.includes('--pending-maintenance');
 const ROUTINE_MANAGE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 // Matches the warm-mode PROVIDER_TOKEN binding the hosted fixture pins; the
 // production wake delivery must carry exactly this bearer on its one POST.
@@ -90,7 +106,7 @@ const syntheticAuth = {
 // Everything stays under the repository's private .local tree: the launch
 // floor rejects /tmp ancestors (mode 1777) and requires uid-owned 0700 paths.
 const directory = await mkdtemp(join(resolve('.local'), 'warm-auto-stop-'));
-const report = { status: 'failed', mode: 'automatic-expiry-real-native', nativeStarts: 0, modelPosts: [], modelGets: 0,
+const report = { status: 'failed', mode: pendingMaintenance ? 'pending-maintenance-backstop' : 'automatic-expiry-real-native', nativeStarts: 0, modelPosts: [], modelGets: 0,
   spriteRequests: [], taskNames: [], maintains: 0, stopCalls: [], events: [], eventTimes: [], maintainLog: [], controlRejections: [],
   dualLocksProved: false, descendantSettlementProved: false, effectSettlementProved: false };
 let fixture, model, listener, serviceRef, managerClient, testOwnedStop = false;
@@ -314,11 +330,28 @@ try {
     }
     return response;
   };
+  // Pending-maintenance mode observes the canonical turn completion through the
+  // owner surface mid-run, exactly like the post-run assert does, so the
+  // maintain latch provably parks only after a genuinely completed turn.
+  let turnCompletedAt = null;
+  let maintenanceDeferred = null, maintenanceLatchedAt = 0, maintenanceReleasedAt = 0;
+  if (pendingMaintenance) {
+    void (async () => {
+      for (let tries = 0; tries < 800 && turnCompletedAt === null; tries++) {
+        try {
+          const history = await (await fixture.fetchImpl(`/v1/conversations/${persona}/events`, { headers: ownerHeaders })).json();
+          const results = history.events.filter(event =>
+            event.type === 'run.result' && event.payload.run_id === manifestRow.value.run_id);
+          if (results.length === 1 && results[0].payload.text === reply) turnCompletedAt = Date.now();
+        } catch { /* transient owner-surface read while the run is still going */ }
+        if (turnCompletedAt === null) await pause(250);
+      }
+    })();
+  }
   // The fenced outcome rethrows after its owner-alpha.failed report; the clean
   // outcome returns normally. Both are accepted production outcomes here.
-  let runError = null;
-  try {
-    await runHostedOwnerAlpha(config, {
+  let runError = null, runSettled = false;
+  const runPromise = runHostedOwnerAlpha(config, {
     report: value => {
       report.events.push(value);
       report.eventTimes.push({ at: Date.now(), event: value.event });
@@ -370,13 +403,26 @@ try {
         assert.equal(alive(nativeExecutablePid), true);
         return value;
       };
-      // Records only; the production stop path itself is never altered.
+      // Records only; the production stop path itself is never altered. In
+      // pending-maintenance mode this is also the composition seam: after a
+      // genuine maintenance, canonical turn completion and several sustained
+      // reconciliations, before expiry, the entrypoint's own maintain await is
+      // parked on an explicit test-owned deferred. The real service and the
+      // real native process stay fully intact; only this await is held. The
+      // production expiry+30s deadline timer must then stop the real native
+      // executable on its own while the await is pending.
       const maintain = service.maintain.bind(service);
       service.maintain = async () => {
         const at = Date.now(); report.maintains++;
         try {
           const value = await maintain();
           if (report.maintains === 1) report.maintainLog.push({ at, ended: Date.now(), ok: true });
+          if (pendingMaintenance && !maintenanceDeferred && turnCompletedAt !== null && report.maintains >= 3
+            && Date.now() < expiryAt - 2000) {
+            maintenanceLatchedAt = Date.now();
+            maintenanceDeferred = Promise.withResolvers();
+          }
+          if (maintenanceDeferred) await maintenanceDeferred.promise;
           return value;
         } catch (error) {
           report.maintainLog.push({ at, ended: Date.now(), ok: false, code: error.code ?? error.name });
@@ -387,66 +433,137 @@ try {
       service.stop = () => { report.stopCalls.push(Date.now()); return stop(); };
       return service;
     },
-    });
-  } catch (error) {
-    runError = error;
+  });
+  runPromise.then(() => { runSettled = true; }, error => { runError = error; runSettled = true; });
+
+  if (pendingMaintenance) {
+    // Wait for the maintain latch: genuine maintenance, canonical turn
+    // completion, and comfortably before expiry, with both PIDs alive.
+    for (let tries = 0; tries < 800 && !maintenanceDeferred && !runSettled && Date.now() < expiryAt - 2000; tries++) await pause(250);
+    assert.ok(maintenanceDeferred, 'the pending-maintenance latch never engaged before expiry');
+    assert.ok(turnCompletedAt !== null, 'the maintain latch engaged without canonical turn completion');
+    assert.ok(turnCompletedAt < maintenanceLatchedAt, 'the maintain latch engaged before canonical turn completion');
+    assert.ok(report.maintains >= 3, 'the maintain latch engaged without genuine sustained maintenance');
+    assert.ok(maintenanceLatchedAt < expiryAt - 2000, 'the maintain latch engaged too close to expiry');
+    assert.equal(alive(nativePid), true, 'the npm launcher was not alive while maintenance was pending');
+    assert.equal(alive(nativeExecutablePid), true, 'the native executable was not alive while maintenance was pending');
+    // While the entrypoint's maintain await stays parked on the deferred, the
+    // production expiry+30s deadline timer must itself stop the real native
+    // process. Real bounded time; the timer is production code and is never
+    // altered or fired by the test.
+    let executableAliveBeforeBackstop = null;
+    const observationDeadline = graceAt + 15000;
+    while (Date.now() < observationDeadline) {
+      if (Date.now() < graceAt && alive(nativeExecutablePid)) executableAliveBeforeBackstop = Date.now();
+      if (report.stopCalls.length >= 1 && nativeExit && !alive(nativePid) && !alive(nativeExecutablePid)) break;
+      assert.equal(runSettled, false, 'the entrypoint promise settled while the deferred was still unresolved');
+      await pause(250);
+    }
+    assert.ok(executableAliveBeforeBackstop !== null,
+      'the native executable was never observed alive before the backstop fired');
+    assert.equal(report.stopCalls.length, 1,
+      `expected exactly the timer-owned stop while the await was pending: ${JSON.stringify(report.stopCalls)}`);
+    assert.ok(report.stopCalls[0] >= graceAt, 'the backstop stop ran before the expiry+30s boundary');
+    assert.ok(report.stopCalls[0] <= graceAt + 5000, 'the backstop stop ran beyond bounded scheduling tolerance');
+    assert.ok(nativeExit, 'the native exit was never observed through the transport child handle');
+    assert.ok(nativeExit.at >= report.stopCalls[0], 'the native process exited before the timer-owned stop call');
+    assert.throws(() => process.kill(nativePid, 0), error => error.code === 'ESRCH',
+      'the npm launcher still exists at the backstop while the await is pending');
+    assert.throws(() => process.kill(nativeExecutablePid, 0), error => error.code === 'ESRCH',
+      'the native executable still exists at the backstop while the await is pending');
+    assert.deepEqual(report.events.map(value => value.event), ['owner-alpha.ready'],
+      'a stopped report appeared before the pending await was released');
+    assert.equal(runSettled, false, 'the entrypoint promise settled before the pending await was released');
+    // Only now release the deferred: the production finally finishes
+    // idempotently with a second stop call, never a second launch.
+    maintenanceReleasedAt = Date.now();
+    maintenanceDeferred.resolve();
   }
+  try { await runPromise; } catch (error) { if (!runError) runError = error; }
 
   // The production entrypoint stopped the real native process by itself.
   assert.ok(!testOwnedStop, 'the test itself stopped the service on the success path');
   assert.equal(report.nativeStarts, 1);
   assert.ok(Number.isInteger(nativePid), 'native PID was never captured through the transport handle');
+  assert.ok(Number.isInteger(nativeExecutablePid), 'native executable PID was never observed');
   assert.equal(pidAliveAtReady, true, 'native PID was not alive when the entrypoint reported ready');
   assert.ok(nativeExit, 'native exit was never observed through the transport child handle');
   assert.ok(nativeExit.code !== null || nativeExit.signal !== null, 'observed native exit has no code and no signal');
-  assert.equal(report.stopCalls.length, 1, `unexpected production stop call count: ${JSON.stringify(report.stopCalls)}`);
   // The real Worker fences the warm host at the frozen expiry: the host
   // credential's exp is floored to whole seconds (rejected up to ~1s before the
   // millisecond-precise expiry), and the lifecycle lease fence rejects
-  // heartbeats at/after expiry. The responsive production maintain loop here
-  // ends at the expiry fence — roughly one loop beat around expiry — and the
-  // entrypoint's finally performs the automatic native stop. The expiry+30s
-  // deadline timer is a backstop that never fires in this composition, so the
-  // stop is proven at the fence, never at the grace boundary.
-  assert.ok(report.stopCalls[0] >= expiryAt - 1500, 'a production stop ran before the expiry fence window opened');
-  assert.ok(report.stopCalls[0] < graceAt, 'the automatic stop only ran at the expiry+30s backstop boundary');
-  assert.ok(report.stopCalls[0] <= expiryAt + 5000, 'the automatic stop ran unboundedly late after the expiry fence');
-  assert.ok(nativeExit.at >= report.stopCalls[0], 'the native process exited before the first production stop call');
-  assert.throws(() => process.kill(nativePid, 0), error => error.code === 'ESRCH',
-    'the npm launcher still exists after the entrypoint returned');
-  assert.ok(Number.isInteger(nativeExecutablePid), 'native executable PID was never observed');
-  assert.throws(() => process.kill(nativeExecutablePid, 0), error => error.code === 'ESRCH',
-    'the native executable still exists after the entrypoint returned');
-  assert.ok(Date.now() < graceAt + 60000, 'the run exceeded its bounded window');
-  assert.ok(report.maintains >= 10, 'the maintain loop never sustained reconciliation');
+  // heartbeats at/after expiry. In normal mode the responsive production
+  // maintain loop ends at the expiry fence — roughly one loop beat around
+  // expiry — and the entrypoint's finally performs the automatic native stop;
+  // the expiry+30s deadline timer is a backstop that never fires in that
+  // composition. In pending-maintenance mode the entrypoint's own maintain
+  // await is parked before expiry, so the expiry+30s deadline timer itself
+  // performs the stop and the finally's stop is the expected idempotent second
+  // call, never a second launch.
+  if (pendingMaintenance) {
+    assert.equal(report.stopCalls.length, 2,
+      `expected the timer stop plus the idempotent finally stop: ${JSON.stringify(report.stopCalls)}`);
+    assert.ok(report.stopCalls[0] >= graceAt, 'the backstop stop ran before the expiry+30s boundary');
+    assert.ok(report.stopCalls[0] <= graceAt + 5000, 'the backstop stop ran beyond bounded scheduling tolerance');
+    assert.ok(report.stopCalls[1] >= maintenanceReleasedAt, 'the finally stop ran before the deferred was released');
+    assert.ok(report.stopCalls[1] < graceAt + 60000, 'the finally stop ran unboundedly late after the backstop');
+    assert.ok(nativeExit.at >= report.stopCalls[0], 'the native process exited before the timer-owned stop call');
+    assert.throws(() => process.kill(nativePid, 0), error => error.code === 'ESRCH',
+      'the npm launcher still exists after the entrypoint returned');
+    assert.throws(() => process.kill(nativeExecutablePid, 0), error => error.code === 'ESRCH',
+      'the native executable still exists after the entrypoint returned');
+    assert.ok(Date.now() < graceAt + 60000, 'the run exceeded its bounded window');
+  } else {
+    assert.equal(report.stopCalls.length, 1, `unexpected production stop call count: ${JSON.stringify(report.stopCalls)}`);
+    assert.ok(report.stopCalls[0] >= expiryAt - 1500, 'a production stop ran before the expiry fence window opened');
+    assert.ok(report.stopCalls[0] < graceAt, 'the automatic stop only ran at the expiry+30s backstop boundary');
+    assert.ok(report.stopCalls[0] <= expiryAt + 5000, 'the automatic stop ran unboundedly late after the expiry fence');
+    assert.ok(nativeExit.at >= report.stopCalls[0], 'the native process exited before the first production stop call');
+    assert.throws(() => process.kill(nativePid, 0), error => error.code === 'ESRCH',
+      'the npm launcher still exists after the entrypoint returned');
+    assert.throws(() => process.kill(nativeExecutablePid, 0), error => error.code === 'ESRCH',
+      'the native executable still exists after the entrypoint returned');
+    assert.ok(Date.now() < graceAt + 60000, 'the run exceeded its bounded window');
+  }
+  assert.ok(report.maintains >= (pendingMaintenance ? 3 : 10), 'the maintain loop never sustained reconciliation');
   assert.ok(readyAt < expiryAt, 'the entrypoint reported ready only after expiry');
 
   // Only bounded lifecycle observations; expiry is not success or settlement.
-  // The real composition ends at the expiry fence: either the entrypoint's own
-  // maintain hits the fence (owner-alpha.failed with an unknown outcome, never
-  // a settlement claim) or the supervisor's scheduled maintenance recovers the
-  // service phase first and the loop condition exits cleanly. Both outcomes
-  // stop the real native process through the production finally.
+  // In normal mode the real composition ends at the expiry fence: either the
+  // entrypoint's own maintain throws (owner-alpha.failed with an unknown
+  // outcome, never a settlement claim) or the supervisor's scheduled
+  // maintenance recovers the service phase first and the loop condition exits
+  // cleanly; both outcomes stop the real native process through the production
+  // finally. In pending-maintenance mode the entrypoint's maintain await is
+  // parked through the fence, the expiry+30s timer performs the stop, and only
+  // the release lets the production finally run to its clean stopped report —
+  // never a failed one, because the deferred holds a genuinely completed
+  // maintain value, not an error.
   const eventNames = report.events.map(value => value.event);
   assert.equal(eventNames[0], 'owner-alpha.ready');
   assert.equal(eventNames.at(-1), 'owner-alpha.stopped');
-  assert.ok(eventNames.length === 2 || eventNames.length === 3, `unexpected report sequence: ${JSON.stringify(eventNames)}`);
   const fencedCodes = ['CONTROL_HTTP_ERROR', 'EXECUTOR_FENCED', 'SERVICE_RECOVERY_REQUIRED'];
-  if (eventNames.length === 3) {
-    assert.equal(eventNames[1], 'owner-alpha.failed');
-    assert.deepEqual(Object.keys(report.events[1]).sort(),
-      ['code', 'event', 'operatorStopped', 'policyExpired', 'replayAllowed', 'stage']);
-    assert.equal(report.events[1].stage, 'run');
-    assert.ok(fencedCodes.includes(report.events[1].code), `unexpected fence code: ${report.events[1].code}`);
-    assert.equal(report.events[1].operatorStopped, false);
-    assert.equal(typeof report.events[1].policyExpired, 'boolean');
-    assert.equal(report.events[1].replayAllowed, false);
-    // The rethrown entrypoint error is the same fence the failed report named.
-    assert.ok(runError, 'a failed report was emitted without an entrypoint rethrow');
-    assert.ok(fencedCodes.includes(runError.code), `unexpected rethrow code: ${runError.code}`);
-    assert.equal(runError.code, report.events[1].code);
+  if (pendingMaintenance) {
+    assert.deepEqual(eventNames, ['owner-alpha.ready', 'owner-alpha.stopped']);
+    assert.equal(runError, null, 'the released entrypoint rejected instead of finishing cleanly');
   } else {
-    assert.equal(runError, null, 'the entrypoint rethrew without a failed report');
+    assert.ok(eventNames.length === 2 || eventNames.length === 3, `unexpected report sequence: ${JSON.stringify(eventNames)}`);
+    if (eventNames.length === 3) {
+      assert.equal(eventNames[1], 'owner-alpha.failed');
+      assert.deepEqual(Object.keys(report.events[1]).sort(),
+        ['code', 'event', 'operatorStopped', 'policyExpired', 'replayAllowed', 'stage']);
+      assert.equal(report.events[1].stage, 'run');
+      assert.ok(fencedCodes.includes(report.events[1].code), `unexpected fence code: ${report.events[1].code}`);
+      assert.equal(report.events[1].operatorStopped, false);
+      assert.equal(typeof report.events[1].policyExpired, 'boolean');
+      assert.equal(report.events[1].replayAllowed, false);
+      // The rethrown entrypoint error is the same fence the failed report named.
+      assert.ok(runError, 'a failed report was emitted without an entrypoint rethrow');
+      assert.ok(fencedCodes.includes(runError.code), `unexpected rethrow code: ${runError.code}`);
+      assert.equal(runError.code, report.events[1].code);
+    } else {
+      assert.equal(runError, null, 'the entrypoint rethrew without a failed report');
+    }
   }
   assert.deepEqual(report.events.at(-1), { event: 'owner-alpha.stopped', stateRetained: true, settlementProved: false, replayAllowed: false });
   assert.equal(report.events[0].hosted, true);
@@ -509,7 +626,11 @@ try {
   assert.ok(version.includes('codex-cli 0.154.0'), `unexpected binary version: ${version}`);
 
   Object.assign(report, { status: 'passed', automaticStop: true, automaticStopAt: report.stopCalls[0],
-    expiryFenceStop: true, graceBackstopFired: false,
+    ...(pendingMaintenance
+      ? { pendingMaintenance: true, maintenanceLatchedAt, maintenanceReleasedAt,
+          backstopStopAt: report.stopCalls[0], graceBackstopFired: true, expiryFenceStop: false,
+          pendingAwaitHeld: true, secondStopWasIdempotentFinally: true }
+      : { expiryFenceStop: true, graceBackstopFired: false }),
     expiryAt: config.ownerAlpha.expires_at, transportPid: nativePid, nativeExecutablePid,
     nativeExecutableStopped: true, nativeExit: { code: nativeExit.code, signal: nativeExit.signal },
     productionEnabled: false, providerOrAccountVerified: false, realWorkerWakeDelivery: true,

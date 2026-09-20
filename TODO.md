@@ -21,12 +21,14 @@ pass. Subsequent backup/automatic-stop fixtures passed targeted checks below;
 that full-suite result predates them. Next: integrate Stage B runtime, then verify actual
 Stage B browser/native composition. No new live authorization or production claim.
 
-**Scheduled continuation:** the existing F3 implementor now owns a bounded
-`--pending-maintenance` mode in the reviewed automatic-stop fixture, from local
-d8124cf. It must hold the entrypoint await while the real +30s timer stops both
-launcher/native PIDs, then release the await without premature completion or
-settlement claims. Explicit composition-seam fault injection, not live network
-timeout evidence. Stage B runtime ownership is unchanged; no duplicate assignment.
+**F3 pending-maintenance integrated:** parent rerun passes: production timer stop
+at expiry+30000ms, both launcher/native PIDs absent before deferred release, then
+idempotent finally stop at +31223ms; one launch, no premature stopped report.
+Normal mode also passes (expiry−181ms); related runtime tests 46/46 and typecheck
+pass. Added to combined verifier; full suite not rerun for this test-only change.
+Evidence `.local/warm-pending-{parent,normal-parent,contracts,typecheck}.log`.
+This closes the pending-maintenance backstop item in F3 below, not live network
+timeout, dual-lock or settlement acceptance. Stage B runtime remains the priority.
 
 | Done | Order / status | Deliverable and exit evidence |
 | --- | --- | --- |

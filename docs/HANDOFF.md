@@ -4,9 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
+Pending-maintenance follow-up COMPLETE and integrated. Verified delivered patch
+SHA256 eecf99c5e0db81725fa8810b718d5560c1eefe02d644ed7ea6848c8f76157776.
+Parent pending-mode rerun: timer stop expiry+30000ms, both PIDs absent before
+deferred release, finally stop +31223ms; one native launch, exit0, no premature
+report/completion. Normal mode passes at expiry−181ms; 46/46 related tests and
+typecheck pass. Added mode to verifier, full suite not rerun. Logs
+`.local/warm-pending-{parent,normal-parent,contracts,typecheck}.log`.
+No production change or live I/O/settlement claim. Assignment below is historical;
+Stage B runtime remains assigned and is the next integration priority.
+
 Scheduled continuation reuses F3 thread T-01a0bdf0-6b4d-70ba-acb2-ce10eb4f9d29
 for --pending-maintenance in its existing script (and its floor fixture only).
-The normal-mode delivery below is complete; this new backstop mode is not.
+Both normal-mode and backstop deliveries are now complete, as recorded above.
 Source d8124cf8bcf5bdacdc12258accf6993a09a5d7cc through
 `.local/warm-backstop-source.bundle`, SHA256
 930d9eeb0149616837770934c2e9715a74c6b47079158441eef219ca2b445aaa.

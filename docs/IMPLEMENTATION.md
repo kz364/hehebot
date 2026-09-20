@@ -4,6 +4,18 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+F3 pending-maintenance integration (2026-09-20): verified patch SHA256
+eecf99c5e0db81725fa8810b718d5560c1eefe02d644ed7ea6848c8f76157776.
+Parent real-native run passed: production deadline stop at expiry+30000ms;
+launcher and attested executable absent before deferred release, no premature
+stopped report or entrypoint completion; finally stop +31223ms, one native start,
+exit0, retained recovery identity, no replay/settlement. Normal-mode regression
+passed (expiry−181ms); related runtime tests46/46, typecheck and verifier shell
+syntax passed. Logs `.local/warm-pending-{parent,normal-parent,contracts,typecheck}.log`.
+Added new mode to combined verifier; full suite not rerun for this test-only
+integration. This is an injected maintenance await, not observed live I/O failure.
+No production runtime/auth changes; dual locks and recursive settlement stay open.
+
 Scheduled F3 follow-up (2026-09-20): source review of the real entrypoint confirms
 the independent timer runs while service.maintain is awaited, but stopped reporting
 waits for that await to finish and finally to run. Reused the completed shutdown
