@@ -15,9 +15,16 @@ readback; focused native run passes, `.local/cold-child-recovery.log`. Cancellat
 is never replayed; crossed identity and duplicate-write negatives pass, effect
 settlement/sleep remain unproved. This uses graceful process restart, not crash
 takeover. Parent prepared F4 in AUTH_SETUP/SETUP without live operations.
-Combined verifier PID305807 runs to `.local/followthrough-integrated-verify.log`;
-check its exit before claiming combined success. Stage B runtime assignment below
-is unchanged. Existing two-hour follow-through schedule was read and retained.
+Combined verifier PID 305807 finished exit 0: 1790 backend/570 runtime plus
+browser/native/service fixtures, typecheck and dry-run build; evidence
+`.local/followthrough-integrated-verify.log`. Focused recovery contracts 37/37 and
+Electron 16/16 pass. New cold-child and warm wake-first flags pass in the full run.
+Stage B runtime assignment below is unchanged and not covered by this result.
+Upstream WhatsApp source remains at the pinned revision without the SDK fix;
+CONNECTOR_READINESS records sources. Runner discovery found no connected Mac.
+Existing two-hour follow-through schedule was read and retained. Next integration
+depends on the two disjoint runtime/automatic-stop implementor deliveries, then
+the parent-owned Stage B real browser/native assembly. Do not duplicate their work.
 
 Stage B control implementation integrated at local c35e118 after reviewing patch
 SHA256 4d8b376fcb8e2da1ddf096430c76453b2a85789bc0d4b3092d15766d8845a9b9.

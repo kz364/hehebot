@@ -58,6 +58,22 @@ verified; it is **not recent-history coverage**. There is no validation bypass,
 fallback substitution or additional approved patch. A future reviewed fix needs
 new pins and compatibility/authorization reruns, not an edited status label.
 
+Upstream source recheck (2026-09-20): `vaibhavpandeyvpz/wappmcp`'s default branch
+still resolves to the pinned [9a0a39e revision](https://github.com/vaibhavpandeyvpz/wappmcp/commit/9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8).
+No newer upstream source candidate was found. Its
+[helper](https://github.com/vaibhavpandeyvpz/wappmcp/blob/9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8/src/lib/mcp/helpers.ts#L1-L5)
+only casts `value` to `Record<string, unknown>`; that TypeScript cast cannot turn
+the recent-message array into an object. The
+[tool](https://github.com/vaibhavpandeyvpz/wappmcp/blob/9a0a39e61b2271df1a1d7fc1e198f1e37f66aaf8/src/lib/mcp/server.ts#L162-L174)
+still passes `getChatMessages()` directly and supplies no output schema.
+Upstream's committed lock resolves SDK 1.29.0 under a `^1.29.0` range; that is
+distinct from Hehebot's tested 1.30.0 graph and is not a response-shape fix or a
+reason to downgrade validation. The approved WhatsApp dependency patch is
+unchanged because the revision is identical; it does not modify MCP results.
+Keep recent-history unavailable pending a reviewed upstream fix or separately
+authorized patch review. Pairing, object-shaped search and a passing negative
+compatibility test cannot clear this blocker. No dependency or approval changed.
+
 Node 24+, Chrome/Chromium, a private persistent single-installation profile,
 supported process/descendant supervision, separately authorized pairing, live
 selected-chat behavior and measured reconnect/history gaps remain separate gates.

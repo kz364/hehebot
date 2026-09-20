@@ -22,8 +22,16 @@ AUTH_SETUP now contains the bounded two-message trial procedure and exact stop
 conditions; SETUP no longer incorrectly says deployment has never happened.
 The procedure preserves predecessor retirement, immutable generation/budget and
 all live authorization gates. It is not evidence that current targets are ready.
-Combined verifier runs in `.local/followthrough-integrated-verify.log`; no result
-is claimed until the process exits. No live operation or publication occurred.
+Combined verifier exited 0 in `.local/followthrough-integrated-verify.log`:
+1790 backend/570 runtime tests plus browser/native/service fixtures, typecheck
+and dry-run build. The new cold-child flags and real warm wake-first browser
+flags pass in that run. Focused adapter/process-crash tests pass 37/37 in
+`.local/cold-child-recovery-contracts.log`; Electron reference shell passes 16/16.
+Stage B control and portal are included, but its not-yet-delivered runtime is not.
+Upstream wappmcp source recheck found no later default-branch fix for the existing
+recent-message SDK incompatibility; source links are in CONNECTOR_READINESS.
+Runner discovery returned none, so actual Mac acceptance remains external.
+No live operation or publication occurred.
 
 Stage B portal integration (2026-09-20, local befc7d0): patch SHA256
 7bef3d8fe2e5e04866d82c4708bd8c8c53f33c7f3a89582b2caeb310d05ee783
