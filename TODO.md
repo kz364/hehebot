@@ -12,6 +12,23 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
+**Current checkpoint (2026-09-21):** both authorized corrections are integrated
+locally at `aac8da0746c70889721ad15f57c2584ec68ac299`; targeted real-native and
+strict-launcher checks pass. The fresh combined verifier is running against that
+source (`.local/launcher-retirement-combined.log`); no combined pass claimed yet.
+The intake-load return needs corrections: submission drift included receipt
+latency, schedule drift was not enforced, and burst assertions did not require
+the exact 60-accepted/10-rejected boundary or reject all network errors. The worker
+owns those corrections and a fresh measured run; initial numbers are not accepted.
+A separate worker owns an opt-in host-declared shell window (up to 10 minutes),
+connected through service startup to operation projection and SQLite watchdog
+tests. Other tool, child and inference deadlines stay unchanged. A pending human
+question is not a restartable checkpoint and must not suppress sibling watchdogs.
+No additional approval is needed for these local checks; publication and live
+operations remain gated.
+Historical checkpoints below retain their original failures and restrictions;
+they do not override this current scope or the integrated corrections.
+
 **Authorized correction wave (2026-09-20):** owner approved local Hehebot launcher
 privilege-boundary and expiry/retirement corrections, superseding the fixture-only
 restriction below. Two disjoint implementers own those fixes; a third implements
@@ -28,8 +45,8 @@ available lock with a live synthetic process (exit91), accept absent process (0)
 and detect held locks (73). These controls are not real-launcher acceptance.
 Launcher design review found the proposed `unshare --map-current-user --keep-caps`
 chain clears all capability masks but maps root-owned paths to uid65534, violating
-the unchanged floor ownership checks. Implementer is revising the proposal; do
-not accept65534 as root or treat capability-only tests as full launcher acceptance.
+the unchanged floor ownership checks. That proposal was rejected in favor of the
+production bootstrap below; uid65534 is not accepted as root.
 The revised retirement patch is applied locally: parent focused19/typecheck pass,
 and real-native normal mode now retires correctly despite stopping539ms before
 expiry (one launch, dual locks, unknown root custody/no replay preserved).
@@ -47,7 +64,7 @@ Wrapper session-flags seam remains explicit; not production-config, descendant
 containment, settlement, safe-resume or sleep acceptance. Strict fixture added to
 combined verifier; fresh full run is the next acceptance step. No live service changed.
 
-**Latest integrated check: FAILED, finite wave remains open.** On local source
+**Historical integrated failure, before the corrections above.** On local source
 `11deb67817776d3be4775606c5f73f3d4dd48b24`, `bash scripts/verify-codex.sh`
 exited 1 in the Stage B normal auto-stop fixture. Backend1790/runtime585,
 crash-readback, warm stop modes and Stage B browser/native passed first. Native
@@ -70,7 +87,7 @@ and namespace-local Tasks fixture, with an explicitly labelled supported-CLI
 loopback/catalog wrapper; no runtime patch, softened validation, host mounts or
 live actions. Preserve the fractional-expiry retirement gap separately.
 
-**Launcher slice blocked at its strict capability criterion:** the new standalone
+**Historical launcher capability failure, before the production bootstrap:** the standalone
 `bash scripts/test-codex-launcher-boundary.sh` uses a disposable private mount/root
 and loopback-only network namespace. Actual non-root default entry reaches ready
 with real managed floor/readback, but its CapBnd remains `000001ffffffffff` after
@@ -160,11 +177,13 @@ reporting directly to the user and owning questions, decisions, planning,
 implementation, integration, verification, status and blockers. ASK QUESTIONS HERE
 is retired/custody-transferred. The canonical uncommitted product ledger is
 `.amp/coordination/hehebot-product.md`; external approvals still require the user.
-All workers have returned; no implementation descendants remain active. Their
-fixtures used exact local source-custody `6574cf4`, not origin/main.
+The launcher and retirement corrections are integrated. Two independent workers
+own intake-load review corrections and the explicit shell-window slice. Load used
+exact local source-custody `ba8d174`; shell received `aac8da0`, not origin/main.
 The uncommitted coordination ledger records ownership/lifecycle separately from
-this sole product checklist. No coordinator is needed for parent-only verification;
-reconsider when dependent work is dispatched or decision traffic grows.
+this sole product checklist. Direct management remains simpler for parent
+verification plus two disjoint implementation units; reconsider when
+dependent work is dispatched or decision traffic grows.
 
 An **Amp development follow-through schedule is enabled every two hours** in this
 thread (schedule ID `b05eb8f2-8407-53d6-a253-e01637ba8f38`). It advances ready local

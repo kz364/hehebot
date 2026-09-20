@@ -20,19 +20,41 @@ probes, automatic exit+697ms, retirement/no replay/unknown custody retained.
 No fixture-only pre-drop or loosened floor. Added UID/GID overflow rejection and
 fixture awk alternatives link. Log `.local/launcher-parent-native.log`, SHA256
 9926f5937aec00e252e489dcb2604a8e5bdcf6b3796194c0e890a501f63f58f9.
-Strict fixture now in combined verifier; fresh combined acceptance still pending.
+Strict fixture now in combined verifier; fresh combined acceptance on local
+`aac8da0746c70889721ad15f57c2584ec68ac299` is running as PID458949, log
+`.local/launcher-retirement-combined.log`. Follow that process, do not restart it.
 No deployment, production-config/containment/settlement/resume/sleep claim.
-Advisor T-01a0bfaf-cc22-766f-a9ad-2802923e7fac assesses independent local work.
 Advisor now complete; parent source-checked memory/timing/limiter findings.
+Timing advisor returned. Parent rejected suppressing sibling watchdogs for a
+question: ephemeral human waits are not restartable checkpoints. File changes
+are not shell/transfer observations. No new wait kind or schema is approved.
+The former retirement worker now owns only the connected explicit shell-window
+slice: optional trusted `shellOperationTimeoutMs`120001..600000, clocked root
+and descendant commands only, capped by attempt deadline; defaults and other
+operation deadlines unchanged. Exact source `aac8da0` bundle SHA256
+4b0c4ff8b729163adfe592ecb91837ecd022d7972ac0e1c4f03b4199ec6eacf6
+delivered. Worker owns codex-service/operations and directly relevant tests;
+parent owns docs/verifier/tracking. Await automatic completion.
 Third implementer T-01a0bfb6-0ae9-7457-85ac-c029d51595ce owns only a new local
 intake-load script:48 writes/min for10min, durable readback,p95 and rate-limit
 negative evidence. No limit changes or full5writes/sec SPEC acceptance.
-All received exact localba8d174 source bundle SHA256
+Its initial return is not accepted: drift was measured after response, pacing
+had no pass/fail bound, burst assertions missed early rejection/network failures,
+and mode validation allowed inherited object keys. Parent requested discriminating
+negative controls, monotonic scheduling and exact60/10 burst acceptance before
+fresh smoke/full runs. Downloaded initial file hash145e02e remains under .local,
+not integrated. Worker owns correction and reports automatically.
+The original correction/load/advisor workers received localba8d174 bundle SHA256
 3616a11201014201781d980ec01c3b6510c0af698316ed03196d63d92bd5a546.
 Parent owns strict fixture/entry/integration/tracking and reviews returns before
 acceptance; no overlapping writes or coordinator needed for this small topology.
 Parent entry/floor30 tests and synthetic lock-observer negative control pass.
-Current combined verification on local11deb67 exited1:
+
+### Historical evidence before the corrections above
+
+The following failed checks and fixture-only scope restrictions are historical;
+they do not override current authorization, integrated source or targeted passes.
+Combined verification on local11deb67 exited1:
 `.local/stage-b-final-combined.log`, SHA256
 c83ee88de94784dd5d83929366de6ec4bbb6b0882a4b6656d8f3a583e240fe0b.
 Native stopped321ms before fractional policy expiry (whole-second JWT401);

@@ -41,6 +41,12 @@ session-arguments wrapper stays labelled: no production configuration, recursive
 containment, settlement, safe resume or safe sleep proved. The strict fixture is
 now in the combined verifier. Production Service registration remains unchanged.
 
+Fresh combined run (2026-09-21): source
+`aac8da0746c70889721ad15f57c2584ec68ac299`, PID458949,
+`.local/launcher-retirement-combined.log`; acceptance pending. This includes both
+amended runtime corrections and the production-bootstrap strict launcher fixture.
+Earlier failure evidence below remains historical, not a current scope blocker.
+
 Authorized correction wave (2026-09-20), exact sourceba8d174: owner permits local
 Hehebot launcher privilege-drop and expiry/retirement fixes, not dependency/Codex
 patches or relaxed assertions. Disjoint implementers received verified complete
@@ -54,8 +60,9 @@ lock-observer expression: each lock returns73 while held, returns91 when availab
 but its monitored synthetic process survives, and returns0 only after that process
 exits. Log `.local/runtime-corrections-lock-negative.log`, SHA256
 5cd5b3f08848ac34ddf781ab4eba8429cbf75adbe487eda15ff7dae2a2498169.
-This validates the observer, not native cleanup or the full launcher. No runtime
-correction has yet been integrated; earlier failed results remain authoritative.
+This validated the observer, not native cleanup or the full launcher. At that
+checkpoint no runtime correction was integrated; the later parent passes above
+supersede that state without erasing the earlier failures.
 
 Partial verifier continuation (2026-09-20), source
 61d6198036f5abd9ceee1f0557e3a7f59f8e0346: extracted only the commands from
