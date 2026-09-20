@@ -26,9 +26,14 @@ remaining service checks, typecheck and build dry run all pass. Latest regenerat
 Stage B exhausted capture inspected. Integration committed locally at `6574cf4`.
 F3 implementor now owns a separate Stage B automatic-stop fixture from that exact
 source (existing explicit-stop browser/HTTP modes must remain unchanged).
-The runtime implementor separately owns a new abrupt-native-crash/read-only
-history-reconciliation fixture with an active child, no replay or sleep authority.
-Both report back directly; these assignments are not new verification evidence.
+Crash-readback delivery is now reviewed and locally rerun: actual native SIGKILL
+with a held child, both original PIDs gone before replacement, supported history
+reports interrupted, exactly three model POSTs/four read-only RPCs, no replay or
+sleep authority. Parent tightened blocked-readback failure and replacement-native
+cleanup; new fixture and 121 related tests/typecheck pass. Added to verifier;
+the full combined result above predates this test-only addition. Evidence:
+`.local/crash-readback-{parent-final,contracts,typecheck}.log`.
+Automatic Stage B stop remains assigned and unverified; it reports back directly.
 Electron reference-shell reinstall/tests also pass 16/16; not Mac acceptance.
 No push, deployment, live account calls, automatic Stage B stop or production claim.
 

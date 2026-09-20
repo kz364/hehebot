@@ -4,6 +4,23 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+F3/E02 native crash-readback integration (2026-09-20): verified delivered patch
+SHA256 e41568444223d80da4628869c29183bf1178e6eb4d9662f1e05fcc03c3b08307.
+Actual pinned executable SIGKILL occurs with a held synthetic child model request;
+both original executable/launcher PIDs are absent before replacement over the same
+disposable native home. Supported thread/read returns the completed root's exact
+text and the child's interrupted state, preserving identity/spawn custody, leaving
+effect settlement unproved and sleep denied. Three model POSTs before/after,
+four read-only RPCs, crossed identity rejected before read and duplicate readback
+without journal rewrites. Parent first rerun reproduced worker evidence, then
+tightened blocker reporting to fail the regression and independently attested/stopped
+the replacement native executable, not just its npm launcher. Strengthened fixture
+passes with replacementBothPidsGone:true; 121 related tests, typecheck and shell
+syntax pass. Logs `.local/crash-readback-{parent-final,contracts,typecheck}.log`.
+Added to combined verifier; preceding full1790/585 result predates this test-only
+addition. This is one abrupt-process-death case, not power-loss, provider takeover,
+safe resume, external effect reconciliation or recursive settlement acceptance.
+
 Stage B runtime integration (2026-09-20): delivered patch SHA256
 5b82dec794dc076745043dc9f06a0c4db80cc73e16122b9ce37b616141885f1d verified
 against exact c35e118. Versioned background binding, manager and separate task

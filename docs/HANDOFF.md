@@ -4,6 +4,18 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
+Crash-readback worker returned; parent reviewed/integrated and reran it, then
+strengthened blocked-readback failure and replacement-native PID cleanup.
+Patch SHA256 e41568444223d80da4628869c29183bf1178e6eb4d9662f1e05fcc03c3b08307.
+`node scripts/test-codex-crash-readback.mjs` passes: interrupted child history,
+unchanged three model POSTs, four thread/read calls, no cancellation replay,
+both old PIDs gone before replacement and both replacement PIDs gone at cleanup.
+121 related tests/typecheck/syntax pass. Logs
+`.local/crash-readback-{parent-final,contracts,typecheck}.log`. New verifier entry;
+the full combined result below predates this test-only addition. No power-loss,
+provider takeover, safe resume or effect settlement claim. Only automatic Stage B
+stop worker remains pending; crash assignment below is historical/verified now.
+
 Stage B runtime COMPLETE/integrated locally; all implementors have delivered.
 Verified patch SHA256 5b82dec794dc076745043dc9f06a0c4db80cc73e16122b9ce37b616141885f1d
 from exact c35e118, retained at `.local/stage-b-runtime.patch`.

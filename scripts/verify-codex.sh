@@ -39,6 +39,7 @@ node scripts/test-control-questions.mjs
 node scripts/test-control-whatsapp.mjs
 node scripts/test-control-crash.mjs 2
 node scripts/test-codex-native.mjs
+node scripts/test-codex-crash-readback.mjs
 node scripts/test-codex-capacity.mjs
 node scripts/test-codex-permissions.mjs
 node scripts/test-codex-owner-alpha.mjs
