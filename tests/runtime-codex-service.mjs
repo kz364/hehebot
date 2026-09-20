@@ -852,3 +852,71 @@ for (const changed of [false, true]) test(`owner alpha reuses config in place, d
     assert.equal(f.calls.includes('hold'), false);
   } finally { await service.stop(); }
 });
+
+test('declared shell deadline flows from service config through journal events into emitted heartbeats without granting tools', async t => {
+  const f = await fixture(t), request = f.dependencies.control.request;
+  const heartbeats = [];
+  const attemptDeadline = new Date(f.dependencies.now() + 600000).toISOString();
+  const serviceConfig = { ...f.config, shellOperationTimeoutMs: 240000 };
+  const service = createCodexService(serviceConfig, { ...f.dependencies, operations: undefined,
+    control: { request: async (type, payload) => {
+      if (type === 'claim') return { submission_key: '88888888-0000-4000-8000-0000000000e1:1', deadline_at: attemptDeadline,
+        run: { id: '88888888-0000-4000-8000-0000000000e1', persona_id: 'bot', current_attempt: 1, updated_at: new Date().toISOString(), context_json: '{"instruction":"fixture"}' } };
+      if (type === 'heartbeat') { heartbeats.push(payload.operations); return { lease_until: new Date(f.dependencies.now() + 60000).toISOString(), cancellations: [] }; }
+      return request(type, payload);
+    } } });
+  t.after(() => service.stop());
+  // Freeze through composition: later caller mutation never changes the service's deadline.
+  serviceConfig.shellOperationTimeoutMs = 120001;
+  await service.start();
+  const launch = f.calls.find(call => call.method === 'thread/start');
+  assert.deepEqual(Object.keys(launch.params.config.mcp_servers.hehebot.tools), ['hehebot_list_routines'],
+    'a declared shell deadline grants no tool permission');
+  const grant = JSON.parse(await readFile(launch.params.config.mcp_servers.hehebot.env.HEHEBOT_AGENT_TOOLS_CONFIG, 'utf8'));
+  assert.deepEqual(grant.allowedTools, ['hehebot_list_routines'],
+    'the admitted grant keeps its declared tool surface');
+  f.advance(1000);
+  const native = await service.observe();
+  f.transport.emit('notification', { method: 'item/started', params: { threadId: native.threadId, turnId: native.nativeRunId,
+    item: { id: 'shell-op', type: 'commandExecution', status: 'inProgress' } } });
+  f.transport.emit('notification', { method: 'item/started', params: { threadId: native.threadId, turnId: native.nativeRunId,
+    item: { id: 'mcp-op', type: 'mcpToolCall', status: 'inProgress' } } });
+  for (let i = 0; i < 100 && (await service.supervisor.operations()).length < 5; i++)
+    await new Promise(resolve => setTimeout(resolve, 10));
+  await service.supervisor.heartbeat();
+  const startedAt = new Date(f.dependencies.now()).toISOString();
+  const operations = heartbeats.at(-1);
+  const shell = operations.find(op => op.started_at === startedAt && op.deadline_at === new Date(Date.parse(startedAt) + 240000).toISOString());
+  const mcp = operations.find(op => op.started_at === startedAt && op.deadline_at === new Date(Date.parse(startedAt) + 120000).toISOString());
+  assert.ok(shell, 'the clocked shell command carries the declared four-minute deadline into the emitted heartbeat');
+  assert.ok(mcp, 'a concurrent MCP invocation still carries the two-minute deadline');
+  assert.equal(shell.last_progress_at, startedAt, 'a declared deadline never refreshes progress');
+  assert.ok(operations.every(op => op.deadline_at <= attemptDeadline),
+    'no operation deadline extends past the admitted attempt deadline');
+  f.advance(500);
+  await service.supervisor.heartbeat();
+  assert.deepEqual(heartbeats.at(-1).find(op => op.id === shell.id), { ...shell },
+    'a repeated heartbeat replays the identical deadline and progress');
+  await assert.rejects(service.supervisor.drain({ state: 'fixture' }), { code: 'SLEEP_DENIED' },
+    'unsettled obligations prevent sleep');
+  await service.stop();
+});
+
+test('service validates the declared shell deadline before any side effect', async t => {
+  const f = await fixture(t);
+  for (const invalid of [120000, 600001, 1.5, '240000', null, true, Number.NaN]) {
+    const service = createCodexService({ ...f.config, shellOperationTimeoutMs: invalid }, f.dependencies);
+    await assert.rejects(service.start(), error => ['SERVICE_RECOVERY_REQUIRED', 'INVALID_SERVICE_CONFIGURATION'].includes(error.code),
+      `invalid declared deadline ${JSON.stringify(invalid)} must refuse startup`);
+    assert.deepEqual(f.calls, []);
+    assert.deepEqual(await readdir(f.directory), ['token']);
+  }
+  for (const valid of [120001, 600000]) {
+    // A stopped service's journal row survives for recovery, so each accepted
+    // boundary value proves admission on its own pristine state directory.
+    const accepted = await fixture(t);
+    const service = createCodexService({ ...accepted.config, shellOperationTimeoutMs: valid }, accepted.dependencies);
+    await service.start();
+    await service.stop();
+  }
+});

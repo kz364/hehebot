@@ -22,15 +22,17 @@ Log `.local/launcher-retirement-combined.log`, SHA256
 `c67aaf9314190296e47d8bbe7280ed49e699ba2a57803457c164a68b66d931f2`.
 Parent reproduced the early callback deterministically, then made the production
 timer recheck the frozen deadline before stopping. The strict native assertion is
-unchanged; focused5 and typecheck pass. Native and broader verification remain open.
-The intake-load return needs corrections: submission drift included receipt
-latency, schedule drift was not enforced, and burst assertions did not require
-the exact 60-accepted/10-rejected boundary or reject all network errors. The worker
-owns those corrections and a fresh measured run; initial numbers are not accepted.
-A separate worker owns an opt-in host-declared shell window (up to 10 minutes),
-connected through service startup to operation projection and SQLite watchdog
-tests. Other tool, child and inference deadlines stay unchanged. A pending human
-question is not a restartable checkpoint and must not suppress sibling watchdogs.
+unchanged; focused5, runtime600 (no skips) and typecheck pass. Real warm pending
+backstop now passes at expiry+30001ms. Corrected native tail through strict
+launcher, 15 service modes and build passes; a fresh full combined result is still
+required. Parent integrated the opt-in host-declared shell window (up to 10 minutes).
+Operations/service tests96, SQLite watchdog tests10 and typecheck pass. Other tool,
+child and inference deadlines stay unchanged. A pending human question is not a
+restartable checkpoint and must not suppress sibling watchdogs.
+The corrected intake-load harness has returned with worker-reported selfcheck,
+smoke and full passes. Parent review and independent measurement remain required;
+initial flawed-harness numbers are not accepted. This tests 48 writes/minute, not
+the SPEC's 5 writes/second, and preserves the existing 60/minute owner limit.
 No additional approval is needed for these local checks; publication and live
 operations remain gated.
 Historical checkpoints below retain their original failures and restrictions;

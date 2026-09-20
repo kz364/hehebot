@@ -45,6 +45,9 @@ const privatePath = async (path, directory = false) => {
  */
 export function createCodexService(config, dependencies) {
   config = structuredClone(config);
+  // Frozen at composition time: later mutation of the caller's config object
+  // never changes a running service's declared shell-operation deadline.
+  const shellOperationTimeoutMs = config.shellOperationTimeoutMs;
   const { tasks, fetchImpl, prepareNative = async () => {},
     launch = spawnCodex, now = Date.now, onRecovery = () => {},
     checkVersion = async binary => {
@@ -77,7 +80,8 @@ export function createCodexService(config, dependencies) {
       snapshots.push(...await new CodexOperations({ journal, attemptId: row.attemptId, runId: row.claim.run.id,
         attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at,
         deadlineAt: row.claim.deadline_at, textOnlyProfile: row.claim.text_only ?? null,
-        backgroundRole: alphaBackground ? row.claim.role : null }).snapshot());
+        backgroundRole: alphaBackground ? row.claim.role : null,
+        ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}) }).snapshot());
     }
     return snapshots;
   });
@@ -219,10 +223,15 @@ export function createCodexService(config, dependencies) {
       } else if (config.backgroundProfile !== undefined) fail('INVALID_SERVICE_CONFIGURATION');
       if (config.textOnlyProfile !== undefined && !alpha?.text_only) fail('INVALID_SERVICE_CONFIGURATION');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs'].includes(key)) ||
         config.nativeHome !== undefined && (!alpha || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
-        config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean') fail('INVALID_SERVICE_CONFIGURATION');
+        config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean' ||
+        // A declared shell-operation deadline is a timing bound only: it never
+        // widens the admitted tool surface, and it must be an explicit safe
+        // integer above the two-minute default, capped at ten minutes.
+        config.shellOperationTimeoutMs !== undefined && (typeof config.shellOperationTimeoutMs !== 'number' ||
+          !Number.isSafeInteger(config.shellOperationTimeoutMs) || config.shellOperationTimeoutMs < 120001 || config.shellOperationTimeoutMs > 600000)) fail('INVALID_SERVICE_CONFIGURATION');
       if (!alpha && (!tasks?.hold || !tasks?.release) || typeof operations !== 'function' ||
           !isAbsolute(config.binary) || !config.personas || !isAbsolute(config.stateDirectory)) fail('INVALID_SERVICE_CONFIGURATION');
       for (const persona of Object.values(config.personas)) {

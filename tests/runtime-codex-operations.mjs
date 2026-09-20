@@ -341,3 +341,66 @@ for (const timing of [null, {}, { startedAt: 'invalid', lastProgressAt: 'invalid
     await assert.rejects(f.operations.snapshot(), { code: 'INVALID_OPERATION_TIMING' });
   });
 }
+
+test('declared shell-operation deadline extends only clocked commands, capped by the attempt deadline', async t => {
+  const f = await fixture(t), child = '[\"child\",\"turn\"]';
+  await f.journal.putIfAbsent('attempt-a', { status: 'running', threadId: 'root', nativeRunId: 'turn',
+    commands: { clocked: 'inProgress', legacy: 'inProgress' }, mcpCalls: { concurrent: 'inProgress' },
+    fileChanges: { change: 'inProgress' }, spawns: { spawn: { status: 'completed', receiverThreadIds: ['child-a'] } },
+    quietPhases: { '[\"commands\",\"clocked\"]': { status: 'inProgress', startedAt: '2026-09-14T01:10:00.000Z' } },
+    operationTimes: {
+      '[\"commands\",\"clocked\"]': { startedAt: '2026-09-14T01:10:00.000Z', lastProgressAt: '2026-09-14T01:10:00.000Z' },
+      '[\"mcpCalls\",\"concurrent\"]': { startedAt: '2026-09-14T01:10:00.000Z', lastProgressAt: '2026-09-14T01:10:00.000Z' },
+      '[\"fileChanges\",\"change\"]': { startedAt: '2026-09-14T01:10:00.000Z', lastProgressAt: '2026-09-14T01:10:00.000Z' },
+      '[\"spawns\",\"spawn\"]': { startedAt: '2026-09-14T01:09:00.000Z', lastProgressAt: '2026-09-14T01:10:00.000Z' },
+    },
+    childObligations: { [child]: { commands: { nested: 'inProgress' },
+      operationTimes: { '[\"commands\",\"nested\"]': { startedAt: '2026-09-14T01:19:30.000Z', lastProgressAt: '2026-09-14T01:19:30.000Z' } } } } });
+  const declared = await new CodexOperations({ ...f.config, shellOperationTimeoutMs: 240000 }).snapshot();
+  assert.equal(declared.filter(op => op.started_at === '2026-09-14T01:10:00.000Z' && op.status === 'active' && op.kind === 'tool'
+      && op.deadline_at === '2026-09-14T01:14:00.000Z').length, 1,
+    'only the clocked root command carries the declared four-minute shell deadline');
+  assert.equal(declared.filter(op => op.deadline_at === '2026-09-14T01:12:00.000Z').length, 3,
+    'concurrent MCP, file changes and child startup still expire at two minutes');
+  assert.equal(declared.find(op => op.started_at === '2026-09-14T01:19:30.000Z').deadline_at, '2026-09-14T01:20:00.000Z',
+    'a nested clocked command is hard-clamped to the admitted attempt deadline');
+  assert.equal(declared.find(op => op.last_progress_at === '2026-09-14T01:19:30.000Z').status, 'active',
+    'the clamped nested command stays active until the attempt deadline');
+  const legacy = declared.find(op => op.kind === 'tool' && op.started_at === f.config.startedAt && op.status === 'active' &&
+    op.deadline_at === f.config.deadlineAt);
+  assert.ok(legacy, 'the unclocked legacy command keeps the attempt deadline');
+  assert.equal(declared.find(op => op.kind === 'inference' && op.started_at === '2026-09-14T01:10:00.000Z').deadline_at,
+    '2026-09-14T01:15:00.000Z', 'quiet phases keep their independent five-minute bound');
+  // The same journal projected without a declaration keeps the two-minute
+  // command bound, matched by exact operation identity.
+  const shellCommand = declared.find(op => op.deadline_at === '2026-09-14T01:14:00.000Z');
+  const undeclared = await f.operations.snapshot();
+  assert.equal(undeclared.find(op => op.id === shellCommand.id).deadline_at, '2026-09-14T01:12:00.000Z',
+    'without a declaration the same clocked command expires at two minutes');
+  // A nearer attempt deadline hard-clamps the declared shell bound at the root too.
+  const clamped = await new CodexOperations({ ...f.config, deadlineAt: '2026-09-14T01:11:30.000Z', shellOperationTimeoutMs: 240000 }).snapshot();
+  assert.equal(clamped.find(op => op.id === shellCommand.id).deadline_at, '2026-09-14T01:11:30.000Z',
+    'the exact root command is clamped to the admitted attempt deadline');
+});
+
+for (const invalid of [120000, 600001, 0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '240000', null, true, {}]) {
+  test(`shell-operation deadline must be an explicit safe integer in range: ${JSON.stringify(invalid)}`, () => {
+    assert.throws(() => new CodexOperations({ journal: { get: async () => null }, attemptId: 'attempt-a',
+      runId: '01234567-0123-4123-a123-012345678901', attempt: 1,
+      startedAt: '2026-09-14T01:00:00.000Z', deadlineAt: '2026-09-14T01:20:00.000Z',
+      shellOperationTimeoutMs: invalid }), { code: 'INVALID_OPERATION_CONFIGURATION' });
+  });
+}
+
+test('shell-operation deadline boundaries are accepted and frozen with the binding', () => {
+  const base = { journal: { get: async () => null }, attemptId: 'attempt-a', runId: '01234567-0123-4123-a123-012345678901',
+    attempt: 1, startedAt: '2026-09-14T01:00:00.000Z', deadlineAt: '2026-09-14T01:20:00.000Z' };
+  for (const value of [120001, 600000]) {
+    const operations = new CodexOperations({ ...base, shellOperationTimeoutMs: value });
+    assert.ok(Object.isFrozen(operations.binding), 'the declared deadline is frozen with the binding');
+    assert.equal(operations.binding.shellOperationTimeoutMs, value);
+  }
+  const undeclared = new CodexOperations(base);
+  assert.ok(Object.isFrozen(undeclared.binding));
+  assert.ok(!Object.hasOwn(undeclared.binding, 'shellOperationTimeoutMs'), 'an undeclared binding keeps its exact shape');
+});

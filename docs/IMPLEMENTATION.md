@@ -53,7 +53,26 @@ policy clock is1ms short. It fails before the fix, then passes when the producti
 callback rechecks the immutable grace deadline and rearms only its remainder.
 No fixed extra grace or softened assertion; operator abort/final cleanup unchanged.
 Focused5 and typecheck pass (`.local/grace-deadline-{red,green}.log`); native and
-broader verification pending. Earlier failure evidence remains retained.
+broader verification subsequently passed on local b8c1136: runtime600/600, no
+skips; corrected native tail from warm pending through build exited0. Warm pending
+stopped at +30001ms; both background stop modes, strict launcher (2260 lock probes),
+15 service modes and build pass. This is tail-only, not a fresh full verifier pass.
+Logs `.local/grace-deadline-runtime.log` SHA256
+76c6ff0b7ac371f0f6442467385ae5380f7b10086a868d43c10e3c5f22791866 and
+`.local/grace-deadline-native-tail.log` SHA256
+a20c48b39916ce6915a9fb73a74121379008161b2a1a811463f0748d37aa4cae.
+Earlier failure evidence remains retained; reference desktop tests16 pass separately.
+
+Shell-window parent integration (2026-09-21): verified worker patch SHA256
+7acced1ccdc540dea86f5dbf675a5bf6770568e43963650a8a07cecb4a422745 from exact
+aac8da0 source applied after native-tail exit. Optional trusted host configuration
+`shellOperationTimeoutMs` (120001..600000) affects only clocked command operations,
+clamped to the attempt deadline. Defaults, legacy unclocked records, other tool
+deadlines, grants, settlement and sleep remain unchanged. Parent tightened test
+identity/clamp assertions; operations/service96, SQLite watchdog10 and typecheck
+pass. Log `.local/shell-timing-parent.log` SHA256
+f739754d8b3cede5d325dce49ca5f9cd8935694d3796255b603a4f0ed1a7c341.
+Fresh full combined acceptance remains open. No production flags changed.
 
 Authorized correction wave (2026-09-20), exact sourceba8d174: owner permits local
 Hehebot launcher privilege-drop and expiry/retirement fixes, not dependency/Codex

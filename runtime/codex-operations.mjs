@@ -18,28 +18,35 @@ const uuid = value => {
  * supported native coverage, external effects and recovery are established.
  */
 export class CodexOperations {
-  constructor({ journal, attemptId, runId, attempt, startedAt, deadlineAt, textOnlyProfile = null, backgroundRole = null }) {
+  constructor({ journal, attemptId, runId, attempt, startedAt, deadlineAt, textOnlyProfile = null, backgroundRole = null, shellOperationTimeoutMs = /** @type {number | undefined} */ (undefined) }) {
     if (!journal?.get || !/^[a-zA-Z0-9_-]{1,128}$/.test(attemptId ?? '') ||
         !/^[0-9a-f-]{36}$/i.test(runId ?? '') || !Number.isSafeInteger(attempt) || attempt < 1 ||
         !Number.isFinite(Date.parse(startedAt)) || !Number.isFinite(Date.parse(deadlineAt)) ||
-        Date.parse(deadlineAt) <= Date.parse(startedAt)) fail('INVALID_OPERATION_CONFIGURATION');
+        Date.parse(deadlineAt) <= Date.parse(startedAt) ||
+        shellOperationTimeoutMs !== undefined && (typeof shellOperationTimeoutMs !== 'number' ||
+          !Number.isSafeInteger(shellOperationTimeoutMs) || shellOperationTimeoutMs < 120001 || shellOperationTimeoutMs > 600000)
+      ) fail('INVALID_OPERATION_CONFIGURATION');
     this.journal = journal;
-    this.binding = Object.freeze({ attemptId, runId, attempt, startedAt, deadlineAt });
+    this.binding = Object.freeze({ attemptId, runId, attempt, startedAt, deadlineAt,
+      ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}) });
     this.textOnlyProfile = textOnlyProfile && structuredClone(textOnlyProfile);
     this.backgroundRole = backgroundRole;
   }
 
   async snapshot() {
-    const { attemptId, runId, attempt, startedAt, deadlineAt } = this.binding;
+    const { attemptId, runId, attempt, startedAt, deadlineAt, shellOperationTimeoutMs } = this.binding;
     const row = await this.journal.get(attemptId);
     const operations = [];
-    const add = (key, kind, status, timing = undefined) => {
+    const add = (key, kind, status, timing = undefined, timeoutMs = undefined) => {
       if (operations.length === 4096) fail('NATIVE_OPERATION_LIMIT');
       if (timing !== undefined && (!timing || typeof timing !== 'object' || Array.isArray(timing) || !['startedAt', 'lastProgressAt'].every(key => typeof timing[key] === 'string' && Number.isFinite(Date.parse(timing[key])) &&
           new Date(timing[key]).toISOString() === timing[key]) || timing.lastProgressAt < timing.startedAt)) fail('INVALID_OPERATION_TIMING');
       operations.push({ id: uuid([attemptId, runId, attempt, key]), run_id: runId, attempt,
         kind, status, started_at: timing?.startedAt ?? startedAt,
-        deadline_at: timing ? new Date(Math.min(Date.parse(timing.startedAt) + (kind === 'inference' ? 300000 : 120000), Date.parse(deadlineAt))).toISOString() : deadlineAt,
+        // Only an explicitly declared shell timeout may extend a clocked
+        // command beyond two minutes; every other clocked tool stays at two
+        // minutes, and no deadline may exceed the admitted attempt deadline.
+        deadline_at: timing ? new Date(Math.min(Date.parse(timing.startedAt) + (kind === 'inference' ? 300000 : timeoutMs ?? 120000), Date.parse(deadlineAt))).toISOString() : deadlineAt,
         // Reading the same journal is not fresh native progress.
         last_progress_at: timing?.lastProgressAt ?? startedAt });
     };
@@ -121,7 +128,7 @@ export class CodexOperations {
       for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems', 'planItems']) {
         const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems', 'planItems'].includes(field) ? ['completed']
           : ['completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
-        for (const [id, value] of entries(owner[field])) add([identity, field, id], ['reasoningItems', 'planItems'].includes(field) ? 'inference' : 'tool', status(value, terminal), takeClock(field, id));
+        for (const [id, value] of entries(owner[field])) add([identity, field, id], ['reasoningItems', 'planItems'].includes(field) ? 'inference' : 'tool', status(value, terminal), takeClock(field, id), field === 'commands' ? shellOperationTimeoutMs : undefined);
       }
       for (const [id, spawn] of entries(owner.spawns)) {
         const timing = takeClock('spawns', id);

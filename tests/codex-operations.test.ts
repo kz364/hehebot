@@ -128,3 +128,71 @@ it.each(['tool', 'initial', 'child', 'startup', 'quiet'])('Worker watchdog cance
     expect(f.db.all("SELECT status FROM attempts WHERE run_id=?", claim.run.id)).toEqual([{ status: 'running' }]);
   } finally { f.close(); await rm(directory, { recursive: true, force: true }); }
 });
+
+it('declared shell timeout survives two minutes and cancels exactly at its explicit deadline', async () => {
+  const f = fixture(true), directory = await mkdtemp(join(tmpdir(), 'hehebot-shell-deadline-'));
+  try {
+    const life = new LifecycleCore(f.store, f.core);
+    f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
+    const identity = life.registerBoot(randomUUID()); life.ready(identity);
+    f.accept({ schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Synthetic declared shell deadline' } });
+    const claim = life.claim(identity)!; life.submitted(identity, claim.run.id, 1, 'turn');
+    const journal = new FileJournal(directory);
+    await journal.putIfAbsent('native-attempt', { status: 'running', threadId: 'root', nativeRunId: 'turn',
+      commands: { shell: 'inProgress' },
+      operationTimes: { '["commands","shell"]': { startedAt: '2026-09-10T00:10:00.000Z', lastProgressAt: '2026-09-10T00:10:00.000Z' } } });
+    const projection = new CodexOperations({ journal, attemptId: 'native-attempt', runId: claim.run.id, attempt: 1,
+      startedAt: f.core.now(), deadlineAt: claim.deadline_at, shellOperationTimeoutMs: 240000 });
+    f.db.exec("UPDATE lifecycle SET lease_until='2026-09-10T00:20:00.000Z'");
+    const heartbeat = async () => life.heartbeat(identity, await projection.snapshot() as HeartbeatOperation[]);
+    // The declared shell operation survives the two-minute default tool deadline...
+    f.setNow('2026-09-10T00:12:00.000Z'); await heartbeat(); life.watchdog();
+    expect(f.store.run(claim.run.id).status).toBe('running');
+    // Isolate the shell deadline from the independently renewed heartbeat lease.
+    f.db.exec("UPDATE lifecycle SET lease_until='2026-09-10T00:20:00.000Z'");
+    f.setNow('2026-09-10T00:13:59.999Z'); await heartbeat(); life.watchdog();
+    expect(f.store.run(claim.run.id).status).toBe('running');
+    // ...and cancels exactly at its declared four-minute deadline, not the hard attempt deadline.
+    f.setNow('2026-09-10T00:14:00.000Z'); life.watchdog();
+    expect(f.store.run(claim.run.id)).toMatchObject({ status: 'cancelling', error_code: 'DEADLINE_EXCEEDED', updated_at: '2026-09-10T00:14:00.000Z' });
+    expect((await heartbeat()).cancellations).toEqual([claim.run.id]);
+    expect(f.db.all('SELECT deadline_at FROM operations WHERE kind=? AND status=?', 'tool', 'active'))
+      .toEqual([{ deadline_at: '2026-09-10T00:14:00.000Z' }]);
+    // A nearer admitted attempt deadline hard-clamps the declared shell bound.
+    const clamped = new CodexOperations({ journal, attemptId: 'native-attempt', runId: claim.run.id, attempt: 1,
+      startedAt: '2026-09-10T00:00:00.000Z', deadlineAt: '2026-09-10T00:13:00.000Z', shellOperationTimeoutMs: 240000 });
+    expect((await clamped.snapshot()).filter(op => op.kind === 'tool').map(op => [op.started_at, op.deadline_at]))
+      .toEqual([['2026-09-10T00:00:00.000Z', '2026-09-10T00:13:00.000Z'], ['2026-09-10T00:10:00.000Z', '2026-09-10T00:13:00.000Z']]);
+    expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
+  } finally { f.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+it('concurrent MCP invocation still expires at two minutes under a declared shell timeout', async () => {
+  const f = fixture(true), directory = await mkdtemp(join(tmpdir(), 'hehebot-shell-mcp-deadline-'));
+  try {
+    const life = new LifecycleCore(f.store, f.core);
+    f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
+    const identity = life.registerBoot(randomUUID()); life.ready(identity);
+    f.accept({ schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Synthetic shell and MCP deadline' } });
+    const claim = life.claim(identity)!; life.submitted(identity, claim.run.id, 1, 'turn');
+    const journal = new FileJournal(directory);
+    await journal.putIfAbsent('native-attempt', { status: 'running', threadId: 'root', nativeRunId: 'turn',
+      commands: { shell: 'inProgress' }, mcpCalls: { remote: 'inProgress' },
+      operationTimes: {
+        '["commands","shell"]': { startedAt: '2026-09-10T00:10:00.000Z', lastProgressAt: '2026-09-10T00:10:00.000Z' },
+        '["mcpCalls","remote"]': { startedAt: '2026-09-10T00:10:00.000Z', lastProgressAt: '2026-09-10T00:10:00.000Z' },
+      } });
+    const projection = new CodexOperations({ journal, attemptId: 'native-attempt', runId: claim.run.id, attempt: 1,
+      startedAt: f.core.now(), deadlineAt: claim.deadline_at, shellOperationTimeoutMs: 240000 });
+    f.db.exec("UPDATE lifecycle SET lease_until='2026-09-10T00:20:00.000Z'");
+    const heartbeat = async () => life.heartbeat(identity, await projection.snapshot() as HeartbeatOperation[]);
+    f.setNow('2026-09-10T00:11:59.999Z'); await heartbeat(); life.watchdog();
+    expect(f.store.run(claim.run.id).status).toBe('running');
+    f.setNow('2026-09-10T00:12:00.000Z'); life.watchdog();
+    expect(f.store.run(claim.run.id)).toMatchObject({ status: 'cancelling', error_code: 'DEADLINE_EXCEEDED', updated_at: '2026-09-10T00:12:00.000Z' });
+    // The concurrent MCP invocation kept the two-minute default while the declared shell operation did not.
+    expect(f.db.all('SELECT deadline_at FROM operations WHERE kind=? AND status=? ORDER BY deadline_at', 'tool', 'active'))
+      .toEqual([{ deadline_at: '2026-09-10T00:12:00.000Z' }, { deadline_at: '2026-09-10T00:14:00.000Z' }]);
+    expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
+  } finally { f.close(); await rm(directory, { recursive: true, force: true }); }
+});

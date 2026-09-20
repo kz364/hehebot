@@ -27,8 +27,13 @@ c67aaf9314190296e47d8bbe7280ed49e699ba2a57803457c164a68b66d931f2.
 Warm pending-maintenance production timer stopped1ms before expiry+30s; strict
 assertion retained. Parent owns correction in owner-alpha-entry and its warm-entry
 test, disjoint from workers: deadline callback now rechecks frozen graceAt before
-stopping. Deterministic red/green and focused5/typecheck pass. Native/broader
-verification pending; do not rerun unchanged failed source or claim combined green.
+stopping. Deterministic red/green and focused5/typecheck pass. Do not rerun
+unchanged failed source or claim combined green from partial evidence.
+Correction is committed at b8c1136. Runtime PID481857 exits0 with600/600, no skips.
+Native-tail PID481858 exited0 (`.local/grace-deadline-native-tail.log`), from
+warm pending through build only, without full-verifier success banner. Warm
+pending passes+30001ms; background browser, both auto-stop modes, strict launcher
+(2260 lock probes), 15 service modes and build pass. Full rerun remains required.
 No deployment, production-config/containment/settlement/resume/sleep claim.
 Advisor now complete; parent source-checked memory/timing/limiter findings.
 Memory-design advisor also returned: actual model currently lives only in host
@@ -43,8 +48,12 @@ slice: optional trusted `shellOperationTimeoutMs`120001..600000, clocked root
 and descendant commands only, capped by attempt deadline; defaults and other
 operation deadlines unchanged. Exact source `aac8da0` bundle SHA256
 4b0c4ff8b729163adfe592ecb91837ecd022d7972ac0e1c4f03b4199ec6eacf6
-delivered. Worker owns codex-service/operations and directly relevant tests;
-parent owns docs/verifier/tracking. Await automatic completion.
+delivered. Worker returned patch `.local/e01-shell-timing.patch`, SHA256
+7acced1ccdc540dea86f5dbf675a5bf6770568e43963650a8a07cecb4a422745.
+Parent applied after native-tail exit, tightened legacy lookup to kind=tool and
+exact attempt deadline assertions, removed an unused map. Parent operations/service
+96/96, SQLite10/10 and typecheck pass; `.local/shell-timing-parent.log` SHA256
+f739754d8b3cede5d325dce49ca5f9cd8935694d3796255b603a4f0ed1a7c341.
 Third implementer T-01a0bfb6-0ae9-7457-85ac-c029d51595ce owns only a new local
 intake-load script:48 writes/min for10min, durable readback,p95 and rate-limit
 negative evidence. No limit changes or full5writes/sec SPEC acceptance.
@@ -52,8 +61,11 @@ Its initial return is not accepted: drift was measured after response, pacing
 had no pass/fail bound, burst assertions missed early rejection/network failures,
 and mode validation allowed inherited object keys. Parent requested discriminating
 negative controls, monotonic scheduling and exact60/10 burst acceptance before
-fresh smoke/full runs. Downloaded initial file hash145e02e remains under .local,
-not integrated. Worker owns correction and reports automatically.
+fresh smoke/full runs. Corrected return downloaded to
+`.local/test-control-intake-load-v2.mjs`, expected SHA256
+043aeb0ccf8e4d898f6502b960f8d1c52612a78c20d7ab716076d995df43c586.
+Worker reports selfcheck/smoke/full passes; parent review and rerun still required.
+Earlier deleted failed-run evidence is disclosed, not recoverable or accepted.
 The original correction/load/advisor workers received localba8d174 bundle SHA256
 3616a11201014201781d980ec01c3b6510c0af698316ed03196d63d92bd5a546.
 Parent owns strict fixture/entry/integration/tracking and reviews returns before
