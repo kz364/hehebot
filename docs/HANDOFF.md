@@ -4,6 +4,20 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
+Stage B contract review is complete and integrated at local 17954ea. Control-plane
+implementor T-01a0bd1f-7755-7126-b241-6325b14659e4 owns src/core, src/worker,
+runtime schema/generated validators and focused SQLite/HTTP tests; no runtime,
+portal, verifier or tracking writes. Exact source bundle:
+`.local/stage-b-control-full.bundle`, SHA256
+ef6cf5268234c120d3e24e3e31be4ad8ae399203a3c04e4e8a90e1a2d1a4f5cb.
+Baseline 17954ea2753392b301b7168c6fcd8efc670bdeee is local source-custody, not
+origin/main. Worker downloads and verifies the bundle before branching and replies
+on completion; no polling or duplicate assignment. Runtime/portal integration is
+not assigned until control-plane tests pass review. Parent clarified restricted
+context at both enqueue and claim, immutable stored status bytes and completion
+proof, actual hosted predecessor requirements, and host-asserted thread identity.
+The contract is reviewed, not implemented; prior proposal notes below are historical.
+
 F1b corrected replacement integrated at 0ecdc55. Patch
 `.local/warm-wake-listener-round2.patch` SHA256
 8eaca10d89070526a8f5210eb0b8d5c74439c5946d26ff6608c36739a82f1ad6.

@@ -4,6 +4,19 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stage B contract review (2026-09-20): revised single-file delivery SHA256
+d511a446c7697af8c388160ab0fb16e8c7aa455a46eeb76af7d75949f1999ef7
+verified and applied; parent source review added necessary context and persistence
+rules before committing 17954ea. `Lifecycle.claim` rebuilds generic context;
+`ControlCore.context` includes historical owner text/previews/child titles, so the
+new generation must explicitly select a restricted snapshot at enqueue and claim.
+The frozen status summary must persist its bytes, not only its hash. Completion
+stores an immutable S/B receipt; root thread IDs are host-asserted because attempts
+only store native_run_ref. A remains unsettled and no termination/sleep is inferred.
+Control implementation is assigned with SQLite/signed-HTTP and privacy-canary tests;
+runtime/native integration remains unimplemented. This is source/contract review,
+not executed Stage B acceptance; no production flag or deployed configuration changed.
+
 F1b replacement integration (2026-09-20, local 0ecdc55): reviewed replacement
 8eaca10d89070526a8f5210eb0b8d5c74439c5946d26ff6608c36739a82f1ad6.
 Callback expectations now read config and durable generation/manifest rows
