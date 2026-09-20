@@ -4,7 +4,8 @@ import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { once, EventEmitter } from 'node:events';
 import { ControlClient } from '../runtime/control-client.mjs';
 import { runHostedOwnerBackgroundManager, prepareHostedOwnerBackgroundManager } from '../runtime/hosted-owner-background-manager.mjs';
@@ -367,6 +368,10 @@ async function stoppedBackground(path) {
 
 test('background manager stages one exclusive session, holds once, and never widens legacy or warm kinds', async t => {
   const f = await managerFixture(t);
+  // Short window: this launch stages no stop proof, so the single proof read
+  // must fail at the boundary and never report retirement.
+  f.envelope.generation.policy.expires_at = new Date(Date.now() + 900).toISOString();
+  f.envelope.host_credential.grant.expires_at = f.envelope.generation.policy.expires_at;
   let launches = 0;
   const launch = async (path, options) => {
     launches++;
@@ -432,19 +437,68 @@ test('null generation, replay fence, and widened templates refuse before any hol
   }
 });
 
-test('retirement requires matching background journal identity and both locks, only after expiry', async t => {
+test('retirement waits for the exact millisecond expiry boundary after the auto-stop returns early', async t => {
+  // Production shape: the control plane floors the native auth JWT expiry to
+  // whole seconds, so the real auto-stop returns with the policy's exact
+  // millisecond expiry still ahead. The proof read must hold the one-shot
+  // continuation until that boundary; an immediate read is premature and
+  // fails closed. No favorable fixture sleeps launch past the deadline.
   const f = await managerFixture(t);
-  // Expiry must elapse in real time: inspectLocked uses the wall clock.
-  f.envelope.generation.policy.expires_at = new Date(Date.now() + 1500).toISOString();
+  f.envelope.generation.policy.expires_at = new Date(Date.now() + 1200).toISOString();
   f.envelope.host_credential.grant.expires_at = f.envelope.generation.policy.expires_at;
+  let returnedAt = 0;
   assert.equal(await runHostedOwnerBackgroundManager(f.config, f.request, { control: f.control, tasks: f.tasks,
-    launch: async (path, options) => {
-      await new Promise(resolve => setTimeout(resolve, 1600));
+    launch: async path => {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await stoppedBackground(path);
+      returnedAt = Date.now();
+      return { code: 0, signal: null };
+    } }), 'RETIREMENT_REPORTED');
+  const expiryAt = Date.parse(f.generation.policy.expires_at);
+  assert.ok(returnedAt < expiryAt, 'the launch fixture must return before the boundary for the wait to discriminate');
+  assert.deepEqual(f.calls.map(call => call.type), ['generation', 'retirement']);
+  const report = f.calls[1].body;
+  assert.deepEqual(report, { epoch: f.generation.epoch, boot_id: f.generation.boot_id, session_id: f.generation.session_id,
+    transition_id: f.generation.transition_id, observed_at: report.observed_at, direct_child_stopped: true,
+    execution_lock_free: true, session_lock_free: true,
+    source: 'hosted-background-manager:file-journal-nativeStopped+dual-flock' });
+  assert.ok(Date.parse(report.observed_at) >= expiryAt, 'retirement was observed before the exact expiry boundary');
+  assert.ok(Date.parse(report.observed_at) < expiryAt + 2000, 'the boundary wait ran unbounded');
+  // Launch returning only after the boundary needs no wait at all.
+  const g = await managerFixture(t);
+  g.envelope.generation.policy.expires_at = new Date(Date.now() + 400).toISOString();
+  g.envelope.host_credential.grant.expires_at = g.envelope.generation.policy.expires_at;
+  assert.equal(await runHostedOwnerBackgroundManager(g.config, g.request, { control: g.control, tasks: g.tasks,
+    launch: async path => {
+      await new Promise(resolve => setTimeout(resolve, 500));
       await stoppedBackground(path);
       return { code: 0, signal: null };
     } }), 'RETIREMENT_REPORTED');
-  assert.deepEqual(f.calls.map(call => call.type), ['generation', 'retirement']);
-  const report = f.calls[1].body;
+  assert.deepEqual(g.calls.map(call => call.type), ['generation', 'retirement']);
+});
+
+test('--inspect-locked refuses before the exact expiry boundary and reports at or after it', async t => {
+  // The strict pre-expiry refusal lives in the production CLI boundary itself.
+  // One immutable staged session flips from refusal to report purely by the
+  // wall clock crossing the exact millisecond expiry; nothing is rewritten.
+  const f = await managerFixture(t);
+  f.envelope.generation.policy.expires_at = new Date(Date.now() + 2000).toISOString();
+  f.envelope.host_credential.grant.expires_at = f.envelope.generation.policy.expires_at;
+  let staged = null;
+  await assert.rejects(runHostedOwnerBackgroundManager(f.config, f.request, { control: f.control, tasks: f.tasks,
+    launch: async (path, options) => {
+      await stoppedBackground(path);
+      staged = { path, sha256: options.expectedSha256 };
+      throw new Error('staged session captured for direct CLI boundary reads');
+    } }));
+  const self = new URL('../runtime/hosted-owner-background-manager.mjs', import.meta.url).pathname;
+  const read = () => promisify(execFile)(process.execPath, [self, '--inspect-locked', staged.path, staged.sha256],
+    { timeout: 10000, maxBuffer: 16384 });
+  await assert.rejects(read(), error => error.code === 1 && error.stderr.trim() === 'HOSTED_BACKGROUND_MANAGER_REFUSED_OR_UNKNOWN',
+    'the CLI read proof before the exact expiry boundary');
+  while (Date.now() < Date.parse(f.generation.policy.expires_at) + 50) await new Promise(ok => setTimeout(ok, 25));
+  const after = await read();
+  const report = JSON.parse(after.stdout);
   assert.deepEqual(report, { epoch: f.generation.epoch, boot_id: f.generation.boot_id, session_id: f.generation.session_id,
     transition_id: f.generation.transition_id, observed_at: report.observed_at, direct_child_stopped: true,
     execution_lock_free: true, session_lock_free: true,
@@ -452,40 +506,44 @@ test('retirement requires matching background journal identity and both locks, o
   assert.ok(Date.parse(report.observed_at) >= Date.parse(f.generation.policy.expires_at));
 });
 
-test('wrong journal identity, false stop, and premature stop never report retirement', async t => {
-  for (const mutate of [row => ({ ...row, nativeStopped: false }), row => ({ ...row, bootId: id(9) }),
+test('wrong journal identity, false stop and proofless early exit never report retirement at the boundary', async t => {
+  // Every case reads proof only at the exact expiry boundary: a mismatched or
+  // missing stop record must fail closed there, never before the boundary.
+  const mutations = [row => ({ ...row, nativeStopped: false }), row => ({ ...row, bootId: id(9) }),
     row => ({ ...row, identity: { epoch: 8, boot_id: row.identity.boot_id } }),
     row => ({ ...row, ownerAlphaGeneration: { ...row.ownerAlphaGeneration, transition_id: id(9) } }),
     row => ({ ...row, ownerAlphaBackground: { ...row.ownerAlphaBackground, generation_sha256: 'ff'.repeat(32) } }),
     row => ({ ...row, ownerAlphaBackground: { ...row.ownerAlphaBackground, background_profile_sha256: 'ff'.repeat(32) } }),
     row => ({ ...row, ownerAlpha: { ...row.ownerAlpha, session_id: id(9) } }),
-    row => ({ ...row, hostedOwner: { ...row.hostedOwner, bindingSha256: 'ef'.repeat(32) } }), null]) {
+    row => ({ ...row, hostedOwner: { ...row.hostedOwner, bindingSha256: 'ef'.repeat(32) } })];
+  for (const mutate of [...mutations, null]) {
     const f = await managerFixture(t);
+    f.envelope.generation.policy.expires_at = new Date(Date.now() + 700).toISOString();
+    f.envelope.host_credential.grant.expires_at = f.envelope.generation.policy.expires_at;
     await assert.rejects(runHostedOwnerBackgroundManager(f.config, f.request, { control: f.control, tasks: f.tasks,
       launch: async path => {
-        await stoppedBackground(path);
         if (mutate) {
+          await stoppedBackground(path);
           const { config } = await readOwnerAlphaConfig(path);
           const journal = new FileJournal(join(config.stateDirectory, 'journal'));
           const row = await journal.get('service');
           await journal.update('service', mutate({ ...row }));
-        }
+        } // null: an early exit stages no stop proof at all
         return { code: 0, signal: null };
       } }));
     assert.deepEqual(f.calls.map(call => call.type), ['generation']);
   }
 });
 
-test('either held kernel lock prevents background retirement despite a matching journal', async t => {
+test('either held kernel lock prevents background retirement despite a matching journal at the boundary', async t => {
   for (const which of ['nativeHome', 'stateDirectory']) {
     const f = await managerFixture(t);
-    f.envelope.generation.policy.expires_at = new Date(Date.now() + 1500).toISOString();
+    f.envelope.generation.policy.expires_at = new Date(Date.now() + 900).toISOString();
     f.envelope.host_credential.grant.expires_at = f.envelope.generation.policy.expires_at;
     let holder;
     try {
       await assert.rejects(runHostedOwnerBackgroundManager(f.config, f.request, { control: f.control, tasks: f.tasks,
         launch: async path => {
-          await new Promise(resolve => setTimeout(resolve, 1600));
           await stoppedBackground(path);
           const { config } = await readOwnerAlphaConfig(path);
           holder = spawn('bash', [join('scripts', 'with-executor-lock.sh'), config[which], process.execPath,
@@ -522,11 +580,108 @@ test('wake listener routes the background kind to the background manager without
   assert.deepEqual(f.holds, []);
 });
 
-test('prepare continuation is single-shot and expiry-fenced', async t => {
+test('prepare continuation is single-shot, expiry-fenced and never waits an aborted window out', async t => {
+  // Expired before the continuation starts: refused before any launch.
+  const expired = await managerFixture(t);
+  expired.envelope.generation.policy.expires_at = new Date(Date.now() + 400).toISOString();
+  expired.envelope.host_credential.grant.expires_at = expired.envelope.generation.policy.expires_at;
+  let launches = 0;
+  const resumeExpired = await prepareHostedOwnerBackgroundManager(expired.config, expired.request,
+    { control: expired.control, tasks: expired.tasks, launch: async () => { launches++; return { code: 0, signal: null }; } });
+  await new Promise(ok => setTimeout(ok, 550));
+  await assert.rejects(resumeExpired());
+  assert.equal(launches, 0);
+  assert.deepEqual(expired.calls.map(call => call.type), ['generation']);
+  // Single-shot through the boundary wait: one read, one report, consumed once.
+  const retire = await managerFixture(t);
+  retire.envelope.generation.policy.expires_at = new Date(Date.now() + 700).toISOString();
+  retire.envelope.host_credential.grant.expires_at = retire.envelope.generation.policy.expires_at;
+  const resumeOnce = await prepareHostedOwnerBackgroundManager(retire.config, retire.request,
+    { control: retire.control, tasks: retire.tasks,
+      launch: async path => { await stoppedBackground(path); return { code: 0, signal: null }; } });
+  assert.equal(await resumeOnce(), 'RETIREMENT_REPORTED');
+  await assert.rejects(resumeOnce());
+  assert.deepEqual(retire.calls.map(call => call.type), ['generation', 'retirement']);
+  // Abort during the boundary wait retains UNKNOWN without waiting it out.
+  const aborted = await managerFixture(t);
+  aborted.envelope.generation.policy.expires_at = new Date(Date.now() + 2500).toISOString();
+  aborted.envelope.host_credential.grant.expires_at = aborted.envelope.generation.policy.expires_at;
+  const controller = new AbortController();
+  const resumeAborted = await prepareHostedOwnerBackgroundManager(aborted.config, aborted.request,
+    { control: aborted.control, tasks: aborted.tasks, signal: controller.signal,
+      launch: async path => { await stoppedBackground(path); return { code: 0, signal: null }; } });
+  const rejection = assert.rejects(resumeAborted());
+  setTimeout(() => controller.abort(), 200);
+  await rejection;
+  assert.ok(Date.now() < Date.parse(aborted.generation.policy.expires_at) - 1000,
+    'an aborted manager must retain UNKNOWN well before the boundary, never wait the window out');
+  assert.deepEqual(aborted.calls.map(call => call.type), ['generation']);
+  await assert.rejects(resumeAborted());
+});
+
+test('a successful timed wait leaves no abort listener behind', async t => {
+  // Regression for the listener leak: the deadline-anchored wait must remove
+  // its abort listener on every path, including normal timer completion and
+  // repeated early timer firings. The tracked signal records each add and
+  // remove; after a full successful retirement through a real timed wait no
+  // listener may remain.
   const f = await managerFixture(t);
-  const resume = await prepareHostedOwnerBackgroundManager(f.config, f.request, { control: f.control, tasks: f.tasks,
-    launch: async path => { await stoppedBackground(path); return { code: 0, signal: null }; } });
-  await assert.rejects(resume()); // pre-expiry inspect fails closed
-  await assert.rejects(resume()); // the continuation is consumed exactly once
-  assert.deepEqual(f.calls.map(call => call.type), ['generation']);
+  f.envelope.generation.policy.expires_at = new Date(Date.now() + 400).toISOString();
+  f.envelope.host_credential.grant.expires_at = f.envelope.generation.policy.expires_at;
+  const listeners = [];
+  let added = 0;
+  const signal = {
+    aborted: false,
+    addEventListener: (type, listener) => { added++; listeners.push(listener); },
+    removeEventListener: (type, listener) => { const at = listeners.indexOf(listener); if (at >= 0) listeners.splice(at, 1); }
+  };
+  assert.equal(await runHostedOwnerBackgroundManager(f.config, f.request, { control: f.control, tasks: f.tasks, signal,
+    launch: async path => { await stoppedBackground(path); return { code: 0, signal: null }; } }), 'RETIREMENT_REPORTED');
+  assert.ok(added >= 1, 'the timed wait must actually register an abort listener to be a discriminator');
+  assert.equal(listeners.length, 0, 'every abort listener registered by the boundary wait must be removed by retirement time');
+  assert.deepEqual(f.calls.map(call => call.type), ['generation', 'retirement']);
+});
+
+test('an abort observed at or after the exact boundary never reaches the proof read or retirement', async t => {
+  // The launch fixture returns with the boundary already behind it and the
+  // manager signal already aborted: an aborted manager must retain UNKNOWN
+  // even though now() >= expires_at, never start the dual-lock proof read,
+  // and never initiate a retirement request.
+  const f = await managerFixture(t);
+  f.envelope.generation.policy.expires_at = new Date(Date.now() + 300).toISOString();
+  f.envelope.host_credential.grant.expires_at = f.envelope.generation.policy.expires_at;
+  const controller = new AbortController();
+  const rejection = assert.rejects(runHostedOwnerBackgroundManager(f.config, f.request,
+    { control: f.control, tasks: f.tasks, signal: controller.signal,
+      launch: async path => {
+        await stoppedBackground(path);
+        await new Promise(resolve => setTimeout(resolve, 420));
+        controller.abort();
+        return { code: 0, signal: null };
+      } }), { message: 'HOSTED_BACKGROUND_MANAGER_REFUSED_OR_UNKNOWN' });
+  await rejection;
+  assert.ok(Date.now() >= Date.parse(f.generation.policy.expires_at), 'the launch fixture must return at or after the boundary for this discriminator');
+  assert.deepEqual(f.calls.map(call => call.type), ['generation'],
+    'an aborted manager never initiates a retirement request, at or after the boundary');
+});
+
+test('an abort observed while the proof read runs never initiates the retirement request', async t => {
+  // The abort lands inside the dual-lock --inspect-locked read itself: the
+  // boundary wait completed un-aborted and the proof read succeeded, but the
+  // manager must still retain UNKNOWN and never dispatch the retirement
+  // request. An already-dispatched write is out of scope here; this asserts
+  // only that none is initiated after the observed abort.
+  const f = await managerFixture(t);
+  f.envelope.generation.policy.expires_at = new Date(Date.now() + 300).toISOString();
+  f.envelope.host_credential.grant.expires_at = f.envelope.generation.policy.expires_at;
+  const controller = new AbortController();
+  await assert.rejects(runHostedOwnerBackgroundManager(f.config, f.request,
+    { control: f.control, tasks: f.tasks, signal: controller.signal,
+      launch: async path => {
+        await stoppedBackground(path);
+        setTimeout(() => controller.abort(), Date.parse(f.generation.policy.expires_at) + 10 - Date.now());
+        return { code: 0, signal: null };
+      } }), { message: 'HOSTED_BACKGROUND_MANAGER_REFUSED_OR_UNKNOWN' });
+  assert.deepEqual(f.calls.map(call => call.type), ['generation'],
+    'an abort observed during the proof read never initiates a retirement request');
 });

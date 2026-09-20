@@ -63,10 +63,37 @@ portal binding. Do not copy its account cache. Every assigned transition receive
 its own exclusive directory, task token and journal. Existing or partial directories
 are refusal evidence, not disposable retry state.
 
-Hosted launch requires Linux `flock` and `setpriv` (util-linux). After acquiring
-the native-home and session locks, the shared launcher drops bounding, inheritable
-and ambient capabilities and sets no-new-privileges before the native entrypoint.
-Missing/failed capability drop refuses launch without an unrestricted fallback.
+Hosted launch requires Linux `flock`, `setpriv` (util-linux), Bash and awk.
+For a root-started service, use the production bootstrap
+`scripts/with-hosted-owner-user.sh UID GID -- COMMAND [ARGS...]` with the explicit
+nonzero owner identity before starting the listener. It drops supplemental groups,
+capabilities and future privilege gains in the same user namespace, preserving
+authentic root ownership of `/etc/codex`. It never elevates or installs itself.
+The service operator must supply trusted root-owned bootstrap code and a controlled
+environment; this is not a setuid helper for untrusted callers. Use absolute command
+paths and set HOME to the existing authorized owner's home, not root's home. For
+example, the service command shape (not deployment authorization) is:
+
+```sh
+/bin/bash /absolute/hehebot/scripts/with-hosted-owner-user.sh OWNER_UID OWNER_GID -- \
+  /usr/bin/env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/absolute/owner-home \
+  /absolute/node /absolute/hehebot/runtime/hosted-owner-wake.mjs \
+  --listen /absolute/manager.json /absolute/wake-token 8080
+```
+
+UID/GID, paths, ownership and required non-secret environment must be resolved for
+the specific installation. Do not copy or recreate account caches. An already
+non-root service needs an equivalently verified zero-capability startup boundary;
+an unprivileged process cannot clear a nonempty bounding set in the initial user
+namespace. Merely calling `setpriv` is insufficient: some libcap-ng builds report
+success despite failed bounding-set drops. The bootstrap verifies the resulting
+non-root UID, five empty capability masks and NoNewPrivs=1 before executing the
+command. It uses Debian's `/usr/bin/setpriv`, `/bin/bash`, and `/usr/bin/awk` paths
+and fails closed if unavailable.
+
+After acquiring the native-home and session locks, the shared launcher repeats
+the supported drop and verifies the boundary before the native entrypoint.
+Missing/failed capability drop or readback refuses launch without a fallback.
 This is required for the selected Sprite's Codex sandbox; do not disable the
 sandbox to bypass a startup failure. It is not descendant-settlement evidence.
 
@@ -80,7 +107,7 @@ The original runtime token does not authenticate automatic task requests. Task
 expiry is fixed at message admission, not when the listener becomes ready.
 
 A supported [Sprite HTTP service](https://docs.sprites.dev/concepts/services/)
-can register the absolute Node command and listener arguments with `http_port:8080`
+can register the bootstrap-prefixed absolute Node command and listener arguments with `http_port:8080`
 on the **same existing Sprite**. Registration starts the service and changes shared
 state; it is not a read-only staging check. Inspect conflicts and persistent paths
 within the authorized deployment window first. Only one HTTP-port service is allowed.

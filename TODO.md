@@ -1,6 +1,6 @@
 # Hehebot progress and TODO
 
-**Last reviewed: 2026-09-20 (Asia/Jakarta). Not operational; production gates remain false.**
+**Last reviewed: 2026-09-21 (Asia/Jakarta). Not operational; production gates remain false.**
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
@@ -26,6 +26,26 @@ remain unchanged. Baseline `ba8d174caf4ba2fe95ea3b550e99afa380f8591c` transferre
 by verified bundle. Entry/floor contracts pass30; both lock observers reject an
 available lock with a live synthetic process (exit91), accept absent process (0),
 and detect held locks (73). These controls are not real-launcher acceptance.
+Launcher design review found the proposed `unshare --map-current-user --keep-caps`
+chain clears all capability masks but maps root-owned paths to uid65534, violating
+the unchanged floor ownership checks. Implementer is revising the proposal; do
+not accept65534 as root or treat capability-only tests as full launcher acceptance.
+The revised retirement patch is applied locally: parent focused19/typecheck pass,
+and real-native normal mode now retires correctly despite stopping539ms before
+expiry (one launch, dual locks, unknown root custody/no replay preserved).
+Pending-maintenance also passes: timer at expiry+30000ms, idempotent finally
+at+31133ms, retirement/no replay and unknown custody preserved. Combined
+verification remains open. Logs `.local/retirement-parent-{native,pending}.log`.
+The reusable production root-to-owner bootstrap is now integrated and used by the
+strict fixture. Parent launcher/bootstrap16 tests pass with no skips. Real launcher
+run passes: non-root entry/npm/native, all5 capability sets zero/NoNewPrivs1, real
+floor/readback/Tasks socket,2150 lock probes, automatic exit at expiry+697ms,
+dual-lock retirement/no replay/unknown custody. No harness success-stop. Log
+`.local/launcher-parent-native.log`, SHA256
+`9926f5937aec00e252e489dcb2604a8e5bdcf6b3796194c0e890a501f63f58f9`.
+Wrapper session-flags seam remains explicit; not production-config, descendant
+containment, settlement, safe-resume or sleep acceptance. Strict fixture added to
+combined verifier; fresh full run is the next acceptance step. No live service changed.
 
 **Latest integrated check: FAILED, finite wave remains open.** On local source
 `11deb67817776d3be4775606c5f73f3d4dd48b24`, `bash scripts/verify-codex.sh`

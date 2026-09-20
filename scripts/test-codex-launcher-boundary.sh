@@ -34,6 +34,10 @@ for path in /bin /sbin /lib /lib64; do
   if [[ -L "$path" ]]; then ln -s "$(readlink "$path")" "$R$path";
   elif [[ -d "$path" ]]; then mkdir "$R$path"; mount --bind "$path" "$R$path"; fi
 done
+# Debian's trusted awk executable is reached through this alternatives link.
+# Its target is already present in the mounted OS tool tree, not a fixture stub.
+mkdir -p "$R/etc/alternatives"
+ln -s "$(readlink -f /usr/bin/awk)" "$R/etc/alternatives/awk"
 # Only explicit non-secret OS lookup/crypto configuration; no home, auth cache,
 # environment, /etc private keys or credential files are copied into the root.
 for path in /etc/passwd /etc/group /etc/nsswitch.conf /etc/hosts /etc/ld.so.cache /etc/ssl/openssl.cnf; do
@@ -62,6 +66,7 @@ pivot_root . .oldroot
 cd /
 umount -l /.oldroot
 rmdir /.oldroot
-exec setpriv --reuid="$UID_OWNER" --regid="$GID_OWNER" --clear-groups /usr/bin/env -i \
+# Exercise the production service bootstrap, not a fixture-only privilege drop.
+exec /bin/bash "$ROOT/scripts/with-hosted-owner-user.sh" "$UID_OWNER" "$GID_OWNER" -- /usr/bin/env -i \
   PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 HOME=/home/user WRANGLER_SEND_METRICS=false \
   "$NODE" "$ROOT/scripts/test-codex-launcher-boundary.mjs" "$ROOT" "$BASE" "$HOST_MNT" "$HOST_NET" "$MODE"

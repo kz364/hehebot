@@ -2,7 +2,7 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies, including one Worker-triggered staged wake, have canonical completion and full-reload persistence. Historical failed work remains recovery-required. Bounded policies expired and launchers stopped; this is not ongoing chat availability or production readiness. Production execution/native gates remain false.
 
-## Active follow-up (2026-09-20 Asia/Jakarta)
+## Active follow-up (2026-09-21 Asia/Jakarta)
 
 Main T-01a0b925-c847-73b9-9713-e04b5f3b43d4 is now the sole user-facing
 project-owner, reporting directly to user (lifecycle revision4). ASK QUESTIONS
@@ -10,9 +10,18 @@ HERE is retired/custody-transferred. Canonical uncommitted ledger:
 `.amp/coordination/hehebot-product.md`; two-hour recovery schedule preserved.
 Owner now authorizes both local Hehebot runtime corrections. This supersedes the
 fixture-only/no-runtime-patch approval blockers in the historical evidence below;
-Codex/dependency patches and live actions remain excluded. Active implementers:
-T-01a0bfae-c760-72c6-aaca-06a50ea28df3 (background retirement manager/tests),
-T-01a0bfaf-4b8b-7477-abdb-95ec1cda4f35 (launcher capability drop/tests).
+Codex/dependency patches and live actions remain excluded. Retirement and launcher
+implementers have returned; parent integrated both with review corrections.
+Parent focused19/typecheck and launcher/bootstrap16 pass. Native normal retirement
+passes despite stop539ms early; pending timer+30000/finally+31133 passes separately.
+Real launcher/default entry now passes using the same production root-to-owner
+bootstrap: uid1000/all5 masks0/NoNewPrivs1, real floor/readback/Tasks,2150 lock
+probes, automatic exit+697ms, retirement/no replay/unknown custody retained.
+No fixture-only pre-drop or loosened floor. Added UID/GID overflow rejection and
+fixture awk alternatives link. Log `.local/launcher-parent-native.log`, SHA256
+9926f5937aec00e252e489dcb2604a8e5bdcf6b3796194c0e890a501f63f58f9.
+Strict fixture now in combined verifier; fresh combined acceptance still pending.
+No deployment, production-config/containment/settlement/resume/sleep claim.
 Advisor T-01a0bfaf-cc22-766f-a9ad-2802923e7fac assesses independent local work.
 Advisor now complete; parent source-checked memory/timing/limiter findings.
 Third implementer T-01a0bfb6-0ae9-7457-85ac-c029d51595ce owns only a new local

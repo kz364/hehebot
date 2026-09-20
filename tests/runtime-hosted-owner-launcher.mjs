@@ -71,12 +71,24 @@ function injectedFixture(f, fixture, extra = [], inspect = () => {}) {
       calls++;
       const digest = createHash('sha256').update(f.bytes).digest('hex');
       assert.equal(command, 'bash');
-      assert.deepEqual(argv, [lockScript, f.nativeHome, 'bash', lockScript, f.stateDirectory,
-        'setpriv', '--bounding-set=-all', '--inh-caps=-all', '--ambient-caps=-all', '--no-new-privs', '--',
-        process.execPath, entry, '--run-hosted-locked', f.path, digest]);
+      const verifyIndex = argv.indexOf('-c');
+      assert.ok(verifyIndex > 5 && argv[verifyIndex - 1] === 'bash',
+        'launcher must install a bash -c verified exec after the capability drop');
+      const verifyScript = argv[verifyIndex + 1];
+      assert.ok(typeof verifyScript === 'string' && verifyScript.includes('/proc/self/status')
+        && verifyScript.includes('exec "$@"') && verifyScript.includes('exit 91'),
+        'verified exec must read back /proc/self/status and refuse on mismatch');
+      assert.deepEqual([...argv.slice(0, verifyIndex - 1), 'bash', '-c', verifyScript, ...argv.slice(verifyIndex + 2)],
+        [lockScript, f.nativeHome, 'bash', lockScript, f.stateDirectory,
+          'setpriv', '--bounding-set=-all', '--inh-caps=-all', '--ambient-caps=-all', '--no-new-privs', '--',
+          'bash', '-c', verifyScript, 'verify-launch-boundary',
+          process.execPath, entry, '--run-hosted-locked', f.path, digest]);
       assert.deepEqual(options, { stdio: 'inherit' });
       inspect(argv);
-      return f.trackedSpawn(command, argv.slice(0, argv.indexOf(process.execPath)).concat(process.execPath, fixture,
+      // The lock test exercises lock semantics, not the boundary; run the real
+      // locks and the setpriv drop attempt, then the fixture instead of the
+      // verified exec (which would refuse an unprivileged harness).
+      return f.trackedSpawn(command, argv.slice(0, verifyIndex - 1).concat(process.execPath, fixture,
         f.nativeHome, f.stateDirectory, ...extra), options);
     },
     get calls() { return calls; },
@@ -143,6 +155,96 @@ test('capability-drop refusal preserves custody and never falls back or retries 
   assert.equal(await readFile(f.path, 'utf8'), f.bytes);
   await assert.rejects(lstat(join(f.stateDirectory, 'journal')), { code: 'ENOENT' });
   await assert.rejects(lstat(join(f.stateDirectory, 'workspace')), { code: 'ENOENT' });
+});
+
+const statusReadbackFixture = `
+  import { readFile } from 'node:fs/promises';
+  const fields = {};
+  for (const line of (await readFile('/proc/self/status', 'utf8')).split('\\n')) {
+    const match = /^(Uid|CapInh|CapPrm|CapEff|CapBnd|CapAmb|NoNewPrivs):\\t(.*)$/.exec(line);
+    if (match) fields[match[1]] = match[2].trim();
+  }
+  console.log(JSON.stringify({ uid: process.getuid(), euid: process.geteuid(), ...fields }));
+`;
+
+test('unverified boundary refuses launch instead of running the entry with capabilities', { timeout: 30000 }, async t => {
+  const f = await setupConfig(t), fixture = join(f.root, 'ran.mjs');
+  await writeFile(fixture, statusReadbackFixture, { mode: 0o600 });
+  assert.ok(process.getuid() !== 0, 'regression evidence requires an unprivileged harness');
+  let stdout = '', calls = 0;
+  const result = await launchHostedOwnerAlpha(f.path, { spawnImpl(command, argv, options) {
+    calls++;
+    assert.equal(argv[5], 'setpriv');
+    // Real locks, real drop attempt, real verified exec; only the entry is a
+    // status readback so the refusal is observable.
+    const child = f.trackedSpawn(command, argv.slice(0, argv.indexOf(process.execPath)).concat(process.execPath, fixture),
+      { ...options, stdio: ['ignore', 'pipe', 'inherit'] });
+    child.stdout.on('data', data => { stdout += data; });
+    return child;
+  } });
+  assert.deepEqual(result, { code: 91, signal: null });
+  assert.equal(stdout, '');
+  assert.equal(calls, 1);
+  assert.equal(await readFile(f.path, 'utf8'), f.bytes);
+  await assert.rejects(lstat(join(f.stateDirectory, 'journal')), { code: 'ENOENT' });
+  await assert.rejects(lstat(join(f.stateDirectory, 'workspace')), { code: 'ENOENT' });
+});
+
+test('verified exec admits only a zero-capability non-root boundary before running the entry', { timeout: 30000 }, async t => {
+  const f = await setupConfig(t), fixture = join(f.root, 'status.mjs');
+  await writeFile(fixture, statusReadbackFixture, { mode: 0o600 });
+  assert.ok(process.getuid() !== 0, 'boundary evidence requires a non-root harness');
+  let stdout = '', calls = 0;
+  const result = await launchHostedOwnerAlpha(f.path, { spawnImpl(command, argv, options) {
+    calls++;
+    const verifyIndex = argv.indexOf('-c');
+    assert.ok(verifyIndex > 5, 'launcher must install a bash -c verified exec boundary');
+    const entryIndex = argv.indexOf(process.execPath);
+    assert.ok(entryIndex > verifyIndex, 'verified exec must precede the entry');
+    // Reproduce the supported drop inside a private identity-mapped user
+    // namespace: the only unprivileged environment where the kernel permits
+    // the bounding-set drop the verified exec demands.
+    const child = f.trackedSpawn('unshare', ['--map-current-user', '--keep-caps',
+      ...argv.slice(5, entryIndex), process.execPath, fixture, f.path],
+      { ...options, stdio: ['ignore', 'pipe', 'inherit'] });
+    child.stdout.on('data', data => { stdout += data; });
+    return child;
+  } });
+  assert.deepEqual(result, { code: 0, signal: null });
+  assert.equal(calls, 1);
+  const observed = JSON.parse(stdout);
+  const uid = process.getuid();
+  assert.equal(observed.uid, uid); assert.equal(observed.euid, uid);
+  assert.equal(observed.Uid, [uid, uid, uid, uid].join('\t'));
+  for (const field of ['CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb']) {
+    assert.equal(observed[field], '0000000000000000', field);
+  }
+  assert.equal(observed.NoNewPrivs, '1');
+});
+
+test('verified exec refuses a silently ignored capability drop without running the entry', { timeout: 30000 }, async t => {
+  const f = await setupConfig(t), fixture = join(f.root, 'ran.mjs');
+  await writeFile(fixture, statusReadbackFixture, { mode: 0o600 });
+  assert.ok(process.getuid() !== 0, 'refusal evidence requires an unprivileged harness');
+  let stdout = '', calls = 0;
+  const result = await launchHostedOwnerAlpha(f.path, { spawnImpl(command, argv, options) {
+    calls++;
+    const verifyIndex = argv.indexOf('-c');
+    assert.ok(verifyIndex > 5, 'launcher must install a bash -c verified exec boundary');
+    const entryIndex = argv.indexOf(process.execPath);
+    // Without --keep-caps the namespace grants are dropped before setpriv,
+    // whose bounding-set drop Debian libcap-ng then silently ignores: the
+    // exact regression class the verified exec must catch.
+    const child = f.trackedSpawn('unshare', ['--map-current-user',
+      ...argv.slice(5, entryIndex), process.execPath, fixture, f.path],
+      { ...options, stdio: ['ignore', 'pipe', 'inherit'] });
+    child.stdout.on('data', data => { stdout += data; });
+    return child;
+  } });
+  assert.deepEqual(result, { code: 91, signal: null });
+  assert.equal(stdout, '');
+  assert.equal(calls, 1);
+  assert.equal(await readFile(f.path, 'utf8'), f.bytes);
 });
 
 test('abort is forwarded once to the exact exec-preserved child and is not retried', { timeout: 15000 }, async t => {
@@ -216,7 +318,10 @@ test('locked child rejects config changed after parent digest capture before sta
         assert.equal(argv.at(-1), createHash('sha256').update(f.bytes).digest('hex'));
         // Synchronous spawn interception is the boundary between parent capture and locked child read.
         requireWriteChangedConfig(f.path, f.config);
-        return f.trackedSpawn(command, argv, options);
+        // Reproduce the supported drop in a private identity-mapped user
+        // namespace so the verified exec admits the chain and the locked
+        // child itself can be observed refusing the changed digest.
+        return f.trackedSpawn('unshare', ['--map-current-user', '--keep-caps', ...argv.slice(5)], options);
       },
     };
     function requireWriteChangedConfig(path, config) {

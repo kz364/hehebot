@@ -1,4 +1,5 @@
 import { mkdir, lstat, open } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -32,8 +33,10 @@ async function writeExclusive(path, bytes) {
 }
 
 /** Called only by authenticated wake admission under the background contract.
- * No timer, renewal or replay; one launch envelope ever, one process, one
- * boot. Nothing may follow a background generation in this slice. */
+ * No renewal or replay; one launch envelope ever, one process, one boot. The
+ * only timer in this slice is the deadline-anchored wait that holds the
+ * one-shot continuation to the exact millisecond expiry boundary. Nothing may
+ * follow a background generation in this slice. */
 export async function runHostedOwnerBackgroundManager(config, request, dependencies = {}) {
   const resume = await prepareHostedOwnerBackgroundManager(config, request, dependencies);
   return resume ? resume() : 'NO_ASSIGNMENT';
@@ -127,10 +130,30 @@ export async function prepareHostedOwnerBackgroundManager(config, request, { rea
     await syncDirectory(directory);
     if (Date.parse(policy.expires_at) <= now() || signal?.aborted) fail();
     await launch(path, { expectedSha256: sha256, signal });
+    // The control plane floors the native auth JWT expiry to whole seconds
+    // (warmTimestamps), so the production auto-stop can return up to one
+    // second before this policy's exact millisecond expiry, and an immediate
+    // proof read is premature and fails closed. Hold the one-shot
+    // continuation until the exact expiry boundary, then read once. The wait
+    // is deadline-anchored — never longer than the remaining policy window,
+    // no polling, no retry, no inferred settlement, no renewal and no
+    // replay. An aborted manager never waits the window out, and an abort
+    // observed at or after the boundary refuses before the proof read: both
+    // retain UNKNOWN exactly as an immediate premature read would.
+    const expiresAtMs = Date.parse(policy.expires_at);
+    while (now() < expiresAtMs && !signal?.aborted) {
+      try { await delay(expiresAtMs - now(), undefined, { signal }); }
+      catch (error) { if (!signal?.aborted) throw error; }
+    }
+    if (signal?.aborted || now() < expiresAtMs) fail();
     // Acquire, rather than inspect PID files. Read proof while both locks are
     // held. Failure (including still-held locks) retains UNKNOWN and never retries.
     const { stdout } = await promisify(execFile)('bash', [lockScript, child.nativeHome, 'bash', lockScript,
       directory, process.execPath, self, '--inspect-locked', path, sha256], { timeout: 10000, maxBuffer: 16384 });
+    // An abort observed while the proof read ran never initiates the
+    // retirement request; an already-dispatched write is left to settle on
+    // its own. This retains UNKNOWN exactly like every other refusal.
+    if (signal?.aborted) fail();
     const report = JSON.parse(stdout);
     await control.request('retirement', report);
     return 'RETIREMENT_REPORTED';

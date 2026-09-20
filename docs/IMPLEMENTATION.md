@@ -4,6 +4,43 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Retirement correction parent integration (2026-09-20): amended worker patch
+SHA256293b3a2b37b3d808bef4631c89ba55d3e24216bc88529365eca8620d7a1354cd
+applied to localfc60892. Parent requested supported abortable-delay listener cleanup,
+abort refusal before inspection and after its await before retirement dispatch.
+The manager waits to the immutable millisecond expiry; it does not renew auth,
+retry the read/launch, or weaken identity/stop/lock checks. Parent focused19 and
+typecheck pass. Real native normal mode passes with automatic stop539ms before
+expiry, then dual-lock retirement; one native launch, recovery_required/STALE_EPOCH,
+no second envelope. Log `.local/retirement-parent-native.log`, SHA256
+a76bdf518d7568e51ca056f1ac113dcf897616442a6adaac15fb95c8d82179ab.
+Pending mode also passes: timer+30000ms/finally+31133ms, same retirement/no-replay
+and retained unknown root. `.local/retirement-parent-pending.log`, SHA256
+c53c234bcf3176b9d27413fcb39b965ec0e4f886740a46c3d5cd7835cf5839cd.
+These two modes remain in-process entry/staged readback evidence. Combined
+acceptance remains open. Parent rejected fixture-only pre-clearing and integrated
+a reusable production root-to-owner startup helper plus launcher readback guard
+(worker patch SHA25627b0e8ed4fb1fc63e3eec2a61d0a22cacce7ed8ea17c90747266d3678a2f9916).
+The userns proposal zeros caps but maps actual root paths to65534, which fails
+unchanged root-owned floor inspection. No ownership check is weakened.
+
+Real launcher parent pass (2026-09-21 Asia/Jakarta): same production bootstrap
+now precedes the fixture's non-root manager/default entry. All root floor/socket
+mounts remain in the disposable private namespace. Parent16 launcher/bootstrap
+contracts pass with0 skips. Added integer-overflow identity negatives (red before
+length-bound fix); composition scratch now stays under the test cleanup directory.
+Private root needed Debian's standard awk alternatives link; no binary stub or
+privilege bypass added. Actual entry/npm/native PIDs446713/446748/446755 observed
+uid1000, five zero masks,NoNewPrivs1; real floor/readback before ready;3 model POSTs
+with held child,2150 lock probes, expiry-driven exit+697ms, process absence before
+successful lock acquisition, real manager retirement/no replay/unknown custody.
+Log `.local/launcher-parent-native.log`, SHA256
+9926f5937aec00e252e489dcb2604a8e5bdcf6b3796194c0e890a501f63f58f9.
+Host `/etc/codex` and `/.sprite` remain absent. The supported-loopback/catalog
+session-arguments wrapper stays labelled: no production configuration, recursive
+containment, settlement, safe resume or safe sleep proved. The strict fixture is
+now in the combined verifier. Production Service registration remains unchanged.
+
 Authorized correction wave (2026-09-20), exact sourceba8d174: owner permits local
 Hehebot launcher privilege-drop and expiry/retirement fixes, not dependency/Codex
 patches or relaxed assertions. Disjoint implementers received verified complete
