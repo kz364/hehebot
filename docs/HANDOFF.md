@@ -6,15 +6,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 Stage B control implementation integrated at local c35e118 after reviewing patch
 SHA256 4d8b376fcb8e2da1ddf096430c76453b2a85789bc0d4b3092d15766d8845a9b9.
-Parent focused8/8/typecheck pass, integrated backend1790 pass. Combined verifier
-PID 275220 remains running: follow with shell_command_status, do not restart;
-log `.local/stage-b-integrated-verify.log`. Parent fixed summary next_role before
+Parent focused8/8/typecheck pass. Combined verifier PID 275220 finished exit0:
+1790 backend/570 runtime plus native/browser/service fixtures and build, log
+`.local/stage-b-integrated-verify.log`. Parent fixed summary next_role before
 first admission to background and reverted unrelated warm custody accounting.
 Two disjoint workers use exact c35e118a835d5a5c80e589cf852efb7f35301a36 source:
 - T-01a0bd60-d11c-7141-a108-a27ae5c33b45: runtime, focused runtime tests, new native
   HTTP manager fixture and minimal hosted-control fixture support. No src/public.
-- T-01a0bd61-76f6-742e-9818-80b9cef62494: public/app.js plus new browser-only
-  portal fixture. No runtime/hosted fixture changes.
+- T-01a0bd61-76f6-742e-9818-80b9cef62494: portal COMPLETE/integrated at befc7d0.
+  Parent added legacy-session-only/warm-latch conflict guards and cleared only
+  stale Stage B admission errors. Background/warm browser checks pass; legacy
+  adoption had one timeout and passes isolated rerun. Four screenshots inspected.
+  Logs `.local/stage-b-portal-{parent,warm,legacy,legacy-rerun}.log` preserve both
+  failure and success. New browser fixture is included in combined verifier;
+  full control verifier above preceded this portal commit. Task action fences
+  unchanged: cancel/follow-up remain existing controls, steer execution-gated.
 Bundle `.local/stage-b-integration-source.bundle`, SHA256
 84f95953f7cb60fc73ed1c779bec5f7df90533d00fd8ea9f40b5e682af6d8e5c.
 Both download/verify then branch; replies on completion, no polling. Parent owns

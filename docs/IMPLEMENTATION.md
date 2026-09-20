@@ -4,11 +4,27 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stage B portal integration (2026-09-20, local befc7d0): patch SHA256
+7bef3d8fe2e5e04866d82c4708bd8c8c53f33c7f3a89582b2caeb310d05ee783
+reviewed. Parent regression reproduced enabled Send with conflicting legacy
+session-only custody; fixed that plus same-page latched warm→background transition.
+Rendered status-available capture exposed a stale closed-admission error; Stage B
+now clears only its prior matching block reason, not unrelated request errors.
+Background and warm browser fixtures pass; legacy adoption timed out once with
+its conversation/connection guard and passes isolated rerun (both logs retained).
+Node syntax, verifier shell syntax and diff checks pass. Pre-first, status-blocked,
+status-available and exhausted DPR2 captures inspected; composer disabled/readOnly
+and ARIA associations asserted. New browser fixture is in the combined verifier.
+Evidence `.local/stage-b-portal-{red,parent,warm,legacy,legacy-rerun}.log`.
+Synthetic browser consumer only; actual browser/native assembly remains open.
+Existing cancel/follow-up actions unchanged; steer remains execution-gated.
+
 Stage B control integration (2026-09-20, local c35e118): worker patch SHA256
 4d8b376fcb8e2da1ddf096430c76453b2a85789bc0d4b3092d15766d8845a9b9
 verified and reviewed. Parent reran 8 SQLite/signed-HTTP tests and typecheck;
-combined verifier's backend1790 passes, remaining verification still running in
-`.local/stage-b-integrated-verify.log`. Parent corrected pre-first next_role from
+combined verifier exited0 with backend1790/runtime570 and native/browser/service
+fixtures, typecheck and dry-run build in `.local/stage-b-integrated-verify.log`.
+This full run precedes the later portal integration. Parent corrected pre-first next_role from
 null to background (the original test copied the wrong behavior) and restored
 legacy warm custody counting. New background custody uses manifest order, not UUID
 order, and excludes observed children from admission counts. Restricted enqueue/
