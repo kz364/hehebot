@@ -35,6 +35,103 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it.each(['pending', 'answered'])('records a restart-required cutoff for %s questions without settling custody', state => {
+  const deadline = '2026-09-10T00:05:00.000Z';
+  const id = f.core.questions.record(identity, runId, 1, { ...input(), callback_deadline_at: deadline });
+  if (state === 'answered') f.accept(answer(id));
+  const unrelated = admit(otherBot, 'other-turn'), prior = f.core.questions.get(id);
+  f.setNow('2026-09-10T00:04:59.999Z'); lifecycle.watchdog();
+  expect(f.store.run(runId).status).toBe('running');
+  expect(f.core.questions.nextCallbackDeadline()).toBe(deadline);
+  f.setNow(deadline); lifecycle.watchdog();
+  expect(f.core.questions.get(id)).toEqual({ ...prior, revision: prior.revision + 1, restart_required_at: deadline });
+  expect(f.store.run(runId)).toMatchObject({ status: 'cancelling', error_code: 'NATIVE_QUESTION_RESTART_REQUIRED', updated_at: deadline });
+  expect(f.store.run(unrelated).status).toBe('running');
+  expect(lifecycle.heartbeat(identity, []).cancellations).toContain(runId);
+  expect(f.core.questions.nextCallbackDeadline()).toBeNull();
+  if (state === 'answered') expect(() => f.core.questions.takeAnswer(identity, id, connection)).toThrow();
+  else expect(f.core.questions.takeAnswer(identity, id, connection)).toBeNull();
+  f.setNow('2026-09-10T00:05:29.999Z'); lifecycle.watchdog();
+  expect(f.store.run(runId).status).toBe('cancelling');
+  f.setNow('2026-09-10T00:05:30.000Z'); lifecycle.watchdog();
+  expect(f.store.run(runId).status).toBe('recovery_required');
+  const reopened = new ControlCore(f.store, f.core.options);
+  expect(reopened.questions.get(id)).toMatchObject({ state, restart_required_at: deadline });
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+  expect(() => lifecycle.prepareSleep(identity)).toThrow();
+});
+
+it.each(['handoff', 'resolved', 'legacy'])('does not infer callback timeout from %s custody', state => {
+  const id = f.core.questions.record(identity, runId, 1, { ...input(), ...(state === 'legacy' ? {} : { callback_deadline_at: '2026-09-10T00:05:00.000Z' }) });
+  if (state === 'handoff') { f.accept(answer(id)); f.core.questions.takeAnswer(identity, id, connection); }
+  if (state === 'resolved') f.core.questions.resolve(identity, id, connection);
+  const prior = f.core.questions.get(id);
+  f.setNow('2026-09-10T00:05:00.000Z'); lifecycle.watchdog();
+  expect(f.core.questions.get(id)).toEqual(prior);
+  expect(f.store.run(runId).status).toBe('running');
+  expect(f.core.questions.nextCallbackDeadline()).toBeNull();
+});
+
+it.each(['OWNER_CANCELLED', 'CONTEXT_INVALIDATED', 'DEADLINE_EXCEEDED'])('preserves earlier %s cancellation and its grace across question expiry', reason => {
+  const id = f.core.questions.record(identity, runId, 1, { ...input(), callback_deadline_at: '2026-09-10T00:05:00.000Z' });
+  f.db.exec("UPDATE runs SET status='cancelling',error_code=?,updated_at='2026-09-10T00:04:50.000Z' WHERE id=?", reason, runId);
+  f.setNow('2026-09-10T00:05:00.000Z'); lifecycle.watchdog();
+  expect(f.store.run(runId)).toMatchObject({ status: 'cancelling', error_code: reason, updated_at: '2026-09-10T00:04:50.000Z' });
+  f.core.questions.resolve(identity, id, connection);
+  expect(f.core.questions.get(id)).toMatchObject({ state: 'resolved', restart_required_at: f.core.now() });
+  f.setNow('2026-09-10T00:05:20.000Z'); lifecycle.watchdog();
+  expect(f.store.run(runId).status).toBe('recovery_required');
+});
+
+it.each(['epoch', 'boot', 'attempt', 'turn', 'terminated'])('never mutates historical or mismatched %s question custody', mismatch => {
+  const id = f.core.questions.record(identity, runId, 1, { ...input(), callback_deadline_at: '2026-09-10T00:05:00.000Z' });
+  if (mismatch === 'epoch') f.db.exec('UPDATE lifecycle SET epoch=4');
+  if (mismatch === 'boot') f.db.exec('UPDATE lifecycle SET boot_id=?', randomUUID());
+  if (mismatch === 'attempt') f.db.exec('UPDATE runs SET current_attempt=2 WHERE id=?', runId);
+  if (mismatch === 'turn') f.db.exec("UPDATE attempts SET native_run_ref='another-turn'");
+  if (mismatch === 'terminated') f.db.exec("UPDATE attempts SET status='terminated'");
+  const prior = f.core.questions.get(id);
+  f.setNow('2026-09-10T00:05:00.000Z'); lifecycle.watchdog();
+  expect(f.core.questions.get(id)).toEqual(prior);
+  expect(f.core.questions.nextCallbackDeadline()).toBeNull();
+  expect(f.store.run(runId).status).toBe('running');
+});
+
+it('keeps sibling watchdogs, locks and effects independent of the question cutoff', () => {
+  const id = f.core.questions.record(identity, runId, 1, { ...input(), callback_deadline_at: '2026-09-10T00:05:00.000Z' });
+  const now = f.core.now(), effect = randomUUID();
+  f.db.exec("INSERT INTO operations VALUES(?, ?,1,'tool','active',?,'2026-09-10T00:02:00.000Z',?)", randomUUID(), runId, now, now);
+  f.db.exec('INSERT INTO resource_locks VALUES(?,?,1,?)', 'synthetic-resource', runId, now);
+  f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,'send','mutation','dispatched','grant','digest',?)", effect, runId, now);
+  f.setNow('2026-09-10T00:02:00.000Z'); lifecycle.watchdog();
+  expect(f.store.run(runId)).toMatchObject({ status: 'cancelling', error_code: 'DEADLINE_EXCEEDED' });
+  f.setNow('2026-09-10T00:02:30.000Z'); lifecycle.watchdog();
+  const before = protectedRows();
+  f.setNow('2026-09-10T00:05:00.000Z'); lifecycle.watchdog();
+  expect(f.core.questions.get(id)).toMatchObject({ restart_required_at: f.core.now() });
+  expect(protectedRows()).toEqual(before);
+  expect(f.db.all('SELECT status FROM effects WHERE id=?', effect)).toEqual([{ status: 'outcome_unknown' }]);
+  expect(f.db.all('SELECT status FROM operations WHERE run_id=?', runId)).toEqual([{ status: 'active' }]);
+});
+
+it('rolls back cutoff metadata with failed cancellation, then survives reload and stopped closure', () => {
+  const id = f.core.questions.record(identity, runId, 1, { ...input(), callback_deadline_at: '2026-09-10T00:05:00.000Z' });
+  f.setNow('2026-09-10T00:05:00.000Z');
+  f.db.exec("CREATE TRIGGER cutoff_fail BEFORE UPDATE ON runs BEGIN SELECT RAISE(ABORT,'synthetic'); END");
+  expect(() => lifecycle.watchdog()).toThrow();
+  expect(f.core.questions.get(id)).not.toHaveProperty('restart_required_at');
+  f.db.exec('DROP TRIGGER cutoff_fail');
+  const reopened = new ControlCore(f.store, f.core.options);
+  new LifecycleCore(f.store, reopened).watchdog();
+  expect(reopened.questions.get(id)).toMatchObject({ restart_required_at: f.core.now(), revision: 2 });
+  f.setNow('2026-09-10T00:04:59.999Z');
+  expect(() => reopened.questions.resolve(identity, id, connection)).toThrowError(expect.objectContaining({ code: 'INVALID_INPUT' }));
+  f.setNow('2026-09-10T00:05:00.000Z');
+  f.db.exec("UPDATE attempts SET status='terminated',settled_at=? WHERE run_id=?", f.core.now(), runId);
+  expect(f.accept({ schema_version: 1, type: 'question.close', payload: { question_id: id, expected_revision: 2, confirm_stopped_closure: true } })).toMatchObject({ status: 'applied' });
+  expect(reopened.questions.get(id)).toMatchObject({ version: 2, state: 'closed', revision: 3, restart_required_at: f.core.now() });
+});
+
 it('keeps the declared callback deadline through delayed recording and rejects answers at its exact boundary', () => {
   const request = { ...input(), callback_deadline_at: '2026-09-10T00:05:00.000Z' };
   f.setNow('2026-09-10T00:00:12.000Z');

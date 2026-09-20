@@ -4,6 +4,20 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-21 Asia/Jakarta)
 
+Latest local unit: pre-handoff question cutoff is verified on top of5d655d0.
+Worker persists `restart_required_at` once for explicit expired pending/answered
+current-attempt questions, increments question revision, and requests ordinary
+cancellation. Prior cancellation reasons/grace and sibling watchdogs remain intact.
+No response_unknown inference, historical mutation, answer replay or settlement.
+Marker survives resolution/closure and reload; owner cards explain the policy.
+Backend1814/typecheck, exact alarm, HTTP, native answer/cancel and dry-run build
+pass. Chromium pending/narrow/saved-answer states inspected. The first narrow
+capture was scrolled past the notice; corrected capture shows it. Logs/hashes in
+IMPLEMENTATION.md; PID563538/PID566349 exit0, no checks remain active.
+Next local priority remains supported recovery/containment: post-handoff or
+never-recorded callback uncertainty needs actual host observation, not extrapolation
+from an elapsed Worker deadline. Full human-wait/checkpoint acceptance is open.
+
 Latest checkpoint supersedes pending verification in the integration history below:
 full verifier PID505075 on local6a225a3 exited0, backend1792/runtime615 and all
 browser/native/shutdown/strict-launcher/service/build checks pass. Log

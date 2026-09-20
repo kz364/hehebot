@@ -5,6 +5,7 @@ import { PersonalControl } from '../src/worker/control-object';
 import worker from '../src/worker/index';
 import { Store } from '../src/core/store';
 import { BudgetLedger } from '../src/core/budget';
+import type { ControlCore } from '../src/core/control';
 import { SKILL_PROPOSE_POLICY } from '../src/core/agent-commands';
 
 // Exercise the real RPC methods and SQL; only the Cloudflare host is replaced.
@@ -378,6 +379,23 @@ it('alarms expire only settled steering audit with execution disabled and no pro
   vi.setSystemTime(new Date('2026-10-10T00:00:00.000Z'));await control.alarm();
   expect(db.all("SELECT key FROM runtime_metadata WHERE key GLOB 'steer:*'")).toEqual([{key:`steer:${run}:1:pending`}]);
   expect(db.all('SELECT * FROM controller_operations')).toEqual([]);expect(deleteAlarm).toHaveBeenCalled();
+});
+
+it('arms the exact pre-handoff question cutoff and persists it on alarm without a wake',async()=>{
+  const core=(control as unknown as {core:ControlCore}).core;
+  const run=randomUUID(),boot=randomUUID(),now=new Date().toISOString(),deadline='2026-09-10T00:00:03.000Z';
+  db.exec("UPDATE lifecycle SET epoch=1,boot_id=?,phase='READY',lease_until='2026-09-10T00:20:00.000Z'",boot);
+  db.exec("INSERT INTO runs(id,persona_id,context_json,status,current_attempt,created_at,updated_at) VALUES(?,?,?,'running',1,?,?)",run,bot,JSON.stringify(core.context(bot,'Question',null,null)),now,now);
+  db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,native_run_ref,deadline_at) VALUES(?,1,?,1,?,'running','turn','2026-09-10T00:15:00.000Z')",run,randomUUID(),boot);
+  const id=core.questions.record({epoch:1,boot_id:boot},run,1,{id:randomUUID(),connection_id:randomUUID(),request_id:1,callback_deadline_at:deadline,
+    params:{threadId:'thread',turnId:'turn',itemId:'item',isBlocking:true,questions:[{id:'choice',header:'Choice',question:'Choose'}]}});
+  await control.getState('owner');expect(setAlarm).toHaveBeenLastCalledWith(Date.parse(deadline));
+  vi.setSystemTime(new Date(deadline));await control.alarm();
+  expect(core.questions.get(id)).toMatchObject({state:'pending',restart_required_at:deadline,revision:2});
+  expect(db.all('SELECT status,error_code FROM runs WHERE id=?',run)).toEqual([{status:'cancelling',error_code:'NATIVE_QUESTION_RESTART_REQUIRED'}]);
+  const before=core.questions.get(id);await control.alarm();expect(core.questions.get(id)).toEqual(before);
+  expect(db.all('SELECT * FROM controller_operations')).toEqual([]);
+  expect(core.questions.nextCallbackDeadline()).toBeNull();
 });
 
 it.each(['resolved','closed'])('%s question retention alarm runs while execution is disabled without wake or task mutation',async state=>{

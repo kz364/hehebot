@@ -12,6 +12,7 @@ export type NativeQuestionAnswers = Record<string, { answers: string[] }>;
 export type NativeQuestionAnswerCommand = { question_id: string; expected_revision: number; answers: NativeQuestionAnswers };
 export type NativeQuestionCloseCommand = { question_id: string; expected_revision: number; confirm_stopped_closure: true };
 export type NativeQuestionRecord = NativeQuestionInput & { revision: number;
+  restart_required_at?: string;
   run_id: string; attempt: number; epoch: number; boot_id: string; persona_id: string; conversation_id: string;
   created_at: string; expires_at: string; answers: NativeQuestionAnswers | null; answer_owner_id: string | null; answer_command_id: string | null;
   answered_at: string | null; response_taken_at: string | null; resolved_at: string | null } &
@@ -82,6 +83,41 @@ const retentionOrigin = "MAX(COALESCE(json_extract(m.value_json,'$.resolved_at')
 /** Trusted runtime custody and owner-answer queue, never approval, dispatch retry or task settlement. */
 export class NativeQuestionLedger {
   constructor(private store: Store, private lifecycle: LifecycleCore, private now: () => string) {}
+  private callbackCandidates(): NativeQuestionRecord[] {
+    // Match current executor and attempt, not merely an unresolved historical row.
+    const keys = this.store.db.all<{ key: string }>(`SELECT m.key FROM runtime_metadata m
+      JOIN runs r ON r.id=json_extract(m.value_json,'$.run_id')
+      JOIN attempts a ON a.run_id=r.id AND a.attempt=r.current_attempt
+      JOIN lifecycle l ON l.singleton=1 AND l.epoch=a.epoch AND l.boot_id=a.boot_id
+      WHERE m.key GLOB 'native-question:*'
+      AND json_extract(m.value_json,'$.state') IN ('pending','answered')
+      AND json_type(m.value_json,'$.callback_deadline_at') IS NOT NULL
+      AND json_type(m.value_json,'$.restart_required_at') IS NULL
+      AND json_extract(m.value_json,'$.attempt')=a.attempt
+      AND json_extract(m.value_json,'$.epoch')=a.epoch
+      AND json_extract(m.value_json,'$.boot_id')=a.boot_id
+      AND json_extract(m.value_json,'$.params.turnId')=a.native_run_ref
+      AND a.status IN ('claimed','running')
+      AND r.status IN ('running','finishing','cancelling','recovery_required')
+      ORDER BY m.key LIMIT 65`);
+    requireThat(keys.length <= 64, 'NATIVE_QUESTION_CAPACITY', 'Too many active native questions.');
+    return keys.map(({ key }) => this.get(key.slice(NATIVE_QUESTION_PREFIX.length)));
+  }
+  nextCallbackDeadline(): string | null {
+    return this.callbackCandidates().map(r => r.callback_deadline_at!).sort()[0] ?? null;
+  }
+  /** Worker deadline policy, not an observation of callback/process termination. */
+  expireCallbacks(): void {
+    this.store.db.transaction(() => {
+      const now = this.clock();
+      for (const r of this.callbackCandidates()) {
+        if (r.callback_deadline_at! > now) continue;
+        r.restart_required_at = now; r.revision++; this.save(r);
+        // Existing cancellation owns its reason and original grace start.
+        this.store.db.exec("UPDATE runs SET status='cancelling',error_code='NATIVE_QUESTION_RESTART_REQUIRED',updated_at=? WHERE id=? AND status IN ('running','finishing')", now, r.run_id);
+      }
+    });
+  }
   nextExpiry(): string | null {
     return this.store.db.all<{ due: string | null }>(`SELECT strftime('%Y-%m-%dT%H:%M:%fZ',MIN(${retentionOrigin}),'+90 days') AS due ${retentionCandidates}`)[0].due;
   }
@@ -111,12 +147,16 @@ export class NativeQuestionLedger {
       const r = JSON.parse(row.value_json) as NativeQuestionRecord;
       invalid(fields(r, ['version', 'id', 'connection_id', 'request_id', 'params', 'revision', 'state', 'run_id', 'attempt', 'epoch', 'boot_id', 'persona_id',
         'conversation_id', 'created_at', 'expires_at', 'answers', 'answer_owner_id', 'answer_command_id', 'answered_at', 'response_taken_at', 'resolved_at',
-        ...(r.version === 2 ? ['closed_at', 'close_owner_id', 'close_command_id'] : [])], ['callback_deadline_at']));
+        ...(r.version === 2 ? ['closed_at', 'close_owner_id', 'close_command_id'] : [])], ['callback_deadline_at', 'restart_required_at']));
       normalize(inputOf(r));
       invalid((r.version === 1 || r.version === 2 && r.state === 'closed') && r.id === id && uuid(r.run_id) && uuid(r.persona_id) && uuid(r.conversation_id) && uuid(r.boot_id) &&
         Number.isSafeInteger(r.attempt) && r.attempt > 0 && Number.isSafeInteger(r.epoch) && r.epoch >= 0 &&
         timestamp(r.created_at) && timestamp(r.expires_at) && r.expires_at > r.created_at && Date.parse(r.expires_at) - Date.parse(r.created_at) <= 900000 &&
-        (r.callback_deadline_at === undefined || r.expires_at <= r.callback_deadline_at));
+        (r.callback_deadline_at === undefined || r.expires_at <= r.callback_deadline_at) &&
+        (!Object.hasOwn(r, 'restart_required_at') || timestamp(r.restart_required_at) && timestamp(r.callback_deadline_at) &&
+          r.restart_required_at >= r.callback_deadline_at && r.response_taken_at === null &&
+          (r.resolved_at === null || r.resolved_at >= r.restart_required_at) &&
+          (r.version !== 2 || r.closed_at >= r.restart_required_at)));
       const answered = r.answers !== null, taken = r.response_taken_at !== null, resolved = r.state === 'resolved', closed = r.state === 'closed';
       invalid((r.version === 1 ? ['pending', 'answered', 'response_unknown', 'resolved'].includes(r.state) : closed) &&
         (answered ? text(r.answer_owner_id, 1, 256) && uuid(r.answer_command_id) && timestamp(r.answered_at) && r.answered_at >= r.created_at && r.answered_at < r.expires_at :
@@ -126,7 +166,7 @@ export class NativeQuestionLedger {
         (r.version === 2 ? timestamp(r.closed_at) && r.closed_at >= (r.response_taken_at ?? r.answered_at ?? r.created_at) &&
           text(r.close_owner_id, 1, 256) && uuid(r.close_command_id) : true) &&
         (r.state === 'pending' ? !answered && !taken : r.state === 'answered' ? answered && !taken : r.state === 'response_unknown' ? answered && taken : true) &&
-        r.revision === 1 + Number(answered) + Number(taken) + Number(resolved || closed));
+        r.revision === 1 + Number(answered) + Number(taken) + Number(resolved || closed) + Number(r.restart_required_at !== undefined));
       if (answered) answersFor(r.params.questions, r.answers);
       return r;
     } catch { throw new ControlError('NATIVE_QUESTION_CORRUPT', 'Native question metadata requires review.'); }
@@ -247,7 +287,7 @@ export class NativeQuestionLedger {
     this.store.db.transaction(() => {
       const r = this.get(id); this.bound(identity, r, connectionId, false); if (r.state === 'resolved') return;
       requireThat(r.state !== 'closed', 'REVISION_CONFLICT', 'Stopped question custody was already closed.');
-      const now = this.clock(); requireThat(now >= (r.response_taken_at ?? r.answered_at ?? r.created_at), 'INVALID_INPUT', 'The question clock moved backwards.', 422);
+      const now = this.clock(); requireThat(now >= (r.restart_required_at ?? r.response_taken_at ?? r.answered_at ?? r.created_at), 'INVALID_INPUT', 'The question clock moved backwards.', 422);
       r.state = 'resolved'; r.resolved_at = now; r.revision++; this.save(r);
     });
   }
@@ -257,7 +297,7 @@ export class NativeQuestionLedger {
       'SELECT status,settled_at,epoch,boot_id,native_run_ref FROM attempts WHERE run_id=? AND attempt=?', r.run_id, r.attempt)[0];
     return attempt?.status === 'terminated' && attempt.epoch === r.epoch && attempt.boot_id === r.boot_id &&
       attempt.native_run_ref === r.params.turnId && timestamp(attempt.settled_at) &&
-      attempt.settled_at >= (r.response_taken_at ?? r.answered_at ?? r.created_at) && this.clock() >= attempt.settled_at;
+      attempt.settled_at >= (r.restart_required_at ?? r.response_taken_at ?? r.answered_at ?? r.created_at) && this.clock() >= attempt.settled_at;
   }
 
   /** Owner custody closure after provider-confirmed termination, NOT native

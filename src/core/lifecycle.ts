@@ -482,6 +482,7 @@ export class LifecycleCore {
    const overdue=this.store.db.all<{run_id:string}>(`SELECT run_id FROM attempts WHERE status IN ('claimed','running') AND deadline_at<=?${generationFence}`,now,...(current?[current.epoch,current.boot_id]:[]));
    const ops=this.store.db.all<{run_id:string}>(`SELECT DISTINCT o.run_id FROM operations o JOIN attempts a ON a.run_id=o.run_id AND a.attempt=o.attempt WHERE o.status='active' AND o.deadline_at<=?${current?' AND a.epoch=? AND a.boot_id=?':''}`,now,...(current?[current.epoch,current.boot_id]:[]));
    for(const id of new Set([...overdue,...ops].map(x=>x.run_id)))this.store.db.exec("UPDATE runs SET status='cancelling',error_code='DEADLINE_EXCEEDED',updated_at=? WHERE id=? AND status IN ('claimed','running','finishing')",now,id);
+   this.core.questions.expireCallbacks();
    const cancelledBefore=new Date(this.core.options.now().getTime()-30000).toISOString();
    const unsettled=this.store.db.all<Run>(`SELECT r.* FROM runs r WHERE r.status='cancelling' AND r.updated_at<=? ${current?'AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?)':''}`,cancelledBefore,...(current?[current.epoch,current.boot_id]:[]));
    if(unsettled.length){

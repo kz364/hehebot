@@ -1,6 +1,6 @@
 # Native question custody
 
-`src/core/native-questions.ts` stores bounded native question obligations in existing `runtime_metadata`, under `native-question:<UUID>`. It does not implement approvals, inference, wake, cancellation, task settlement, transport, owner authentication, or UI. No schema change is required.
+`src/core/native-questions.ts` stores bounded native question obligations in existing `runtime_metadata`, under `native-question:<UUID>`. Its deadline maintenance can request ordinary run cancellation; it does not implement native cancellation, approvals, inference, wake, task settlement, transport or owner authentication. No database schema change is required.
 
 ## Public TypeScript contract
 
@@ -15,6 +15,8 @@ answer(owner: string, commandId: string, input: NativeQuestionAnswerCommand): st
 takeAnswer(identity: Identity, id: string, connectionId: string): { answers: NativeQuestionAnswers } | null
 resolve(identity: Identity, id: string, connectionId: string): void
 closeStopped(owner: string, commandId: string, input: NativeQuestionCloseCommand): string
+nextCallbackDeadline(): string | null
+expireCallbacks(): void
 nextExpiry(): string | null
 prune(): number
 ```
@@ -51,8 +53,32 @@ Legacy inputs and records without the field retain their shape and prior cap.
 No database migration is needed; `SCHEMAS/runtime.json` and its generated validator
 accept the optional field. Update the tested Worker/runtime pair together: an old
 Worker rejects the new metadata, and the runtime does not strip it and retry.
-This does not introduce parked waits, suppress sibling watchdogs, persist a new
-restart-required timeout state, settle custody or authorize resume.
+This does not introduce parked waits, suppress sibling watchdogs, settle custody
+or authorize resume.
+
+The watchdog now atomically records optional `restart_required_at` when an explicit
+callback deadline expires while the question is still pending or answered, before
+handoff or recorded native resolution. It matches the lifecycle epoch/boot,
+current run attempt and native turn; old/terminated attempts and legacy records
+without a declaration do not qualify. This is a Worker deadline policy, not an
+observation that the native callback timed out. `response_unknown` is excluded:
+a committed handoff can represent either successful delivery or a lost response.
+
+The marker increments question revision once and survives reload, native resolution
+and stopped closure. A running/finishing run enters ordinary cancellation with
+`NATIVE_QUESTION_RESTART_REQUIRED`; existing cancellation/recovery keeps its reason
+and original grace start. At 30 seconds unconfirmed cancellation follows the existing
+recovery/effect-uncertainty path. No operation, lock, answer or effect is settled by
+the marker. Later authorized resolution cannot undo cancellation; termination
+and explicit owner recovery remain separate. The question card explains this
+distinction and offers no resend/restart action.
+
+`nextCallbackDeadline()` schedules only actionable, unmarked current questions;
+it is separate from `nextExpiry()`'s terminal-record retention. Worker alarms and
+missed-alarm ingress maintenance apply the policy, without inventing an exact-time
+delivery guarantee during outages. The saved marker time is the observed Worker
+maintenance time, not a claimed host timeout time. Post-handoff and never-recorded
+callback failures still require separate recovery evidence.
 
 Trusted runtime **must independently bind threadId to its native journal**. The application attempt row independently checks only native turn identity, not native thread identity. This ledger does not invent a task-owner ACL; authenticated owner ingress and owner-matching accepted command receipts are the authority boundary. Parent ControlCore.accept owns receipt replay/dedupe. Model/imported question text grants no authority.
 
@@ -82,7 +108,7 @@ current work. Effects, operations, locks, tasks, native journals and lifecycle
 remain unchanged. The owner must separately reconcile effects and close recovery
 or request an eligible retry. There is no model/tool closure surface.
 
-`list()` returns unresolved records sorted by created_at then UUID, including stale/expired obligations; resolved and explicitly closed records are excluded. It derives answerable using the same live checks as answer, plus pending state, and `closeable` from original confirmed termination. It catches authority failures only; corrupt metadata and unexpected errors propagate. Reads do not repair or write. All ledger writes are transactional metadata upserts; no runs, attempts, effects, locks, lifecycle, events or other objects change.
+`list()` returns unresolved records sorted by created_at then UUID, including stale/expired obligations; resolved and explicitly closed records are excluded. It derives answerable using the same live checks as answer, plus pending state, and `closeable` from original confirmed termination. It catches authority failures only; corrupt metadata and unexpected errors propagate. Reads do not repair or write. Record/answer/take/resolve/closure writes change only question metadata. Separately, watchdog `expireCallbacks()` atomically records the cutoff and requests run cancellation as described above.
 
 ## Local owner and Worker integration
 

@@ -4,6 +4,44 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Pre-handoff question cutoff (2026-09-21): watchdog records optional
+`restart_required_at` once for explicit elapsed callback declarations while
+pending/answered. Current lifecycle epoch/boot, attempt and native turn must match;
+terminated/historical/legacy and response_unknown custody is excluded. Metadata
+and run cancellation commit atomically. Existing reasons and cancellation grace
+remain unchanged; no sibling watchdog suppression, retry, wake, lock release or
+settlement. The question revision increments and the reason survives reload,
+resolution and stopped closure. Resolution/closure cannot precede that marker.
+Alarm scheduling uses actionable callback deadlines separately from90d retention.
+Owner cards distinguish this Worker policy cutoff from observed host timeout or
+confirmed executor termination, including saved-but-undelivered answers.
+
+Verification:13 red cases before implementation (`.local/question-cutoff-red.log`),
+initial119 focused green, then final `npm test`1814 and typecheck pass. Coverage
+includes exact before/at cutoff, both handoff/resolution orderings, earlier owner/
+context/tool cancellation grace, current-attempt isolation, fault-injected atomic
+rollback, reload, stopped closure and clock regression. The actual Worker RPC/
+SQLite alarm fixture schedules a3s deadline and records it without provider work.
+HTTP questions and native answer/cancel fixtures pass; these native fixtures are
+regressions, not a live5min callback-timeout observation. Dry-run build passes.
+Chromium verifies disabled pending answers, saved-answer delivery-window-ended
+text and no resend/restart actions. Desktop and390px captures were inspected.
+Initial narrow capture was scrolled past the warning; corrected390×1200 capture
+shows it legibly, alongside390×844 interaction/overflow checks. No phone claim.
+The full long-running verifier was not repeated for this bounded unit.
+
+Private log SHA256s:
+- `question-cutoff-red.log`:4190232c546c450dd945d89fce457ff6daf23090d7470a55e9a189bb54b1ac56.
+- `question-cutoff-backend-final.log`:8f864b02b99f94ed70cee437fc93d47a98b703f64dac8cb9a646a873225a8c04.
+- `question-cutoff-browser-reviewed.log`:d2746eca25d0b7db350b2ca6a2524912cdbb1c3cb6e28ee2e4dee8bd7d034dae.
+- `question-cutoff-http.log`:ec7f9e39cddf31053dff851f8b5a62e3ae03faa54bfbe6edf5c0fac58225ed64.
+- `question-cutoff-native.log`:022c27a316d088515d7a7cb3f459b3273517a0f7047afc38e351038718da5329.
+- `question-cutoff-native-cancel.log`:f71c7c85ecfc6d4cf2240cd9e0fb0ad7e1a09d7b79fa9e402d2adb0832b57a92.
+- `question-cutoff-build-final.log`:0f991d031db26cca7e03e1778bac89cc64d0c6f3568aed9a3cace15b77f61c6c.
+All logs are under `.local/`. Post-handoff/never-recorded timeout evidence,
+durable checkpoint parking and safe recovery remain open. No production gates,
+dependencies or live accounts changed.
+
 Connected question deadline (2026-09-21): host-generated `callback_deadline_at`
 now carries the frozen, attempt-clamped callback deadline through the runtime
 wire contract into Worker question custody. Expiry is the minimum of that value,

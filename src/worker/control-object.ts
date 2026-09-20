@@ -597,7 +597,8 @@ export class PersonalControl extends DurableObject<Env> {
   if(generation){
    const state=this.lifecycle.get();
    if(!['STOPPED','RECOVERY_REQUIRED'].includes(state.phase)){
-    const due=Date.now()+Math.max(delayMs,5000),existing=await this.ctx.storage.getAlarm();
+    const callback=this.core.questions.nextCallbackDeadline();
+    const due=Math.max(Date.now()+Math.max(100,delayMs),Math.min(Date.now()+Math.max(delayMs,5000),callback?Date.parse(callback):Infinity)),existing=await this.ctx.storage.getAlarm();
     // Portal refreshes must not continually postpone the wake/lease watchdog.
     if(existing===null||existing>due)await this.ctx.storage.setAlarm(due);
    }
@@ -612,6 +613,7 @@ export class PersonalControl extends DurableObject<Env> {
   const usageDue=new TokenUsageSnapshots(this.store,()=>this.core.now()).nextDue();if(usageDue)times.push(Date.parse(usageDue));
   const steeringDue=new TaskSteering(this.store,()=>this.core.now()).nextExpiry();if(steeringDue)times.push(Date.parse(steeringDue));
   const questionDue=this.core.questions.nextExpiry();if(questionDue)times.push(Date.parse(questionDue));
+  const callbackDue=this.core.questions.nextCallbackDeadline();if(callbackDue)times.push(Date.parse(callbackDue));
   const commandExpiry=this.core.nextCommandPayloadExpiry();if(commandExpiry)times.push(Date.parse(commandExpiry));
   const followupExpiry=this.core.nextFollowupExpiry();if(followupExpiry)times.push(Date.parse(followupExpiry));
   const queuedContextExpiry=this.core.nextQueuedContextExpiry();if(queuedContextExpiry)times.push(Date.parse(queuedContextExpiry));

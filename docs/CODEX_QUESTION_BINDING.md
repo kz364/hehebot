@@ -73,9 +73,13 @@ their old cap. Update the tested runtime/Worker pair together; older Workers rej
 the field and no metadata-stripping fallback is attempted. Clocks must agree,
 and earlier disconnect/cancellation can still stop the callback before expiry.
 Callback expiry neither resolves that custody nor proves native termination.
-Restart-required UI, durable checkpoint parking, reconciled cancellation and safe
-compute release remain unimplemented; existing inference deadlines may stop the
-callback earlier. No automatic retry or sleep is introduced.
+The Worker now records a restart-required policy cutoff for pending/answered
+current-attempt questions at their declared deadline, with an owner explanation
+and ordinary cancellation/grace. This is not host-observed timeout evidence;
+post-handoff `response_unknown` questions are excluded. Durable checkpoint parking,
+reconciled cancellation and safe compute release remain unimplemented; existing
+inference deadlines may stop the callback earlier. No automatic retry or sleep
+is introduced. See [custody policy](NATIVE_QUESTION_CUSTODY.md).
 
 Resolution is tracked separately as resolutionObserved. A matching typed requestId AND threadId aborts active answer delivery immediately and queues resolution behind the in-flight record/take operation. It can arrive before answer, during take, or after callback return. For resolution, original custody is used without requiring a still-running resolver result, future deadline, rootSettled=false, or running journal status: interruption can settle the root first. Exact journal thread/turn must still match, and Worker enforces the original lease. Successful Worker resolution saves phase resolved. Neither the notification nor this phase proves answer acceptance, RPC delivery, model consumption, or task settlement.
 
