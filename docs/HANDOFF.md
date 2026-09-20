@@ -13,9 +13,19 @@ Warm pending+30001ms; strict launcher2256 lock probes, uid1000/all5 masks0/NNP1,
 authentic floor, retirement/no replay and unknown custody retained. No live or
 recursive containment/settlement/safe-sleep acceptance. No full verifier running.
 Corrected load script is integrated locally with parent pre-kill census retention
-and failure logging before readback. Eight focused harness fault checks pass;
-real `selfcheck` and `full` are the next independent acceptance steps. Worker
-latency evidence remains unaccepted pending parent measurement; no5writes/sec claim.
+and failure logging before readback. Eight focused harness fault checks, real
+`selfcheck` and `full` now pass on ca08154. Parent full:480/480 accepted,
+p95 203.475ms, max223.543ms, drift max1ms,481/481 receipts and481 durable commands,
+zero inference/controller records; burst60 accepted/10 RATE_LIMITED, first at61,
+one minute, zero network/other errors. Children stopped, temporary data removed.
+Full log `.local/intake-parent-full.log` SHA256
+f0d55f8f600efa83b66875b0b32727670eef0cade771c794ce634b514a1c2648.
+No parent commands remain running. No5writes/sec or cold/deployed reliability claim.
+Next owner action: resolve the next supported recovery/operation-timing contract
+from TODO without question-based sibling watchdog suppression or settlement claims.
+Memory work requires a connected selected-model/constraint contract; no mock-only
+tokenizer or truncation-only completion. All workers returned; direct management
+is simpler until another independently owned work unit is ready.
 
 Main T-01a0b925-c847-73b9-9713-e04b5f3b43d4 is now the sole user-facing
 project-owner, reporting directly to user (lifecycle revision4). ASK QUESTIONS

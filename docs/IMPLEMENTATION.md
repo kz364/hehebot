@@ -19,7 +19,32 @@ proving live accounts, recursive containment, settlement, safe resume or sleep.
 Production flags remain false. The new intake harness is a separate check, not
 included in this verifier run: parent review retained the process census before
 fault-injected kill and logged workload failures before readback. Eight focused
-fault checks pass (`.local/intake-parent-review.log`); real selfcheck/full pending.
+fault checks pass (`.local/intake-parent-review.log`).
+
+Independent partial intake acceptance (2026-09-21): source ca08154, harness
+SHA25612ab57cb0a92c8dbf39bf7954a54baca35afd485be91945112d2303dadfc2159.
+`node scripts/test-control-intake-load.mjs selfcheck` exited0: green4/4 with5/5
+receipt readbacks, injected3249ms delay aborts without catch-up, over-paced write61
+gets RATE_LIMITED, and injected server loss surfaces65 network failures. Child
+cleanup confirmed. Log `.local/intake-parent-selfcheck.log` SHA256
+c49bce7d8d9920ba18b5457a7d3ee21a8fa5e2f735537b6223424c5e3b8c68aa.
+`node scripts/test-control-intake-load.mjs full` exited0 (PID545448):480 submitted
+and accepted at48/min over598771ms; no errors,429s,retries or guard activation.
+p50 62.317ms, p95 203.475ms, p99 217.767ms, max223.543ms; submission drift mean0ms,
+max1ms. All481 canonical receipts match, durable commands481; runs/attempts/
+operations/effects/controller-operations/native-task-links all0, STOPPED,
+execution disabled, provider unconfigured. Separate disposable burst:70 submitted,
+60 accepted,10 RATE_LIMITED, first at index60, one calendar minute, zero network or
+other errors. All child processes stopped and temporary intake directory removed.
+Typecheck passed before the run. Log `.local/intake-parent-full.log` SHA256
+f0d55f8f600efa83b66875b0b32727670eef0cade771c794ce634b514a1c2648.
+The submission workload is ten minutes; readback/burst made total elapsed1248773ms.
+This is warm local48/min measurement, not SPEC5writes/sec, deployed reliability,
+or cold-start latency acceptance. The enforced60/min owner limit was unchanged.
+Worker disclosed earlier deleted failed evidence: first cold smoke p95 1774.7ms,
+and a later failed run with an incorrect rolling-counter assertion. Those artifacts
+cannot be audited and are not acceptance evidence. Parent corrected-source runs
+above passed on their first invocation; future failures remain retained.
 
 Retirement correction parent integration (2026-09-20): amended worker patch
 SHA256293b3a2b37b3d808bef4631c89ba55d3e24216bc88529365eca8620d7a1354cd

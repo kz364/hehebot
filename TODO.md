@@ -24,10 +24,19 @@ Log `.local/shell-integrated-combined.log`, SHA256
 The opt-in shell window is integrated and capped by attempt deadlines; other
 operation bounds and grants are unchanged. Human questions do not park sibling
 watchdogs. No recursive containment, settlement or safe-resume/sleep claim.
-Corrected intake harness is locally integrated for parent verification. Eight
-focused harness fault checks pass; independent real selfcheck/full measurement
-remain required. Earlier flawed-harness numbers are not accepted. This measures
-48 writes/minute, not the SPEC's 5 writes/second; the 60/minute limit is unchanged.
+Corrected intake harness is integrated and parent-verified. Eight
+focused harness fault checks and the independent real selfcheck/full run pass.
+Parent full: 480/480 accepted, p95 203.475ms, max 223.543ms, maximum submission
+drift 1ms, no errors/retries/guard delays, 481/481 canonical receipts matched,
+481 durable commands and zero inference/controller records. Separate burst:
+60 accepted, 10 RATE_LIMITED, first at write 61, one minute, zero other errors.
+Log `.local/intake-parent-full.log`, SHA256
+f0d55f8f600efa83b66875b0b32727670eef0cade771c794ce634b514a1c2648.
+This is warm local 48/min evidence, not SPEC 5 writes/sec or deployed reliability;
+the 60/min limit is unchanged. Earlier failed/deleted worker evidence is disclosed
+in IMPLEMENTATION.md, not hidden by these passes. Next priority: remaining
+supported recovery/containment and per-operation timing contracts; memory budgets
+still need a connected selected-model/constraint contract, not a mock tokenizer.
 No additional approval is needed for these local checks; publication and live
 operations remain gated.
 Historical checkpoints below retain their original failures and restrictions;
