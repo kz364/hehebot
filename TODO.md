@@ -12,7 +12,7 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-20):** all assigned implementors have delivered.
+**Current checkpoint (2026-09-20):** the prior implementor wave has delivered.
 Stage B runtime is reviewed/integrated locally. Actual portal → signed Worker/SQLite
 → one pristine Codex 0.154.0 process passes the three-root browser/native fixture:
 S replies while A's child stays active; B has isolated context/read-only credentials;
@@ -23,7 +23,13 @@ runtime tests 585/585 and typecheck pass. Screenshots inspected. Evidence:
 Combined verifier is running in `.local/stage-b-integrated-combined.log`, now
 including setup safety, backup, both F3 modes and Stage B browser/native coverage.
 Previous full run passed 1790 backend/570 runtime tests; it predates Stage B runtime.
-Next: finish combined verification/commit, then recovery/safe-sleep work in F3.
+Integration committed locally at `6574cf4`; finish combined verification next.
+F3 implementor now owns a separate Stage B automatic-stop fixture from that exact
+source (existing explicit-stop browser/HTTP modes must remain unchanged).
+The runtime implementor separately owns a new abrupt-native-crash/read-only
+history-reconciliation fixture with an active child, no replay or sleep authority.
+Both report back directly; these assignments are not new verification evidence.
+Electron reference-shell reinstall/tests also pass 16/16; not Mac acceptance.
 No push, deployment, live account calls, automatic Stage B stop or production claim.
 
 **F3 pending-maintenance integrated:** parent rerun passes: production timer stop

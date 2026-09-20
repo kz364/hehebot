@@ -18,8 +18,25 @@ The fixture explicitly stops after expiry; it does not claim automatic Stage B s
 live account/provider evidence, natural-language routing or recursive settlement.
 Combined verifier PID 373109 is running in `.local/stage-b-integrated-combined.log`;
 includes setup safety, backup, both F3 modes and the new Stage B browser mode.
-Finish that process without restarting, record outcome, commit locally. Next priority:
-F3 recovery/safe-sleep gaps; no pending worker dependency. Two-hour schedule retained.
+Integration committed locally at 6574cf4b1d20c0f4c7456ae00f003aee86c71652.
+Finish that process without restarting and record outcome. Desktop reinstall/tests
+pass 16/16. Reused F3 worker T-01a0bdf0-6b4d-70ba-acb2-ce10eb4f9d29 for Stage B
+automatic-stop native verification through runHostedOwnerAlpha, preserving existing
+explicit-stop HTTP/browser modes. Owns Stage B script and at most new dedicated
+script/floor fixture only; no runtime/src/shared fixture/verifier/tracking edits.
+Uploaded `.local/background-auto-source.bundle`, exact integration commit above,
+SHA256 5d664f799e8b27c60fa490ad209a17ccd8a7b628381b6ca239d8eee7ff158cca.
+No bypass of launch floor/provider checks, auth rounding, inferred settlement or
+test-owned stops satisfying success. Worker reports directly; do not poll.
+Separately reused runtime worker T-01a0bd60-d11c-7141-a108-a27ae5c33b45 for a NEW
+scripts/test-codex-crash-readback.mjs and at most new dedicated fixture. Existing
+test-codex-native cold readback unloads threads and exits gracefully; this slice
+must attest abrupt native death with an active child, both PIDs gone before
+replacement, then supported read-only history with exact identity and no inference,
+cancellation/effect replay or sleep permission. Same bundle/hash uploaded as
+`.local/recovery-native-source.bundle`. No production/shared-file changes allowed;
+unsupported readback must be reported, not bypassed. These assignments are not
+evidence. Workers report directly; two-hour parent schedule retained.
 The older assignment/status paragraphs below are historical, superseded by this entry.
 
 Setup worker delivery COMPLETE/integrated, patch SHA256
