@@ -58,7 +58,7 @@ bash scripts/test-codex-service.sh
 node scripts/test-codex-hosted-owner.mjs
 node scripts/test-codex-hosted-manager.mjs --browser
 node scripts/test-codex-warm-manager.mjs
-node scripts/test-codex-warm-manager.mjs --browser
+node scripts/test-codex-warm-manager.mjs --browser --wake-first
 bash scripts/test-codex-service.sh --text-only
 bash scripts/test-codex-service.sh --owner-alpha-multi
 bash scripts/test-codex-service.sh --owner-alpha-background

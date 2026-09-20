@@ -35,6 +35,22 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
   }
   const root = resolve(directory), bundle = join(root, 'worker.mjs');
   const caFile = join(root, 'loopback-cert.pem'), keyFile = join(root, 'loopback-key.pem');
+  // Disposable loopback transport routing for the warm wake delivery only. The
+  // production Worker sends its one wake POST to the exact synthetic Sprite
+  // destination pinned in the warm bindings; this fixture maps that destination
+  // to a local listener so the real sendHostedOwnerWake path can be exercised
+  // without any live Sprite provider or Access edge. Never a URL allowlist
+  // change: every other outbound request stays blocked.
+  const WARM_WAKE_DESTINATION = 'https://synthetic-warm.sprites.app';
+  let warmWakeLoopbackUrl = null;
+  const warmWakeDeliveries = [];
+  const setWarmWakeLoopback = url => {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1' || !parsed.port ||
+        parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password)
+      throw new TypeError('Warm wake loopback routing accepts one exact local HTTP listener origin only.');
+    warmWakeLoopbackUrl = parsed.origin;
+  };
   let mf, server, dispatcher;
   try {
     await mkdir(root, { recursive: true, mode: 0o700 });
@@ -78,13 +94,28 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
         ...(warm ? { HEHEBOT_OWNER_ALPHA_WARM_GENERATION: JSON.stringify(warm.generation),
         HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN: warm.token, HEHEBOT_OWNER_ALPHA_HOST_SIGNING_KEY: warm.hostSigningKey,
         HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY: warm.taskSigningKey,
-        HEHEBOT_OWNER_ALPHA_WAKE: JSON.stringify({ url: 'https://synthetic-warm.sprites.app' }),
+        HEHEBOT_OWNER_ALPHA_WAKE: JSON.stringify({ url: WARM_WAKE_DESTINATION }),
         HEHEBOT_OWNER_ALPHA_WAKE_TOKEN: warm.wakeToken, PROVIDER_TOKEN: 'synthetic-provider-' + 'p'.repeat(40) } : {}),
         ...(successor === undefined ? {} : { HEHEBOT_OWNER_ALPHA_SUCCESSOR: JSON.stringify(successor) }) },
       outboundService: async request => {
         outboundRequests.push({ method: request.method, url: request.url });
         if (request.method === 'GET' && request.url === `${ISSUER}/cdn-cgi/access/certs`) {
           return Response.json({ keys: [jwk] });
+        }
+        if (warm && request.method === 'POST' && request.url === `${WARM_WAKE_DESTINATION}/wake`) {
+          // Loopback transport routing only, never a live Sprite provider: forward
+          // the production wake POST with exactly its production headers to the
+          // arranged local listener and return the listener's receipt unchanged.
+          if (!warmWakeLoopbackUrl) throw new Error('Warm wake loopback listener is not arranged.');
+          const headers = { authorization: request.headers.get('authorization'),
+            'x-hehe-wake-token': request.headers.get('x-hehe-wake-token'),
+            'content-type': request.headers.get('content-type') };
+          const body = await request.text();
+          warmWakeDeliveries.push({ method: request.method, url: request.url, headers, body: JSON.parse(body) });
+          const response = await undiciFetch(`${warmWakeLoopbackUrl}/wake`, { method: 'POST',
+            headers, body, redirect: 'error' });
+          return new Response(response.body, { status: response.status,
+            headers: { 'content-type': response.headers.get('content-type') ?? 'application/json' } });
         }
         throw new Error(`Blocked unexpected outbound request: ${request.method} ${request.url}`);
       } }));
@@ -142,7 +173,8 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
       ...(portalAssetsDirectory ? { browserCommands } : {}),
       ...(manager ? { retireUnusedPredecessor: () => fixtureCall('fixture-retire'), retainedManifest: () => fixtureCall('fixture-manifest') } : {}),
       ...(warm ? { retirePredecessor: bootId => fixtureCall('fixture-retire', { boot_id: bootId }),
-        wakeIntent: () => fixtureCall('fixture-wake'), warmRows: () => fixtureCall('fixture-warm') } : {}) };
+        wakeIntent: () => fixtureCall('fixture-wake'), warmRows: () => fixtureCall('fixture-warm'),
+        warmWakeDeliveries, setWarmWakeLoopback } : {}) };
   } catch (error) {
     if (server) await new Promise(resolveClose => server.close(() => resolveClose()));
     if (mf) await mf.dispose();

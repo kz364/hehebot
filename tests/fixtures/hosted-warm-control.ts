@@ -5,11 +5,11 @@ export { default } from '../../src/worker/index';
 
 /** Fixture-only warm custody surface. The seeded epoch-1 predecessor boot id is
  * supplied by the caller because the same immutable identity must already be
- * frozen in the trusted seed retirement configuration. Never routed publicly. */
+ * frozen in the trusted seed retirement configuration. Never routed publicly.
+ * The production PersonalControl alarm and sendHostedWake path runs unchanged:
+ * its outbound wake fetch to the pinned synthetic Sprite destination is routed
+ * by the fixture (startHostedControlFixture) to a disposable loopback listener. */
 export class HostedWarmControl extends PersonalControl {
-  protected async sendHostedWake(): Promise<void> {
-    // The caller drives the warm wake handoff explicitly. Never contact a Sprite.
-  }
   async fetch(request: Request) {
     const routes = ['http://127.0.0.1/fixture-retire', 'http://127.0.0.1/fixture-wake', 'http://127.0.0.1/fixture-warm'];
     if (!routes.includes(request.url) || request.method !== 'POST') return new Response('Not found', { status: 404 });

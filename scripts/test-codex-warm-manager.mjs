@@ -5,10 +5,20 @@
 // server + the authenticated Worker/SQLite fixture; credential-free, no live
 // model, provider or account. A second message never triggers a second wake,
 // process, provider bootstrap, activity hold, boot or epoch.
+// The Worker-to-warm-wake-listener handoff runs the real production path: the
+// PersonalControl alarm delivers the once-only wake intent through the actual
+// sendHostedWake workerd fetch to the pinned synthetic Sprite destination,
+// which the fixture loopback-routes (disposable transport routing only, never
+// a live Sprite provider or Access edge, and no URL allowlist change) into the
+// production createHostedOwnerWakeService listener.
 // --browser drives both ordinary owner messages through the actual portal
 // composer in a real browser against the same authenticated Worker/SQLite
 // fixture and the same single warm process; it is local integration only,
-// never production Access SSO, actual outbound Worker wake or a live model.
+// never production Access SSO or a live model.
+// --wake-first is the alarm-race regression: the main flow deliberately delays
+// its first receipt observation until the real alarm, wake delivery and native
+// launch have already staged, proving the wake callback never depends on
+// main-flow bindings or on main-flow reads preceding the alarm.
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { EventEmitter, once } from 'node:events';
@@ -26,15 +36,19 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { createCodexTextOnlyProfile, codexTextOnlyProfileSha256 } from '../runtime/codex-text-only.mjs';
 
 const browserMode = process.argv.includes('--browser');
+const wakeFirst = process.argv.includes('--wake-first');
 const exec = (await import('node:util')).promisify(execFile);
 const ROUTINE_MANAGE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
+// Matches the warm-mode PROVIDER_TOKEN binding the hosted fixture pins; the
+// production wake delivery must carry exactly this bearer on its one POST.
+const syntheticProviderToken = 'synthetic-provider-' + 'p'.repeat(40);
 const persona = '11111111-1111-4111-8111-111111111111';
 const replies = ['The notebook is cobalt blue, reference 47.', 'Cobalt blue.'];
 const pause = ms => new Promise(ok => setTimeout(ok, ms));
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const directory = await mkdtemp(join(tmpdir(), 'hehe-warm-manager-'));
-const report = { status: 'failed', mode: browserMode ? 'browser-composer' : 'http-one-process', nativeStarts: 0, modelRequests: 0, spriteRequests: [] };
+const report = { status: 'failed', mode: (browserMode ? 'browser-composer' : 'http-one-process') + (wakeFirst ? '+wake-first' : ''), nativeStarts: 0, modelRequests: 0, spriteRequests: [] };
 // Real-browser session for --browser mode. The synthetic signed owner identity
 // is fixture-only: the header rides the same authenticated Worker ingress.
 // Session names must stay short; keep this label at or under 20 characters.
@@ -48,6 +62,13 @@ const waitFor = async (probe, timeoutMs, stepMs = 250) => {
     await pause(stepMs);
   } while (Date.now() < end);
   return false;
+};
+// Race a promise against a deadline without leaving an unhandled rejection
+// behind when the race is won by the promise.
+const withDeadline = (promise, timeoutMs, message) => {
+  const timeout = pause(timeoutMs).then(() => { throw new Error(message); });
+  timeout.catch(() => {});
+  return Promise.race([promise, timeout]);
 };
 // Disposable Sprite seam: the manager task hold and the activity guard both
 // ride it; every hold and confirmation is recorded for exact-sequence asserts.
@@ -70,7 +91,7 @@ const spriteRequest = (options, callback) => {
   return request;
 };
 const deferred = () => { let resolve, reject; const promise = new Promise((ok, no) => { resolve = ok; reject = no; }); return { promise, resolve, reject }; };
-let fixture, model, service, listener, modelError, wakeDeadline, hostTokenBytes, firstEnvelope;
+let fixture, model, service, listener, modelError, wakeDeadline, hostTokenBytes;
 try {
   const home = join(directory, 'native-home'), sessionsDirectory = join(directory, 'sessions');
   await mkdir(home, { mode: 0o700 }); await mkdir(sessionsDirectory, { mode: 0o700 });
@@ -113,6 +134,25 @@ try {
   await fixture.retirePredecessor(epochOneBoot);
   const managerClient = new ControlClient({ origin: fixture.origin, token: managerToken, principal: 'warm-manager',
     accessClientId, accessClientSecret, fetchImpl: fixture.fetchImpl });
+  // Byte-stability seam on the manager request path. Whichever caller first
+  // reads the launch envelope — this main flow or the real wake preparation
+  // itself — captures the deterministic credential here, before the envelope
+  // is returned and therefore before any launch staging can follow. The proof
+  // never assumes main-flow reads precede the production alarm.
+  const managerRequest = managerClient.request.bind(managerClient);
+  let launchEnvelopeByteStable = false;
+  managerClient.request = async (type, payload) => {
+    const result = await managerRequest(type, payload);
+    if (type !== 'generation' || result === null || launchEnvelopeByteStable) return result;
+    launchEnvelopeByteStable = true;
+    assert.equal(result.kind, 'owner-alpha-warm-launch-v1');
+    assert.equal(result.generation.epoch, 2);
+    assert.equal(result.generation.policy.max_runs, 2);
+    assert.deepEqual(JSON.parse(JSON.stringify(result.generation.policy.text_only)), text_only);
+    assert.deepEqual(await managerRequest('generation', {}), result,
+      'repeated launch-envelope reads did not reproduce the identical credential');
+    return result;
+  };
   const ownerHeaders = { 'Cf-Access-Jwt-Assertion': fixture.ownerJwt };
   const command = (type, payload, idempotencyKey) => ({ method: 'POST', headers: { ...ownerHeaders,
     Origin: fixture.origin, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey ?? randomUUID() },
@@ -138,6 +178,7 @@ try {
   assert.equal(await managerClient.request('generation', {}), null, 'passive generation read staged work');
   assert.equal(report.nativeStarts, 0); assert.equal(report.modelRequests, 0);
   assert.deepEqual(report.spriteRequests, []); assert.deepEqual(await readdir(sessionsDirectory), []);
+  assert.deepEqual(fixture.warmWakeDeliveries, [], 'a passive read delivered a warm wake');
 
   if (browserMode) {
     // The user worker runs ahead of static assets: the portal routes stay
@@ -183,68 +224,9 @@ try {
     assert.deepEqual(fixture.browserCommands, [], 'passive portal load sent a command');
   }
 
-  const text1 = 'Remember the cobalt blue notebook, reference 47.', text2 = 'What color was the notebook?';
-  let request1, receipt1;
-  if (browserMode) {
-    // Send the first ordinary owner message through the actual composer.
-    await browser('fill', '#message', text1);
-    await browser('click', '#send');
-    // The composer clears the textarea only after its receipt is confirmed.
-    assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),
-      'composer did not confirm the first message');
-    assert.equal(await browserJson(`localStorage.getItem("personal.pending.${persona}")`), null,
-      'composer left an unconfirmed pending first message');
-    assert.equal(fixture.browserCommands.length, 1, 'composer send was not recorded exactly once');
-    const sent1 = fixture.browserCommands[0];
-    assert.deepEqual(JSON.parse(sent1.body), { schema_version: 1, type: 'message.send',
-      payload: { conversation_id: persona, text: text1 } });
-    assert.match(sent1.headers['idempotency-key'], uuidPattern, 'composer idempotency key is not a UUID');
-    assert.equal(sent1.headers.origin, fixture.origin);
-    assert.equal(sent1.headers['sec-fetch-site'], 'same-origin');
-    // Recover the durable receipt by replaying the exact composer bytes: the
-    // idempotent replay returns the stored receipt without a new command.
-    request1 = { method: 'POST', headers: { ...ownerHeaders, 'Content-Type': sent1.headers['content-type'],
-      Origin: fixture.origin, 'Idempotency-Key': sent1.headers['idempotency-key'] }, body: sent1.body };
-    const confirmed1 = await fixture.fetchImpl('/v1/commands', request1);
-    assert.equal(confirmed1.status, 202);
-    assert.equal(fixture.browserCommands.length, 1, 'receipt replay sent another browser command');
-    receipt1 = await confirmed1.json();
-  } else {
-    request1 = command('message.send', { conversation_id: persona, text: text1 });
-    const response1 = await fixture.fetchImpl('/v1/commands', request1);
-    assert.equal(response1.status, 202);
-    receipt1 = await response1.json();
-  }
-  assert.equal(receipt1.status, 'applied');
-  const rowsOf = (rows, suffix) => rows.filter(row => row.key.endsWith(suffix));
-  const rows1 = await fixture.warmRows();
-  const generationRow1 = rowsOf(rows1, 'owner_alpha_warm_generation:2')[0];
-  const manifestRow1 = rowsOf(rows1, 'owner_alpha_warm_manifest:2:1')[0];
-  const reservationRow1 = rowsOf(rows1, 'owner_alpha_reservation:2:1')[0];
-  assert.ok(generationRow1 && manifestRow1 && reservationRow1, 'first admission rows missing');
-  assert.equal(manifestRow1.value.run_id, receipt1.resource_id);
-  assert.equal(generationRow1.value.epoch, 2);
-  // Passive generation reads after admission are byte-stable and stage nothing.
-  firstEnvelope = await managerClient.request('generation', {});
-  assert.ok(firstEnvelope && firstEnvelope.kind === 'owner-alpha-warm-launch-v1');
-  assert.equal(firstEnvelope.generation.epoch, 2);
-  assert.equal(firstEnvelope.generation.policy.max_runs, 2);
-  assert.deepEqual(JSON.parse(JSON.stringify(firstEnvelope.generation.policy.text_only)), text_only);
-  assert.deepEqual(await readdir(sessionsDirectory), [], 'passive generation read staged a session');
-  assert.equal(report.nativeStarts, 0); assert.deepEqual(report.spriteRequests, []);
-
-  // The Durable Object alarm delivers the single once-only wake intent.
-  let intent = null;
-  for (let tries = 0; tries < 120 && !intent; tries++) { intent = await fixture.wakeIntent(); if (!intent) await pause(250); }
-  assert.ok(intent, 'wake intent never formed');
-  // The fixture's warm Durable Object stubs the outbound wake delivery, so the
-  // single once-only intent settles queued and is never replayed or re-formed.
-  assert.deepEqual(intent, { epoch: 2, boot_id: generationRow1.value.boot_id,
-    transition_id: generationRow1.value.transition_id, status: 'queued' });
-
-  // Deterministic envelope: a second read reproduces the identical credential.
-  assert.deepEqual(await managerClient.request('generation', {}), firstEnvelope);
-
+  // Arrange the real wake listener before the first composer send: the Worker
+  // alarm may call back the manager generation while the alarm handler still
+  // awaits the wake acknowledgement, so the loopback route must already exist.
   const accessClientIdFile = join(directory, 'access-id'), accessClientSecretFile = join(directory, 'access-secret');
   await writeFile(accessClientIdFile, accessClientId, { mode: 0o600 });
   await writeFile(accessClientSecretFile, accessClientSecret, { mode: 0o600 });
@@ -266,18 +248,39 @@ try {
   const configPath = join(directory, 'manager.json');
   await writeFile(configPath, JSON.stringify(managerConfig), { mode: 0o600 });
 
-  const run1Done = deferred(), proceed2 = deferred(), run2Done = deferred(), proceedStop = deferred();
+  const run1Done = deferred(), proceed2 = deferred(), run2Done = deferred(), proceedStop = deferred(), launchStaged = deferred();
+  // The wake-first regression deliberately holds back the main flow's first
+  // receipt observation until the real alarm fired, the production wake was
+  // delivered, the preparation claimed the generation and the native launch
+  // already staged. It never blocks wake preparation or acknowledgement: the
+  // gate only gates this flow's own reads.
+  const wakeFirstGate = () => wakeFirst
+    ? withDeadline(launchStaged.promise, 90000, 'wake-first regression: the real wake launch never staged after the first admission')
+    : Promise.resolve();
   const launchImpl = async (path, { expectedSha256 }) => {
+    // This launch runs inside the real wake callback, potentially before the
+    // main flow has observed the first receipt or any warm row, so every
+    // expectation is derived from the immutable staged config plus independent
+    // durable reads taken here — never from main-flow bindings, which may still
+    // be in their temporal dead zone when the alarm callback wins the race.
+    const { config } = await readOwnerAlphaConfig(path, expectedSha256);
+    assert.deepEqual(Object.keys(config.ownerAlphaGeneration).sort(), ['boot_id', 'epoch', 'transition_id']);
+    assert.equal(config.ownerAlphaGeneration.epoch, 2);
+    // Independent durable read: the Worker's immutable generation and manifest rows.
+    const durableRows = await fixture.warmRows();
+    const generationRow = durableRows.find(row => row.key === `owner_alpha_warm_generation:${config.ownerAlphaGeneration.epoch}`);
+    const manifestRow = durableRows.find(row => row.key === `owner_alpha_warm_manifest:${config.ownerAlphaGeneration.epoch}:1`);
+    assert.ok(generationRow && manifestRow, 'first-admission durable rows missing at launch');
+    assert.deepEqual(config.ownerAlphaGeneration, { epoch: generationRow.value.epoch,
+      boot_id: generationRow.value.boot_id, transition_id: generationRow.value.transition_id });
     // The manager staged exactly one exclusive session for this transition.
-    assert.deepEqual(await readdir(sessionsDirectory), [intent.transition_id]);
+    assert.deepEqual(await readdir(sessionsDirectory), [config.ownerAlphaGeneration.transition_id]);
     assert.deepEqual(report.spriteRequests.slice(0, 2), ['PUT', 'GET'], 'warm manager hold must precede launch');
     assert.equal(report.nativeStarts, 0, 'native started before the manager handed over');
-    const { config } = await readOwnerAlphaConfig(path, expectedSha256);
-    assert.deepEqual(config.ownerAlpha, { session_id: generationRow1.value.policy.session_id, persona_id: persona,
-      expires_at: generationRow1.value.policy.expires_at, max_runs: 2, max_task_seconds: 30, text_only });
-    assert.deepEqual(config.ownerAlphaGeneration, { epoch: intent.epoch, boot_id: intent.boot_id, transition_id: intent.transition_id });
-    assert.deepEqual(config.ownerAlphaWarm, { generation_sha256: generationRow1.value.authority.generation_sha256 });
-    assert.equal(config.stateDirectory, join(sessionsDirectory, intent.transition_id));
+    assert.deepEqual(config.ownerAlpha, { session_id: generationRow.value.policy.session_id, persona_id: persona,
+      expires_at: generationRow.value.policy.expires_at, max_runs: 2, max_task_seconds: 30, text_only });
+    assert.deepEqual(config.ownerAlphaWarm, { generation_sha256: generationRow.value.authority.generation_sha256 });
+    assert.equal(config.stateDirectory, join(sessionsDirectory, config.ownerAlphaGeneration.transition_id));
     const hostTokenFile = config.runtimeTokenFile;
     hostTokenBytes = await readFile(hostTokenFile);
     const hostTokenStat = await stat(hostTokenFile);
@@ -324,15 +327,20 @@ try {
       prepareNative: home => writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) });
     const dispatched = await service.start();
     assert.equal(report.nativeStarts, 1, 'warm session started more than one native process');
-    assert.equal(dispatched.claim.run.id, receipt1.resource_id);
+    assert.equal(dispatched.claim.run.id, manifestRow.value.run_id);
     assert.equal(dispatched.claim.manifest.admission, 1);
-    assert.equal(dispatched.claim.manifest.manifest_sha256, manifestRow1.value.manifest_sha256);
+    assert.equal(dispatched.claim.manifest.manifest_sha256, manifestRow.value.manifest_sha256);
     assert.deepEqual(Object.keys(dispatched.claim.task_credential).sort(), ['grant', 'token_file']);
-    assert.equal(dispatched.claim.task_credential.token_file, join(config.stateDirectory, 'task-tokens', receipt1.resource_id));
+    assert.equal(dispatched.claim.task_credential.token_file, join(config.stateDirectory, 'task-tokens', manifestRow.value.run_id));
     const token1 = await readFile(dispatched.claim.task_credential.token_file);
     const token1Stat = await stat(dispatched.claim.task_credential.token_file);
     assert.equal(token1Stat.mode & 0o777, 0o600, 'task token file is not owner-only');
     assert.equal(JSON.parse(Buffer.from(token1.toString('utf8').split('.')[0], 'base64url').toString('utf8')).typ, 'hehebot-warm-task+jwt');
+
+    // The real wake preparation and native launch are now fully staged (session
+    // claimed, native started, task credential written); the wake-first
+    // regression releases the deliberately delayed main-flow observation here.
+    launchStaged.resolve();
 
     const stateDirectory = config.stateDirectory;
     const completedRun = async runId => {
@@ -349,18 +357,18 @@ try {
       }
       assert.fail(`run ${runId} never completed canonically`);
     };
-    await maintainUntil(receipt1.resource_id);
+    await maintainUntil(manifestRow.value.run_id);
     const state1 = await readState();
     assert.deepEqual(state1.summary.owner_alpha_warm, { schema_version: 1, kind: 'owner-alpha-warm-summary-v1',
       policy_revision: 'warm-stage-a-v1', persona_id: persona, policy_expires_at: warmConfig.expires_at,
       max_admissions: 2, admissions_used: 1, message_admission_available: true,
-      generation: { session_id: generationRow1.value.policy.session_id, expires_at: generationRow1.value.policy.expires_at, epoch: 2 } });
+      generation: { session_id: generationRow.value.policy.session_id, expires_at: generationRow.value.policy.expires_at, epoch: 2 } });
     const history1 = await (await fixture.fetchImpl(`/v1/conversations/${persona}/events`, { headers: ownerHeaders })).json();
-    const results1 = history1.events.filter(event => event.type === 'run.result' && event.payload.run_id === receipt1.resource_id);
+    const results1 = history1.events.filter(event => event.type === 'run.result' && event.payload.run_id === manifestRow.value.run_id);
     assert.equal(results1.length, 1); assert.equal(results1[0].payload.text, replies[0]);
     let families = await service.supervisor.bridge.families();
     assert.equal(families.length, 1); assert.equal(families[0].phase, 'complete');
-    assert.equal(families[0].claim.run.id, receipt1.resource_id);
+    assert.equal(families[0].claim.run.id, manifestRow.value.run_id);
     if (browserMode) {
       // The portal timeline must show the owner message and the attributed
       // canonical reply for the first turn.
@@ -436,21 +444,21 @@ try {
     // dual-lock readback). runHostedOwnerAlpha's independent automatic stop
     // timer (expiry + 30s grace) is NOT exercised by this script; that
     // warm entrypoint path requires separate verification.
-    while (Date.now() < Date.parse(generationRow1.value.policy.expires_at)) await pause(200);
+    while (Date.now() < Date.parse(generationRow.value.policy.expires_at)) await pause(200);
     await service.stop();
     service = null;
     const stoppedJournal = JSON.parse(await readFile(join(stateDirectory, 'journal', 'service.json')));
     assert.equal(stoppedJournal.phase, 'recovery');
     assert.equal(stoppedJournal.nativeStopped, true);
-    assert.deepEqual(stoppedJournal.ownerAlphaGeneration, { epoch: intent.epoch, boot_id: intent.boot_id, transition_id: intent.transition_id });
-    assert.deepEqual(stoppedJournal.ownerAlphaWarm, { generation_sha256: generationRow1.value.authority.generation_sha256 });
+    assert.deepEqual(stoppedJournal.ownerAlphaGeneration, config.ownerAlphaGeneration);
+    assert.deepEqual(stoppedJournal.ownerAlphaWarm, config.ownerAlphaWarm);
     return { code: 0, signal: null };
   };
   // A failed launch assertion must reject the coordination deferreds rather
   // than vanish into the wake callback's catch and hang the main flow.
   const launch = async (path, options) => {
     try { return await launchImpl(path, options); }
-    catch (error) { proceed2.resolve(); run1Done.reject(error); run2Done.reject(error); proceedStop.resolve(); throw error; }
+    catch (error) { proceed2.resolve(); run1Done.reject(error); run2Done.reject(error); proceedStop.resolve(); launchStaged.resolve(); throw error; }
   };
   let finishWake;
   const wakeFinished = new Promise(ok => { finishWake = ok; });
@@ -459,12 +467,87 @@ try {
   listener = createHostedOwnerWakeService({ configPath, wakeTokenFile, port: 8080 },
     { control: managerClient, spriteRequest, report: value => finishWake(value.code), launch });
   listener.listen(0, '127.0.0.1'); await once(listener, 'listening');
-  const wakeResponse = await fetch(`http://127.0.0.1:${listener.address().port}/wake`, { method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-hehe-wake-token': wakeToken },
-    body: JSON.stringify({ epoch: intent.epoch, operationId: intent.transition_id }),
-    signal: AbortSignal.timeout(15000) });
-  assert.equal(wakeResponse.status, 202, `wake response body: ${await wakeResponse.clone().text().catch(() => '<unreadable>')}`);
-  assert.deepEqual(await wakeResponse.json(), { accepted: true, epoch: intent.epoch, duplicate: false });
+  // Disposable loopback transport routing only: the fixture maps the exact
+  // synthetic Sprite destination the production wake allowlist pins to this
+  // local listener. This is never a live Sprite provider or Access edge, and no
+  // production URL policy changed.
+  fixture.setWarmWakeLoopback(`http://127.0.0.1:${listener.address().port}`);
+  assert.deepEqual(fixture.warmWakeDeliveries, [], 'arranging the listener delivered a wake');
+  assert.deepEqual(await readdir(sessionsDirectory), [], 'arranging the listener staged a session');
+  assert.equal(report.nativeStarts, 0); assert.deepEqual(report.spriteRequests, []);
+
+  const text1 = 'Remember the cobalt blue notebook, reference 47.', text2 = 'What color was the notebook?';
+  let request1, receipt1;
+  if (browserMode) {
+    // Send the first ordinary owner message through the actual composer.
+    await browser('fill', '#message', text1);
+    await browser('click', '#send');
+    if (wakeFirst) await wakeFirstGate();
+    // The composer clears the textarea only after its receipt is confirmed.
+    assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),
+      'composer did not confirm the first message');
+    assert.equal(await browserJson(`localStorage.getItem("personal.pending.${persona}")`), null,
+      'composer left an unconfirmed pending first message');
+    assert.equal(fixture.browserCommands.length, 1, 'composer send was not recorded exactly once');
+    const sent1 = fixture.browserCommands[0];
+    assert.deepEqual(JSON.parse(sent1.body), { schema_version: 1, type: 'message.send',
+      payload: { conversation_id: persona, text: text1 } });
+    assert.match(sent1.headers['idempotency-key'], uuidPattern, 'composer idempotency key is not a UUID');
+    assert.equal(sent1.headers.origin, fixture.origin);
+    assert.equal(sent1.headers['sec-fetch-site'], 'same-origin');
+    // Recover the durable receipt by replaying the exact composer bytes: the
+    // idempotent replay returns the stored receipt without a new command.
+    request1 = { method: 'POST', headers: { ...ownerHeaders, 'Content-Type': sent1.headers['content-type'],
+      Origin: fixture.origin, 'Idempotency-Key': sent1.headers['idempotency-key'] }, body: sent1.body };
+    const confirmed1 = await fixture.fetchImpl('/v1/commands', request1);
+    assert.equal(confirmed1.status, 202);
+    assert.equal(fixture.browserCommands.length, 1, 'receipt replay sent another browser command');
+    receipt1 = await confirmed1.json();
+  } else {
+    request1 = command('message.send', { conversation_id: persona, text: text1 });
+    const response1 = fixture.fetchImpl('/v1/commands', request1);
+    if (wakeFirst) await wakeFirstGate();
+    const confirmed1 = await response1;
+    assert.equal(confirmed1.status, 202);
+    receipt1 = await confirmed1.json();
+  }
+  assert.equal(receipt1.status, 'applied');
+  const rowsOf = (rows, suffix) => rows.filter(row => row.key.endsWith(suffix));
+  const rows1 = await fixture.warmRows();
+  const generationRow1 = rowsOf(rows1, 'owner_alpha_warm_generation:2')[0];
+  const manifestRow1 = rowsOf(rows1, 'owner_alpha_warm_manifest:2:1')[0];
+  const reservationRow1 = rowsOf(rows1, 'owner_alpha_reservation:2:1')[0];
+  assert.ok(generationRow1 && manifestRow1 && reservationRow1, 'first admission rows missing');
+  assert.equal(manifestRow1.value.run_id, receipt1.resource_id);
+  assert.equal(generationRow1.value.epoch, 2);
+  // No envelope or staging assertions run here: after the first admission the
+  // production alarm is live, so these would be timing assumptions, not
+  // invariants. Envelope byte-stability is captured inside the manager request
+  // seam at the first launch-envelope read, before any launch staging; the
+  // session/sprite/native observations below happen only at race-free points
+  // (durable rows, the queued wake intent and the completed turns).
+
+  // The Durable Object alarm now delivers the single once-only wake intent
+  // through the real production path: PersonalControl.alarm runs the actual
+  // sendHostedWake, whose workerd fetch to the pinned synthetic Sprite
+  // destination the fixture loopback-routes into the wake listener arranged
+  // above. The delivery is acknowledged only after the listener's preparation
+  // claims the generation, so 'queued' proves the exact 202 receipt was read,
+  // accepted and persisted by the Worker itself.
+  let intent = null;
+  for (let tries = 0; tries < 120 && !(intent && intent.status === 'queued'); tries++) {
+    intent = await fixture.wakeIntent();
+    if (!(intent && intent.status === 'queued')) await pause(250);
+  }
+  assert.ok(intent, 'wake intent never formed');
+  assert.equal(intent.status, 'queued', `wake delivery was never confirmed: ${JSON.stringify(intent)}`);
+  assert.equal(fixture.warmWakeDeliveries.length, 1, 'the warm wake was not delivered exactly once');
+  // Exact production method, URL, headers and body at the private destination.
+  assert.deepEqual(fixture.warmWakeDeliveries[0], { method: 'POST', url: 'https://synthetic-warm.sprites.app/wake',
+    headers: { authorization: `Bearer ${syntheticProviderToken}`, 'x-hehe-wake-token': wakeToken, 'content-type': 'application/json' },
+    body: { epoch: 2, operationId: generationRow1.value.transition_id } });
+  assert.deepEqual(intent, { epoch: 2, boot_id: generationRow1.value.boot_id,
+    transition_id: generationRow1.value.transition_id, status: 'queued' });
 
   await run1Done.promise;
   let request2, receipt2;
@@ -510,6 +593,9 @@ try {
   assert.notDeepEqual(reservationRow2.value, reservationRow1.value);
   assert.deepEqual(rowsOf(rows2, 'owner_alpha_warm_generation:2')[0].value, generationRow1.value,
     'second admission rewrote the immutable generation descriptor');
+  // The second admission never forms, mutates or replays the once-only intent.
+  assert.deepEqual(await fixture.wakeIntent(), intent, 'second admission touched the settled wake intent');
+  assert.equal(fixture.warmWakeDeliveries.length, 1, 'second admission delivered a second warm wake');
   proceed2.resolve();
 
   await run2Done.promise; const finalSummary = (await readState()).summary;
@@ -611,11 +697,32 @@ try {
   const retiredRows = await fixture.warmRows();
   assert.deepEqual(rowsOf(retiredRows, 'owner_alpha_warm_generation:2')[0].value, generationRow1.value,
     'retirement rewrote the immutable generation descriptor');
-  assert.ok(fixture.outboundRequests.every(request => request.method === 'GET' && request.url.endsWith('/cdn-cgi/access/certs')));
+  // Exactly one production wake POST to the private pinned Sprite destination
+  // (loopback-routed); every other outbound request stays the Access certs read.
+  const wakePosts = fixture.outboundRequests.filter(request => request.method === 'POST');
+  assert.deepEqual(wakePosts, [{ method: 'POST', url: 'https://synthetic-warm.sprites.app/wake' }],
+    'the warm wake was not the single outbound POST');
+  assert.ok(fixture.outboundRequests.every(request => request.method === 'GET' && request.url.endsWith('/cdn-cgi/access/certs') ||
+    (request.method === 'POST' && request.url === 'https://synthetic-warm.sprites.app/wake')));
+  // Idempotent replay of the exact delivered wake body to the same production
+  // listener is acknowledged duplicate without a second launch, hold or POST.
+  const wakeReplay = await fetch(`http://127.0.0.1:${listener.address().port}/wake`, { method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-hehe-wake-token': wakeToken },
+    body: JSON.stringify({ epoch: intent.epoch, operationId: intent.transition_id }),
+    signal: AbortSignal.timeout(15000) });
+  assert.equal(wakeReplay.status, 202, `wake replay body: ${await wakeReplay.clone().text().catch(() => '<unreadable>')}`);
+  assert.deepEqual(await wakeReplay.json(), { accepted: true, epoch: intent.epoch, duplicate: true });
+  assert.equal(fixture.warmWakeDeliveries.length, 1, 'wake replay reached the Worker outbound path again');
+  assert.equal(report.nativeStarts, 1, 'wake replay launched a second native process');
+  // The seam above must have captured the launch envelope on some caller (the
+  // real wake preparation reads it even if this flow never does).
+  assert.ok(launchEnvelopeByteStable, 'launch envelope byte-stability was never captured through the manager request seam');
   Object.assign(report, { status: 'passed', canonicalReplies: replies, oneProcessTwoTurns: true,
     sameGenerationBothTurns: true, distinctTaskCredentials: true, boundedPriorCanonicalContext: true,
     passiveReadsDidNotLaunch: true, replayDidNotRelaunch: true, noPrematureRetirement: true,
     explicitPostExpiryStop: true, dualLockRetirement: true, productionEnabled: false, providerOrAccountVerified: false,
+    realWorkerWakeDelivery: true, wakeReplayIdempotent: true, launchEnvelopeByteStable: true,
+    ...(wakeFirst ? { wakeFirstRegression: true } : {}),
     ...(browserMode ? { browserComposerVerified: true, passivePortalReadsDidNotLaunch: true,
       completionReenabledComposer: true, portalReloadRetainedBothTurns: true } : {}) });
 } catch (error) {
