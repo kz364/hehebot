@@ -4,6 +4,30 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Cold pending-question recovery contract (2026-09-21), fixture-only follow-through
+on local0c5a566: `node scripts/test-codex-questions.mjs` passes18 assertions with
+the pinned native executable and synthetic loopback responses. An exact active
+question is interrupted by SIGKILL; old PID absence precedes replacement startup.
+Same-home `thread/read` → `thread/resume` → `thread/read` preserves the exact
+interrupted turn, transitions notLoaded history to idle, recreates0 callbacks,
+submits0 model requests during readback and suppresses the abandoned callback's
+late answer. Binary/transport hashes are unchanged; native processes and held
+connections close and disposable homes are removed. This is a bounded cold-readback
+observation, not authenticated inference, live reconnect, safe resume or settlement.
+Pinned upstream source agrees that callback IDs/waiters are process-local; source
+links and the resulting authority boundary are in CODEX_RECOVERY.md. No production
+runtime transition was added: old question custody cannot be rebound from history.
+Existing run.recover closes reconciled custody; run.retry starts a fresh attempt
+with checkpoint data, subject to existing gates. Drain intent restoration remains
+unimplemented. Focused85 question/transport/inspection tests and typecheck pass.
+The full verifier already passed the parent checkpoint and was not repeated for
+this fixture/documentation-only change; it already invokes this extended script.
+Final check also counts denied requests on the replacement connection:0.
+Private log `.local/question-cold-readback-final.log` SHA256
+`26db541cb30fa56eb7d2566a10be4aeba92874fd071bc5e8b49abaa4ac5ef739`;
+trace `.local/questions-proof-1qyzXi/trace.jsonl` SHA256
+`5453e8c3fb9d00c3c55648bf20a6e8bfedea43502fc64b581012e5619ce28e3b`.
+
 Host question timeout observation (2026-09-21): runtime adds optional private
 `callbackTimeout: {source, observedAt}` to an already-owned question row after an
 active binding observes its deadline or that exact transport request's timer fires.

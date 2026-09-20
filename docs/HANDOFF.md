@@ -4,6 +4,18 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-21 Asia/Jakarta)
 
+Latest bounded unit on0c5a566 is fixture/documentation only: real pinned Codex
+pending question → SIGKILL/PID absence → same-home read/resume/read now passes.
+Exact turn becomes interrupted; resumed thread is idle; no recreated callback,
+late answer write or model request during readback. Native fixture18 assertions,
+focused85 and typecheck pass. Source links and authority distinction are recorded
+in CODEX_RECOVERY.md. This does not restore a question, prove recursive settlement
+or authorize native takeover. Parent full verifier below was not rerun for this
+fixture-only change. Log `.local/question-cold-readback-final.log`, SHA256
+26db541cb30fa56eb7d2566a10be4aeba92874fd071bc5e8b49abaa4ac5ef739.
+No active child/check. Continue checkpoint/restart authority or selected-model
+memory contracts; do not manufacture fresh question authority from cold history.
+
 Latest verified local unit on9189063: private host callback-timeout observations in
 transport/question binding/offline inspector, with exact existing custody and no
 Worker RPC or recovery authority. Binding deadline stops and exact transport timer

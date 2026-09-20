@@ -234,6 +234,54 @@ try {
     assert.equal(on.resolved.has(JSON.stringify([disconnected.params.threadId, disconnected.id])), false);
   });
 
+  const cold = await session('cold-question', true, false);
+  const interruptedQuestion = await cold.start('DISCONNECT');
+  const abandoned = await cold.wait(() => cold.pending.get('DISCONNECT'), 'COLD_QUESTION');
+  const live = await cold.transport.request('thread/read', { threadId: interruptedQuestion.threadId, includeTurns: true });
+  check('pending question has exact live turn and waiting-on-input status before process loss', () => {
+    assert.equal(live.thread.status.type, 'active');
+    assert.ok(live.thread.status.activeFlags.includes('waitingOnUserInput'));
+    assert.equal(live.thread.turns.find(turn => turn.id === interruptedQuestion.turnId)?.status, 'inProgress');
+  });
+  const oldNative = cold.native, oldTransport = cold.transport;
+  const beforeCold = report.modelRequests, oldWrites = cold.answersWritten;
+  oldNative.kill('SIGKILL');
+  await cold.wait(() => oldNative.signalCode === 'SIGKILL', 'KILLED_NATIVE');
+  assert.throws(() => process.kill(oldNative.pid, 0), { code: 'ESRCH' });
+  await cold.wait(() => abandoned.signal.aborted, 'ABORTED_OLD_CALLBACK');
+  cold.native = spawn(binary, ['app-server', '--strict-config', '--listen', 'stdio://'], { env: envFor(cold.home), cwd: cold.home, stdio: ['pipe', 'pipe', 'pipe'] });
+  cold.native.stderr.on('data', data => capture('cold.stderr', data.toString()));
+  let recreatedRequests = 0;
+  cold.transport = new CodexTransport(cold.native, { timeoutMs: 10000, onUserInput: () => {
+    recreatedRequests++; throw Error('UNEXPECTED_COLD_QUESTION');
+  } });
+  cold.transport.on('deniedRequest', () => report.deniedRequests++);
+  cold.transport.on('notification', notification => capture('cold.notification', notification));
+  await cold.transport.initialize({ experimentalApi: true });
+  const historical = await cold.transport.request('thread/read', { threadId: interruptedQuestion.threadId, includeTurns: true });
+  const resumed = await cold.transport.request('thread/resume', { threadId: interruptedQuestion.threadId });
+  abandoned.resolve(answerFor('DISCONNECT'));
+  // A second supported read is the post-resume barrier; the short observation
+  // window is not a claim about future inference or another connection.
+  const afterCold = await cold.transport.request('thread/read', { threadId: interruptedQuestion.threadId, includeTurns: true });
+  await sleep(150);
+  capture('cold.readback', { historical, resumed, afterCold });
+  check('cold history restoration retains the interrupted turn but recreates no question or answer authority', () => {
+    assert.equal(historical.thread.status.type, 'notLoaded');
+    for (const result of [historical, resumed, afterCold]) {
+      assert.equal(result.thread.id, interruptedQuestion.threadId);
+      assert.equal(result.thread.turns.find(turn => turn.id === interruptedQuestion.turnId)?.status, 'interrupted');
+    }
+    assert.equal(afterCold.thread.status.type, 'idle');
+    assert.equal(recreatedRequests, 0); assert.equal(cold.answersWritten, oldWrites);
+    assert.equal(oldTransport.closed, true); assert.equal(report.modelRequests, beforeCold);
+    assert.equal(cold.transport.closed, false);
+  });
+  report.coldQuestionReadback = { oldProcessStopped: true, exactInterruptedTurn: true,
+    recreatedRequests, inferenceRequestsDuringReadback: report.modelRequests - beforeCold,
+    answerReplayAllowed: false, safeResumeProved: false };
+  await stop(cold);
+
   const v2 = await session('v2-feature-on', true, true); await v2.start('V2'); finish((await v2.answer('V2')).res); await stop(v2);
   check('no unexpected server requests or approvals were granted', () => assert.equal(report.deniedRequests, 0));
   report.status = 'passed';

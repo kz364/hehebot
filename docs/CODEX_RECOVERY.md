@@ -135,6 +135,34 @@ After inspection, retain the state and reconcile uncertain Worker/native/effect
 outcomes through separately supported procedures. This tool supplies evidence
 only; safe resume, recursive settlement and production sleep gates stay open work.
 
+## Cold question history does not restore answer authority
+
+For pinned Codex 0.154.0, pending server-request callbacks and their IDs are
+[process-local](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server/src/outgoing_message.rs#L128-L157).
+A still-running thread can replay its pending request to a newly attached
+connection through the [live resume path](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L783-L814).
+That is not the cold-start path: without a live runtime, history-derived in-progress
+turns are [normalized to interrupted](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server/src/request_processors/thread_lifecycle.rs#L919-L933).
+Neither path supplies a recursive external-effect settlement receipt.
+
+`scripts/test-codex-questions.mjs` now tests a real abrupt process loss while an
+exact question is pending. It observes an active/waitingOnUserInput thread and
+inProgress turn, SIGKILLs the pinned native executable, proves its PID absent,
+then opens the same disposable home in a replacement process. Supported
+`thread/read` returns notLoaded history; `thread/resume` and a subsequent read
+retain the exact interrupted turn and leave the thread idle. No question callback
+is recreated, no old answer is written, and no synthetic model request occurs
+during those calls and the bounded observation window. Native and transport hashes
+remain unchanged. This is not a live reconnect test or proof about future turns.
+
+Hehebot therefore keeps the old question's original custody unresolved until its
+existing explicit reconciliation rules are satisfied. A history item or private
+timeout marker cannot mint a new connection/request binding. `run.recover` closes
+reconciled stopped custody, not resumes it; separately admitted `run.retry` supplies
+checkpoint data to a fresh attempt after its settlement fences. Detached drain
+checkpoints have no restoration path. Do not add a cold-question answer replay or
+native resume transition without a separate supported authority contract.
+
 ## Exact status-bearing native history recovery
 
 The adapter's separate `reconcile` and `reconcileChild` APIs use supported

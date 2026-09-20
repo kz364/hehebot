@@ -22,6 +22,14 @@ evidence, not native settlement or restart permission. Remaining priority:
 supported checkpoint/recovery/termination contracts and selected-model memory
 constraints; external account/provider/device gates remain unchanged.
 
+**Latest bounded follow-through:** real native cold-question fixture passes18
+assertions: abrupt process loss, exact interrupted-turn readback, zero recreated
+question callbacks, zero readback inference and no late answer replay. Focused85
+and typecheck pass. This changes fixture/documentation only; parent full-verifier
+evidence above remains separate. Cold history is not answer authority, and a
+fresh retry is not native restoration. Next: supported checkpoint/restart authority
+and selected-model memory constraints, without weakening settlement gates.
+
 **Earlier combined checkpoint:** full credential-free verifier passes on local
 `6a225a3`: backend1792/runtime615, native/browser fixtures, both warm/background
 shutdown modes, strict launcher, service modes and dry-run build. The earlier
@@ -913,6 +921,7 @@ These are useful foundations that should not be rebuilt simply because their ful
 - [x] Terminal owner cancellation checks previously queued follow-ups, delivering once after descendant settlement without steering unrelated work. Evidence: `tests/orchestration.test.ts`, waiting checkpoint and live-grandchild cases, plus retention fixtures. Native checkpoint/restart and full intent-aware E03 behavior remain unverified.
 - [x] Five-minute non-checkpointed service question callback ceiling, private wait deadline and matching Worker answerability cap. Worker pre-handoff cutoff now persists a restart-required reason with ordinary cancellation/grace and owner explanation. Evidence: question/service/inspection tests, exact alarm, native answer/cancel fixtures, HTTPS and inspected Chromium checks. Expired custody remains unresolved; post-handoff timeout proof, checkpoint parking and safe compute release remain E01/E02.
 - [x] Partial private host callback-timeout observations retain existing request/task identity and are validated by offline inspection. Exact transport timeout winner is distinguished from collateral abort; held handoff and owned-but-unrecorded work retain uncertainty. Evidence: deterministic binding/transport tests, real FileJournal handoff persistence and inspector tests; runtime620 and focused85/typecheck pass. Missing evidence does not prove no timeout; no Worker mutation, native termination, answer replay or safe-resume/sleep claim.
+- [x] Cold pending-question readback through supported Codex0.154.0 APIs: exact interrupted turn survives process loss; history restore recreates no question callback or answer authority and submits no inference during the observed calls/window. Evidence: extended native question fixture,18 assertions; upstream pinned-source contract in CODEX_RECOVERY.md. Live reconnect, provider containment and safe native restoration remain E02.
 - [x] Unsupported live native item boundaries trigger recovery rather than silently evading operation accounting. Evidence: `tests/runtime-codex-events.mjs`; complete supported coverage remains E01, and recovery does not prove native termination.
 - [x] Content-free plan-item lifetime/deadline projection and offline inspection, plus actual root Plan emission, unchanged clocks across native text deltas and accepted active Worker heartbeat under scripted loopback inference. Evidence: `scripts/test-codex-service.sh --plan` and synthetic event/operation/recovery fixtures. Native child Plan emission, held-stream expiry, rendering and full operation coverage remain E01/E04.
 
