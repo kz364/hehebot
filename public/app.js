@@ -20,12 +20,30 @@ let bootstrapSession=null;
 // immutable for this page. Terminal states are sticky in sessionStorage so a
 // reload with a rolled-back clock cannot reopen a closed generation.
 let warmSession=null,warmSeen=false,warmInvalid=false,warmPolicyExpired=false,warmGenerationExpired=false;
+// Stage B background owner-alpha generation state: a separate strict path that
+// never reuses warm/bootstrap/legacy alpha fences. The first observed summary
+// binds policy identity and deadline; admissions_used can only grow; the
+// generation identity transitions null -> first identity once and is then
+// immutable. Terminal states are sticky in sessionStorage so a reload with a
+// rolled-back clock cannot reopen a closed generation.
+let backgroundSession=null,backgroundSeen=false,backgroundInvalid=false,backgroundPolicyExpired=false,backgroundGenerationExpired=false;
+let backgroundRenderedReason=null;
+const backgroundRoles=['background','status','independent'];
 const reviewedBootstrapRevisions=new Set();
 const bootstrapFields=['policy_revision','persona_id','expires_at','max_task_seconds'];
 const validBootstrap=value=>value&&typeof value.policy_revision==='string'&&value.policy_revision&&typeof value.persona_id==='string'&&Number.isFinite(Date.parse(value.expires_at))&&Number.isInteger(value.max_task_seconds)&&value.max_task_seconds>=1&&value.max_task_seconds<=300&&typeof value.message_admission_available==='boolean';
 const validWarmTimestamp=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d\d\dZ$/.test(value)&&Number.isFinite(Date.parse(value));
 const validWarmGeneration=(value,policyExpiresAt)=>value===null||!!value&&typeof value==='object'&&!Array.isArray(value)&&typeof value.session_id==='string'&&value.session_id&&validWarmTimestamp(value.expires_at)&&Date.parse(value.expires_at)<=Date.parse(policyExpiresAt)&&Number.isSafeInteger(value.epoch)&&value.epoch>=2;
 const validWarmSummary=value=>!!value&&typeof value==='object'&&!Array.isArray(value)&&value.schema_version===1&&value.kind==='owner-alpha-warm-summary-v1'&&typeof value.policy_revision==='string'&&value.policy_revision&&typeof value.persona_id==='string'&&value.persona_id&&validWarmTimestamp(value.policy_expires_at)&&value.max_admissions===2&&Number.isSafeInteger(value.admissions_used)&&value.admissions_used>=0&&value.admissions_used<=2&&typeof value.message_admission_available==='boolean'&&validWarmGeneration(value.generation,value.policy_expires_at);
+/** Strict Stage B background-generation gate shape. The ordinal role schedule
+ * is fixed: next_role is 'background' before the first admission, then
+ * 'status'/'independent' only while that admission is actually available, and
+ * null while blocked, exhausted or expired. Impossible count/generation/role
+ * combinations are malformed and fail closed. */
+const validBackgroundSummary=value=>{
+ if(!value||typeof value!=='object'||Array.isArray(value)||value.schema_version!==1||value.kind!=='owner-alpha-background-summary-v1'||typeof value.policy_revision!=='string'||!value.policy_revision||typeof value.persona_id!=='string'||!value.persona_id||!validWarmTimestamp(value.policy_expires_at)||value.max_admissions!==3||!Number.isSafeInteger(value.admissions_used)||value.admissions_used<0||value.admissions_used>3||typeof value.message_admission_available!=='boolean'||!validWarmGeneration(value.generation,value.policy_expires_at))return false;
+ return value.next_role===(value.message_admission_available?backgroundRoles[value.admissions_used]??null:null);
+};
 /** Strict warm-generation gate. Returns null only when warm mode is truly
  * absent (no summary.owner_alpha_warm property and never seen); a present
  * property with any value — including null, false, 0, '' or malformed — latches
@@ -88,7 +106,75 @@ function warmBannerText(reason){
  const generation=warmSession.generation?` · Generation ${warmSession.generation.epoch} deadline ${new Date(warmSession.generation.expires_at).toLocaleString(undefined,{timeZoneName:'short'})}`:' · One fixed generation starts with your first Send';
  return `Warm owner generation · ${name} only · ${Math.max(0,2-warmSession.admissions_used)} of 2 messages remaining${generation} · Policy deadline ${new Date(warmSession.policy_expires_at).toLocaleString(undefined,{timeZoneName:'short'})}. ${reason||'Message admission available. The second message reuses this generation only after the first task completes canonically.'} This is not always-on chat or safe recovery. Portal visits, refreshes and history do not start the runtime. No renewal, rollover, successor generation or background work in this revision.`;
 }
+/** Strict Stage B background-generation gate. Returns null only when
+ * background mode is truly absent (no summary.owner_alpha_background property
+ * and never seen); a present property with any value — including null, false,
+ * 0, '' or malformed — latches background mode and fails closed. Otherwise
+ * returns a blocking reason or '' when an explicit Send is admissible. The
+ * portal never classifies message text or picks a role itself: it discloses
+ * the summary's next_role and message_admission_available exactly. Conflicting
+ * generation summaries (background together with legacy, bootstrap or warm
+ * custody) fail closed rather than selecting a permissive path. */
+function backgroundBlock(){
+ const b=snapshot?.summary?.owner_alpha_background;
+ if(b===undefined&&!backgroundSeen)return null;
+ backgroundSeen=true;alphaSeen=true;
+ if(warmSeen||snapshot?.summary&&(snapshot.summary.owner_alpha||snapshot.summary.owner_alpha_session!==undefined||snapshot.summary.owner_alpha_warm!==undefined||snapshot.summary.owner_alpha_bootstrap!==undefined))backgroundInvalid=true;
+ if(!validBackgroundSummary(b))backgroundInvalid=true;
+ if(!backgroundInvalid){
+  if(!backgroundSession){
+   backgroundSession={policy_revision:b.policy_revision,persona_id:b.persona_id,policy_expires_at:b.policy_expires_at,
+    policy_deadline:performance.now()+Math.max(0,Date.parse(b.policy_expires_at)-Date.now()),
+    admissions_used:b.admissions_used,generation:null,generation_deadline:0};
+   // A previously observed terminal state for this exact revision stays closed.
+   if(sessionStorage.getItem('personal.background-policy-expired.'+b.policy_revision))backgroundPolicyExpired=true;
+   if(b.generation){
+    backgroundSession.generation={session_id:b.generation.session_id,expires_at:b.generation.expires_at,epoch:b.generation.epoch};
+    backgroundSession.generation_deadline=performance.now()+Math.max(0,Date.parse(b.generation.expires_at)-Date.now());
+    if(sessionStorage.getItem('personal.background-generation-expired.'+b.generation.session_id))backgroundGenerationExpired=true;
+   }
+  }else{
+   if(['policy_revision','persona_id','policy_expires_at'].some(key=>b[key]!==backgroundSession[key]))backgroundInvalid=true;
+   if(b.admissions_used<backgroundSession.admissions_used)backgroundInvalid=true;else backgroundSession.admissions_used=b.admissions_used;
+   if(!backgroundSession.generation&&b.generation){
+    // generation:null -> the first bound identity is the expected transition
+    // when the first message creates the generation; it is not a new policy.
+    backgroundSession.generation={session_id:b.generation.session_id,expires_at:b.generation.expires_at,epoch:b.generation.epoch};
+    backgroundSession.generation_deadline=performance.now()+Math.max(0,Date.parse(b.generation.expires_at)-Date.now());
+    if(sessionStorage.getItem('personal.background-generation-expired.'+b.generation.session_id))backgroundGenerationExpired=true;
+   }else if(backgroundSession.generation&&(!b.generation||b.generation.session_id!==backgroundSession.generation.session_id||b.generation.expires_at!==backgroundSession.generation.expires_at||b.generation.epoch!==backgroundSession.generation.epoch))backgroundInvalid=true;
+  }
+  if(b.admissions_used>=1&&!b.generation)backgroundInvalid=true;
+  if(b.generation&&b.admissions_used<1)backgroundInvalid=true;
+ }
+ if(backgroundInvalid)return 'Background generation details changed or are unavailable. Reload to review the current generation; sending is closed.';
+ if(backgroundSession){
+  // Both deadlines are immutable and monotonic locally: a wall-clock rollback
+  // never reopens a deadline the local timer has already passed.
+  if(Date.now()>=Date.parse(backgroundSession.policy_expires_at)||performance.now()>=backgroundSession.policy_deadline)backgroundPolicyExpired=true;
+  if(backgroundSession.generation&&(Date.now()>=Date.parse(backgroundSession.generation.expires_at)||performance.now()>=backgroundSession.generation_deadline))backgroundGenerationExpired=true;
+  if(backgroundPolicyExpired)sessionStorage.setItem('personal.background-policy-expired.'+backgroundSession.policy_revision,'1');
+  if(backgroundGenerationExpired&&backgroundSession.generation)sessionStorage.setItem('personal.background-generation-expired.'+backgroundSession.generation.session_id,'1');
+ }
+ if(backgroundPolicyExpired)return 'Background policy expired. New messages are closed.';
+ if(backgroundGenerationExpired)return 'Background generation expired. New messages are closed.';
+ if(backgroundSession&&backgroundSession.admissions_used>=3)return 'All three background messages have been used. This background generation is closed.';
+ if(backgroundSession&&(current()?.kind!=='persona'||selected!==backgroundSession.persona_id))return 'This background generation accepts private messages only for its selected persona. Other bots and rooms are read-only.';
+ if($('connection').textContent!=='Connected'||!navigator.onLine)return 'Background generation status is offline. Reconnect before sending.';
+ if(backgroundSession&&!snapshot.summary.owner_alpha_background.message_admission_available)return 'No message admission is available in this background revision. New messages are closed.';
+ return '';
+}
+function backgroundBannerText(reason){
+ if(!backgroundSession)return `Background owner generation · Session details changed or are unavailable. Reload to review the current generation; sending is closed.`;
+ const name=snapshot?.objects?.find(x=>x.id===backgroundSession.persona_id)?.body.name??backgroundSession.persona_id;
+ const generation=backgroundSession.generation?` · Generation ${backgroundSession.generation.epoch} deadline ${new Date(backgroundSession.generation.expires_at).toLocaleString(undefined,{timeZoneName:'short'})}`:' · One fixed generation starts with your first Send';
+ const role=snapshot?.summary?.owner_alpha_background?.next_role;
+ const nextRole=role==='background'?'background (starts the bounded background root)':role==='status'?'status (admitted only after the background root releases its coordinator lane)':role==='independent'?'independent (admitted only after the status answer settles)':'none (no message admission is currently available)';
+ return `Background owner generation · ${name} only · ${Math.max(0,3-backgroundSession.admissions_used)} of 3 messages remaining · Next message role: ${nextRole}${generation} · Policy deadline ${new Date(backgroundSession.policy_expires_at).toLocaleString(undefined,{timeZoneName:'short'})}. ${reason||'Message admission available.'} The roles are fixed in order: background root first, status second, independent third. Status and independent replies do not prove the background root or its children completed or settled. This is not always-on chat or safe recovery. Portal visits, refreshes and history do not start the runtime. All three admissions are finite; no renewal, rollover, successor generation or always-on background work.`;
+}
 function alphaBlock(){
+ const background=backgroundBlock();
+ if(background!==null)return background;
  const warm=warmBlock();
  if(warm!==null)return warm;
  const bootstrap=snapshot?.summary.owner_alpha_bootstrap;
@@ -126,17 +212,26 @@ function alphaBlock(){
 }
 function renderAlphaSession(){
  const reason=alphaBlock();
+ if(backgroundSeen){
+  if(backgroundRenderedReason&&$('error').textContent===backgroundRenderedReason&&reason!==backgroundRenderedReason)report(reason||'');
+  backgroundRenderedReason=reason;
+ }
  $('send').disabled=sending||Boolean(reason);
  $('message').readOnly=Boolean(reason);
  const review=$('review-alpha-session');
- // A latched warm generation never offers the legacy bootstrap review/renewal
- // flow, including a page previously bound to a bootstrap session.
- review.hidden=warmSeen||!(bootstrapSession||snapshot?.summary.owner_alpha_bootstrap);
+ // A latched warm or background generation never offers the legacy bootstrap
+ // review/renewal flow, including a page previously bound to a bootstrap session.
+ review.hidden=backgroundSeen||warmSeen||!(bootstrapSession||snapshot?.summary.owner_alpha_bootstrap);
  review.disabled=sending||loading||!navigator.onLine||$('connection').textContent!=='Connected';
  if(!alphaSeen)return;
  $('message').setAttribute('aria-describedby','runtime-banner');
  $('send').setAttribute('aria-describedby','runtime-banner');
  $('runtime-banner').hidden=false;
+ if(backgroundSeen){
+  const text=backgroundBannerText(reason);
+  if($('runtime-banner-text').textContent!==text)$('runtime-banner-text').textContent=text;
+  return;
+ }
  if(warmSeen){
   const text=warmBannerText(reason);
   if($('runtime-banner-text').textContent!==text)$('runtime-banner-text').textContent=text;
@@ -243,21 +338,24 @@ function acceptHistory(conversationId,history){
  }
  return true;
 }
-// Warm mode scopes reads to the validated bound identity only; pre-binding
-// invalid state closes all conversation reads. Legacy fallback personas are
-// never authorized while a warm summary has been observed on this page.
+// Warm and background modes scope reads to the validated bound identity only;
+// pre-binding invalid state closes all conversation reads. Legacy fallback
+// personas are never authorized while a warm or background summary has been
+// observed on this page.
 function alphaConversationAvailable(id){
+ if(backgroundSeen)return Boolean(backgroundSession)&&id===backgroundSession.persona_id;
  if(warmSeen)return Boolean(warmSession)&&id===warmSession.persona_id;
  return !(alphaSeen||snapshot?.summary.owner_alpha)||id===(snapshot?.summary.owner_alpha_bootstrap?.persona_id??snapshot?.summary.owner_alpha_session?.persona_id);
 }
 async function refresh(force=false){
  if(loading||document.hidden&&!force)return;loading=true;
  try{const value=await api('/v1/state');snapshot=value;
-  // Bind warm/alpha fences before any conversation reads so unrelated personas
-  // and rooms stay read-only without issuing denied requests. Presence of the
-  // owner_alpha_warm property (even null/false/0/'') latches warm mode; only a
-  // truly absent property leaves legacy/default behavior.
-  if(value.summary.owner_alpha||'owner_alpha_warm' in value.summary)alphaBlock();
+  // Bind background/warm/alpha fences before any conversation reads so
+  // unrelated personas and rooms stay read-only without issuing denied
+  // requests. Presence of the owner_alpha_background or owner_alpha_warm
+  // property (even null/false/0/'') latches that mode; only a truly absent
+  // property leaves legacy/default behavior.
+  if(value.summary.owner_alpha||'owner_alpha_warm' in value.summary||'owner_alpha_background' in value.summary)alphaBlock();
   if(!selected||!managedSelected()&&!value.objects.some(x=>x.id===selected))selected=items('persona').find(x=>!x.body.archived)?.id;
   const conversationId=selected,readable=!managedSelected()&&alphaConversationAvailable(conversationId);if(readable){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId&&acceptHistory(conversationId,history)){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
   if(readable){
@@ -280,7 +378,7 @@ async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=nul
 }
 function render(){
  if(!snapshot)return;
- if(snapshot.summary.owner_alpha||'owner_alpha_warm' in snapshot.summary)alphaBlock();
+ if(snapshot.summary.owner_alpha||'owner_alpha_warm' in snapshot.summary||'owner_alpha_background' in snapshot.summary)alphaBlock();
  $('show-connectors').hidden=!connectorsAllowed();$('show-connectors').setAttribute('aria-current',String(selected==='connectors'));
  if(!connectorsAllowed()||!connectorOnline())connectorView=null;
  if(routinePreflight&&!routinePreflightCurrent(routinePreflight))routinePreflight=null;

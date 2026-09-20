@@ -33,6 +33,7 @@ node scripts/test-portal-routine-preflight.mjs
 node scripts/test-owner-alpha-gateway.mjs
 node scripts/test-portal-alpha-session.mjs
 node scripts/test-portal-alpha-warm-portal.mjs
+node scripts/test-portal-alpha-background.mjs
 node scripts/test-control-questions.mjs
 node scripts/test-control-whatsapp.mjs
 node scripts/test-control-crash.mjs 2
