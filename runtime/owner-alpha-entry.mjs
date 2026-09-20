@@ -115,7 +115,15 @@ async function runBoundedOwnerAlpha(config, { createService = createCodexService
       return transport;
     } });
     // Stop independently of an in-flight maintenance/account await.
-    deadline = setTimeout(() => { timedOut = true; stop(); }, Math.max(0, Date.parse(policy.expires_at) + 30000 - now()));
+    // Timer delivery can precede the wall-clock boundary by a millisecond.
+    // Recheck the frozen deadline, never renew grace or infer settlement.
+    const graceAt = Date.parse(policy.expires_at) + 30000;
+    const atDeadline = () => {
+      const remaining = graceAt - now();
+      if (remaining > 0) { deadline = setTimeout(atDeadline, remaining); return; }
+      timedOut = true; stop();
+    };
+    deadline = setTimeout(atDeadline, Math.max(0, graceAt - now()));
     await service.start();
     if (timedOut || signal?.aborted) fail('OWNER_ALPHA_STOPPED');
     report({ event: 'owner-alpha.ready', session_id: policy.session_id, expires_at: policy.expires_at,
@@ -123,7 +131,7 @@ async function runBoundedOwnerAlpha(config, { createService = createCodexService
       ...(hosted ? { hosted: true } : {}) });
     // Keep reconciliation alive through the existing 30s cancellation grace.
     // Stopping the app-server afterward is not recursive/effect settlement.
-    while (!timedOut && !signal?.aborted && service.phase === 'running' && now() < Date.parse(policy.expires_at) + 30000) {
+    while (!timedOut && !signal?.aborted && service.phase === 'running' && now() < graceAt) {
       await service.maintain();
       await wait(1000);
     }

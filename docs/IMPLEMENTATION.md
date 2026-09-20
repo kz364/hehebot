@@ -42,10 +42,18 @@ containment, settlement, safe resume or safe sleep proved. The strict fixture is
 now in the combined verifier. Production Service registration remains unchanged.
 
 Fresh combined run (2026-09-21): source
-`aac8da0746c70889721ad15f57c2584ec68ac299`, PID458949,
-`.local/launcher-retirement-combined.log`; acceptance pending. This includes both
-amended runtime corrections and the production-bootstrap strict launcher fixture.
-Earlier failure evidence below remains historical, not a current scope blocker.
+`aac8da0746c70889721ad15f57c2584ec68ac299`, PID458949 exited1.
+Backend1790/runtime599 and earlier fixtures passed, but warm pending-maintenance
+failed before later Stage B/strict-launcher/tail checks: timer stop1789926402448
+preceded expiry1789926372449 +30000 by1ms. Log
+`.local/launcher-retirement-combined.log`, SHA256
+c67aaf9314190296e47d8bbe7280ed49e699ba2a57803457c164a68b66d931f2.
+Parent added a deterministic early-callback discriminator: timer queue fires while
+policy clock is1ms short. It fails before the fix, then passes when the production
+callback rechecks the immutable grace deadline and rearms only its remainder.
+No fixed extra grace or softened assertion; operator abort/final cleanup unchanged.
+Focused5 and typecheck pass (`.local/grace-deadline-{red,green}.log`); native and
+broader verification pending. Earlier failure evidence remains retained.
 
 Authorized correction wave (2026-09-20), exact sourceba8d174: owner permits local
 Hehebot launcher privilege-drop and expiry/retirement fixes, not dependency/Codex

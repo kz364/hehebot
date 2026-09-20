@@ -156,6 +156,44 @@ test('grace timer independently stops a hung warm maintenance await without misl
   assert.equal(stops.length, 2); assert.equal(reports.length, 2); assert.equal(maintains, 1);
 });
 
+test('an early timer callback rechecks the frozen grace deadline before stopping', async t => {
+  const at = Date.parse('2026-09-19T02:47:00.000Z');
+  t.mock.timers.enable({ apis: ['setTimeout'], now: at });
+  const scenario = { at, session: 'd1d1d1d1-d1d1-4d1d-8d1d-222222222222', persona: 'e2e2e2e2-e2e2-4e2e-8e2e-222222222222', model: 'warm-early-timer-model' };
+  const stateDirectory = await directory(t), nativeHome = await directory(t);
+  let clock = at;
+  const entered = Promise.withResolvers(), held = Promise.withResolvers();
+  const stops = [], reports = [];
+  const fixture = warmServiceFixture(scenario, dependencies => ({
+    phase: 'running',
+    start: async () => { await dependencies.launch({}).initialize(); },
+    maintain: () => { entered.resolve(); return held.promise; },
+    stop: async () => { stops.push(clock); },
+  }));
+  const run = runHostedOwnerAlpha({ stateDirectory, nativeHome, ...warmConfig(scenario) },
+    { ...fixture, now: () => clock, report: value => reports.push(value) });
+  await entered.promise;
+  try {
+    // The timer queue reaches its scheduled callback while the policy clock is
+    // still one millisecond short, reproducing the real-native failure exactly.
+    clock = at + 89999;
+    t.mock.timers.tick(90000);
+    assert.deepEqual(stops, []);
+    assert.deepEqual(reports.map(value => value.event), ['owner-alpha.ready']);
+    clock++;
+    t.mock.timers.tick(1);
+    assert.deepEqual(stops, [at + 90000]);
+  } finally {
+    clock = at + 90000;
+    held.resolve(); await flush();
+    t.mock.timers.tick(1000); await run;
+  }
+  assert.deepEqual(stops, [at + 90000, at + 90000]);
+  t.mock.timers.tick(60000);
+  assert.equal(stops.length, 2);
+  assert.equal(fixture.launches.length, 1);
+});
+
 test('grace timer stops a warm service whose start await is pending; a late start is refused, not settled', async t => {
   const at = Date.parse('2026-09-19T03:31:00.000Z');
   t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: at });

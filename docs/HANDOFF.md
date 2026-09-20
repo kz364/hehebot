@@ -21,10 +21,20 @@ No fixture-only pre-drop or loosened floor. Added UID/GID overflow rejection and
 fixture awk alternatives link. Log `.local/launcher-parent-native.log`, SHA256
 9926f5937aec00e252e489dcb2604a8e5bdcf6b3796194c0e890a501f63f58f9.
 Strict fixture now in combined verifier; fresh combined acceptance on local
-`aac8da0746c70889721ad15f57c2584ec68ac299` is running as PID458949, log
-`.local/launcher-retirement-combined.log`. Follow that process, do not restart it.
+`aac8da0746c70889721ad15f57c2584ec68ac299` failed (PID458949 exit1), log
+`.local/launcher-retirement-combined.log` SHA256
+c67aaf9314190296e47d8bbe7280ed49e699ba2a57803457c164a68b66d931f2.
+Warm pending-maintenance production timer stopped1ms before expiry+30s; strict
+assertion retained. Parent owns correction in owner-alpha-entry and its warm-entry
+test, disjoint from workers: deadline callback now rechecks frozen graceAt before
+stopping. Deterministic red/green and focused5/typecheck pass. Native/broader
+verification pending; do not rerun unchanged failed source or claim combined green.
 No deployment, production-config/containment/settlement/resume/sleep claim.
 Advisor now complete; parent source-checked memory/timing/limiter findings.
+Memory-design advisor also returned: actual model currently lives only in host
+config, while Worker context is rebuilt at claim. Its suggested tokenizer/channel
+and truncation contract are not accepted; parent review remains. No memory worker
+is assigned, and explicit constraints must not be dropped to fit budgets.
 Timing advisor returned. Parent rejected suppressing sibling watchdogs for a
 question: ephemeral human waits are not restartable checkpoints. File changes
 are not shell/transfer observations. No new wait kind or schema is approved.

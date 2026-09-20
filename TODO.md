@@ -14,8 +14,15 @@ still require their applicable approval. Completed fixtures are not live accepta
 
 **Current checkpoint (2026-09-21):** both authorized corrections are integrated
 locally at `aac8da0746c70889721ad15f57c2584ec68ac299`; targeted real-native and
-strict-launcher checks pass. The fresh combined verifier is running against that
-source (`.local/launcher-retirement-combined.log`); no combined pass claimed yet.
+strict-launcher checks pass. The fresh combined verifier failed in the warm
+pending-maintenance fixture: its production timer stopped 1 ms before the exact
+expiry+30s boundary. Backend1790/runtime599 and the preceding fixtures passed;
+later Stage B/strict-launcher/service-tail checks did not run in this invocation.
+Log `.local/launcher-retirement-combined.log`, SHA256
+`c67aaf9314190296e47d8bbe7280ed49e699ba2a57803457c164a68b66d931f2`.
+Parent reproduced the early callback deterministically, then made the production
+timer recheck the frozen deadline before stopping. The strict native assertion is
+unchanged; focused5 and typecheck pass. Native and broader verification remain open.
 The intake-load return needs corrections: submission drift included receipt
 latency, schedule drift was not enforced, and burst assertions did not require
 the exact 60-accepted/10-rejected boundary or reject all network errors. The worker
