@@ -4,14 +4,21 @@ const MANAGER_TYPES = Object.freeze(['manifest', 'retirement']);
 const WARM_MANAGER_TYPES = Object.freeze(['generation', 'retirement']);
 const WARM_HOST_TYPES = Object.freeze(['boot', 'ready', 'claim', 'heartbeat', 'submitted', 'coordinator-release', 'complete', 'status', 'output-preview', 'token-usage', 'steer-pending']);
 const WARM_TASK_TYPES = Object.freeze(['agent-routines', 'agent-skill']);
+const BACKGROUND_MANAGER_TYPES = Object.freeze(['generation', 'retirement']);
+const BACKGROUND_HOST_TYPES = Object.freeze(['boot', 'ready', 'claim', 'heartbeat', 'submitted', 'coordinator-release', 'complete', 'status', 'output-preview', 'token-usage', 'steer-pending', 'steer-result', 'native-child']);
+const BACKGROUND_TASK_TYPES = Object.freeze(['agent-routines', 'agent-skill']);
 /** Route selection is not authentication; the Worker checks separate keys and
- * token kinds per principal. Warm principals never widen legacy route meaning. */
+ * token kinds per principal. Warm and background principals never widen legacy
+ * route meaning, and never reach each other's routes. */
 const PRINCIPALS = Object.freeze({
   runtime: Object.freeze({ path: '/internal/', types: TYPES }),
   manager: Object.freeze({ path: '/internal/manager/', types: MANAGER_TYPES }),
   'warm-manager': Object.freeze({ path: '/internal/warm/manager/', types: WARM_MANAGER_TYPES }),
   'warm-host': Object.freeze({ path: '/internal/warm/host/', types: WARM_HOST_TYPES }),
   'warm-task': Object.freeze({ path: '/internal/warm/task/', types: WARM_TASK_TYPES }),
+  'background-manager': Object.freeze({ path: '/internal/background/manager/', types: BACKGROUND_MANAGER_TYPES }),
+  'background-host': Object.freeze({ path: '/internal/background/host/', types: BACKGROUND_HOST_TYPES }),
+  'background-task': Object.freeze({ path: '/internal/background/task/', types: BACKGROUND_TASK_TYPES }),
 });
 export class ControlClientError extends Error {
   constructor(code, outcomeUnknown = false, status) {

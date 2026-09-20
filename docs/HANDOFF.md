@@ -4,6 +4,24 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
+Stage B runtime COMPLETE/integrated locally; all implementors have delivered.
+Verified patch SHA256 5b82dec794dc076745043dc9f06a0c4db80cc73e16122b9ce37b616141885f1d
+from exact c35e118, retained at `.local/stage-b-runtime.patch`.
+Parent narrowed receipt-based coverage settlement to status/independent roles,
+added negative role/receipt/child tests, and removed unrelated error-cause changes.
+Focused 15/15, all runtime 585/585 and typecheck pass. Actual portal browser mode
+now drives signed Worker/SQLite/native A/S/B, frozen summary, distinct contexts and
+task credentials, passive/replay guards, canonical reload, and exact A-family cancel
+through the task card/dialog. HTTP and final browser runs pass; two DPR2 captures
+inspected. Logs `.local/stage-b-{native-parent,browser-final,runtime-all-final,typecheck-final}.log`.
+The fixture explicitly stops after expiry; it does not claim automatic Stage B stop,
+live account/provider evidence, natural-language routing or recursive settlement.
+Combined verifier PID 373109 is running in `.local/stage-b-integrated-combined.log`;
+includes setup safety, backup, both F3 modes and the new Stage B browser mode.
+Finish that process without restarting, record outcome, commit locally. Next priority:
+F3 recovery/safe-sleep gaps; no pending worker dependency. Two-hour schedule retained.
+The older assignment/status paragraphs below are historical, superseded by this entry.
+
 Setup worker delivery COMPLETE/integrated, patch SHA256
 b1a29ecbc50a5875108424885b0e8e506385318bac4249554e7b1dad18e522c1.
 Parent fixed ignored version-command nonzero exit (two reproduced red cases),

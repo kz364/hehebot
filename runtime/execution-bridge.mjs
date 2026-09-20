@@ -42,7 +42,11 @@ export class ExecutionBridge {
       if (!family) {
         const { families: _history, ...current } = row;
         family = { ...current, coordinatorRelease: { payload, acknowledged: false } };
-        families = [...families.filter(value => value.phase !== 'complete'), family];
+        // Completed families leave custody once their lane advances — except
+        // independently admitted background roots, whose thread bindings stay
+        // durable for the background receipt checks. The background root never
+        // completes, so only its status/independent siblings are retained.
+        families = [...families.filter(value => value.phase !== 'complete' || value.claim?.role !== undefined), family];
         if (families.length > 32) fail('FAMILY_CAPACITY_EXCEEDED');
         // One fsynced record retains the old family before the lane can advance.
         await this.journal.update(this.cursor, { phase: 'released', families });
@@ -79,6 +83,10 @@ export class ExecutionBridge {
           Object.hasOwn(claim, 'owner_alpha_background') && claim.owner_alpha_background !== true) fail('INVALID_CLAIM');
       claim = structuredClone(claim);
       const background = Object.hasOwn(claim, 'owner_alpha_background');
+      // Staged background-family claims carry an explicit role; only the frozen
+      // status summary ever composes into a restricted prompt, never caller text.
+      if (claim.role !== undefined && !['background', 'status', 'independent'].includes(claim.role)) fail('INVALID_CLAIM');
+      if (claim.role === 'status' && (claim.status_summary === undefined || claim.status_summary === null)) fail('INVALID_CLAIM');
       if (claim.text_only !== undefined && (!claim.text_only || claim.owner_alpha_background ||
           claim.text_only.profile_version !== 'codex-text-only-v1' || !/^[0-9a-f]{64}$/.test(claim.text_only.profile_sha256 ?? ''))) fail('INVALID_CLAIM');
       // Versioned claim staging runs after the base shape checks and before the
@@ -99,8 +107,9 @@ export class ExecutionBridge {
           id: skill.id, revision: skill.revision, name: skill.body.name,
           description: skill.body.description, when_to_use: skill.body.when_to_use,
           load_with: 'hehebot_read_skill',
-        })), ...(claim.run.current_attempt > 1 && claim.run.checkpoint_json
-          ? { durable_checkpoint: JSON.parse(claim.run.checkpoint_json) } : {}) }),
+        })), ...(claim.role === 'status' ? { background_status_summary: claim.status_summary } : {}),
+          ...(claim.run.current_attempt > 1 && claim.run.checkpoint_json
+            ? { durable_checkpoint: JSON.parse(claim.run.checkpoint_json) } : {}) }),
       };
       await this.journal.update(this.cursor, { phase: 'submission_unknown', attemptId: input.attemptId });
       let submitted;
@@ -108,7 +117,7 @@ export class ExecutionBridge {
       catch { return this.journal.get(this.cursor); }
       if (!submitted?.nativeRunId || submitted.recoveryRequired || submitted.status !== 'running') return this.journal.get(this.cursor);
       await this.journal.update(this.cursor, { phase: 'submitted_unknown', nativeRunId: submitted.nativeRunId,
-        ...(claim.text_only ? { nativeThreadId: submitted.threadId } : {}) });
+        ...((claim.text_only || claim.role !== undefined) ? { nativeThreadId: submitted.threadId } : {}) });
       try {
         await this.control.request('submitted', { identity: this.identity, run_id: claim.run.id,
           attempt: claim.run.current_attempt, native_ref: submitted.nativeRunId });
@@ -152,15 +161,26 @@ export class ExecutionBridge {
       if (!['rootSettled', 'toolsSettled', 'childrenSettled', 'effectsSettled', 'outputCommitted'].every(key => observation[key] === true)) fail('NATIVE_SETTLEMENT_INCOMPLETE');
       const result = observation.result;
       const receipt = observation.text_only_receipt;
+      const backgroundReceipt = observation.background_receipt;
       if (Boolean(row.claim.text_only) !== Boolean(receipt)) fail('TEXT_ONLY_RECEIPT_MISMATCH');
       if (receipt && (Object.keys(receipt).sort().join(',') !== 'output_sha256,profile_sha256,profile_version,thread_id,turn_id' ||
           receipt.profile_version !== row.claim.text_only.profile_version || receipt.profile_sha256 !== row.claim.text_only.profile_sha256 ||
           receipt.thread_id !== row.nativeThreadId || receipt.turn_id !== row.nativeRunId ||
           receipt.output_sha256 !== createHash('sha256').update(result?.text ?? '').digest('hex'))) fail('TEXT_ONLY_RECEIPT_MISMATCH');
+      // Background-family settlement: the background root never completes, and
+      // status/independent roots settle only with a covering background receipt
+      // bound to this family's journaled native thread and turn.
+      const backgroundRoot = row.claim.role !== undefined;
+      if (backgroundRoot && row.claim.role === 'background') fail('BACKGROUND_ROOT_NOT_COMPLETABLE');
+      if (backgroundRoot !== Boolean(backgroundReceipt)) fail('BACKGROUND_RECEIPT_MISMATCH');
+      if (backgroundReceipt && (Object.keys(backgroundReceipt).sort().join(',') !== 'output_sha256,thread_id,turn_id' ||
+          backgroundReceipt.thread_id !== row.nativeThreadId || backgroundReceipt.turn_id !== row.nativeRunId ||
+          backgroundReceipt.output_sha256 !== createHash('sha256').update(result?.text ?? '').digest('hex'))) fail('BACKGROUND_RECEIPT_MISMATCH');
       if (!result || !['completed', 'failed', 'cancelled', 'waiting'].includes(result.status) || typeof result.text !== 'string' ||
           result.status === 'waiting' && !result.checkpoint) fail('INVALID_NATIVE_RESULT');
       if (row.result && hash(row.result) !== hash(result)) fail('RESULT_CONFLICT');
       if (row.textOnlyReceipt && hash(row.textOnlyReceipt) !== hash(receipt)) fail('RESULT_CONFLICT');
+      if (row.backgroundReceipt && hash(row.backgroundReceipt) !== hash(backgroundReceipt)) fail('RESULT_CONFLICT');
       if (row.phase === 'complete') return row;
       const update = async patch => {
         if (!archived) return this.journal.update(this.cursor, patch);
@@ -168,12 +188,15 @@ export class ExecutionBridge {
         await this.journal.update(this.cursor, { families: cursor.families.map(family => family.attemptId === row.attemptId ? next : family) });
         return next;
       };
-      await update({ phase: 'complete_pending', result, ...(receipt ? { textOnlyReceipt: receipt } : {}) });
+      await update({ phase: 'complete_pending', result, ...(receipt ? { textOnlyReceipt: receipt } : {}),
+        ...(backgroundReceipt ? { backgroundReceipt } : {}) });
       // Control completion is idempotent for the same fenced attempt. Explicit replay
       // sends the persisted identical result; it never resubmits native inference.
       await this.control.request('complete', { identity: this.identity, run_id: row.claim.run.id,
-        attempt: row.claim.run.current_attempt, result, ...(receipt ? { text_only_receipt: receipt } : {}) });
-      return update({ phase: 'complete', result, ...(receipt ? { textOnlyReceipt: receipt } : {}) });
+        attempt: row.claim.run.current_attempt, result, ...(receipt ? { text_only_receipt: receipt } : {}),
+        ...(backgroundReceipt ? { background_receipt: backgroundReceipt } : {}) });
+      return update({ phase: 'complete', result, ...(receipt ? { textOnlyReceipt: receipt } : {}),
+        ...(backgroundReceipt ? { backgroundReceipt } : {}) });
     } finally { this.#busy = false; }
   }
 }

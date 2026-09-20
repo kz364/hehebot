@@ -170,11 +170,12 @@ export async function runAgentToolsCli() {
   const path = process.env[CONFIG_ENV];
   let config;
   try { config = JSON.parse(await readPrivate(path, 65536)); } catch { throw new Error('INVALID_CONFIGURATION'); }
-  if (!validGrant(config) || Object.keys(config).some(key => !['origin','tokenFile','identity','runId','attempt','allowedTools','accessClientIdFile','accessClientSecretFile'].includes(key))) throw new Error('INVALID_CONFIGURATION');
+  if (!validGrant(config) || Object.keys(config).some(key => !['origin','tokenFile','identity','runId','attempt','allowedTools','accessClientIdFile','accessClientSecretFile','principal'].includes(key))) throw new Error('INVALID_CONFIGURATION');
+  if (config.principal !== undefined && !['runtime','warm-task','background-task'].includes(config.principal)) throw new Error('INVALID_CONFIGURATION');
   const token = (await readPrivate(config.tokenFile, 16384)).trim();
   const access = await readAccessCredentials(config);
   const contracts = JSON.parse(await readFile(new URL('../SCHEMAS/contracts.json', import.meta.url), 'utf8'));
-  const handler = createAgentToolsHandler({ controlClient: new ControlClient({ origin: config.origin, token, ...access }), config, contracts });
+  const handler = createAgentToolsHandler({ controlClient: new ControlClient({ origin: config.origin, token, principal: config.principal ?? 'runtime', ...access }), config, contracts });
   const pending = new Set();
   const write = async response => {
     if (!process.stdout.write(JSON.stringify(response) + '\n')) await once(process.stdout, 'drain');

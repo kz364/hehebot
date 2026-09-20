@@ -18,7 +18,7 @@ const uuid = value => {
  * supported native coverage, external effects and recovery are established.
  */
 export class CodexOperations {
-  constructor({ journal, attemptId, runId, attempt, startedAt, deadlineAt, textOnlyProfile = null }) {
+  constructor({ journal, attemptId, runId, attempt, startedAt, deadlineAt, textOnlyProfile = null, backgroundRole = null }) {
     if (!journal?.get || !/^[a-zA-Z0-9_-]{1,128}$/.test(attemptId ?? '') ||
         !/^[0-9a-f-]{36}$/i.test(runId ?? '') || !Number.isSafeInteger(attempt) || attempt < 1 ||
         !Number.isFinite(Date.parse(startedAt)) || !Number.isFinite(Date.parse(deadlineAt)) ||
@@ -26,6 +26,7 @@ export class CodexOperations {
     this.journal = journal;
     this.binding = Object.freeze({ attemptId, runId, attempt, startedAt, deadlineAt });
     this.textOnlyProfile = textOnlyProfile && structuredClone(textOnlyProfile);
+    this.backgroundRole = backgroundRole;
   }
 
   async snapshot() {
@@ -62,7 +63,20 @@ export class CodexOperations {
       !Object.keys(row.childTurns ?? {}).length && !Object.keys(row.childObligations ?? {}).length &&
       ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'spawns', 'v2Activities', 'planItems', 'whatsappReads']
         .every(field => !Object.keys(row[field] ?? {}).length);
-    add(['coverage'], 'tool', textOnlySettled ? 'settled' : 'unknown');
+    // Background roots (roles status/independent) settle their coverage through
+    // the root-only background receipt: same thread and turn binding, settled
+    // root, completed native outcome and no descendant obligations. Allowed
+    // tool activity (for example the independent root's read-only MCP reads)
+    // settles through its own operations, so coverage never depends on their
+    // absence here. The background root itself never journals a receipt, so
+    // its coverage stays unknown exactly like its never-settling family.
+    const backgroundSettled = ['status', 'independent'].includes(this.backgroundRole) && !this.textOnlyProfile && row?.backgroundReceipt &&
+      row.rootSettled === true && row.nativeOutcome === 'completed' &&
+      Object.keys(row.backgroundReceipt).sort().join(',') === 'output_sha256,thread_id,turn_id' &&
+      /^[a-f0-9]{64}$/.test(row.backgroundReceipt.output_sha256 ?? '') &&
+      row.backgroundReceipt.thread_id === row.threadId && row.backgroundReceipt.turn_id === row.nativeRunId &&
+      !Object.keys(row.childTurns ?? {}).length && !Object.keys(row.childObligations ?? {}).length;
+    add(['coverage'], 'tool', textOnlySettled || backgroundSettled ? 'settled' : 'unknown');
     add(['root'], 'inference', row?.rootSettled === true ? 'settled'
       : row?.status === 'cancelling' ? 'cancelling' : row?.status === 'running' ? 'active' : 'unknown');
     if (!row) return operations;

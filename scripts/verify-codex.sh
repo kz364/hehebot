@@ -63,6 +63,7 @@ node scripts/test-codex-warm-manager.mjs
 node scripts/test-codex-warm-manager.mjs --browser --wake-first
 node scripts/test-codex-warm-auto-stop.mjs
 node scripts/test-codex-warm-auto-stop.mjs --pending-maintenance
+node scripts/test-codex-background-manager.mjs --browser
 bash scripts/test-codex-service.sh --text-only
 bash scripts/test-codex-service.sh --owner-alpha-multi
 bash scripts/test-codex-service.sh --owner-alpha-background

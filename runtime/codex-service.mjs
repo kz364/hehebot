@@ -17,6 +17,7 @@ import { ExecutionSupervisor } from './execution-supervisor.mjs';
 import { SpritesActivityGuard } from './sprites-activity-guard.mjs';
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 import { stageWarmClaim, warmGenerationBinding } from './owner-alpha-warm-binding.mjs';
+import { backgroundProfileSha256, backgroundGenerationBinding, backgroundGenerationPolicy, stageBackgroundClaim, validateBackgroundProfile } from './owner-alpha-background-binding.mjs';
 import { codexTextOnlyProfileSha256, createCodexTextOnlyCompletionReceipt,
   createCodexTextOnlyProfile, verifyCodexTextOnlyProfile } from './codex-text-only.mjs';
 
@@ -53,7 +54,7 @@ export function createCodexService(config, dependencies) {
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
   let ownsIntent = false, stopping, questions, questionNotification, admission;
   let alpha = null, textOnlyProfile = null, textOnlyVerification = null, textOnlyCatalogContent = null, commandedConfigContent = null;
-  let alphaGeneration = null, alphaWarm = null;
+  let alphaGeneration = null, alphaWarm = null, alphaBackground = null, backgroundProfile = null;
   let verifyTextOnlyCurrent;
   const hosted = Object.hasOwn(config, 'hostedOwnerBindingSha256');
   const taskControllers = new Map();
@@ -75,7 +76,8 @@ export function createCodexService(config, dependencies) {
       if (!row.nativeRunId || row.phase === 'complete') continue;
       snapshots.push(...await new CodexOperations({ journal, attemptId: row.attemptId, runId: row.claim.run.id,
         attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at,
-        deadlineAt: row.claim.deadline_at, textOnlyProfile: row.claim.text_only ?? null }).snapshot());
+        deadlineAt: row.claim.deadline_at, textOnlyProfile: row.claim.text_only ?? null,
+        backgroundRole: alphaBackground ? row.claim.role : null }).snapshot());
     }
     return snapshots;
   });
@@ -127,6 +129,36 @@ export function createCodexService(config, dependencies) {
                 rootSettled: true, toolsSettled: true, childrenSettled: true, effectsSettled: true,
                 outputCommitted: true, result, text_only_receipt: receipt });
             }
+            // Background roles status/independent settle canonically with a
+            // root-only background receipt after the coordinator release is
+            // durably observed. The role background root never completes here:
+            // its release keeps uncertainty and family settlement rejected.
+            if (alphaBackground && row.claim.role !== 'background' &&
+                native.nativeOutcome === 'completed' && !native.backgroundReceipt) {
+              const readback = await transport.request('thread/read', { threadId: native.threadId, includeTurns: true });
+              const turn = readback?.thread?.turns?.filter(value => value?.id === native.nativeRunId);
+              const outputs = turn?.[0]?.items?.filter(item => item?.type === 'agentMessage' &&
+                (item.phase === undefined || item.phase === null || item.phase === 'final_answer')) ?? [];
+              if (turn?.length !== 1 || outputs.length !== 1) fail('BACKGROUND_OUTPUT_AMBIGUOUS');
+              await router.flush();
+              supervisor.assertLease();
+              const observed = await adapter.requireRun(row.attemptId);
+              const messages = turn[0].items.filter(item => item.type === 'agentMessage');
+              if (messages.length !== Object.keys(observed.outputItems ?? {}).length || messages.some(item =>
+                  observed.outputItems?.[item.id] !== projectOutputMessage(item).outputDigest)) fail('BACKGROUND_OUTPUT_AMBIGUOUS');
+              const backgroundReceipt = { thread_id: native.threadId, turn_id: native.nativeRunId,
+                output_sha256: createHash('sha256').update(outputs[0].text).digest('hex') };
+              await journal.update(row.attemptId, { backgroundReceipt });
+              const snapshot = await operations();
+              if (snapshot.some(operation => operation.run_id === row.claim.run.id && operation.status !== 'settled')) fail('NATIVE_SETTLEMENT_INCOMPLETE');
+              const cancellations = await supervisor.heartbeat();
+              if (cancellations.includes(row.claim.run.id)) fail('OWNER_ALPHA_ADMISSION_DENIED');
+              supervisor.assertLease();
+              await supervisor.bridge.complete({ attemptId: row.attemptId, nativeRunId: native.nativeRunId,
+                rootSettled: true, toolsSettled: true, childrenSettled: true, effectsSettled: true,
+                outputCommitted: true, result: { status: 'completed', text: outputs[0].text },
+                background_receipt: backgroundReceipt });
+            }
           }
         }
       });
@@ -166,7 +198,7 @@ export function createCodexService(config, dependencies) {
       } else if (config.disposableTest !== true) fail('NATIVE_COMPATIBILITY_GATE_BLOCKED');
       if (config.ownerAlphaGeneration !== undefined) {
         alphaGeneration = ownerAlphaGeneration(config.ownerAlphaGeneration);
-        if (!hosted || !alpha?.text_only || !textOnlyProfile) fail('INVALID_SERVICE_CONFIGURATION');
+        if (!hosted || !alpha || (alpha.text_only ? !textOnlyProfile : alpha.background_first_root !== true)) fail('INVALID_SERVICE_CONFIGURATION');
       }
       // The warm binding is a separate explicit kind: it requires the hosted
       // text-only generation composition and never widens the legacy contract.
@@ -175,9 +207,19 @@ export function createCodexService(config, dependencies) {
         if (!hosted || !alphaGeneration || !alpha?.text_only || !textOnlyProfile ||
             alpha.background_first_root === true) fail('INVALID_SERVICE_CONFIGURATION');
       }
+      // The background binding is a separate explicit kind: it requires the
+      // hosted background generation composition (background_first_root, never
+      // text_only) and never widens the legacy, warm or text-only contracts.
+      if (config.ownerAlphaBackground !== undefined) {
+        alphaBackground = backgroundGenerationBinding(config.ownerAlphaBackground);
+        backgroundProfile = validateBackgroundProfile(config.backgroundProfile);
+        if (!hosted || !alphaGeneration || alpha?.background_first_root !== true || alphaWarm ||
+            alpha?.text_only || textOnlyProfile ||
+            backgroundProfileSha256(backgroundProfile) !== alphaBackground.background_profile_sha256) fail('INVALID_SERVICE_CONFIGURATION');
+      } else if (config.backgroundProfile !== undefined) fail('INVALID_SERVICE_CONFIGURATION');
       if (config.textOnlyProfile !== undefined && !alpha?.text_only) fail('INVALID_SERVICE_CONFIGURATION');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile'].includes(key)) ||
         config.nativeHome !== undefined && (!alpha || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean') fail('INVALID_SERVICE_CONFIGURATION');
@@ -203,7 +245,7 @@ export function createCodexService(config, dependencies) {
         const token = (await starting(() => readFile(config.runtimeTokenFile, 'utf8'))).trim();
         const access = await starting(() => readAccessCredentials(config));
         const configuredControl = new ControlClient({ origin: config.portalOrigin, token, fetchImpl,
-          ...(alphaWarm ? { principal: 'warm-host' } : {}), ...access });
+          ...(alphaWarm ? { principal: 'warm-host' } : alphaBackground ? { principal: 'background-host' } : {}), ...access });
         control = dependencies.control ?? configuredControl;
         journal = new FileJournal(join(config.stateDirectory, 'journal'));
         const bootId = alphaGeneration?.boot_id ?? randomUUID();
@@ -211,6 +253,7 @@ export function createCodexService(config, dependencies) {
         if (await journal.putIfAbsent('service', { phase: 'boot_unknown', bootId, ...(alpha ? { ownerAlpha: alpha } : {}),
           ...(alphaGeneration ? { ownerAlphaGeneration: alphaGeneration } : {}),
           ...(alphaWarm ? { ownerAlphaWarm: alphaWarm } : {}),
+          ...(alphaBackground ? { ownerAlphaBackground: alphaBackground } : {}),
           ...(hosted ? { hostedOwner: { bindingSha256: config.hostedOwnerBindingSha256,
             origin: new URL(config.portalOrigin).origin } } : {}) })) fail('SERVICE_RECOVERY_REQUIRED');
         ownsIntent = true;
@@ -226,6 +269,22 @@ export function createCodexService(config, dependencies) {
               JSON.stringify(ownerAlphaPolicy(status.owner_alpha)) !== JSON.stringify(alpha) ||
               JSON.stringify(ownerAlphaGeneration(status.owner_alpha_warm_generation)) !== JSON.stringify(alphaGeneration) ||
               Object.hasOwn(status ?? {}, 'owner_alpha_generation')) fail('CONTROL_NOT_BOOTABLE');
+        } else if (alphaBackground) {
+          // A background generation identifies itself only through the versioned
+          // background discriminator; legacy and warm summaries must stay absent
+          // so no legacy or warm credential can adopt this boot. The Durable
+          // Object reports the generation policy (full restricted profile under
+          // `background`), not the staged runtime shape, so the comparison goes
+          // through the versioned background policy validator, never the generic
+          // warm/legacy ownerAlphaPolicy shape.
+          const expectedGenerationPolicy = { session_id: alpha.session_id, persona_id: alpha.persona_id,
+            expires_at: alpha.expires_at, max_runs: alpha.max_runs, max_task_seconds: alpha.max_task_seconds,
+            background: structuredClone(backgroundProfile) };
+          if (status?.phase !== 'BOOTING' || status.epoch !== alphaGeneration.epoch || status.execution_enabled !== false ||
+              JSON.stringify(backgroundGenerationPolicy(status.owner_alpha, { alpha, backgroundProfile })) !==
+                JSON.stringify(expectedGenerationPolicy) ||
+              JSON.stringify(ownerAlphaGeneration(status.owner_alpha_background_generation)) !== JSON.stringify(alphaGeneration) ||
+              Object.hasOwn(status ?? {}, 'owner_alpha_generation') || Object.hasOwn(status ?? {}, 'owner_alpha_warm_generation')) fail('CONTROL_NOT_BOOTABLE');
         } else if (alphaGeneration) {
           if (status?.phase !== 'BOOTING' || status.epoch !== alphaGeneration.epoch || status.execution_enabled !== false ||
               JSON.stringify(ownerAlphaPolicy(status.owner_alpha)) !== JSON.stringify(alpha) ||
@@ -270,9 +329,9 @@ export function createCodexService(config, dependencies) {
             [join(config.stateDirectory, 'journal')]: 'deny', [home]: 'deny',
             ...Object.fromEntries([config.runtimeTokenFile, config.accessClientIdFile, config.accessClientSecretFile]
               .filter(Boolean).map(path => [path, 'deny'])),
-            // Warm task tokens live beside the journal: model-visible paths stay
-            // denied so the native sandbox can never read staged credentials.
-            ...(alphaWarm ? { [join(config.stateDirectory, 'task-tokens')]: 'deny' } : {}) };
+            // Warm and background task tokens live beside the journal: model-visible
+            // paths stay denied so the native sandbox can never read staged credentials.
+            ...((alphaWarm || alphaBackground) ? { [join(config.stateDirectory, 'task-tokens')]: 'deny' } : {}) };
           const digest = createHash('sha256').update(JSON.stringify({ base, filesystem, network: { enabled: false }, configOverrides })).digest('hex');
           const name = `hehebot-restricted-${digest}`;
           const contents = `default_permissions = ${JSON.stringify(name)}\n${base}\n[permissions.${name}.filesystem]\n` +
@@ -398,6 +457,40 @@ export function createCodexService(config, dependencies) {
               return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, ownerAlpha: { ...alpha, expires_at: row.claim.deadline_at },
                 now, permissionsProfile: permissions?.name, textOnlyProfile }).submit(input);
             }
+            if (alphaBackground) {
+              // Only staged background-family claims reach a background
+              // generation. Each claim carries its own write-once staged task
+              // token; the host runtime credential never enters a child grant.
+              if (row.claim.role === undefined || typeof row.claim.task_credential?.token_file !== 'string' ||
+                  !isAbsolute(row.claim.task_credential.token_file) ||
+                  row.claim.task_credential.grant?.run_id !== run.id) fail('OWNER_ALPHA_ADMISSION_DENIED');
+              if (row.claim.role === 'background' !== background) fail('OWNER_ALPHA_ADMISSION_DENIED');
+              const grant = { origin: config.portalOrigin, tokenFile: row.claim.task_credential.token_file,
+                ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}),
+                identity, runId: run.id, attempt: run.current_attempt, allowedTools: persona.allowedTools, principal: 'background-task' };
+              // Write once, fsync, never rewrite an admitted grant in place.
+              const key = `grant-${input.attemptId}`;
+              const existing = await journal.putIfAbsent(key, grant);
+              if (existing && JSON.stringify(existing) !== JSON.stringify(grant)) fail('TASK_GRANT_CONFLICT');
+              supervisor.assertLease();
+              // The status root carries no MCP surface at all: its frozen
+              // summary composes into the restricted prompt, nothing else.
+              if (row.claim.role === 'status') {
+                return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, testMode: !alpha,
+                  ownerAlpha: { ...alpha, expires_at: row.claim.deadline_at }, now,
+                  permissionsProfile: permissions?.name }).submit(input);
+              }
+              const mcpServers = { hehebot: {
+                command: process.execPath, args: [fileURLToPath(new URL('./agent-tools.mjs', import.meta.url))],
+                env: { HEHEBOT_AGENT_TOOLS_CONFIG: journal.path(key),
+                  ...(config.tlsCAFile ? { NODE_EXTRA_CA_CERTS: config.tlsCAFile } : {}) },
+                tools: Object.fromEntries(persona.allowedTools.map(name => [name, { approval_mode: 'approve' }])),
+                ...(permissions ? { enabled_tools: persona.allowedTools } : {}),
+              } };
+              return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, testMode: !alpha,
+                ownerAlpha: { ...alpha, expires_at: row.claim.deadline_at }, now, mcpServers,
+                permissionsProfile: permissions?.name }).submit(input);
+            }
             const grant = { origin: config.portalOrigin, tokenFile: config.runtimeTokenFile,
               ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}),
               identity, runId: run.id, attempt: run.current_attempt, allowedTools: persona.allowedTools };
@@ -439,6 +532,11 @@ export function createCodexService(config, dependencies) {
             generation: { epoch: alphaGeneration.epoch, boot_id: alphaGeneration.boot_id,
               transition_id: alphaGeneration.transition_id, session_id: alpha.session_id, persona_id: alpha.persona_id },
             generationSha256: alphaWarm.generation_sha256, textOnly: alpha.text_only, now }) } : {}),
+          ...(alphaBackground ? { claimStage: claim => stageBackgroundClaim(claim, {
+            installationId: config.installationId, stateDirectory: config.stateDirectory,
+            generation: { epoch: alphaGeneration.epoch, boot_id: alphaGeneration.boot_id,
+              transition_id: alphaGeneration.transition_id, session_id: alpha.session_id, persona_id: alpha.persona_id },
+            generationSha256: alphaBackground.generation_sha256, background: backgroundProfile, now }) } : {}),
           children: { sync: () => eachController(controller => controller.sync()), cancel: ids => eachController(controller => controller.cancel(ids)),
             steer: () => eachController(controller => controller.steer()), publishOutputs: () => eachController(controller => controller.publishOutputs()) } });
         await starting(() => control.request('ready', { identity }));

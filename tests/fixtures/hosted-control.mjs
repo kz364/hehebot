@@ -16,16 +16,22 @@ const OWNER = 'fixture-owner';
 const INSTALLATION = 'hosted-fixture';
 const ROUTINE_MANAGE_POLICY = 'f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 
-export async function startHostedControlFixture({ directory, ownerAlpha, ownerAlphaSuccessor, runtimeToken, accessClientId, accessClientSecret, manager, warm, portalAssetsDirectory }) {
+export async function startHostedControlFixture({ directory, ownerAlpha, ownerAlphaSuccessor, runtimeToken, accessClientId, accessClientSecret, manager, warm, background, portalAssetsDirectory }) {
   if (![directory, runtimeToken, accessClientId, accessClientSecret].every(value => typeof value === 'string' && value)) {
     throw new TypeError('Hosted fixture requires a private directory and non-empty synthetic credentials.');
   }
-  if (manager && warm) throw new TypeError('Hosted fixture admits one owner-alpha composition: bootstrap manager or warm generation, never both.');
+  if ((manager ? 1 : 0) + (warm ? 1 : 0) + (background ? 1 : 0) > 1) throw new TypeError('Hosted fixture admits one owner-alpha composition: bootstrap manager, warm generation or background generation, never more than one.');
   if (warm !== undefined && (!warm || typeof warm !== 'object' ||
       !warm.generation || typeof warm.generation !== 'object' || Array.isArray(warm.generation) ||
       ![warm.token, warm.hostSigningKey, warm.taskSigningKey, warm.wakeToken].every(value => typeof value === 'string' && value) ||
       new Set([warm.token, warm.hostSigningKey, warm.taskSigningKey, warm.wakeToken]).size !== 4)) {
     throw new TypeError('Warm fixture requires a generation configuration and four distinct synthetic secrets.');
+  }
+  if (background !== undefined && (!background || typeof background !== 'object' ||
+      !background.generation || typeof background.generation !== 'object' || Array.isArray(background.generation) ||
+      ![background.token, background.hostSigningKey, background.taskSigningKey, background.wakeToken].every(value => typeof value === 'string' && value) ||
+      new Set([background.token, background.hostSigningKey, background.taskSigningKey, background.wakeToken]).size !== 4)) {
+    throw new TypeError('Background fixture requires a generation configuration and four distinct synthetic secrets.');
   }
   // Browser mode serves the actual portal assets from the real authenticated
   // Worker. The synthetic signed owner identity stays fixture-only; this is
@@ -51,10 +57,23 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
       throw new TypeError('Warm wake loopback routing accepts one exact local HTTP listener origin only.');
     warmWakeLoopbackUrl = parsed.origin;
   };
+  // Same disposable loopback transport routing for the background wake delivery
+  // only: the production Worker sends its one wake POST to the exact synthetic
+  // Sprite destination pinned in the background bindings, never a live provider.
+  const BACKGROUND_WAKE_DESTINATION = 'https://synthetic-background.sprites.app';
+  let backgroundWakeLoopbackUrl = null;
+  const backgroundWakeDeliveries = [];
+  const setBackgroundWakeLoopback = url => {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1' || !parsed.port ||
+        parsed.pathname !== '/' || parsed.search || parsed.hash || parsed.username || parsed.password)
+      throw new TypeError('Background wake loopback routing accepts one exact local HTTP listener origin only.');
+    backgroundWakeLoopbackUrl = parsed.origin;
+  };
   let mf, server, dispatcher;
   try {
     await mkdir(root, { recursive: true, mode: 0o700 });
-    await build({ entryPoints: [resolve(manager ? 'tests/fixtures/hosted-manager-control.ts' : warm ? 'tests/fixtures/hosted-warm-control.ts' : 'src/worker/index.ts')], outfile: bundle, bundle: true, format: 'esm',
+    await build({ entryPoints: [resolve(manager ? 'tests/fixtures/hosted-manager-control.ts' : warm ? 'tests/fixtures/hosted-warm-control.ts' : background ? 'tests/fixtures/hosted-background-control.ts' : 'src/worker/index.ts')], outfile: bundle, bundle: true, format: 'esm',
       platform: 'browser', target: 'es2022', loader: { '.sql': 'text' },
       external: ['cloudflare:workers', 'node:*'] });
     await run('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '2', '-subj', '/CN=localhost',
@@ -79,7 +98,7 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
       // V4-style options: the assets converter reads snake_case keys and the
       // router config, so the user worker runs ahead of static assets.
       ...(portalAssetsDirectory ? { assets: { directory: portalAssetsDirectory, binding: 'ASSETS', run_worker_first: true, routerConfig: { has_user_worker: true } } } : {}), resourcePersistencePath: join(root, 'miniflare'),
-      durableObjects: { CONTROL: { className: manager ? 'HostedManagerControl' : warm ? 'HostedWarmControl' : 'PersonalControl', useSQLite: true } },
+      durableObjects: { CONTROL: { className: manager ? 'HostedManagerControl' : warm ? 'HostedWarmControl' : background ? 'HostedBackgroundControl' : 'PersonalControl', useSQLite: true } },
       bindings: { INSTALLATION_ID: INSTALLATION, AUTH_MODE: 'access', ACCESS_ISSUER: ISSUER, ACCESS_AUD: AUDIENCE,
         OWNER_SUB: OWNER, EXECUTION_ENABLED: 'false', NATIVE_VERIFIED: 'false', PROVIDER_CONFIG: '{}',
         ACTION_POLICY_IDS: '[]', TOOL_POLICY_IDS: JSON.stringify([ROUTINE_MANAGE_POLICY]),
@@ -96,6 +115,12 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
         HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY: warm.taskSigningKey,
         HEHEBOT_OWNER_ALPHA_WAKE: JSON.stringify({ url: WARM_WAKE_DESTINATION }),
         HEHEBOT_OWNER_ALPHA_WAKE_TOKEN: warm.wakeToken, PROVIDER_TOKEN: 'synthetic-provider-' + 'p'.repeat(40) } : {}),
+        ...(background ? { HEHEBOT_OWNER_ALPHA_BACKGROUND_GENERATION: JSON.stringify(background.generation),
+        HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN: background.token,
+        HEHEBOT_OWNER_ALPHA_BACKGROUND_HOST_SIGNING_KEY: background.hostSigningKey,
+        HEHEBOT_OWNER_ALPHA_BACKGROUND_TASK_SIGNING_KEY: background.taskSigningKey,
+        HEHEBOT_OWNER_ALPHA_WAKE: JSON.stringify({ url: BACKGROUND_WAKE_DESTINATION }),
+        HEHEBOT_OWNER_ALPHA_WAKE_TOKEN: background.wakeToken, PROVIDER_TOKEN: 'synthetic-provider-' + 'p'.repeat(40) } : {}),
         ...(successor === undefined ? {} : { HEHEBOT_OWNER_ALPHA_SUCCESSOR: JSON.stringify(successor) }) },
       outboundService: async request => {
         outboundRequests.push({ method: request.method, url: request.url });
@@ -113,6 +138,20 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
           const body = await request.text();
           warmWakeDeliveries.push({ method: request.method, url: request.url, headers, body: JSON.parse(body) });
           const response = await undiciFetch(`${warmWakeLoopbackUrl}/wake`, { method: 'POST',
+            headers, body, redirect: 'error' });
+          return new Response(response.body, { status: response.status,
+            headers: { 'content-type': response.headers.get('content-type') ?? 'application/json' } });
+        }
+        if (background && request.method === 'POST' && request.url === `${BACKGROUND_WAKE_DESTINATION}/wake`) {
+          // Identical disposable loopback routing for the background wake: the
+          // production POST bytes and headers forward unchanged, nothing else.
+          if (!backgroundWakeLoopbackUrl) throw new Error('Background wake loopback listener is not arranged.');
+          const headers = { authorization: request.headers.get('authorization'),
+            'x-hehe-wake-token': request.headers.get('x-hehe-wake-token'),
+            'content-type': request.headers.get('content-type') };
+          const body = await request.text();
+          backgroundWakeDeliveries.push({ method: request.method, url: request.url, headers, body: JSON.parse(body) });
+          const response = await undiciFetch(`${backgroundWakeLoopbackUrl}/wake`, { method: 'POST',
             headers, body, redirect: 'error' });
           return new Response(response.body, { status: response.status,
             headers: { 'content-type': response.headers.get('content-type') ?? 'application/json' } });
@@ -174,7 +213,10 @@ export async function startHostedControlFixture({ directory, ownerAlpha, ownerAl
       ...(manager ? { retireUnusedPredecessor: () => fixtureCall('fixture-retire'), retainedManifest: () => fixtureCall('fixture-manifest') } : {}),
       ...(warm ? { retirePredecessor: bootId => fixtureCall('fixture-retire', { boot_id: bootId }),
         wakeIntent: () => fixtureCall('fixture-wake'), warmRows: () => fixtureCall('fixture-warm'),
-        warmWakeDeliveries, setWarmWakeLoopback } : {}) };
+        warmWakeDeliveries, setWarmWakeLoopback } : {}),
+      ...(background ? { retirePredecessor: bootId => fixtureCall('fixture-retire', { boot_id: bootId }),
+        wakeIntent: () => fixtureCall('fixture-wake'), backgroundRows: () => fixtureCall('fixture-background'),
+        backgroundWakeDeliveries, setBackgroundWakeLoopback } : {}) };
   } catch (error) {
     if (server) await new Promise(resolveClose => server.close(() => resolveClose()));
     if (mf) await mf.dispose();

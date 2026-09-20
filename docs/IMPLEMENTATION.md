@@ -4,6 +4,34 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stage B runtime integration (2026-09-20): delivered patch SHA256
+5b82dec794dc076745043dc9f06a0c4db80cc73e16122b9ce37b616141885f1d verified
+against exact c35e118. Versioned background binding, manager and separate task
+credentials now compose with the existing finite control/portal contract. Parent
+restricted coverage receipt settlement to status/independent roles and added
+malformed/cross-turn/nonterminal/descendant/legacy-role rejection coverage.
+Focused runtime tests 15/15, full runtime 585/585 and typecheck pass.
+
+Parent added actual Chromium submission/reload/cancellation to the native fixture:
+one pristine Codex 0.154.0 process, six scripted model requests, three distinct
+root threads/grants, Worker alarm-driven wake, S visible while A's child is active,
+B's own read-only routine call, frozen status context, and exact task-card/dialog
+A-family cancellation leaving S/B completed. Passive reads and exact receipt replay
+cause no additional work. Exhaustion/reload retain exactly three owner texts and
+one canonical S/B reply each; composer disabled/readOnly with runtime-banner
+aria-describedby and role=status. Both final DPR2 captures were inspected:
+`.amp/in/artifacts/background-manager-{status,exhausted}.png`.
+HTTP and browser runs exit 0; logs `.local/stage-b-{native-parent,browser-final}.log`.
+The combined verifier now includes `test-codex-background-manager.mjs --browser`
+and is running in `.local/stage-b-integrated-combined.log`.
+
+Evidence boundary: loopback model/Sprite seams and staged floor readback are
+synthetic; authenticated real accounts/providers are unverified. Fixed A/S/B
+ordinals are not general intent routing. Post-expiry stop is explicit in this
+fixture, not an automatic timer claim. Retained A/child uncertainty blocks sleep;
+S/B root receipts do not settle A's family. No production gates or live authority
+changed. All implementors delivered; parent owns remaining verification/commit.
+
 F6/E13 setup integration (2026-09-20): verified worker patch SHA256
 b1a29ecbc50a5875108424885b0e8e506385318bac4249554e7b1dad18e522c1.
 Pinned candidate installation/validation now precedes replacement, with prior

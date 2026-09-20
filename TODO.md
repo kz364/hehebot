@@ -12,14 +12,19 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-20):** the combined credential-free verifier exits 0
-with 1790 backend/570 runtime tests, browser/native/service integrations, typecheck
-and dry-run build (`.local/followthrough-integrated-verify.log`). This includes
-Stage B control/portal and new native cold-child readback, not the pending Stage B
-runtime delivery. Focused recovery contracts 37/37 and Electron reference-shell 16/16
-pass. Subsequent backup/automatic-stop fixtures passed targeted checks below;
-that full-suite result predates them. Next: integrate Stage B runtime, then verify actual
-Stage B browser/native composition. No new live authorization or production claim.
+**Current checkpoint (2026-09-20):** all assigned implementors have delivered.
+Stage B runtime is reviewed/integrated locally. Actual portal → signed Worker/SQLite
+→ one pristine Codex 0.154.0 process passes the three-root browser/native fixture:
+S replies while A's child stays active; B has isolated context/read-only credentials;
+portal cancellation targets only A's family; reload/replay/passive reads add no work.
+Parent tightened background receipt coverage to S/B only; focused tests 15/15,
+runtime tests 585/585 and typecheck pass. Screenshots inspected. Evidence:
+`.local/stage-b-{browser-final,runtime-all-final,typecheck-final}.log`.
+Combined verifier is running in `.local/stage-b-integrated-combined.log`, now
+including setup safety, backup, both F3 modes and Stage B browser/native coverage.
+Previous full run passed 1790 backend/570 runtime tests; it predates Stage B runtime.
+Next: finish combined verification/commit, then recovery/safe-sleep work in F3.
+No push, deployment, live account calls, automatic Stage B stop or production claim.
 
 **F3 pending-maintenance integrated:** parent rerun passes: production timer stop
 at expiry+30000ms, both launcher/native PIDs absent before deferred release, then
@@ -28,23 +33,22 @@ Normal mode also passes (expiry−181ms); related runtime tests 46/46 and typech
 pass. Added to combined verifier; full suite not rerun for this test-only change.
 Evidence `.local/warm-pending-{parent,normal-parent,contracts,typecheck}.log`.
 This closes the pending-maintenance backstop item in F3 below, not live network
-timeout, dual-lock or settlement acceptance. Stage B runtime remains the priority.
+timeout, dual-lock or settlement acceptance. Stage B is now integrated locally.
 
 **F6/E13 setup integrated:** candidates are staged/validated before replacement,
 with prior-CLI rollback and unrelated config preservation. Parent found and fixed
 ignored nonzero CLI-version exit status (two red/green cases), added both retained
 swap-state recovery tests, and reran 13/13 tests plus two real disposable installs
 of pristine Codex 0.154.0. Syntax/diff checks pass. No concurrent/active-upgrade or
-power-loss guarantee. Stage B runtime remains assigned. Combined verifier is
-still running in `.local/followthrough-latest-combined.log`; its earlier setup
-step predates this change, which has separate focused verification.
+power-loss guarantee. The earlier combined verifier exited 0; the new integrated
+run in `.local/stage-b-integrated-combined.log` includes these setup changes.
 
 | Done | Order / status | Deliverable and exit evidence |
 | --- | --- | --- |
 | [x] | **F1a — Local entrypoint control flow verified** | Four tests exercise actual runHostedOwnerAlpha expiry plus 30-second grace, pending start/maintenance and operator abort, without test-owned stop. Parent rerun: 4/4 focused, 568/568 runtime and typecheck pass. Service/native termination is simulated; this proves automatic stop dispatch and honest pending-state reporting, not real native shutdown. Explicit-stop native journal/dual-lock proof remains separate; automatic real-native termination remains part of F3 lifecycle acceptance. [Worker](https://ampcode.com/threads/T-01a0ba7c-fad5-710c-a2e1-099b66e11fb5) complete; no production fix needed. |
 | [x] | **F1b — Integrated and locally verified** | Corrected real Worker alarm-to-listener patch integrated at 0ecdc55. Parent two UNKNOWN/no-retry negatives and browser --wake-first pass: launch precedes receipt observation, one native process/two replies, exact one wake and idempotent replay. Full verifier exited 0: 1782 backend/570 runtime tests, browser/native/service fixtures, typecheck and dry-run build. Fresh exhausted-composer screenshot inspected. Evidence: `.local/warm-wake-integrated-verify.log`. Loopback routing/scripted model remains non-live; explicit-stop limitation unchanged. |
-| [ ] | **F2 — Control/portal integrated; runtime active; Stage B / P0.3 / E03** | Control c35e118 combined verifier exited0 (1790 backend/570 runtime plus native/browser/service/build). Portal befc7d0 adds finite role-aware composer and fail-closed custody; parent background/warm browser checks pass, legacy adoption passes isolated rerun after one recorded timeout. Four rendered states inspected; parent fixed legacy-session-only conflict, latched warm→background transition and stale admission error. [Runtime implementor](https://ampcode.com/threads/T-01a0bd60-d11c-7141-a108-a27ae5c33b45) still owns runtime/native HTTP fixture from c35e118. Portal worker complete; parent owns eventual real browser/native integration. Existing cancel/follow-up controls unchanged, steer remains execution-gated. No Stage B native/live or settlement acceptance claimed. |
-| [ ] | **F3 — Automatic native expiry stop integrated; lifecycle acceptance partial** | Cold exact-child recovery passes without replay or sleep permission. Automatic-stop worker complete; parent strengthened its PID evidence to check the real Codex executable separately from the npm launcher. Native rerun passes: one canonical reply/start/wake, one production stop at expiry+598ms, both PIDs absent, retained recovery journal, no settlement claim. Related runtime tests 46/46 and typecheck pass. Responsive Worker maintenance fences near expiry, not at expiry+30s; JWT exp floors to seconds and can reject early. No auth/runtime behavior was changed. Evidence `.local/warm-auto-stop-{parent,native-pid,contracts,typecheck}.log`. Remaining: pending-maintenance real-native backstop, dual locks in this composition, crash/reconnect recovery, unknown effects/locks and recursive settlement before safe sleep/replacement. |
+| [x] | **F2 — Finite Stage B locally integrated / P0.3 / E03 remains partial** | Control, portal and runtime now compose through actual Chromium, signed Worker/SQLite and one pristine Codex process. Parent HTTP/browser runs verify A/S/B, active child through S, separate B context/grant, exact portal A-family cancellation, canonical reload, no passive/replay relaunch, immutable envelope and explicit-stop dual-lock retirement. Focused 15/15 and runtime 585/585 pass; combined verifier running. Two final DPR2 screenshots inspected. All workers complete. Fixed ordinals are not natural-language routing; no live-account, automatic Stage B stop, recursive settlement or safe-sleep acceptance. |
+| [ ] | **F3 — Automatic native expiry stop integrated; lifecycle acceptance partial** | Cold exact-child recovery passes without replay or sleep permission. Parent checks native executable and launcher separately. Normal expiry stop and injected pending-maintenance +30s timer both pass with retained recovery custody; related tests 46/46. Responsive Worker maintenance fences near expiry; JWT exp floors to seconds and can reject early. No auth behavior changed. Evidence `.local/warm-pending-{parent,normal-parent,contracts,typecheck}.log`. Remaining: crash/reconnect recovery, unknown effects/locks and recursive settlement before safe sleep/replacement. Stage B native manager currently proves explicit stop/dual-lock retirement, not automatic stop. |
 | [ ] | **F4 — Procedure prepared; live trial externally gated / P0.2 / E14** | [Bounded trial procedure](docs/AUTH_SETUP.md#next-bounded-owner-trial-preparation-and-stop-conditions) covers exact release/targets, supported predecessor retirement, separate Access/runtime/wake/account checks, two canonical messages/reload, automatic stop, cumulative reservations/billing and retained rollback custody. No empty-install seed fabrication, warm rollover or warm→background transition. Still need actual target/retirement/containment, budget and eligibility evidence plus applicable deployment/account/live-operation authorization; procedure preparation is not readiness or a trial. Local commits are unpushed; publication is separate. |
 | [ ] | **F5 — After usable slice; E05/E07/E09** | Complete required Google/WhatsApp/Messages integrations, adopted routine workflows and browser/computer tasks. Track permissions, per-effect authority, watermarks/dedupe and uncertain effects. Sep20 upstream source recheck found default branch still at the selected wappmcp revision: no newer source fix for array-shaped recent-message results. [Source evidence](docs/CONNECTOR_READINESS.md) retains the SDK blocker; no validation bypass, search substitution or unapproved patch. Connector account access and routine activation remain gated. |
 | [ ] | **F6 — After usable slice; E10–E15** | Complete Mac build/render/device acceptance, coordinated backups and restore, clean installation/upgrade, measured cost/reliability and remaining product acceptance. Use the detailed E01–E15 rows below for scope; keep optional polish behind P0/P1. Sep20 runner discovery found no connected runner; actual Apple-framework/device acceptance needs a Mac runner. Electron reference-shell rerun passes16/16, not Mac acceptance. Account/billing data, signing/release and live infrastructure measurements require their own access/approval. |
@@ -58,7 +62,7 @@ and simulated 2027 clocks pass. Related tests 95/95, typecheck and shell syntax 
 The drill is now in the combined verifier; the full suite was not rerun for this
 test-only integration. Evidence `.local/backup-restore-{parent,contracts,typecheck,future-clock}.log`.
 This advances F6/E10 only for application snapshots, not native/browser restoration
-or safe activation. Stage B runtime remains the open implementation assignment.
+or safe activation. Stage B runtime delivery is now integrated; no implementor is pending.
 
 **Ownership and scheduling:** this parent owns review, integration, combined verification,
 tracking and user decisions. F1 workers use disjoint files and the exact local
