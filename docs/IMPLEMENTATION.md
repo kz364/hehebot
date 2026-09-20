@@ -4,6 +4,14 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Scheduled F3 follow-up (2026-09-20): source review of the real entrypoint confirms
+the independent timer runs while service.maintain is awaited, but stopped reporting
+waits for that await to finish and finally to run. Reused the completed shutdown
+implementor for a real-native --pending-maintenance regression on exact d8124cf.
+Its explicit deferred-await fault injection must distinguish native stop from
+entrypoint completion; it cannot claim live I/O cancellation or settlement.
+Assignment only, no new verification result. Stage B runtime ownership unchanged.
+
 F3 automatic native stop integration (2026-09-20): worker patch SHA256
 6667a56eda297038519a98837908416ce8ca157ee98d8fefcb3a9c6495524a1e verified.
 Parent first reproduced stop at expiry−154ms, launcher exit0. Review found the

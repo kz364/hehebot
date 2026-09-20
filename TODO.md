@@ -21,6 +21,13 @@ pass. Subsequent backup/automatic-stop fixtures passed targeted checks below;
 that full-suite result predates them. Next: integrate Stage B runtime, then verify actual
 Stage B browser/native composition. No new live authorization or production claim.
 
+**Scheduled continuation:** the existing F3 implementor now owns a bounded
+`--pending-maintenance` mode in the reviewed automatic-stop fixture, from local
+d8124cf. It must hold the entrypoint await while the real +30s timer stops both
+launcher/native PIDs, then release the await without premature completion or
+settlement claims. Explicit composition-seam fault injection, not live network
+timeout evidence. Stage B runtime ownership is unchanged; no duplicate assignment.
+
 | Done | Order / status | Deliverable and exit evidence |
 | --- | --- | --- |
 | [x] | **F1a — Local entrypoint control flow verified** | Four tests exercise actual runHostedOwnerAlpha expiry plus 30-second grace, pending start/maintenance and operator abort, without test-owned stop. Parent rerun: 4/4 focused, 568/568 runtime and typecheck pass. Service/native termination is simulated; this proves automatic stop dispatch and honest pending-state reporting, not real native shutdown. Explicit-stop native journal/dual-lock proof remains separate; automatic real-native termination remains part of F3 lifecycle acceptance. [Worker](https://ampcode.com/threads/T-01a0ba7c-fad5-710c-a2e1-099b66e11fb5) complete; no production fix needed. |

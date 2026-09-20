@@ -4,6 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
+Scheduled continuation reuses F3 thread T-01a0bdf0-6b4d-70ba-acb2-ce10eb4f9d29
+for --pending-maintenance in its existing script (and its floor fixture only).
+The normal-mode delivery below is complete; this new backstop mode is not.
+Source d8124cf8bcf5bdacdc12258accf6993a09a5d7cc through
+`.local/warm-backstop-source.bundle`, SHA256
+930d9eeb0149616837770934c2e9715a74c6b47079158441eef219ca2b445aaa.
+Preserve parent native-executable PID corrections. Use explicit deferred-await
+fault injection around real maintenance; real +30s production stop must precede
+deferred release/entrypoint completion, with no test stop, replay or settlement.
+Worker returns patch/evidence directly. No runtime/shared-file edits or polling.
+
 Owner requested continued implementor progress and feasible additional parallelism.
 Continuation instructions sent to Stage B runtime and automatic-stop workers.
 New F6/E10 worker T-01a0be08-b284-765f-b2c5-1aa35bb10799 owns only new
