@@ -23,11 +23,19 @@ full suite not rerun for this test-only integration. Evidence
 code changed; successful application decrypt remains no activation authority.
 
 Owner said “Go do all that”; local F1–F6 follow-through continues without live
-authorization expansion. F3 worker T-01a0bdf0-6b4d-70ba-acb2-ce10eb4f9d29 owns
-only new scripts/test-codex-warm-auto-stop.mjs (plus a new fixture if required),
-from the exact c35e118 bundle below. It must prove actual runHostedOwnerAlpha
-automatic expiry/stop of a real native process, not test-owned stop. No overlapping
-runtime edits; worker reports completion/blocker directly, no polling.
+authorization expansion. F3 worker T-01a0bdf0-6b4d-70ba-acb2-ce10eb4f9d29 is
+COMPLETE/integrated from c35e118, patch SHA256
+6667a56eda297038519a98837908416ce8ca157ee98d8fefcb3a9c6495524a1e.
+Parent added actual native executable PID/path evidence alongside transport/npm
+launcher exit. Strengthened native run passes (expiry+598ms stop, both PIDs gone,
+one canonical reply/start/wake, recovery journal retained), plus46/46 runtime tests
+and typecheck. Added to combined verifier; full suite not rerun for this fixture.
+Logs `.local/warm-auto-stop-{parent,native-pid,contracts,typecheck}.log`.
+Auth exp floors to seconds (background grants too), so responsive maintenance
+fences near expiry, potentially early, and finally auto-stops; expiry+30s is only
+a pending-I/O backstop here, not a guaranteed reconciliation window. AUTH_SETUP
+corrected; Stage B implementor notified. No auth/runtime change, no recursive
+settlement/live containment/dual-lock claim. Native pending-maintenance remains open.
 Parent extended scripts/test-codex-native.mjs with missed-child-interruption cold
 readback; focused native run passes, `.local/cold-child-recovery.log`. Cancellation
 is never replayed; crossed identity and duplicate-write negatives pass, effect
@@ -41,7 +49,7 @@ Stage B runtime assignment below is unchanged and not covered by this result.
 Upstream WhatsApp source remains at the pinned revision without the SDK fix;
 CONNECTOR_READINESS records sources. Runner discovery found no connected Mac.
 Existing two-hour follow-through schedule was read and retained. Next integration
-depends on the two disjoint runtime/automatic-stop implementor deliveries, then
+depends on the Stage B runtime implementor delivery, then
 the parent-owned Stage B real browser/native assembly. Do not duplicate their work.
 
 Stage B control implementation integrated at local c35e118 after reviewing patch

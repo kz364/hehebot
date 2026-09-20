@@ -15,9 +15,10 @@ TODO remains the progress checklist; this section is the trial procedure.
    revision, artifact digest and target Worker/Sprite privately. Rerun
    `bash scripts/verify-codex.sh` on the integrated revision; include the real
    Worker-to-loopback wake and browser `--wake-first` evidence. Synthetic model,
-   Access and provider seams are not live checks. Require automatic real-native
-   expiry/stop evidence before claiming that shutdown property; it is still open
-   at this preparation checkpoint. Publication and deployment are separate actions.
+   Access and provider seams are not live checks. The credential-free
+   `test-codex-warm-auto-stop.mjs` now proves automatic expiry-fence stop of both
+   launcher and native executable; actual provider/process containment remains
+   separate. Publication and deployment are separate actions.
 2. **Inspect predecessor custody before selecting any policy.** Read existing
    generation, reservation, retirement and native journal records through their
    supported interfaces. A retained Stage A generation is terminal in this slice:
@@ -69,8 +70,13 @@ TODO remains the progress checklist; this section is the trial procedure.
    replay the wake or mint a replacement idempotency key. Do not submit a third
    message to test quota; use the local denial fixture and exhausted portal state.
 8. **Observe expiry and retain honest shutdown evidence.** Verify that admission
-   closes at the fixed deadline and the entrypoint requests stop after its
-   existing 30-second grace. Record actual process termination separately from
+   closes no later than the fixed deadline. With responsive maintenance, the
+   real Worker fences the warm host near expiry and the entrypoint's `finally`
+   stops it then; the expiry-plus-30-second timer is an independent backstop,
+   not a guaranteed authenticated reconciliation window. JWT expiry is floored
+   to seconds, so authentication can reject up to 999ms before the precise
+   policy deadline. An expiry-fence failure report preserves uncertainty, not
+   settlement. Record launcher and native executable termination separately from
    journal state, locks, provider activity-hold state and billing. Root completion,
    a free lock or HTTP 202 is not process/child/effect settlement. If termination
    or provider state is unknown, retain recovery-required custody and prohibit

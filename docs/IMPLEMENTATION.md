@@ -4,6 +4,31 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+F3 automatic native stop integration (2026-09-20): worker patch SHA256
+6667a56eda297038519a98837908416ce8ca157ee98d8fefcb3a9c6495524a1e verified.
+Parent first reproduced stop at expiry−154ms, launcher exit0. Review found the
+transport PID belongs to the npm launcher, so parent added Linux process/exec-path
+attestation for its actual pinned Codex child and requires both PIDs absent after
+production stop. Strengthened rerun passes: one start/model request/canonical
+result/wake, one stop at expiry+598ms, launcher exit0 and actual native PID absent.
+The retained journal stays recovery/nativeStopped with exact generation identity;
+no test-owned stop satisfies success and no effect/descendant settlement is inferred.
+Logs `.local/warm-auto-stop-{parent,native-pid,contracts,typecheck}.log`; related
+runtime tests 46/46, typecheck and syntax pass. Added to combined verifier; full
+suite not rerun for this fixture-only integration.
+
+Important corrected expectation: warmTimestamps floors JWT exp to seconds with
+zero tolerance (also used by background grants), so host authentication can fence
+up to 999ms before the precise policy deadline. Lease/phase fencing applies at
+expiry. Responsive maintenance therefore reaches automatic finally-stop near
+expiry, not a guaranteed expiry+30s reconciliation window. The rerun reports
+EXECUTOR_FENCED then stopped, preserving uncertainty. The independent 30s backstop
+can still matter for pending I/O; this test does not cover that case and does not
+prove it unreachable. AUTH_SETUP corrected and Stage B implementor notified.
+No production auth/runtime change. Floor filesystem/configRequirements readback,
+account/model/provider are explicit synthetic seams; live eligibility/containment,
+dual launcher locks in this composition and recursive settlement remain open.
+
 F6/E10 backup drill integration (2026-09-20): verified worker patch SHA256
 762dad71f08e3342326342eb7bf2045fb5edf85505364bd801bbd04d02362c9a and inspected
 the public-API composition. Real SQLite snapshot and pinned age encryption/decrypt
