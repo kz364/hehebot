@@ -22,7 +22,17 @@ socket and explicitly labelled supported-CLI loopback/catalog wrapper. No
 runtime/dependency patch or softened restrictions, no shared floor/socket writes.
 Native must remain non-root; exact entry/npm/native disappearance before free
 locks, expiry-owned stop, manager retirement/no replay, uncertainty retained.
-sudo -n and private mount namespace feasibility were checked, not implemented.
+That slice now exists as scripts/test-codex-launcher-boundary.{sh,mjs}, but fails
+its strict CapBnd gate after actual ready. tmpfs root/pivot_root (not chroot)
+preserves native nested-user-namespace support. Non-root real entry/setpriv/floor
+and Tasks socket run, but CapBnd remains000001ffffffffff; other sets0/NoNewPrivs1.
+Exact production setpriv invocation reproduces unchanged CapBnd outside fixture.
+No pre-clearing or softened assertion. Remaining post-capability lock/expiry/
+retirement assertions did not execute. Log .local/launcher-boundary-pivot.log,
+SHA256 5182b2b7e77c864fddb1491e00c6ead70884ccd432d7efd524a8bdfba1249c34.
+Namespace --probe and32 launcher/floor contracts pass. Not in combined verifier.
+Needs separately reviewed privilege-boundary correction under the strict criterion;
+current no-runtime-patch assignment cannot claim this accepted. Host paths unchanged.
 Retain the fractional-expiry retirement defect rather than masking it. No live,
 push/deploy, containment/settlement/safe-resume/sleep acceptance is authorized.
 

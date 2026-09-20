@@ -29,6 +29,20 @@ and namespace-local Tasks fixture, with an explicitly labelled supported-CLI
 loopback/catalog wrapper; no runtime patch, softened validation, host mounts or
 live actions. Preserve the fractional-expiry retirement gap separately.
 
+**Launcher slice blocked at its strict capability criterion:** the new standalone
+`bash scripts/test-codex-launcher-boundary.sh` uses a disposable private mount/root
+and loopback-only network namespace. Actual non-root default entry reaches ready
+with real managed floor/readback, but its CapBnd remains `000001ffffffffff` after
+the exact production setpriv command; other capability sets are zero and
+NoNewPrivs=1. A direct command outside the namespace reproduces this. Assertions
+remain strict; no pre-clearing of the bounding set, runtime patch or gate removal.
+The test fails before its lock-lifetime/expiry/retirement assertions; those are
+not accepted. Namespace prerequisite check and 32 existing launcher/floor tests
+pass. Log `.local/launcher-boundary-pivot.log`, SHA256
+`5182b2b7e77c864fddb1491e00c6ead70884ccd432d7efd524a8bdfba1249c34`.
+The fixture is not added to the combined verifier. A separately reviewed launch
+privilege-boundary correction is needed for the unchanged zero-CapBnd criterion.
+
 **Current checkpoint (2026-09-20):** the prior implementor wave has delivered.
 Stage B runtime is reviewed/integrated locally. Actual portal → signed Worker/SQLite
 → one pristine Codex 0.154.0 process passes the three-root browser/native fixture:

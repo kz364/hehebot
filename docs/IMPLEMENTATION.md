@@ -4,6 +4,30 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Real launcher slice (2026-09-20), based on local2a33854: standalone
+`scripts/test-codex-launcher-boundary.{sh,mjs}` is implemented but NOT accepted.
+Private mount/network namespaces with tmpfs root/pivot_root supply actual root-owned
+floor files and an actual namespace-local Tasks Unix socket. The launcher/default
+entry/service/native are unchanged; a labelled exec wrapper adds supported synthetic
+loopback/catalog session flags and privately captures native stderr. Native launches
+as uid1000. Actual entry reaches ready, proving its real managed-floor/readback gate
+ran; strict process inspection then fails on CapBnd=000001ffffffffff. Other sets
+are zero and NoNewPrivs=1. The exact production setpriv invocation reproduces this
+outside the fixture (util-linux2.38.1 exits0 with bounding set unchanged). No
+privileged pre-clearing is used to hide that behavior; no runtime/dependency patch.
+Log `.local/launcher-boundary-pivot.log`, SHA256
+5182b2b7e77c864fddb1491e00c6ead70884ccd432d7efd524a8bdfba1249c34.
+The initial chroot setup prevented nested user namespaces; host probes succeeded,
+and replacing chroot with namespace-local pivot_root fixed that fixture error
+without kernel changes. Host /.sprite and /etc/codex remain absent/unchanged.
+`--probe` namespace check and32 existing launcher/floor tests pass; syntax/diff clean.
+Latest code only narrows failure diagnostics to capability fields; the full failed
+log predates that formatting-only change. Lock lifetime, automatic expiry, manager
+retirement and uncertainty assertions after the CapBnd gate remain unexecuted here.
+Not in combined verifier. Strict acceptance needs a separately reviewed privilege
+boundary correction, not a weaker assertion. This is distinct from the timing
+failure below and neither demonstrates recursive containment nor safe resume/sleep.
+
 Latest combined verification (2026-09-20), source
 11deb67817776d3be4775606c5f73f3d4dd48b24: FAILED, exit1 at normal Stage B
 auto-stop retirement. Log `.local/stage-b-final-combined.log`, SHA256
