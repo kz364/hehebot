@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
+Setup worker delivery COMPLETE/integrated, patch SHA256
+b1a29ecbc50a5875108424885b0e8e506385318bac4249554e7b1dad18e522c1.
+Parent fixed ignored version-command nonzero exit (two reproduced red cases),
+added both interrupted swap-state tests; 13/13 pass, syntax/diff checks clean.
+Two real disposable installs return codex-cli 0.154.0; no account/native inference.
+Logs `.local/setup-safety-parent-{red,green}.log`. Historical assignment below
+is complete. Combined verifier process339069 is still running; its setup step
+predates this change, verified separately. Stage B runtime remains assigned.
+
 Owner requested more independent parallel work. Reused backup worker
 T-01a0be08-b284-765f-b2c5-1aa35bb10799 for failure-safe pinned Codex setup:
 only scripts/setup-codex.sh, tests/setup-codex.test.mjs and at most one new

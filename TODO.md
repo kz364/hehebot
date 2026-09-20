@@ -30,13 +30,14 @@ Evidence `.local/warm-pending-{parent,normal-parent,contracts,typecheck}.log`.
 This closes the pending-maintenance backstop item in F3 below, not live network
 timeout, dual-lock or settlement acceptance. Stage B runtime remains the priority.
 
-**Parallel follow-through:** Stage B runtime remains assigned. The completed
-backup worker now owns F6/E13 failure-safe Codex setup in `scripts/setup-codex.sh`
-and `tests/setup-codex.test.mjs`, from local ed5360b: validate a staged pinned
-candidate before replacing the working CLI, preserve unrelated configuration,
-and test failed installation/version checks plus a real disposable second install.
-No active-runtime upgrade or power-loss transactionality claim. Parent is running
-the combined verifier in `.local/followthrough-latest-combined.log`; result pending.
+**F6/E13 setup integrated:** candidates are staged/validated before replacement,
+with prior-CLI rollback and unrelated config preservation. Parent found and fixed
+ignored nonzero CLI-version exit status (two red/green cases), added both retained
+swap-state recovery tests, and reran 13/13 tests plus two real disposable installs
+of pristine Codex 0.154.0. Syntax/diff checks pass. No concurrent/active-upgrade or
+power-loss guarantee. Stage B runtime remains assigned. Combined verifier is
+still running in `.local/followthrough-latest-combined.log`; its earlier setup
+step predates this change, which has separate focused verification.
 
 | Done | Order / status | Deliverable and exit evidence |
 | --- | --- | --- |
