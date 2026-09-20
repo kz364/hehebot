@@ -243,9 +243,25 @@ test('question timeout or disconnect aborts the callback and suppresses late ans
     ask(child, 'question'); const pending = transport.request('turn/start');
     await new Promise(setImmediate); if (disconnect) child.stdout.end();
     await assert.rejects(pending, { code: disconnect ? 'CODEX_DISCONNECTED' : 'CODEX_USER_INPUT_OUTCOME_UNKNOWN', outcome: 'unknown' });
+    assert.equal(signal.reason?.code === 'CODEX_USER_INPUT_TIMEOUT', !disconnect);
     assert.equal(signal.aborted, true); finish(answer()); await new Promise(setImmediate);
     assert.equal(writes.length, 1); assert.equal(transport.serverCalls.size, 0);
   }
+});
+
+test('only the exact timeout winner gets a timeout reason, not collateral typed requests', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const signals = new Map();
+  const { child, transport } = fixture({ userInputTimeoutMs: 100, onUserInput: (_params, { signal, requestId }) => {
+    signals.set(requestId, signal); return new Promise(() => {});
+  } });
+  ask(child, 71); await new Promise(setImmediate);
+  t.mock.timers.tick(50); ask(child, '71'); await new Promise(setImmediate);
+  t.mock.timers.tick(50);
+  assert.equal(signals.get(71).reason?.code, 'CODEX_USER_INPUT_TIMEOUT');
+  assert.notEqual(signals.get('71').reason?.code, 'CODEX_USER_INPUT_TIMEOUT');
+  assert.equal(signals.get('71').aborted, true);
+  assert.equal(transport.closed, true);
 });
 
 test('question and tool requests share concurrency and duplicate-ID bounds', async () => {

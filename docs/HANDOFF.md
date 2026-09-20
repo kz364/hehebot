@@ -4,7 +4,23 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-21 Asia/Jakarta)
 
-Latest local unit: pre-handoff question cutoff is verified on top of5d655d0.
+Latest verified local unit on9189063: private host callback-timeout observations in
+transport/question binding/offline inspector, with exact existing custody and no
+Worker RPC or recovery authority. Binding deadline stops and exact transport timer
+winners may be journaled; collateral failures and unbound admission cannot invent
+evidence. Missing markers remain unknown. Runtime620/typecheck initially passed;
+full verifier PID570759 stopped at619/620 on a scheduler-dependent new test.
+Deterministic timer-winner fixtures now pass focused85/typecheck; failure logs kept.
+Full verifier PID576909 exited0: backend1814/runtime620, all HTTP/browser/native,
+warm/background shutdown, strict launcher2242 probes, service modes and build pass.
+Log `.local/question-timeout-integrated-final.log` SHA256
+904eb1cf52ae4d2406c43167ea92a2ecb09f5919d63d8c1e7721d4adad9ea1ae.
+Reference desktop16 passes. No check or child remains active. The existing two-hour
+recovery schedule remains enabled. Continue supported checkpoint/recovery contracts
+and selected-model memory constraints; diagnostic evidence alone never authorizes
+replay, settlement, restart or sleep. Local commits only; external gates unchanged.
+
+Preceding local unit: pre-handoff question cutoff is verified on top of5d655d0.
 Worker persists `restart_required_at` once for explicit expired pending/answered
 current-attempt questions, increments question revision, and requests ordinary
 cancellation. Prior cancellation reasons/grace and sibling watchdogs remain intact.

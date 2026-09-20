@@ -341,6 +341,23 @@ test('invalid question phase, identity, filename, secret fields and links make c
   const timed = await inspectCodexRecovery(f.directory);
   assert.deepEqual(timed.questions.waits, [{ ...wait, phase: 'waiting' }]);
   assert.equal(timed.questions.unresolved, 1); assert.equal(timed.sleepAllowed, false);
+  for (const [source, observedAt] of [['binding', wait.deadlineAt], ['transport', '2026-09-14T23:56:00.000Z']]) {
+    const callbackTimeout = { source, observedAt };
+    await f.journal.write(key, { ...row, wait, callbackTimeout });
+    const report = await inspectCodexRecovery(f.directory);
+    assert.equal(report.questions.complete, true);
+    assert.deepEqual(report.questions.waits, [{ ...wait, phase: 'resolved', callbackTimeout }]);
+    assert.equal(report.resumeAllowed, false); assert.equal(report.sleepAllowed, false);
+  }
+  for (const callbackTimeout of [null, { source: 'disconnect', observedAt: wait.deadlineAt },
+    { source: 'binding', observedAt: '2026-09-14T23:59:59.999Z' },
+    { source: 'transport', observedAt: '2026-09-14T23:54:59.999Z' },
+    { source: 'binding', observedAt: wait.deadlineAt, text: canary }]) {
+    await f.journal.write(key, { ...row, wait, callbackTimeout });
+    const report = await inspectCodexRecovery(f.directory);
+    assert.equal(report.questions.complete, false);
+    assert.doesNotMatch(JSON.stringify(report), /PRIVATE_/);
+  }
   for (const patch of [{ phase: 'accepted' }, { resolutionObserved: false }, { questionId: 71 }, { questionId: '0'.repeat(36) }, { requestId: {} },
     { wait: null }, { wait: { ...wait, deadlineAt: wait.startedAt } }, { wait: { ...wait, deadlineAt: '2026-09-15T00:00:00.001Z' } },
     { wait: { ...wait, startedAt: '2026-09-14T23:44:59.999Z' } }, { wait: { ...wait, text: canary } },

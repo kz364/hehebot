@@ -8,6 +8,7 @@ import { PassThrough } from 'node:stream';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexTransport } from '../runtime/codex-transport.mjs';
 import { CodexQuestionBinding } from '../runtime/codex-questions.mjs';
+import { inspectCodexRecovery } from '../runtime/codex-recovery-inspect.mjs';
 
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -138,6 +139,7 @@ for (const failure of ['journal', 'handoff', 'record', 'timeout', 'answer']) tes
   await assert.rejects(f.binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 }), { message: 'QUESTION_CALLBACK_STOPPED' });
   const beforeTake = ['journal', 'record'].includes(failure);
   assert.equal((await f.rows())[0].phase, beforeTake ? 'record_unknown' : 'take_unknown');
+  assert.equal(Object.hasOwn((await f.rows())[0], 'callbackTimeout'), false);
   assert.equal(f.calls.filter(c => c.type === 'question-take').length, beforeTake ? 0 : 1);
   assert.equal(handoffAttempted, failure === 'handoff');
 });
@@ -172,11 +174,72 @@ test('timeout stops polling without settlement or retained abort listeners', asy
   const count = f.calls.length; await sleep(30); assert.equal(f.calls.length, count);
   assert.equal(getEventListeners(abort.signal, 'abort').length, 0); assert.equal(f.calls.filter(c => c.type === 'question-resolve').length, 0);
 });
+
+test('transport timeout persists only on its bound request, not collateral closure or delivered answers', async t => {
+  const f = await fixture(t, { timeoutMs: 5000 });
+  f.transport.userInputTimeoutMs = 200;
+  f.send(71); await until(() => f.records.size === 1);
+  f.transport.userInputTimeoutMs = 1000;
+  f.send('71', params('item/two')); await until(() => f.records.size === 2);
+  await until(async () => (await f.rows()).some(r => r.callbackTimeout));
+  const rows = await f.rows(), timed = rows.find(r => r.requestId === 71), collateral = rows.find(r => r.requestId === '71');
+  assert.equal(timed.callbackTimeout.source, 'transport');
+  assert.equal(Object.hasOwn(collateral, 'callbackTimeout'), false);
+  assert.equal(timed.resolutionObserved, false); assert.equal(f.writes.length, 0);
+});
+
+test('timeout during committed handoff retains exact private observation without delivering or settling', async t => {
+  const f = await fixture(t, { timeoutMs: 100 }), entered = deferred(), release = deferred(), saved = deferred();
+  const update = f.journal.update.bind(f.journal);
+  f.journal.update = async (key, patch) => {
+    if (patch.phase === 'handoff_unknown') { entered.resolve(); await release.promise; }
+    const result = await update(key, patch);
+    if (patch.callbackTimeout) saved.resolve();
+    return result;
+  };
+  f.setTake(async () => ({ state: 'response_unknown', answer: answer() }));
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: Date.now() });
+  try {
+    f.send(); await entered.promise;
+    const disconnected = new Promise(resolve => f.transport.once('disconnect', resolve));
+    t.mock.timers.tick(100); await disconnected;
+    release.resolve(); await saved.promise;
+  } finally { release.resolve(); t.mock.timers.reset(); }
+  const row = (await f.rows())[0];
+  assert.equal(row.phase, 'handoff_unknown'); assert.equal(row.callbackTimeout.source, 'binding');
+  assert.equal(f.writes.length, 0); assert.equal(row.resolutionObserved, false);
+  const report = await inspectCodexRecovery(f.dir);
+  assert.deepEqual(report.questions.waits, [{ ...row.wait, phase: 'handoff_unknown', callbackTimeout: row.callbackTimeout }]);
+  assert.equal(report.questions.unresolved, 1); assert.equal(report.resumeAllowed, false); assert.equal(report.sleepAllowed, false);
+  assert.doesNotMatch(JSON.stringify(report), /Private synthetic|Blue|questionId|connectionId/);
+});
+
+test('failed timeout-observation persistence is not retried or reported as durable', async t => {
+  const f = await fixture(t, { timeoutMs: 100 }), update = f.journal.update.bind(f.journal);
+  const waiting = deferred(), failed = deferred();
+  let attempts = 0;
+  f.journal.update = async (key, patch) => {
+    if (patch.callbackTimeout) { attempts++; failed.resolve(); throw new Error('PRIVATE disk failure'); }
+    const result = await update(key, patch);
+    if (patch.phase === 'waiting') waiting.resolve();
+    return result;
+  };
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: Date.now() });
+  try {
+    f.send(); await waiting.promise;
+    const disconnected = new Promise(resolve => f.transport.once('disconnect', resolve));
+    t.mock.timers.tick(100); await disconnected; await failed.promise;
+  } finally { t.mock.timers.reset(); }
+  assert.equal(attempts, 1); assert.equal(Object.hasOwn((await f.rows())[0], 'callbackTimeout'), false);
+  assert.equal(f.writes.length, 0); assert.equal(f.calls.filter(c => c.type === 'question-resolve').length, 0);
+});
+
 test('persisted callback deadline is capped by the original task, not by a fresh poll', async t => {
   const f = await fixture(t, { timeoutMs: 900000 });
   f.setTake(async () => ({ state: 'response_unknown', answer: answer() }));
   await f.binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 });
   const row = (await f.rows())[0];
+  assert.equal(Object.hasOwn(row, 'callbackTimeout'), false);
   assert.equal(row.wait.deadlineAt, f.claim.deadline_at);
   assert.ok(Date.parse(row.wait.deadlineAt) - Date.parse(row.wait.startedAt) <= 60000);
   f.notify(); await until(async () => (await f.rows())[0].phase === 'resolved');
@@ -226,6 +289,7 @@ for (const held of ['binding-read', 'journal', 'record']) test(`task deadline ab
       assert.deepEqual(calls, []);
     } else {
       assert.equal(row.wait.deadlineAt, claim.deadline_at);
+      assert.deepEqual(row.callbackTimeout, { source: 'binding', observedAt: claim.deadline_at });
       assert.equal(row.resolutionObserved, false); assert.notEqual(row.phase, 'resolved');
     }
   } finally { release.resolve(); binding.close(); t.mock.timers.reset(); await callback; }
@@ -268,6 +332,7 @@ test('binding read finishing one millisecond before expiry permits one answer an
     assert.deepEqual(calls[2].payload, { identity: claim.identity, question_id: row.questionId, connection_id: binding.connectionId });
     const final = [...rows.values()].find(row => row.questionId);
     assert.equal(final.phase, 'resolved'); assert.deepEqual(final.wait, row.wait);
+    assert.equal(Object.hasOwn(final, 'callbackTimeout'), false);
     await assert.rejects(binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 }));
     assert.equal(calls.length, 3);
   } finally { release.resolve(); binding.close(); t.mock.timers.reset(); }

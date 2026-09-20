@@ -81,6 +81,26 @@ reconciled cancellation and safe compute release remain unimplemented; existing
 inference deadlines may stop the callback earlier. No automatic retry or sleep
 is introduced. See [custody policy](NATIVE_QUESTION_CUSTODY.md).
 
+An owned private question row may additionally retain
+`callbackTimeout: {source: 'binding' | 'transport', observedAt}`. `binding`
+means the active host callback stopped after observing its frozen deadline;
+the timer rechecks that deadline before stopping. `transport` means that exact
+typed native request's transport timer fired. Connection failure also aborts
+other requests, but those collateral aborts receive no timeout attribution.
+Neither source is inferred from Worker expiry, dependency failure, disconnect,
+or an already-returned answer. Existing request, connection, task and native
+identity fields remain unchanged; no new binding is invented for failed admission.
+
+The callback stops immediately. One bounded journal update is serialized behind
+already-started admission or handoff work, including a handoff whose outcome is
+unknown. It does not retry a failed write, change custody phase, synthesize native
+resolution, or call the Worker. A crash, unowned initial record, failed or late I/O,
+or a competing callback stop can leave no marker: absence does not prove absence
+of timeout. A later native resolution may coexist with the historical marker.
+Offline inspection validates and projects only source/time alongside the wait
+clock and phase; it still refuses resume and sleep. This is partial host diagnostic
+evidence, not a complete timeout inventory or a recovery executor.
+
 Resolution is tracked separately as resolutionObserved. A matching typed requestId AND threadId aborts active answer delivery immediately and queues resolution behind the in-flight record/take operation. It can arrive before answer, during take, or after callback return. For resolution, original custody is used without requiring a still-running resolver result, future deadline, rootSettled=false, or running journal status: interruption can settle the root first. Exact journal thread/turn must still match, and Worker enforces the original lease. Successful Worker resolution saves phase resolved. Neither the notification nor this phase proves answer acceptance, RPC delivery, model consumption, or task settlement.
 
 Unknown control/journal failures stop further API operations for that request. A later native notification may persist resolutionObserved but does not retry an unknown record/take/resolve. Duplicates never retry a failed resolve. Local stale/live-admission rejection is distinguished from unknown I/O, so terminal status alone does not suppress an otherwise valid native resolution. Disconnect and timeout are never synthesized as native resolution.

@@ -43,7 +43,8 @@ state writes, hold releases or settlement decisions.
 It also scans exact `question_<64 lowercase hex>.json` records independently of
 the current dispatch, so missing service metadata cannot hide old question custody.
 Question output contains only total/unresolved/resolution-observed counts and phase
-counts, never question IDs, text, answers, native IDs or input hashes. `resolved`
+counts, plus optional validated wait clocks and timeout observations, never
+question IDs, text, answers, native IDs or input hashes. `resolved`
 means a journaled resolution, not acceptance or consumption. Every other phase,
 including `handoff_unknown`, emits `QUESTION_CUSTODY_UNRESOLVED`.
 Invalid question records make `questions.complete` false; scan limits or directory
@@ -51,6 +52,18 @@ errors emit `QUESTION_SCAN_INCOMPLETE`. Partial counts are not a complete invent
 Question scanning is bounded to 16384 directory entries, 4096 candidates and 16 KiB
 per question record. It validates exact fields and filename/custody hash binding;
 this checks local consistency, not authenticity or current Worker authority.
+
+Each timed question projection includes its immutable `startedAt`, `deadlineAt`
+and phase. An optional `callbackTimeout` contains only `source` and canonical UTC
+`observedAt`. A binding deadline stop cannot precede the recorded deadline; a
+transport timer observation may precede it, but neither can precede callback start.
+Unknown sources, extra fields or malformed clocks invalidate the question record.
+The marker belongs to the original private row's exact custody, not a newly inferred
+task. The diagnostic projection omits those question identities. Missing markers remain
+unknown: admission, journal I/O, competing stops and crashes can omit observations.
+This does not infer native timeout from Worker expiry, prove native termination,
+settle a handoff, or authorize answer replay. A resolved row may retain a historical
+timeout; resolution still does not prove answer consumption.
 
 The report includes service epoch/boot, current Worker run/attempt and adapter
 attempt ID, exact observed native root/child thread and turn IDs, command/MCP/spawn,

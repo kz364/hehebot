@@ -67,7 +67,23 @@ export class CodexQuestionBinding {
     Object.assign(this, { journal, control, resolveBinding, pollMs, timeoutMs, controlTimeoutMs, maxRequests });
     Object.defineProperty(this, 'connectionId', { value: randomUUID(), enumerable: true });
   }
-  #alive(e) { check(!this.#closed && !e.controller.signal.aborted && !e.resolutionObserved && Date.now() < e.deadline, 'QUESTION_ABORTED'); }
+  #alive(e) {
+    if (!this.#closed && !e.controller.signal.aborted && !e.resolutionObserved && Date.now() >= e.deadline) this.#timeout(e, 'binding');
+    check(!this.#closed && !e.controller.signal.aborted && !e.resolutionObserved && Date.now() < e.deadline, 'QUESTION_ABORTED');
+  }
+  #timeout(e, source) {
+    if (this.#closed || e.finished || e.controller.signal.aborted || e.resolutionObserved) return;
+    if (source === 'binding' && Date.now() < e.deadline) {
+      e.timer = setTimeout(() => this.#timeout(e, source), e.deadline - Date.now()); return;
+    }
+    const callbackTimeout = { source, observedAt: new Date().toISOString() };
+    e.controller.abort();
+    // Do not delay the cutoff for I/O. Serialize behind admission/handoff so an
+    // eventual owned row can retain the observation; failed writes stay unknown.
+    void this.#serial(e, async () => {
+      if (e.owned) await this.#save(e, { callbackTimeout });
+    }).catch(() => { e.blocked = true; });
+  }
   async #binding(e, live) {
     const b = live ? validateBinding(await bounded(Promise.resolve().then(() => this.resolveBinding({ threadId: e.params.threadId, turnId: e.params.turnId })), this.controlTimeoutMs)) : e.binding;
     if (e.binding) check(['run_id', 'attempt', 'attemptId', 'deadline_at'].every(k => b[k] === e.binding[k]) &&
@@ -79,7 +95,7 @@ export class CodexQuestionBinding {
         e.deadline = Math.min(e.deadline, Date.parse(b.deadline_at));
         this.#alive(e);
         clearTimeout(e.timer);
-        e.timer = setTimeout(() => e.controller.abort(), e.deadline - Date.now());
+        e.timer = setTimeout(() => this.#timeout(e, 'binding'), e.deadline - Date.now());
       }
     }
     const row = await bounded(this.journal.get(b.attemptId), this.controlTimeoutMs);
@@ -121,9 +137,12 @@ export class CodexQuestionBinding {
         callback_deadline_at: new Date(e.deadline).toISOString() };
       check(Buffer.byteLength(JSON.stringify(input)) <= 65536);
       this.#entries.set(requestId, e);
-      const abort = () => e.controller.abort();
+      const abort = () => {
+        if (signal.reason?.code === 'CODEX_USER_INPUT_TIMEOUT') this.#timeout(e, 'transport');
+        else e.controller.abort();
+      };
       if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true });
-      e.timer = setTimeout(abort, this.timeoutMs);
+      e.timer = setTimeout(() => this.#timeout(e, 'binding'), this.timeoutMs);
       e.initialized = this.#serial(e, async () => {
         this.#alive(e); e.binding = await this.#binding(e, true); this.#alive(e);
         // Host clock metadata, not native question text. Record the same frozen
@@ -160,7 +179,7 @@ export class CodexQuestionBinding {
           await pause(Math.max(1, Math.min(this.pollMs, e.deadline - Date.now())), e.controller.signal);
         }
       };
-      return run().catch(() => { throw error('QUESTION_CALLBACK_STOPPED'); }).finally(() => { clearTimeout(e.timer); signal.removeEventListener('abort', abort); });
+      return run().catch(() => { throw error('QUESTION_CALLBACK_STOPPED'); }).finally(() => { e.finished = true; clearTimeout(e.timer); signal.removeEventListener('abort', abort); });
     } catch { return Promise.reject(error('QUESTION_CALLBACK_REJECTED')); }
   };
   #payload(e) { return { identity: e.binding.identity, question_id: e.id, connection_id: this.connectionId }; }

@@ -116,7 +116,12 @@ export class CodexTransport extends EventEmitter {
         !['threadId', 'turnId', 'itemId'].every(key => typeof message.params[key] === 'string' && message.params[key].length > 0))) return this.fail('CODEX_USER_INPUT_INVALID_REQUEST');
     this.seenServerCalls.add(id);
     const controller = new AbortController();
-    const timer = setTimeout(() => this.fail(`${prefix}_OUTCOME_UNKNOWN`), userInput ? this.userInputTimeoutMs : this.timeoutMs);
+    const timer = setTimeout(() => {
+      // Only this timer's request is a timeout observation. fail() also aborts
+      // collateral callbacks, which must retain generic uncertainty instead.
+      if (userInput) controller.abort({ code: 'CODEX_USER_INPUT_TIMEOUT' });
+      this.fail(`${prefix}_OUTCOME_UNKNOWN`);
+    }, userInput ? this.userInputTimeoutMs : this.timeoutMs);
     this.serverCalls.set(id, { controller, timer, questionThreadId: userInput ? message.params.threadId : null });
     // Handler owns exact native identity/grant validation. Merely installing it
     // grants no command, file, network or approval capability. User-input handlers

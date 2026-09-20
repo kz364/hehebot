@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-21):** full credential-free verifier passes on local
+**Current checkpoint (2026-09-21):** host callback-timeout diagnostics and both
+preceding question-deadline slices pass the full credential-free verifier:
+backend1814/runtime620, HTTP/browser/native fixtures, warm/background shutdown,
+strict launcher2242 probes, all service modes and dry-run build. Focused85,
+typecheck and reference desktop16 pass separately. Local source-custody only;
+no push or production change. Exact timeout attribution is partial private
+evidence, not native settlement or restart permission. Remaining priority:
+supported checkpoint/recovery/termination contracts and selected-model memory
+constraints; external account/provider/device gates remain unchanged.
+
+**Earlier combined checkpoint:** full credential-free verifier passes on local
 `6a225a3`: backend1792/runtime615, native/browser fixtures, both warm/background
 shutdown modes, strict launcher, service modes and dry-run build. The earlier
 1ms-early backstop failure is retained in the implementation evidence; the
@@ -55,6 +65,17 @@ HTTP, native answer/cancel, Chromium and dry-run build pass. Pending and
 saved-but-undelivered desktop/narrow captures were inspected. This is Worker
 deadline policy, not host-observed timeout; post-handoff/never-recorded callbacks,
 native termination, checkpoint parking and safe recovery remain E01/E02.
+Host-observation follow-through is implemented locally: only an active binding's
+observed deadline stop or the exact transport request's timeout may add private
+`callbackTimeout` metadata. Collateral disconnects do not inherit that attribution;
+unbound admission creates no invented task record. Offline inspection preserves
+unknown handoff status and never grants resume/sleep. Runtime620 and typecheck
+pass; the first combined run exposed scheduler-sensitive new fixture assertions
+(runtime619/620). Deterministic timer-winner fixtures now pass focused85/typecheck;
+full credential-free verifier PID576909 exited0 with backend1814/runtime620 and
+all subsequent stages passing. Log `.local/question-timeout-integrated-final.log`,
+SHA256 `904eb1cf52ae4d2406c43167ea92a2ecb09f5919d63d8c1e7721d4adad9ea1ae`.
+Failed logs are retained. No new Worker timeout protocol or recovery authority.
 No additional approval is needed for these local checks; publication and live
 operations remain gated.
 Historical checkpoints below retain their original failures and restrictions;
@@ -891,6 +912,7 @@ These are useful foundations that should not be rebuilt simply because their ful
 - [x] New shared-resource locks require an unexpired attempt; held-lock replay and release preserve existing custody semantics. Evidence: `tests/lifecycle.test.ts`, three red/green task-state cases and exact deadline boundaries. A retained lock grants no connector authority and expiry does not release unresolved effects.
 - [x] Terminal owner cancellation checks previously queued follow-ups, delivering once after descendant settlement without steering unrelated work. Evidence: `tests/orchestration.test.ts`, waiting checkpoint and live-grandchild cases, plus retention fixtures. Native checkpoint/restart and full intent-aware E03 behavior remain unverified.
 - [x] Five-minute non-checkpointed service question callback ceiling, private wait deadline and matching Worker answerability cap. Worker pre-handoff cutoff now persists a restart-required reason with ordinary cancellation/grace and owner explanation. Evidence: question/service/inspection tests, exact alarm, native answer/cancel fixtures, HTTPS and inspected Chromium checks. Expired custody remains unresolved; post-handoff timeout proof, checkpoint parking and safe compute release remain E01/E02.
+- [x] Partial private host callback-timeout observations retain existing request/task identity and are validated by offline inspection. Exact transport timeout winner is distinguished from collateral abort; held handoff and owned-but-unrecorded work retain uncertainty. Evidence: deterministic binding/transport tests, real FileJournal handoff persistence and inspector tests; runtime620 and focused85/typecheck pass. Missing evidence does not prove no timeout; no Worker mutation, native termination, answer replay or safe-resume/sleep claim.
 - [x] Unsupported live native item boundaries trigger recovery rather than silently evading operation accounting. Evidence: `tests/runtime-codex-events.mjs`; complete supported coverage remains E01, and recovery does not prove native termination.
 - [x] Content-free plan-item lifetime/deadline projection and offline inspection, plus actual root Plan emission, unchanged clocks across native text deltas and accepted active Worker heartbeat under scripted loopback inference. Evidence: `scripts/test-codex-service.sh --plan` and synthetic event/operation/recovery fixtures. Native child Plan emission, held-stream expiry, rendering and full operation coverage remain E01/E04.
 

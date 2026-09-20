@@ -4,6 +4,51 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Host question timeout observation (2026-09-21): runtime adds optional private
+`callbackTimeout: {source, observedAt}` to an already-owned question row after an
+active binding observes its deadline or that exact transport request's timer fires.
+Numeric/string request IDs remain distinct; collateral connection aborts, dependency
+failures, successful callback returns and native resolution do not create timeout
+evidence. The observation queues behind in-flight journal/control work without
+delaying abort or retrying failed I/O. Unbound admission creates no task association.
+Offline inspection validates source/time against immutable wait clocks and retains
+unresolved handoff status, false resume/sleep permissions and content exclusions.
+No Worker RPC, expiry inference, phase transition, native settlement or replay.
+Missing markers remain unknown, including crash and failed/late journal writes;
+this is partial diagnostic coverage, not full human-wait recovery acceptance.
+
+Verification so far: six initial red discriminators (54/60 pass) retained in
+`.local/question-timeout-winner-red.log`. First focused implementation run had
+82/83 pass: the existing deadline check could stop before the timer and omit its
+observation. Routing that observed deadline stop through the same helper corrected
+it; final runtime620 and typecheck pass in `.local/question-timeout-winner-runtime.log`.
+Tests cover exact typed timeout winner versus collateral abort, held committed
+handoff with no native write, initial journal/control waits, unbound initial read,
+one failed marker-write attempt, successful answer one millisecond before expiry,
+and malformed/content-bearing inspector metadata. The first full verifier passed
+backend1814 but stopped at runtime619/620: a real-time held-handoff fixture assumed
+the binding timer always beat a competing bounded wait. A subsequent focused run
+exposed the same invalid assumption in the ordinary timeout test. Logs are retained
+in `.local/question-timeout-integrated.log` and `.local/question-timeout-deterministic.log`.
+The timer-winner and failed-write fixtures now use deterministic clocks with real
+FileJournal writes; ordinary real-time cleanup retains its original no-settlement
+checks without claiming every competing stop has timeout evidence. Focused85 and
+typecheck pass (`.local/question-timeout-deterministic-final.log`). Full verifier
+PID576909 exited0: backend1814/runtime620, HTTP/browser/native fixtures, warm and
+background normal/pending auto-stop, strict launcher2242 lock probes, all service
+modes and dry-run build pass. Warm pending backstop stopped at expiry+30001ms.
+Reference Electron shell16 also passes; this is not Mac acceptance. Host fixture
+paths `/etc/codex` and `/.sprite` are absent afterward. No live account/provider
+calls, deployment or production-gate changes. Full human-wait recovery, native
+termination coverage and safe restart/sleep remain open.
+
+Private evidence SHA256s:
+- `.local/question-timeout-integrated-final.log`: `904eb1cf52ae4d2406c43167ea92a2ecb09f5919d63d8c1e7721d4adad9ea1ae`.
+- `.local/question-timeout-integrated.log` (failed first combined run): `eb0041748c33ddd8684a3a5a823743dd71d2dd7071091bb0389bef5977be50a8`.
+- `.local/question-timeout-winner-red.log`: `a7dd33a804e779965247569e73bf6253143c7a154b321f3442f04eab8bc1af68`.
+- `.local/question-timeout-deterministic-final.log`: `9e10ddb254ab50826b8b5a969d0b4d7a0fdf48749b30c0fefde582f81f16e666`.
+- `.local/question-timeout-desktop.log`: `cd8dc010a3187677e1723f42db88a2725a718cb6345cf8e82d055dbb257b12ff`.
+
 Pre-handoff question cutoff (2026-09-21): watchdog records optional
 `restart_required_at` once for explicit elapsed callback declarations while
 pending/answered. Current lifecycle epoch/boot, attempt and native turn must match;
