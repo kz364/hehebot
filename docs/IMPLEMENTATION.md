@@ -4,6 +4,23 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Latest combined verification (2026-09-20), source
+11deb67817776d3be4775606c5f73f3d4dd48b24: FAILED, exit1 at normal Stage B
+auto-stop retirement. Log `.local/stage-b-final-combined.log`, SHA256
+c83ee88de94784dd5d83929366de6ec4bbb6b0882a4b6656d8f3a583e240fe0b.
+Backend1790/runtime585, crash readback, both warm stop modes and background
+browser/native passed before this failure; later steps were not executed.
+Frozen expiry 13:35:55.888Z; heartbeat401/production stop at 13:35:55.567Z;
+stopped report at .596Z. The immediate manager inspect refuses before expiry,
+so wake result is LAUNCH_REFUSED_OR_UNKNOWN, not RETIREMENT_REPORTED.
+Retained service journal is recovery/nativeStopped=true. A later read-only
+dual-lock `--inspect-locked` over the identical config/digest passes. No retirement
+was manually submitted, no replay or runtime/auth change made. The second recorded
+stop at .868Z is failure cleanup, not production stop evidence. This contradicts
+unconditional retirement acceptance for fractional-expiry normal runs; earlier
+targeted passes below do not close the finite wave. Preserve the failure rather
+than retrying to obtain a favorable sub-second schedule.
+
 F3 Stage B automatic-stop integration (2026-09-20): verified single-file patch
 SHA256 5481e845faca2281c2ebc50abc0c71e480cf80fd5b6984bc1a900f96d8bd03e0.
 Parent reviewed and ran both real-native modes. Normal production stop is

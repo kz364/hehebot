@@ -4,6 +4,28 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-20 Asia/Jakarta)
 
+Main T-01a0b925-c847-73b9-9713-e04b5f3b43d4 is now the sole user-facing
+project-owner, reporting directly to user (lifecycle revision3). ASK QUESTIONS
+HERE is retired/custody-transferred. Canonical uncommitted ledger:
+`.amp/coordination/hehebot-product.md`; two-hour recovery schedule preserved.
+No active descendants. Current combined verification on local11deb67 exited1:
+`.local/stage-b-final-combined.log`, SHA256
+c83ee88de94784dd5d83929366de6ec4bbb6b0882a4b6656d8f3a583e240fe0b.
+Native stopped321ms before fractional policy expiry (whole-second JWT401);
+immediate manager inspect refused before expiry. Later read-only inspection
+under both locks passes; no retirement replay or runtime fix made. Finite wave
+remains open despite earlier targeted passes. Backend1790/runtime585, crash,
+warm stop modes and Stage B browser passed; subsequent steps did not run.
+Next independently approved local implementation: real launcher/default entry,
+setpriv, dual locks, real floor/readback, pinned native, namespace-local Tasks
+socket and explicitly labelled supported-CLI loopback/catalog wrapper. No
+runtime/dependency patch or softened restrictions, no shared floor/socket writes.
+Native must remain non-root; exact entry/npm/native disappearance before free
+locks, expiry-owned stop, manager retirement/no replay, uncertainty retained.
+sudo -n and private mount namespace feasibility were checked, not implemented.
+Retain the fractional-expiry retirement defect rather than masking it. No live,
+push/deploy, containment/settlement/safe-resume/sleep acceptance is authorized.
+
 All dispatched background/stop/crash workers have returned and are integrated.
 Latest Stage B automatic-stop patch SHA256
 5481e845faca2281c2ebc50abc0c71e480cf80fd5b6984bc1a900f96d8bd03e0.
@@ -17,7 +39,7 @@ Logs `.local/background-auto-stop-{parent,pending-parent,contracts,typecheck}.lo
 Both modes added to verifier; last full1790/585 predates these test-only additions.
 No production/runtime/auth change, setpriv-launcher proof, live account evidence,
 recursive settlement, safe resume or sleep claim. No child is still assigned.
-Next: report integrated evidence and reconcile remaining scope with Hehebot owner.
+The latest failed combined result and approved next slice above supersede this checkpoint.
 This supersedes pending-assignment language in the historical entries below.
 
 Crash-readback worker returned; parent reviewed/integrated and reran it, then

@@ -12,6 +12,23 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
+**Latest integrated check: FAILED, finite wave remains open.** On local source
+`11deb67817776d3be4775606c5f73f3d4dd48b24`, `bash scripts/verify-codex.sh`
+exited 1 in the Stage B normal auto-stop fixture. Backend1790/runtime585,
+crash-readback, warm stop modes and Stage B browser/native passed first. Native
+stopped 321ms before the millisecond expiry after the whole-second JWT fence;
+immediate manager retirement inspection refused before expiry. Later read-only
+inspection of the same retained journal under both locks passes. This is not a
+full integrated pass, retirement, replay permission or F3 completion.
+Log `.local/stage-b-final-combined.log`, SHA256
+`c83ee88de94784dd5d83929366de6ec4bbb6b0882a4b6656d8f3a583e240fe0b`.
+The later Stage B pending mode and remaining service/build steps did not run in
+this invocation. Earlier targeted passes below remain valid but do not erase it.
+Next approved bounded wave: real launcher/default entry/setpriv/dual-lock/floor
+and namespace-local Tasks fixture, with an explicitly labelled supported-CLI
+loopback/catalog wrapper; no runtime patch, softened validation, host mounts or
+live actions. Preserve the fractional-expiry retirement gap separately.
+
 **Current checkpoint (2026-09-20):** the prior implementor wave has delivered.
 Stage B runtime is reviewed/integrated locally. Actual portal → signed Worker/SQLite
 → one pristine Codex 0.154.0 process passes the three-root browser/native fixture:
@@ -41,7 +58,7 @@ cleanup; new fixture and 121 related tests/typecheck pass. Added to verifier;
 the full combined result above predates this test-only addition. Evidence:
 `.local/crash-readback-{parent-final,contracts,typecheck}.log`.
 Electron reference-shell reinstall/tests also pass 16/16; not Mac acceptance.
-Next: reconcile remaining recovery/live-trial boundaries with the Hehebot owner;
+Next priority is the launcher slice and unresolved integrated timing gap above;
 local stop/readback is not safe resume, recursive settlement or sleep acceptance.
 No push, deployment, live account calls or production claim.
 
@@ -83,9 +100,11 @@ Evidence `.local/backup-restore-{parent,contracts,typecheck,future-clock}.log`.
 This advances F6/E10 only for application snapshots, not native/browser restoration
 or safe activation. All delivered stop/crash checks are also integrated.
 
-**Ownership and scheduling:** this thread is implementation workstream-owner,
-reporting to the Hehebot product owner. It owns local review, integration, combined
-verification and tracking; product priorities and external approvals remain above.
+**Ownership and scheduling:** Main is the single user-facing Hehebot project owner,
+reporting directly to the user and owning questions, decisions, planning,
+implementation, integration, verification, status and blockers. ASK QUESTIONS HERE
+is retired/custody-transferred. The canonical uncommitted product ledger is
+`.amp/coordination/hehebot-product.md`; external approvals still require the user.
 All workers have returned; no implementation descendants remain active. Their
 fixtures used exact local source-custody `6574cf4`, not origin/main.
 The uncommitted coordination ledger records ownership/lifecycle separately from
