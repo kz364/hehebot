@@ -4,6 +4,40 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Tokenizer harness parent review (2026-09-21, not integrated): the returned
+three-file bundle has SHA256
+`9cc4ad12cf1b8c8bfdcf6f7f41033cab2da8e1e225ffa53a251312864922cbaa`;
+its exact29d8806 prerequisite and scope were verified. Review found unbounded
+workerd/inspector operations and fixed failure filenames that overwrite prior
+evidence. The existing worker owns corrections, negative tests and a fresh
+delivery; no duplicate implementation or application dependency change.
+
+Parent independently ran the original in an isolated worktree with
+`timeout --signal=TERM --kill-after=15s 600s node scripts/test-memory-tokenizer.mjs`:
+exit0 in167757ms. All91 cases matched official tiktoken0.11.0 exact token IDs in
+Node and real workerd; corrupted expectation detected; real memory schema maxima
+and supplied one-over variants behaved correctly. Offline harness tests9/9 pass.
+Ready534ms, workerd corpus5362ms,1/10/100-record batches1533/14376/129786ms;
+used/total JS heap before31941552/34865152, after94784964/169439232 bytes.
+These are local wall-time and heap observations, not billed CPU, total isolate
+memory, worst-case bounds or deployed acceptance. No workerd processes or
+tokenizer temporary installations remained after the run.
+Log `.local/tokenizer-parent-original.log` SHA256
+`60038f3cd21d1f1605cf70784f93f7cb87963518d19a37c3ad96489769e6b2ac`;
+evidence `.local/tokenizer-parent-original.json` SHA256
+`48fd57d9fdcb8c5a1235419eee798d1d761d9249071ce4f0470befe807124ccd`.
+
+Adoption decision: do not place full-record tokenization into current admission
+transactions. `ControlCore.context()` selects all eligible memories and
+`LifecycleCore.claim()` rebuilds this context inside a SQLite transaction;
+`ExecutionBridge` serializes the full snapshot. The measured stress batch makes
+that direct integration unsuitable without bounded computation. A future design
+must preserve exact model/tokenizer and memory revision identity, explicit
+constraints, scope/expiry invalidation and disclosed summary/retrieval behavior.
+This is an implementation constraint, not a selected cache/precomputation policy
+or permission to truncate. Corrected harness acceptance and the connected budget
+design remain open; the previously verified application code is unchanged.
+
 Tokenizer provenance follow-through (2026-09-21, no adoption): official tiktoken
 tag0.11.0 resolves to [eedc8563](https://github.com/openai/tiktoken/tree/eedc856364506a9d4651645a0290eb0ba81e6935).
 Its [encoding definition](https://github.com/openai/tiktoken/blob/eedc856364506a9d4651645a0290eb0ba81e6935/tiktoken_ext/openai_public.py)

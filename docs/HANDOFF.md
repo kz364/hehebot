@@ -4,10 +4,18 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-21 Asia/Jakarta)
 
-E06 adoption evidence is active. A single GLM task-worker
-[owns the repeatable parity/load harness](https://ampcode.com/threads/T-01a0c19a-3b61-75be-a5d2-116dd0c753f4)
-on exact29d8806 (verified self-contained source bundle); parent owns source notices,
-adoption and integration. Worker will report directly; do not poll or duplicate it.
+E06 adoption evidence is active. The single GLM task-worker
+[owns harness review corrections](https://ampcode.com/threads/T-01a0c19a-3b61-75be-a5d2-116dd0c753f4).
+Original three-file delivery is preserved in the verified bundle and local review
+branch, not integrated. Parent found unbounded workerd/inspector waits and failure
+evidence overwritten on later runs; worker must fix and test both, then report
+directly. Do not poll or duplicate it. Parent independently ran the original under
+external600s containment:91/91 Node/workerd exact parity, negative control, schema
+boundaries and batches pass; offline9/9. The100-record stress batch took129.8s;
+this is not billed CPU or deployed acceptance. Logs/hashes in IMPLEMENTATION.md.
+Do not insert full-record tokenization into the existing claim transaction;
+bounded computation and connected summary/retrieval semantics remain unresolved.
+Parent owns adoption and integration; application code and dependencies unchanged.
 Parent verified the candidate source ranks match official o200k_base bytes and the
 hash pinned in tiktoken0.11.0; candidate tarball SRI and both MIT notices verified.
 Full candidate tree/archive exposes no separate rank notice; retain both complete
