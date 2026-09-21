@@ -4,6 +4,30 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Automatic retry reconstruction contract (2026-09-21): two new cases in
+`tests/lifecycle.test.ts` queue a transient root retry, record late child/grandchild
+observations, finish the direct child, then reconstruct Store/ControlCore/LifecycleCore
+over the same SQLite database. A running grandchild or restored terminal grandchild
+with an unknown effect blocks the next root claim. Exact old result replay preserves
+the queued state, checkpoint, attempts, effect evidence and native ancestry.
+An unrelated queued task still claims/completes; settling the running grandchild
+then permits root attempt2 with its distinct submission key and original checkpoint.
+The unknown-effect case remains blocked; no reconciliation outcome is invented.
+
+Mutation check: temporarily omitting recursive descendants from the existing SQL
+predicate caused both cases to fail at the first forbidden claim. Production source
+was restored byte-for-byte and remains unchanged. Final command:
+`npm test -- tests/lifecycle.test.ts tests/recovery.test.ts tests/orchestration.test.ts tests/execution-bridge.test.ts`
+passed126 tests; `npm run typecheck` passed. Final log
+`.local/retry-reconstruction-final.log` SHA256
+`3f72d15ac117d89bafb29418bf7a1ecb8ee46a3ea074af84f12933987b0ee600`;
+intentional failed mutation log `.local/retry-reconstruction-mutant.log` SHA256
+`3d59db5c4ec82a1eac987fe83feb2b570807ec0cdd03ae44ba64440fb2cc5b61`.
+This adds contract coverage, not new recovery behavior. Object reconstruction is
+not disk reopen, native process recovery, provider containment, checkpoint restoration
+or permission to resume/sleep. Full combined verification was not repeated for this
+test-only change; the last application checkpoint remains separate below.
+
 Tokenizer harness parent review (2026-09-21, not integrated): the returned
 three-file bundle has SHA256
 `9cc4ad12cf1b8c8bfdcf6f7f41033cab2da8e1e225ffa53a251312864922cbaa`;

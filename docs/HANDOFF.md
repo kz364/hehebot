@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-21 Asia/Jakarta)
 
+Scheduled independent unit: automatic-retry reconstruction now has two regression
+cases for late nested custody (running grandchild versus terminal metadata with an
+unknown effect). Both block root attempt advancement while unrelated work proceeds;
+old receipts/checkpoint/ancestry remain intact. Related126 tests and typecheck pass;
+temporarily removing SQL recursion fails both tests, then production source was
+restored unchanged. This is same-database object reconstruction, not native recovery
+or restored-checkpoint acceptance. Logs/hashes are in IMPLEMENTATION.md. No local
+check remains active. Existing two-hour schedule was reread and remains enabled.
+
 E06 adoption evidence is active. The single GLM task-worker
 [owns harness review corrections](https://ampcode.com/threads/T-01a0c19a-3b61-75be-a5d2-116dd0c753f4).
 Original three-file delivery is preserved in the verified bundle and local review

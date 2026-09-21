@@ -4,6 +4,8 @@ import { LifecycleCore, type Identity, type HeartbeatOperation } from '../src/co
 import { NativeTaskLedger } from '../src/core/native-tasks';
 import { ResourceLedger } from '../src/core/resources';
 import { EffectLedger } from '../src/core/effects';
+import { ControlCore } from '../src/core/control';
+import { Store } from '../src/core/store';
 import { FakeProvider, type RuntimeRef } from '../src/providers';
 import { fixture, bot } from './helpers';
 let f: ReturnType<typeof fixture>, life: LifecycleCore, identity: Identity;
@@ -237,6 +239,52 @@ describe('executor leases and attempts', () => {
     expect(f.store.run(root.id).current_attempt).toBe(1);
     life.complete(identity, child.id, 1, { status: 'completed', text: '' });
     expect(life.claim(identity)?.run).toMatchObject({ id: root.id, current_attempt: 2 });
+  });
+  it.each(['running', 'unknown-effect'] as const)('reconstructed automatic retry retains late grandchild %s custody without blocking unrelated work', retained => {
+    const root = claimed().run;
+    life.submitted(identity, root.id, 1, 'automatic-root');
+    const result = { status: 'failed' as const, text: 'Retryable read', error_code: 'TEMPORARY_UNAVAILABLE', checkpoint: { cursor: 43 } };
+    life.complete(identity, root.id, 1, result);
+    f.setNow('2026-09-10T00:00:10.000Z'); life.retryDue();
+    expect(f.store.run(root.id)).toMatchObject({ status: 'queued', current_attempt: 1 });
+    expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+    // Native observations may arrive after the timer queues the next attempt.
+    const native = new NativeTaskLedger(f.store, f.core, life);
+    const spawn = (parent: string, ref: string) => native.register(identity, { parent_run_id: parent,
+      parent_attempt: 1, persona_id: bot, native_run_ref: ref, native_session_key: `thread-${ref}`, title: ref }, true);
+    const child = spawn(root.id, 'automatic-child'), grandchild = spawn(child.id, 'automatic-grandchild');
+    life.complete(identity, child.id, 1, { status: 'completed', text: '' });
+    if (retained === 'unknown-effect') {
+      life.complete(identity, grandchild.id, 1, { status: 'completed', text: '' });
+      unknownEffect(grandchild.id); // Restored terminal metadata cannot hide unresolved effect evidence.
+    }
+    const links = f.db.all('SELECT * FROM native_task_links ORDER BY run_id');
+    const attempts = f.db.all('SELECT * FROM attempts ORDER BY run_id,attempt');
+    const effects = f.db.all('SELECT * FROM effects');
+    // Reconstruct objects over the same SQLite state; this is not process-crash recovery.
+    const store = new Store(f.db), core = new ControlCore(store, f.core.options);
+    const restored = new LifecycleCore(store, core);
+    restored.retryDue();
+    restored.complete(identity, root.id, 1, result); // Exact old receipt must not undo the queued retry.
+    expect(restored.claim(identity)).toBeNull();
+    expect(store.run(root.id)).toMatchObject({ status: 'queued', current_attempt: 1, checkpoint_json: JSON.stringify(result.checkpoint) });
+    expect(f.db.all('SELECT * FROM attempts ORDER BY run_id,attempt')).toEqual(attempts);
+    expect(f.db.all('SELECT * FROM native_task_links ORDER BY run_id')).toEqual(links);
+    expect(f.db.all('SELECT * FROM effects')).toEqual(effects);
+    f.setNow('2026-09-10T00:00:11.000Z');
+    const independent = enqueue();
+    expect(restored.claim(identity)?.run.id).toBe(independent);
+    restored.complete(identity, independent, 1, { status: 'completed', text: '' });
+    expect(store.run(root.id).current_attempt).toBe(1);
+    expect(restored.claim(identity)).toBeNull();
+    if (retained === 'running') {
+      restored.complete(identity, grandchild.id, 1, { status: 'completed', text: '' });
+      const next = restored.claim(identity)!;
+      expect(next.run).toMatchObject({ id: root.id, current_attempt: 2, checkpoint_json: JSON.stringify(result.checkpoint) });
+      expect(next.submission_key).toBe(`${root.id}:2`);
+      expect(f.db.all('SELECT * FROM attempts WHERE run_id=? AND attempt=1', root.id)).toEqual(attempts.filter(row => (row as {run_id:string}).run_id === root.id));
+      expect(f.db.all('SELECT * FROM native_task_links ORDER BY run_id')).toEqual(links);
+    }
   });
   it.each(['attempt','operation','lock','effect'] as const)('terminal descendant status does not hide a retained %s during retry admission', kind => {
     const root = claimed().run;

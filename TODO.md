@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-21):** selected-model claim identity and optional
+**Current checkpoint (2026-09-21):** automatic-retry reconstruction contract verified
+with two new SQLite regression cases: a late running grandchild or retained unknown
+effect fences the next root attempt without hiding independent work. Old receipts,
+native ancestry and checkpoint identity survive object reconstruction; only actual
+settlement in the running case permits attempt2. Removing recursive family checking
+fails both tests; restored production source is unchanged. Related126 tests and
+typecheck pass. This is not process-crash/native restoration or full E02 acceptance.
+Tokenizer corrections remain with their existing worker; next is corrected-delivery
+review and independent verification, without polling or duplicate ownership.
+
+**Latest application checkpoint:** selected-model claim identity and optional
 owner-declared memory constraint metadata pass the full credential-free verifier:
 backend1820/runtime620, HTTP/browser/native fixtures, warm/background shutdown,
 strict launcher2210 probes, all service modes, typecheck and dry-run build. Reference
