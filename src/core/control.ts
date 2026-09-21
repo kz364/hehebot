@@ -280,7 +280,11 @@ export class ControlCore {
     if(p.scope.kind!=='global')this.store.get(p.scope.id!,p.scope.kind);
     requireThat(this.store.db.all('SELECT id FROM events WHERE id=? UNION SELECT id FROM event_tombstones WHERE id=?',p.source_event_id,p.source_event_id).length,'INVALID_INPUT','Memory must reference an existing source event.',422);
     if(p.expires_at)requireThat(Date.parse(p.expires_at)>Date.parse(now),'INVALID_INPUT','Memory expiry must be in the future.',422);
-    const revision=this.store.put(p.id,'memory',p,p.expected_revision,owner,now,p.source_event_id);
+    // Older editors omit this field. Preserve a declaration from the exact
+    // current revision; clearing it requires an explicit false, not omission.
+    const prior=p.explicit_constraint===undefined?this.store.db.all<{constraint_flag:number|null}>("SELECT json_extract(body_json,'$.explicit_constraint') AS constraint_flag FROM objects WHERE id=? AND kind='memory' AND deleted_at IS NULL AND revision=?",p.id,p.expected_revision)[0]?.constraint_flag:undefined;
+    const body=prior===0||prior===1?{...p,explicit_constraint:prior===1}:p;
+    const revision=this.store.put(p.id,'memory',body,p.expected_revision,owner,now,p.source_event_id);
     this.store.event(this.options.uuid(),null,'memory.updated',owner,commandId,{id:p.id,revision,scope:p.scope},now);return p.id;
    }
    case 'memory.delete': {

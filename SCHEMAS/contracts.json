@@ -689,6 +689,9 @@
                 "ordinary",
                 "sensitive"
               ]
+            },
+            "explicit_constraint": {
+              "type": "boolean"
             }
           },
           "required": [

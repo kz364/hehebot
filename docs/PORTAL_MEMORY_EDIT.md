@@ -6,6 +6,12 @@ explicit scope change. New memories retain ordinary/no-expiry defaults and use
 only a user message belonging to the selected conversation. Missing existing
 provenance never falls back to a recent message.
 
+The optional owner-API `explicit_constraint` declaration is not editable in this
+dialog. The server preserves it when this older payload omits the field, including
+text/sharing edits. Clearing requires an explicit boolean false with the current
+memory revision through the owner API. This metadata does not grant tool authority
+or bypass scope, expiry or forgetting; token-budget protection is not implemented.
+
 The dialog binds its original persona, persona revision, memory revision and scope.
 Known offline, removed/changed memory, removed/archived/changed persona, and navigation
 (including away and back) prevent submission. Server revision checks remain the

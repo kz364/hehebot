@@ -4,6 +4,23 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-21 Asia/Jakarta)
 
+Current checkpoint: selected-model declaration (fa223b0) plus explicit-constraint
+representation pass the full verifier, PID631959 exit0. Backend1820/runtime620,
+HTTP/browser/native, automatic shutdown, strict launcher2210 probes, all service
+modes, typecheck and build pass; desktop16 separately. Combined log
+`.local/e06-prerequisites-integrated.log` SHA256
+dd19afe6d31289ff54a66de49e506fa3fdb3d81e2359f3540c8cf96f9e57b8ea.
+Owner API flag preserves omission through legacy edits; clearing requires explicit
+false/current revision. No scope/expiry/permission/budget change. No active child
+or check, no lost delivery, no workerd or host launcher fixture residue.
+Tokenizer candidates were probed only in disposable installs (now removed); no repo
+dependency added. gpt-tokenizer4.0.0 has lower measured Node memory than js-tiktoken
+1.0.21; six samples match official tiktoken0.11.0, including in local workerd with
+32.5MB used JS heap. Realistic context-load/CPU headroom, broader parity and embedded
+rank notices remain adoption gates. Continue that connected E06 contract without
+claiming budgets/summary/retrieval acceptance; existing two-hour schedule enabled.
+External gates unchanged. Detailed logs and limitations in IMPLEMENTATION.md.
+
 Selected-model declaration is locally verified on aba3f15: authenticated claim
 carries host persona_models; Worker records selected_model in rebuilt context;
 bridge captures config before awaits and rejects present returned mismatches before
@@ -11,8 +28,8 @@ native submission. Backend1817/runtime620, strengthened focused33, final typeche
 and default/text-only/background native service fixtures pass. Logs and limits in
 IMPLEMENTATION.md. Interrupted work and child returns reconciled: no missing
 delivery, no re-dispatch, no active child. This is identity only; enqueue/legacy
-contexts remain undeclared. Next connected unit: explicit constraint representation,
-then real tokenizer/bundle sizing and budget semantics. Do not claim E06 acceptance
+contexts remain undeclared. Constraint representation is now verified above;
+tokenizer adoption and budget semantics remain open. Do not claim E06 acceptance
 or infer eligibility from model names. Existing two-hour recovery schedule enabled.
 
 Latest bounded unit on0c5a566 is fixture/documentation only: real pinned Codex

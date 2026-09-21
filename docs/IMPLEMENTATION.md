@@ -4,6 +4,91 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Explicit-constraint representation (2026-09-21, locally verified): owner
+`memory.put` accepts optional boolean `explicit_constraint`. Missing fields retain
+an existing boolean from the exact live revision; explicit false clears it under
+ordinary optimistic revision checks. Legacy records remain unchanged in shape.
+Effective values are retained in object revisions without rewriting command payloads.
+The flag describes the owner's memory constraint; it grants no tool/action authority
+and does not bypass scope, expiry, deletion, restricted-context or model-write fences.
+The portal still edits only text/sharing; its omitted field is preserved server-side.
+Declaration/clearing is currently an owner API surface, not a new portal control.
+There is no classifier or inference from imported text. No budgeting/summary logic
+exists yet; the flag alone does not satisfy the no-silent-constraint-loss requirement.
+
+Focused46/typecheck pass (`.local/memory-constraints-focused.log`); final focused3
+adds model-write denial (`.local/memory-constraints-final-focused.log`). Initial
+red log has two missing-contract failures and one incorrect test expectation for
+schema rejection (throws before receipt); that expectation was corrected rather
+than changing ingress behavior. Combined verifier PID631959 exited0:
+backend1820/runtime620, HTTP/browser/native fixtures, warm/background automatic
+shutdown, strict launcher2210 lock probes, every service mode, typecheck and dry-run
+build pass. Log `.local/e06-prerequisites-integrated.log`, SHA256
+`dd19afe6d31289ff54a66de49e506fa3fdb3d81e2359f3540c8cf96f9e57b8ea`.
+Reference desktop16 passes in `.local/e06-desktop.log`, SHA256
+`5ae55c8bb5c0ea450c79e8cd7ed2d5ea546bdccd8ecc47b75d2b4c9a61264b0d`.
+Real HTTP fixture passes31 checks including owner declaration and preservation on
+a legacy text edit, with canonical readback. No workerd process or launcher host
+fixture paths remain. Production flags remain false; no push, deploy or live calls.
+
+Tokenizer adoption remains unaccepted. Public source inspection identifies
+`js-tiktoken@1.0.21` as dqbd's port, not an official OpenAI JS package; npm gitHead
+is `4c8b748e07992c00386f3180af5c574b27b65139` in dqbd/tiktoken. Its MIT notice and
+base64-js1.5.1's MIT notice must be retained if adopted (the js-tiktoken npm artifact
+does not include a LICENSE file). Narrow lite/o200k_base imports need no runtime
+network/fs/WASM. Untrusted strings need `encode(text, [], [])` to treat special-token
+literals as ordinary text. OpenAI's current gpt-5 prefix mapping selects o200k_base,
+not model eligibility; js-tiktoken's model-name helper does not cover arbitrary
+future GPT-5 suffixes. Unicode/regex parity still needs pinned upstream vectors.
+Disposable esbuild probe with SQL text loader: current Worker2809443 bytes versus
+candidate5144693; gzip313252 versus1458844. This is not Wrangler deployment sizing.
+Node constructor probe765ms, heap delta99375936 bytes/RSS delta174780416 bytes,
+not an isolate memory measurement. Cloudflare's current limits page lists128MB
+per isolate and1s startup; memory/cold-start headroom needs real Worker validation
+before adoption. Logs `.local/tokenizer-bundle-sizing.log` and
+`.local/tokenizer-sizing-probe.json`; no repository dependency added. Initial
+esbuild attempt lacked the existing SQL loader and failed; no result was claimed.
+Sources: [dqbd package source](https://github.com/dqbd/tiktoken/tree/4c8b748e07992c00386f3180af5c574b27b65139/js),
+[OpenAI model mapping](https://github.com/openai/tiktoken/blob/main/tiktoken/model.py),
+[OpenAI rank definition](https://github.com/openai/tiktoken/blob/main/tiktoken_ext/openai_public.py),
+[Cloudflare limits](https://developers.cloudflare.com/workers/platform/limits/).
+The main-branch mapping links are research references, not an adopted immutable pin.
+
+Alternative disposable probe: `gpt-tokenizer@4.0.0`, npm gitHead
+[`fb04ebca`](https://github.com/niieani/gpt-tokenizer/tree/fb04ebca53f662200e737caefe9a5ef372a5e41a),
+MIT copyright2023–2024 Bazyli Brzoska, no runtime dependencies. Narrow
+`encoding/o200k_base` import with `setMergeCacheSize(0)` and empty allowed/disallowed
+special-token sets took152ms for import plus six encodings, heap delta31670144/RSS
+70848512 bytes in Node. Full Worker esbuild candidate6223184 bytes/gzip1469583.
+The six multilingual/special-literal/surrogate samples agree with js-tiktoken;
+cross-port agreement is not authoritative parity. Measurement boundaries differ
+(js-tiktoken's figure counts constructor only), and neither is a Worker memory test.
+Logs `.local/tokenizer-alt-sizing-probe.json` and `.local/tokenizer-alt-bundle-sizing.log`.
+Source inspection finds pure JS embedded ranks, no runtime network/fs/WASM, but
+eager reverse-map allocation remains; disabling the default100000-entry merge cache
+does not avoid that. Before adoption: actual Worker memory/startup measurement,
+pinned official tiktoken differential vectors, and explicit embedded-rank provenance
+and notices (package MIT alone is not a completed rank-data license review).
+Both disposable installations were removed; repository dependencies are unchanged.
+Official reference check via `uv run --no-project --with tiktoken==0.11.0` passes
+exact token IDs for all six samples with `o200k_base` and disallowed_special empty
+(`.local/tokenizer-official-vectors.log`). This covers English, Indonesian, Chinese,
+special-token literals, emoji/combining marks/CRLF and a lone surrogate. It is not
+complete parity or a Worker execution test; no project Python dependency was added.
+
+Follow-up local workerd spike with the full application module bundled and a
+probe-only fetch handler passes the same six exact-reference vectors. Named user
+Worker inspector reports used heap32496344, total heap35028992,
+embedder heap386904 and backing storage680893 bytes. Process/readiness wall
+time421ms; six encodings11ms. This is not total isolate memory, deployed startup
+CPU, free-plan CPU acceptance or realistic multi-record context load. No DO/data
+path or provider route ran. Miniflare was disposed and its disposable installation
+removed. Log `.local/tokenizer-workerd-spike-verified.log`; preceding failures
+(`-first.log`, `-final.log`) retain an obsolete Miniflare constructor shape and an
+inspector ws→http listing correction, not tokenizer failures. Actual package
+adoption still needs rank provenance/notices, broader vectors and worst-case
+context-load headroom; there is no repository dependency or deployment change.
+
 Selected-model declaration prerequisite (2026-09-21): authenticated `claim` accepts
 optional `persona_models` (UUID keys, at most256 entries, existing opaque model-name
 syntax). Worker selects the claimed persona's exact model, fails atomically on a

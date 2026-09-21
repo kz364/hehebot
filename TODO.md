@@ -12,15 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-21):** host callback-timeout diagnostics and both
-preceding question-deadline slices pass the full credential-free verifier:
-backend1814/runtime620, HTTP/browser/native fixtures, warm/background shutdown,
-strict launcher2242 probes, all service modes and dry-run build. Focused85,
-typecheck and reference desktop16 pass separately. Local source-custody only;
-no push or production change. Exact timeout attribution is partial private
-evidence, not native settlement or restart permission. Remaining priority:
-supported checkpoint/recovery/termination contracts and selected-model memory
-constraints; external account/provider/device gates remain unchanged.
+**Current checkpoint (2026-09-21):** selected-model claim identity and optional
+owner-declared memory constraint metadata pass the full credential-free verifier:
+backend1820/runtime620, HTTP/browser/native fixtures, warm/background shutdown,
+strict launcher2210 probes, all service modes, typecheck and dry-run build. Reference
+desktop16 passes separately. Log `.local/e06-prerequisites-integrated.log`, SHA256
+`dd19afe6d31289ff54a66de49e506fa3fdb3d81e2359f3540c8cf96f9e57b8ea`.
+No lost child delivery or interrupted edit; no duplicate ownership or active check.
+Local source-custody only, no push or production change. Memory budgets, summaries,
+retrieval and full recovery/termination acceptance remain open. Next: tokenizer
+adoption gates and connected budget/constraint behavior; external gates unchanged.
 
 **Latest bounded follow-through:** real native cold-question fixture passes18
 assertions: abrupt process loss, exact interrupted-turn readback, zero recreated
@@ -36,9 +37,18 @@ the captured selection and rejects a returned mismatch. Backend1817/runtime620,
 focused33, typecheck and real service default/text-only/background fixtures pass.
 Interrupted edits and returned deliveries were reconciled; nothing was lost or
 needs duplicate dispatch. Local only. This is model identity, not token budgets:
-enqueue snapshots and legacy claims have no declaration. Next: explicit constraint
-representation, then pinned tokenizer/bundle-size and connected budget behavior.
+enqueue snapshots and legacy claims have no declaration. Constraint representation
+is verified below; pinned tokenizer and connected budget behavior remain next.
 Summaries, retrieval, relevance, recovery and all external gates remain open.
+
+**Constraint prerequisite verified:** optional owner-declared `explicit_constraint` metadata is
+implemented locally. Omitted-field edits preserve the exact current declaration;
+only explicit revision-checked false clears it. Scope/expiry/deletion and model
+mutation denial remain unchanged. Focused46/typecheck and the full combined verifier
+pass, including31 real HTTP checks with preservation/readback. No constraint budget
+protection is claimed. Disposable gpt-tokenizer4.0.0 local-workerd spike passes six
+official tiktoken0.11.0 vectors with32.5MB used JS heap; realistic load/CPU, broader
+parity and rank-data notices remain adoption gates. No tokenizer dependency added.
 
 **Earlier combined checkpoint:** full credential-free verifier passes on local
 `6a225a3`: backend1792/runtime615, native/browser fixtures, both warm/background
@@ -946,7 +956,7 @@ Order is dependency-oriented, not a promise to complete an external gate before 
 | [ ] | **E03 — Partial** | Keep coordinator responsive during background work; resolve status/new-task/ambiguous-steer/deferred-follow-up intent; independent admission, saturation and exact cancellation. Pass O01–O09, including two-task isolation and managed refresh ownership. | Synthetic routing/concurrency work now; model judgment and refresh require account access. |
 | [ ] | **E04 — Partial** | Finish quiet streaming/reconnect, approvals and attention, conversation search, attachments/previews/downloads, replies/reactions, stable references/mentions, read/unread, notification preferences and appearance. Verify desktop/mobile/keyboard/accessibility, stale/offline states and cross-bot isolation. | Most UI work is credential-free; push permissions/delivery and some device checks are external. |
 | [ ] | **E05 — Partial** | Complete teach-from-correction skill authoring, update-before-duplicate, review/diff/rollback, supporting-file policy and safe tests. Complete natural-language routine lifecycle, preflight, run history and execution-versus-delivery failure handling; evaluate the 20-enabled-routine cap with load/cost evidence. | Local contracts/UI first; actual model use and connector effects later. |
-| [ ] | **E06 — Partial** | Finish scoped memory inspection/search/correction/deletion and bounded attributed bot/group communication. Add selected-model tokenizer budgets (global directives ≤4,000 tokens, retrieved memory ≤8,000), stable relevance/ID ordering, versioned summaries/pointers, disclosed truncation and targeted retrieval without silently dropping explicit constraints (SPEC §9.3). Current context capture includes all eligible memories; it does not implement these budgets. Verify native transcript/search/filesystem scope isolation, private facts excluded from shared procedures, zero-inference/wake publication, and closed-client discussion continuity. | Context packaging, isolation and zero-call fixtures are credential-free; model judgment and authenticated native retrieval validation later. |
+| [ ] | **E06 — Partial** | Finish scoped memory inspection/search/correction/deletion and bounded attributed bot/group communication. Add selected-model tokenizer budgets (global directives ≤4,000 tokens, retrieved memory ≤8,000), stable relevance/ID ordering, versioned summaries/pointers, disclosed truncation and targeted retrieval without silently dropping explicit constraints (SPEC §9.3). Authenticated claim model identity and owner-declared constraint metadata are verified prerequisites; current context capture still includes all eligible memories and does not implement budgets. Verify native transcript/search/filesystem scope isolation, private facts excluded from shared procedures, zero-inference/wake publication, and closed-client discussion continuity. | Context packaging, isolation and zero-call fixtures are credential-free; model judgment and authenticated native retrieval validation later. |
 | [ ] | **E07 — Unverified** | Complete remote browser/computer tool integration, authenticated view-only/control separation, locks, safe credential handoff, stale-frame rejection and reconnect. Exercise synthetic multistep forms, files/uploads/downloads and uncertain mutations without replay. | Linux fixtures now; personal browser accounts and real Mac permissions later. |
 | [ ] | **E08 — Not implemented** | Opt-in visible demonstration capture → reviewed skill → safe test, excluding microphone audio/secrets and never treating captured actions as authorization. | Credential-free synthetic demonstration possible; real device capture needs hardware. |
 | [ ] | **E09 — Partial** | Connector readiness catalog: distinguish advertised, installed, callable and individually authorized operations; named gaps and per-tool restrictions. Add curated discovery/install/enable/disable and packaged-skill workflows through supported surfaces; catalog metadata alone is insufficient and production app-server plugin installation remains unsupported (UX14). Complete migration workflows, provenance/watermarks/dedupe, flight hold/restore, no-send rules and scoped traveler handling. | Catalog/policy/install fixtures now; actual Google/WhatsApp/Messages/traveler data, supported account installation and adopted mappings are external. |

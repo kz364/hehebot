@@ -36,6 +36,10 @@ try{
  const state=await get('/v1/state');assert.equal(state.runs.length,1);assert.equal(state.runs[0].status,'waiting');assert.equal(state.summary.phase,'STOPPED');
  const history=await get(`/v1/conversations/${bot}/events`);const source=history.events.find(x=>x.type==='message.user').id;
  const memory=await send('memory.put',{id:crypto.randomUUID(),expected_revision:0,scope:{kind:'global',id:null},text:'Prefer concise morning briefings.',source_event_id:source,expires_at:null,sensitivity:'ordinary'});assert.equal(memory.value.status,'applied');checks++;
+ const originalMemory=(await get('/v1/state')).objects.find(x=>x.id===memory.value.resource_id);
+ const declared=await send('memory.put',{...originalMemory.body,expected_revision:1,explicit_constraint:true});assert.equal(declared.value.status,'applied');checks++;
+ const legacyEdit=await send('memory.put',{...originalMemory.body,expected_revision:2,text:'Never send a morning briefing without approval.'});assert.equal(legacyEdit.value.status,'applied');checks++;
+ const retained=(await get('/v1/state')).objects.find(x=>x.id===memory.value.resource_id);assert.equal(retained.revision,3);assert.equal(retained.body.explicit_constraint,true);assert.equal(retained.body.text,'Never send a morning briefing without approval.');
  const routine={id:crypto.randomUUID(),expected_revision:0,persona_id:bot,name:'Morning briefing',instructions:'Summarize the day. Do not send messages.',schedule:{cron:'0 8 * * 1-5',timezone:'Asia/Jakarta'},trigger_source_id:null,enabled:true,policy:{misfire:'coalesce',overlap:'queue_one',max_replay:1,max_lateness_seconds:86400},action_policy_ids:[]};
  const saved=await send('routine.put',routine);assert.equal(saved.value.status,'applied');checks++;
  const invalid=await send('routine.put',{...routine,expected_revision:1,schedule:{...routine.schedule,cron:'* * * * *'}});assert.equal(invalid.value.status,'rejected');assert.equal(invalid.value.error.code,'INVALID_INPUT');checks++;
