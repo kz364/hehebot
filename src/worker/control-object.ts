@@ -336,7 +336,7 @@ export class PersonalControl extends DurableObject<Env> {
    }
    case 'boot':result=this.lifecycle.registerBoot(command.payload.boot_id);break;
    case 'ready':this.lifecycle.ready(command.payload.identity);break;
-   case 'claim':result=this.lifecycle.claim(command.payload.identity);break;
+   case 'claim':result=this.lifecycle.claim(command.payload.identity,command.payload.persona_models);break;
    case 'heartbeat':result=this.lifecycle.heartbeat(command.payload.identity,command.payload.operations);break;
    case 'submitted':this.lifecycle.submitted(command.payload.identity,command.payload.run_id,command.payload.attempt,command.payload.native_ref);break;
    case 'coordinator-release':{

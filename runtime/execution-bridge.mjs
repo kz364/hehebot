@@ -67,6 +67,10 @@ export class ExecutionBridge {
     this.#busy = true;
     try {
       if (this.native.admissionReadiness().allowed !== true) fail('COMPATIBILITY_GATE_BLOCKED');
+      // Capture host configuration before any await. The same selection must
+      // reach both Worker custody and native submission for this attempt.
+      const personas = structuredClone(this.personas);
+      const persona_models = Object.fromEntries(Object.entries(personas).map(([id, persona]) => [id, persona.model]));
       const prior = await this.journal.get(this.cursor);
       if (prior && !['complete', 'released'].includes(prior.phase)) return prior;
       if (prior?.phase === 'released' && !prior.families?.find(row => row.attemptId === prior.attemptId)?.coordinatorRelease?.acknowledged) return prior;
@@ -75,7 +79,7 @@ export class ExecutionBridge {
       if (prior) await this.journal.update(this.cursor, { phase: 'claim_unknown', claim: null, attemptId: null, nativeRunId: null, result: null });
       else await this.journal.putIfAbsent(this.cursor, { phase: 'claim_unknown', identity: this.identity });
       let claim;
-      try { claim = await this.control.request('claim', { identity: this.identity }); }
+      try { claim = await this.control.request('claim', { identity: this.identity, persona_models }); }
       catch { return this.journal.update(this.cursor, { phase: 'claim_unknown' }); }
       if (claim === null) return this.journal.update(this.cursor, { phase: 'complete' });
       if (!claim?.run?.id || !Number.isSafeInteger(claim.run.current_attempt) ||
@@ -94,9 +98,10 @@ export class ExecutionBridge {
       // raw task credential never reaches the journal or the native adapter.
       if (this.claimStage) claim = await this.claimStage(claim);
       await this.journal.update(this.cursor, { phase: 'claimed', claim });
-      const persona = this.personas[claim.run.persona_id];
+      const persona = personas[claim.run.persona_id];
       if (!persona?.agentId || !persona.model) fail('NATIVE_PERSONA_UNMAPPED');
       const context = JSON.parse(claim.run.context_json);
+      if (Object.hasOwn(context, 'selected_model') && context.selected_model !== persona.model) fail('SELECTED_MODEL_MISMATCH');
       const input = {
         attemptId: hash([this.installationId, claim.submission_key]), installationId: this.installationId,
         personaId: persona.agentId, model: persona.model,

@@ -4,20 +4,21 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createHash } from 'node:crypto';
-import { fixture, bot } from './helpers';
+import { fixture, bot, otherBot } from './helpers';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { ExecutionBridge } from '../runtime/execution-bridge.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
+import validateRuntime from '../src/generated/validate-runtime.js';
 
 let f: ReturnType<typeof fixture>, life: LifecycleCore, identity: Identity, directory: string;
-let nativeCalls: number, lose: string | undefined, nativeMessages: any[];
+let nativeCalls: number, lose: string | undefined, nativeMessages: any[], nativeModels: string[];
 beforeEach(async () => {
   f = fixture(true); life = new LifecycleCore(f.store, f.core);
   f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
   identity = life.registerBoot(randomUUID()); life.ready(identity);
   directory = await mkdtemp(join(tmpdir(), 'hehebot-bridge-'));
-  nativeCalls = 0; lose = undefined; nativeMessages = [];
+  nativeCalls = 0; lose = undefined; nativeMessages = []; nativeModels = [];
 });
 afterEach(async () => { f.close(); await rm(directory, { recursive: true, force: true }); });
 function enqueue() {
@@ -25,7 +26,7 @@ function enqueue() {
 }
 function bridge(testMode = true, journal = new FileJournal(join(directory, 'bridge'))) {
   const native = new CodexAdapter({ cwd: directory, testMode, journal: new FileJournal(join(directory, 'native')), rpc: async (method: string, params: any) => {
-    if (method === 'thread/start') return { thread: { id: 'native-bridge-thread' } };
+    if (method === 'thread/start') { nativeModels.push(params.model); return { thread: { id: 'native-bridge-thread' } }; }
     if (method === 'turn/start') {
       nativeCalls++;
       nativeMessages.push(JSON.parse(params.input[0].text));
@@ -36,21 +37,68 @@ function bridge(testMode = true, journal = new FileJournal(join(directory, 'brid
   } });
   const control = { request: async (type: string, p: any) => {
     let result;
-    if (type === 'claim') result = life.claim(p.identity);
+    if (type === 'claim') result = life.claim(p.identity, p.persona_models);
     else if (type === 'submitted') result = life.submitted(p.identity, p.run_id, p.attempt, p.native_ref);
     else if (type === 'complete') result = life.complete(p.identity, p.run_id, p.attempt, p.result);
     else throw new Error('Unexpected control call');
     if (lose === type) throw new Error('lost acknowledgment after durable mutation');
     return result;
   } };
+  const personas = { [otherBot]: { agentId: 'other', model: 'different-model' }, [bot]: { agentId: 'chief-of-staff', model: 'gpt-5.5' } };
   return Object.assign(new ExecutionBridge({ control, native, journal, identity,
-    installationId: 'synthetic-installation', personas: { [bot]: { agentId: 'chief-of-staff', model: 'gpt-5.5' } } }), { control, journal });
+    installationId: 'synthetic-installation', personas }), { control, journal, personas });
 }
 function settled(row: any) {
   return { attemptId: row.attemptId, nativeRunId: row.nativeRunId, rootSettled: true, toolsSettled: true,
     childrenSettled: true, effectsSettled: true, outputCommitted: true,
     result: { status: 'completed', text: 'Durably returned to the portal' } };
 }
+
+it('binds the host-selected model into Worker custody and native input without trusting context text', async () => {
+  const id = enqueue(), executor = bridge(), request = executor.control.request;
+  expect(JSON.parse(f.store.run(id).context_json)).not.toHaveProperty('selected_model');
+  f.db.exec("UPDATE runs SET context_json=json_set(context_json,'$.selected_model','untrusted-prior-model') WHERE id=?", id);
+  executor.control.request = async (type: string, payload: any) => {
+    if (type === 'claim') {
+      expect(payload.persona_models).toEqual({ [otherBot]: 'different-model', [bot]: 'gpt-5.5' });
+      expect(validateRuntime({ type, payload })).toBe(true);
+      executor.personas[bot].model = 'changed-after-claim';
+    }
+    return request(type, payload);
+  };
+  const row = await executor.claimNext();
+  expect(row.phase).toBe('running');
+  expect(JSON.parse(f.store.run(id).context_json).selected_model).toBe('gpt-5.5');
+  expect(nativeMessages[0].selected_model).toBe('gpt-5.5');
+  expect(nativeModels).toEqual(['gpt-5.5']);
+  expect(nativeCalls).toBe(1);
+});
+
+it('rejects a mismatched returned model before native submission while retaining claim custody', async () => {
+  const id = enqueue(), executor = bridge(), request = executor.control.request;
+  executor.control.request = async (type: string, payload: any) => {
+    const reply = await request(type, payload);
+    if (type === 'claim' && reply) reply.run.context_json = JSON.stringify({ ...JSON.parse(reply.run.context_json), selected_model: 'foreign-model' });
+    return reply;
+  };
+  await expect(executor.claimNext()).rejects.toMatchObject({ code: 'SELECTED_MODEL_MISMATCH' });
+  expect(nativeCalls).toBe(0); expect(f.store.run(id).current_attempt).toBe(1);
+  expect((await executor.journal.get(executor.cursor))?.phase).toBe('claimed');
+});
+
+it('validates model declarations and refuses a missing persona mapping without claiming work', () => {
+  const id = enqueue(), payload = { identity, persona_models: { [bot]: 'gpt-5.6-luna' } };
+  expect(validateRuntime({ type: 'claim', payload })).toBe(true);
+  expect(validateRuntime({ type: 'status', payload: { persona_models: payload.persona_models } })).toBe(false);
+  for (const model of ['', 'x'.repeat(129), 'model/foreign', null, { encoding: 'o200k_base' }]) {
+    expect(validateRuntime({ type: 'claim', payload: { ...payload, persona_models: { [bot]: model } } })).toBe(false);
+  }
+  expect(validateRuntime({ type: 'claim', payload: { identity, persona_models: { arbitrary: 'gpt-5.5' } } })).toBe(false);
+  expect(() => life.claim(identity, {})).toThrow(expect.objectContaining({ code: 'NATIVE_PERSONA_UNMAPPED' }));
+  expect(f.store.run(id)).toMatchObject({ status: 'queued', current_attempt: 0 });
+  expect(f.db.all('SELECT * FROM attempts')).toEqual([]);
+  expect(JSON.parse(life.claim(identity)!.run.context_json)).not.toHaveProperty('selected_model');
+});
 
 it('sends skill descriptors while retaining the full admitted snapshot in custody', async () => {
   const id = enqueue(), skill = { id: randomUUID(), revision: 7, body: {

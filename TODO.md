@@ -30,6 +30,16 @@ evidence above remains separate. Cold history is not answer authority, and a
 fresh retry is not native restoration. Next: supported checkpoint/restart authority
 and selected-model memory constraints, without weakening settlement gates.
 
+**Selected-model prerequisite (2026-09-21):** authenticated claim now carries the
+host persona→model declaration into rebuilt Worker context; native submission uses
+the captured selection and rejects a returned mismatch. Backend1817/runtime620,
+focused33, typecheck and real service default/text-only/background fixtures pass.
+Interrupted edits and returned deliveries were reconciled; nothing was lost or
+needs duplicate dispatch. Local only. This is model identity, not token budgets:
+enqueue snapshots and legacy claims have no declaration. Next: explicit constraint
+representation, then pinned tokenizer/bundle-size and connected budget behavior.
+Summaries, retrieval, relevance, recovery and all external gates remain open.
+
 **Earlier combined checkpoint:** full credential-free verifier passes on local
 `6a225a3`: backend1792/runtime615, native/browser fixtures, both warm/background
 shutdown modes, strict launcher, service modes and dry-run build. The earlier

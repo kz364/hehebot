@@ -4,6 +4,35 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Selected-model declaration prerequisite (2026-09-21): authenticated `claim` accepts
+optional `persona_models` (UUID keys, at most256 entries, existing opaque model-name
+syntax). Worker selects the claimed persona's exact model, fails atomically on a
+missing mapping and writes `selected_model` into the rebuilt run context. The host
+captures persona configuration before its first await and uses the same captured
+model for native submission. A present returned mismatch fails before submission
+while retaining claimed custody; it does not retry or erase the uncertain claim.
+Read-only status, grants, native settlement and execution gates are unchanged.
+Queued contexts and legacy claims retain their old shape. This requires a matched
+runtime/Worker upgrade: an older strict Worker rejects the new claim field; the
+runtime does not retry by stripping metadata. Legacy returned contexts without
+metadata remain accepted, so this is not a mandatory budget-enforcement gate.
+No tokenizer/encoding claim, budget, constraint protection, summary, retrieval or
+relevance implementation is implied. Future budgets must address pre-claim context
+and missing declarations explicitly; model identity is not model eligibility.
+
+Verification: initial red3 retained in `.local/model-declaration-red.log`; final
+backend1817/runtime620 in `.local/model-declaration-checks.log`. The interrupted
+process handle disappeared but its complete log was recovered, not rerun blindly.
+Strengthened focused33 in `.local/model-declaration-final-focused.log` checks
+asymmetric persona selection, host mutation after capture, forged prior context,
+actual native model, mismatch fencing, schema rejection and rollback/legacy behavior.
+Real workerd→service→pinned Codex fixtures pass in default, text-only and staged
+background modes (`.local/model-declaration-service.log`,
+`.local/model-declaration-text-only.log`, `.local/model-declaration-background.log`):
+claim context contains fixture-model and every synthetic model request uses it.
+Final typecheck passes (`.local/model-declaration-typecheck.log`). These are local
+loopback fixtures, not live inference. The prior full verifier remains separate.
+
 Cold pending-question recovery contract (2026-09-21), fixture-only follow-through
 on local0c5a566: `node scripts/test-codex-questions.mjs` passes18 assertions with
 the pinned native executable and synthetic loopback responses. An exact active

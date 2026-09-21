@@ -188,6 +188,7 @@ try {
       assert.equal(req.url, '/v1/responses');
       const chunks = []; for await (const chunk of req) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString());
+      assert.equal(body.model, 'fixture-model', 'Native requests use the host-declared selected model');
       report.modelRequests++;
       assert.ok(report.modelRequests <= (ownerAlphaBackgroundMode ? 7 : ownerAlphaMultiMode ? 4 : backgroundMode ? 6 : childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2), 'Unexpected model continuation');
       if (restrictedMode) {
@@ -550,6 +551,8 @@ try {
   service = ownerAlphaMode ? createCodexService(config, dependencies) : createSpriteCodexService(config, dependencies);
   const dispatched = await service.start(); bound = true;
   assert.equal(dispatched.phase, 'running'); assert.equal(dispatched.claim.run.id, queued.resource_id);
+  assert.equal(JSON.parse(dispatched.claim.run.context_json).selected_model, 'fixture-model');
+  report.selectedModelInClaimCustody = true;
   if (ownerAlphaMode) {
     assert.equal(service.adapter.testMode, false);
     assert.equal(service.adapter.admissionReadiness().productionVerified, false);

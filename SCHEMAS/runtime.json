@@ -444,6 +444,15 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "persona_models": {
+              "type": "object",
+              "maxProperties": 256,
+              "propertyNames": { "format": "uuid" },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+              }
+            },
             "identity": {
               "type": "object",
               "additionalProperties": false,

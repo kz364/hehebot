@@ -31,7 +31,7 @@ export type RuntimePayloads={
  'native-child':Base & {child:NativeChildReceipt;started?:boolean};
  'resource-acquire':Base & Attempt & {resources:string[]};
  'resource-release':Base & Attempt & {resources:string[]};
- boot:{boot_id:string};ready:Base;claim:Base;
+ boot:{boot_id:string};ready:Base;claim:Base & {persona_models?:Record<string,string>};
  heartbeat:Base & {operations:HeartbeatOperation[]};
  submitted:Base & Attempt & {native_ref:string};
  'coordinator-release':Base & Attempt & {native_ref:string;outcome:CoordinatorOutcome};

@@ -4,6 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-21 Asia/Jakarta)
 
+Selected-model declaration is locally verified on aba3f15: authenticated claim
+carries host persona_models; Worker records selected_model in rebuilt context;
+bridge captures config before awaits and rejects present returned mismatches before
+native submission. Backend1817/runtime620, strengthened focused33, final typecheck
+and default/text-only/background native service fixtures pass. Logs and limits in
+IMPLEMENTATION.md. Interrupted work and child returns reconciled: no missing
+delivery, no re-dispatch, no active child. This is identity only; enqueue/legacy
+contexts remain undeclared. Next connected unit: explicit constraint representation,
+then real tokenizer/bundle sizing and budget semantics. Do not claim E06 acceptance
+or infer eligibility from model names. Existing two-hour recovery schedule enabled.
+
 Latest bounded unit on0c5a566 is fixture/documentation only: real pinned Codex
 pending question → SIGKILL/PID absence → same-home read/resume/read now passes.
 Exact turn becomes interrupted; resumed thread is idle; no recreated callback,

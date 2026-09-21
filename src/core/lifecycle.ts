@@ -260,7 +260,7 @@ export class LifecycleCore {
    return {lease_until:lease,cancellations:this.store.db.all<{id:string}>("SELECT id FROM runs WHERE status IN ('cancelling','recovery_required')").map(x=>x.id)};
   });
  }
- claim(identity:Identity):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
+ claim(identity:Identity,personaModels?:Record<string,string>):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled||this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
@@ -291,6 +291,11 @@ export class LifecycleCore {
    const backgroundRootRole=this.core.ownerAlpha.backgroundCompletionRole(run.id);
    const context=backgroundRootRole?this.core.backgroundContext(run.persona_id,prior.instruction,run.id):
     this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id,run.command_id);
+   if(personaModels!==undefined){
+    const model=Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
+    requireThat(typeof model==='string'&&/^[a-zA-Z0-9._-]{1,128}$/.test(model),'NATIVE_PERSONA_UNMAPPED','The runtime must declare the selected persona model.');
+    context.selected_model=model;
+   }
    const command=run.command_id?this.store.db.all<{type:string}>('SELECT type FROM commands WHERE id=?',run.command_id)[0]:null;
    if(command?.type==='skill.run'||prior.skill_invocation){
     const selected=prior.skill_invocation;
