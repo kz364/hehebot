@@ -4,6 +4,40 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Tokenizer provenance follow-through (2026-09-21, no adoption): official tiktoken
+tag0.11.0 resolves to [eedc8563](https://github.com/openai/tiktoken/tree/eedc856364506a9d4651645a0290eb0ba81e6935).
+Its [encoding definition](https://github.com/openai/tiktoken/blob/eedc856364506a9d4651645a0290eb0ba81e6935/tiktoken_ext/openai_public.py)
+pins o200k_base SHA256
+`446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d`.
+Both the official blob and candidate
+[source rank file](https://github.com/niieani/gpt-tokenizer/blob/fb04ebca53f662200e737caefe9a5ef372a5e41a/data/o200k_base.tiktoken)
+were downloaded and match that exact hash. This is source-data identity, not proof
+that generated JS code or every Unicode encoding result is equivalent.
+The npm4.0.0 tarball is9130169 bytes, SHA256
+`e50075c9a98389fbe59bf6b42d8d50b49c1cbd7aec6c205bfc28847ee0eeb20a`;
+the published SHA512 SRI was verified before inspecting its manifest/notices.
+Manifest declares MIT and no runtime dependencies. No package script was run.
+
+Candidate root/source/package MIT notice is copyright2023–2024 Bazyli Brzoska,
+SHA256`55c0b09ede96ed11bd312d90b200d74807cad56415cb491a76364e6a537d3b92`.
+Official pinned tiktoken root MIT notice is copyright2022 OpenAI, Shantanu Jain,
+SHA256`418cb499b436128d653d79941333a5437b7be2ea9213dcc2f04d15d5d2c51d86`.
+The complete candidate Git tree and npm archive list only their root/package
+LICENSE, with no separate rank-data notice found. Preserve both complete MIT
+notices in a future distributed artifact and record embedded-rank origin; finding
+MIT text is not a complete legal/redistribution audit or production approval.
+Public source/artifact evidence remains under `.local/tokenizer-provenance/`.
+No code/data/license file from these packages was added to the application tree.
+
+One disjoint task-worker now owns a repeatable pinned official parity/local-workerd
+load harness, using verified29d8806 source; parent retains adoption and integration.
+The initial brief's16000 UTF-16-unit label was corrected: Ajv maxLength counts
+Unicode code points, so16000 astral characters may occupy32000 UTF-16 units.
+Memory lacks the separate32768-byte message limit; test maximum/one-over values
+against the generated command validator rather than assuming the browser limit.
+No product limit was changed. Broader parity, realistic load/CPU evidence and
+parent review remain pending; six-sample evidence is not E06 budget acceptance.
+
 Explicit-constraint representation (2026-09-21, locally verified): owner
 `memory.put` accepts optional boolean `explicit_constraint`. Missing fields retain
 an existing boolean from the exact live revision; explicit false clears it under

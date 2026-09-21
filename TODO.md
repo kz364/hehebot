@@ -23,6 +23,15 @@ Local source-custody only, no push or production change. Memory budgets, summari
 retrieval and full recovery/termination acceptance remain open. Next: tokenizer
 adoption gates and connected budget/constraint behavior; external gates unchanged.
 
+**Active follow-through:** one bounded GLM task-worker owns the repeatable pinned
+tokenizer parity/local-workerd load harness on exact29d8806 source. Parent owns
+adoption decisions and integration; source-rank identity, pinned package SRI and
+both MIT notices are now verified. Maximum memory tests use16000 Unicode code
+points, not16000 UTF-16 units (generated validator boundary checked). No application
+dependency or budget change is authorized by a passing harness alone. Broader
+parity/load evidence and parent review remain pending. Delivery is message-driven;
+do not duplicate this assignment or poll the worker.
+
 **Latest bounded follow-through:** real native cold-question fixture passes18
 assertions: abrupt process loss, exact interrupted-turn readback, zero recreated
 question callbacks, zero readback inference and no late answer replay. Focused85

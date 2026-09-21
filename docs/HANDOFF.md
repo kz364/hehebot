@@ -4,6 +4,20 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-21 Asia/Jakarta)
 
+E06 adoption evidence is active. A single GLM task-worker
+[owns the repeatable parity/load harness](https://ampcode.com/threads/T-01a0c19a-3b61-75be-a5d2-116dd0c753f4)
+on exact29d8806 (verified self-contained source bundle); parent owns source notices,
+adoption and integration. Worker will report directly; do not poll or duplicate it.
+Parent verified the candidate source ranks match official o200k_base bytes and the
+hash pinned in tiktoken0.11.0; candidate tarball SRI and both MIT notices verified.
+Full candidate tree/archive exposes no separate rank notice; retain both complete
+MIT notices on adoption, without calling this a legal/production approval.
+Generated schema check accepts16000 astral code points (32000 UTF-16 units/64000
+UTF-8 bytes) and rejects16001; worker received that corrected load boundary.
+No application dependency or budget behavior changed. Provenance evidence is in
+IMPLEMENTATION.md and `.local/tokenizer-provenance/`. Next: review returned harness
+and independently execute it before selecting a tokenizer or implementing budgets.
+
 Current checkpoint: selected-model declaration (fa223b0) plus explicit-constraint
 representation pass the full verifier, PID631959 exit0. Backend1820/runtime620,
 HTTP/browser/native, automatic shutdown, strict launcher2210 probes, all service
@@ -11,8 +25,8 @@ modes, typecheck and build pass; desktop16 separately. Combined log
 `.local/e06-prerequisites-integrated.log` SHA256
 dd19afe6d31289ff54a66de49e506fa3fdb3d81e2359f3540c8cf96f9e57b8ea.
 Owner API flag preserves omission through legacy edits; clearing requires explicit
-false/current revision. No scope/expiry/permission/budget change. No active child
-or check, no lost delivery, no workerd or host launcher fixture residue.
+false/current revision. No scope/expiry/permission/budget change. That verification
+left no lost delivery, workerd or host launcher fixture residue; new work is above.
 Tokenizer candidates were probed only in disposable installs (now removed); no repo
 dependency added. gpt-tokenizer4.0.0 has lower measured Node memory than js-tiktoken
 1.0.21; six samples match official tiktoken0.11.0, including in local workerd with
