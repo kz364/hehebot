@@ -4,6 +4,37 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Disk-restored automatic retry custody (2026-09-24 Asia/Jakarta): the two existing
+retry reconstruction cases now use `node:sqlite` backup to create a closed
+file-backed snapshot, open it through the existing test database adapter without
+schema initialization, and execute only against that restored connection. A late
+running grandchild or terminal grandchild with unknown effect evidence blocks
+root attempt2 while an independently admitted task completes. Exact old-result
+replay, ancestry, checkpoint, attempt and effect rows remain intact. Settling the
+running grandchild permits attempt2 with its original checkpoint and distinct
+submission key; unknown effect evidence never gains a fabricated resolution.
+Closing/reopening the updated file preserves both outcomes and independent task
+completion. Sleep denial is asserted specifically for outstanding work/effects,
+not idle grace. The original in-memory source remains at attempt1.
+
+Verification: `npm test` passed1822 tests in91 files, covering the shared helper's
+unchanged default behavior. After strengthening the sleep-reason assertion,
+`npm test -- tests/lifecycle.test.ts tests/recovery.test.ts tests/orchestration.test.ts tests/execution-bridge.test.ts`
+passed126 and `npm run typecheck` passed. Temporarily omitting recursive SQL family
+checking failed both disk cases at the forbidden retry claim; production source
+was restored byte-for-byte before final checks. Temporary databases were removed.
+Evidence logs (including the intentional failure) are retained:
+- `.local/retry-disk-backend.log`, SHA256 `0f7b71b5ba34fba58326ae2ed4582d80a8e80afee0fb16d2f705da1cff969c1b`.
+- `.local/retry-disk-final.log`, SHA256 `d58bb15b64ee5a5268c0c68dcaf1e24b5570b60736050f228a5bcadf6ca2eb64`.
+- `.local/retry-disk-mutant.log`, SHA256 `eaee1b7b4f2217ac80776f5b5baf30ed65d67b15786cbd66a21be829efb5ae9b`.
+
+Tests/documentation only; no production behavior changed. Clean SQLite snapshot
+restoration and connection reopening do not prove abrupt process-loss recovery,
+native checkpoint restoration, provider containment, executor takeover or safe
+sleep. No new native/runtime/desktop combined run was needed for this test-only
+change; previous application verification remains separate. Tokenizer corrections
+stay with their existing worker; no duplicate assignment, push or deployment.
+
 Automatic retry reconstruction contract (2026-09-21): two new cases in
 `tests/lifecycle.test.ts` queue a transient root retry, record late child/grandchild
 observations, finish the direct child, then reconstruct Store/ControlCore/LifecycleCore

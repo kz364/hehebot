@@ -6,9 +6,12 @@ import { ControlCore, DEFAULT_BOTS } from '../src/core/control';
 import type { Command, RoutinePut } from '../src/core/types';
 
 export class TestDatabase implements Database {
-  readonly sqlite = new DatabaseSync(':memory:');
+  readonly sqlite: DatabaseSync;
   private transactionDepth = 0;
-  constructor() { this.sqlite.exec(readFileSync(new URL('../DB/schema.sql', import.meta.url), 'utf8')); }
+  constructor(existing?: DatabaseSync) {
+    this.sqlite = existing ?? new DatabaseSync(':memory:');
+    if (!existing) this.sqlite.exec(readFileSync(new URL('../DB/schema.sql', import.meta.url), 'utf8'));
+  }
   all<T>(sql: string, ...values: SqlValue[]): T[] { return this.sqlite.prepare(sql).all(...values) as T[]; }
   exec(sql: string, ...values: SqlValue[]): void { this.sqlite.prepare(sql).run(...values); }
   transaction<T>(fn: () => T): T {

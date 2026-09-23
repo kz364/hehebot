@@ -2,16 +2,19 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies, including one Worker-triggered staged wake, have canonical completion and full-reload persistence. Historical failed work remains recovery-required. Bounded policies expired and launchers stopped; this is not ongoing chat availability or production readiness. Production execution/native gates remain false.
 
-## Active follow-up (2026-09-21 Asia/Jakarta)
+## Active follow-up (2026-09-24 Asia/Jakarta)
 
-Scheduled independent unit: automatic-retry reconstruction now has two regression
-cases for late nested custody (running grandchild versus terminal metadata with an
-unknown effect). Both block root attempt advancement while unrelated work proceeds;
-old receipts/checkpoint/ancestry remain intact. Related126 tests and typecheck pass;
-temporarily removing SQL recursion fails both tests, then production source was
-restored unchanged. This is same-database object reconstruction, not native recovery
-or restored-checkpoint acceptance. Logs/hashes are in IMPLEMENTATION.md. No local
-check remains active. Existing two-hour schedule was reread and remains enabled.
+Scheduled independent unit: the two automatic-retry custody cases now restore a
+file-backed SQLite backup and close/reopen post-admission writes. Running grandchild
+and terminal metadata with unknown effect still block root advancement while
+unrelated work completes. Old receipts/checkpoint/ancestry/effects survive;
+only the settled-grandchild case admits attempt2, and both cases retain sleep
+denial specifically for outstanding work/effects. Full backend1822, final related126
+and typecheck pass; omitting SQL recursion fails both cases. Production source was
+restored unchanged; temporary databases were removed. This proves local SQLite
+persistence, not native process-crash restoration, takeover or full E02 acceptance.
+Logs/hashes are in IMPLEMENTATION.md. No local check remains active. Existing
+two-hour schedule remains enabled; no new worker or duplicate assignment.
 
 E06 adoption evidence is active. The single GLM task-worker
 [owns harness review corrections](https://ampcode.com/threads/T-01a0c19a-3b61-75be-a5d2-116dd0c753f4).

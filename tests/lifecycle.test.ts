@@ -1,4 +1,8 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { backup, DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LifecycleCore, type Identity, type HeartbeatOperation } from '../src/core/lifecycle';
 import { NativeTaskLedger } from '../src/core/native-tasks';
@@ -7,7 +11,7 @@ import { EffectLedger } from '../src/core/effects';
 import { ControlCore } from '../src/core/control';
 import { Store } from '../src/core/store';
 import { FakeProvider, type RuntimeRef } from '../src/providers';
-import { fixture, bot } from './helpers';
+import { fixture, bot, TestDatabase } from './helpers';
 let f: ReturnType<typeof fixture>, life: LifecycleCore, identity: Identity;
 const ref: RuntimeRef = { provider: 'fake', id: 'synthetic-runtime' };
 beforeEach(() => {
@@ -240,7 +244,7 @@ describe('executor leases and attempts', () => {
     life.complete(identity, child.id, 1, { status: 'completed', text: '' });
     expect(life.claim(identity)?.run).toMatchObject({ id: root.id, current_attempt: 2 });
   });
-  it.each(['running', 'unknown-effect'] as const)('reconstructed automatic retry retains late grandchild %s custody without blocking unrelated work', retained => {
+  it.each(['running', 'unknown-effect'] as const)('disk-restored automatic retry retains late grandchild %s custody without blocking unrelated work', async retained => {
     const root = claimed().run;
     life.submitted(identity, root.id, 1, 'automatic-root');
     const result = { status: 'failed' as const, text: 'Retryable read', error_code: 'TEMPORARY_UNAVAILABLE', checkpoint: { cursor: 43 } };
@@ -261,29 +265,56 @@ describe('executor leases and attempts', () => {
     const links = f.db.all('SELECT * FROM native_task_links ORDER BY run_id');
     const attempts = f.db.all('SELECT * FROM attempts ORDER BY run_id,attempt');
     const effects = f.db.all('SELECT * FROM effects');
-    // Reconstruct objects over the same SQLite state; this is not process-crash recovery.
-    const store = new Store(f.db), core = new ControlCore(store, f.core.options);
-    const restored = new LifecycleCore(store, core);
-    restored.retryDue();
-    restored.complete(identity, root.id, 1, result); // Exact old receipt must not undo the queued retry.
-    expect(restored.claim(identity)).toBeNull();
-    expect(store.run(root.id)).toMatchObject({ status: 'queued', current_attempt: 1, checkpoint_json: JSON.stringify(result.checkpoint) });
-    expect(f.db.all('SELECT * FROM attempts ORDER BY run_id,attempt')).toEqual(attempts);
-    expect(f.db.all('SELECT * FROM native_task_links ORDER BY run_id')).toEqual(links);
-    expect(f.db.all('SELECT * FROM effects')).toEqual(effects);
-    f.setNow('2026-09-10T00:00:11.000Z');
-    const independent = enqueue();
-    expect(restored.claim(identity)?.run.id).toBe(independent);
-    restored.complete(identity, independent, 1, { status: 'completed', text: '' });
-    expect(store.run(root.id).current_attempt).toBe(1);
-    expect(restored.claim(identity)).toBeNull();
-    if (retained === 'running') {
-      restored.complete(identity, grandchild.id, 1, { status: 'completed', text: '' });
-      const next = restored.claim(identity)!;
-      expect(next.run).toMatchObject({ id: root.id, current_attempt: 2, checkpoint_json: JSON.stringify(result.checkpoint) });
-      expect(next.submission_key).toBe(`${root.id}:2`);
-      expect(f.db.all('SELECT * FROM attempts WHERE run_id=? AND attempt=1', root.id)).toEqual(attempts.filter(row => (row as {run_id:string}).run_id === root.id));
-      expect(f.db.all('SELECT * FROM native_task_links ORDER BY run_id')).toEqual(links);
+    // Restore a closed SQLite backup, then reopen its post-admission writes too.
+    // This does not simulate native process loss or authorize executor takeover.
+    const dir = mkdtempSync(join(tmpdir(), 'hehebot-retry-reopen-')), file = join(dir, 'control.db');
+    let db: TestDatabase | undefined;
+    try {
+      await backup(f.db.sqlite, file);
+      db = new TestDatabase(new DatabaseSync(file));
+      const store = new Store(db), core = new ControlCore(store, f.core.options);
+      const restored = new LifecycleCore(store, core);
+      restored.retryDue();
+      restored.complete(identity, root.id, 1, result); // Exact old receipt must not undo the queued retry.
+      expect(restored.claim(identity)).toBeNull();
+      expect(store.run(root.id)).toMatchObject({ status: 'queued', current_attempt: 1, checkpoint_json: JSON.stringify(result.checkpoint) });
+      expect(db.all('SELECT * FROM attempts ORDER BY run_id,attempt')).toEqual(attempts);
+      expect(db.all('SELECT * FROM native_task_links ORDER BY run_id')).toEqual(links);
+      expect(db.all('SELECT * FROM effects')).toEqual(effects);
+      f.setNow('2026-09-10T00:00:11.000Z');
+      const command = { schema_version: 1, type: 'message.send', payload: { conversation_id: bot, text: 'Independent disk-restored task' } } as const;
+      const receipt = core.accept('owner', randomUUID(), createHash('sha256').update(JSON.stringify(command)).digest('hex'), command);
+      expect(receipt.status).toBe('applied');
+      const independent = receipt.resource_id!;
+      expect(restored.claim(identity)?.run.id).toBe(independent);
+      restored.complete(identity, independent, 1, { status: 'completed', text: '' });
+      expect(store.run(root.id).current_attempt).toBe(1);
+      expect(restored.claim(identity)).toBeNull();
+      if (retained === 'running') {
+        restored.complete(identity, grandchild.id, 1, { status: 'completed', text: '' });
+        const next = restored.claim(identity)!;
+        expect(next.run).toMatchObject({ id: root.id, current_attempt: 2, checkpoint_json: JSON.stringify(result.checkpoint) });
+        expect(next.submission_key).toBe(`${root.id}:2`);
+        expect(db.all('SELECT * FROM attempts WHERE run_id=? AND attempt=1', root.id)).toEqual(attempts.filter(row => (row as {run_id:string}).run_id === root.id));
+        expect(db.all('SELECT * FROM native_task_links ORDER BY run_id')).toEqual(links);
+      }
+      const persistedRoot = store.run(root.id), persistedAttempts = db.all('SELECT * FROM attempts ORDER BY run_id,attempt');
+      db.close(); db = undefined;
+      db = new TestDatabase(new DatabaseSync(file));
+      const reopenedStore = new Store(db), reopenedCore = new ControlCore(reopenedStore, f.core.options);
+      const reopened = new LifecycleCore(reopenedStore, reopenedCore);
+      expect(reopenedStore.run(root.id)).toEqual(persistedRoot);
+      expect(reopenedStore.run(independent).status).toBe('completed');
+      expect(db.all('SELECT * FROM attempts ORDER BY run_id,attempt')).toEqual(persistedAttempts);
+      expect(db.all('SELECT * FROM native_task_links ORDER BY run_id')).toEqual(links);
+      expect(db.all('SELECT * FROM effects')).toEqual(effects);
+      expect(reopened.claim(identity)).toBeNull();
+      expect(() => reopened.prepareSleep(identity)).toThrowError(expect.objectContaining({
+        code: 'SLEEP_DENIED', message: 'Work or unresolved effects prevent sleep.',
+      }));
+      expect(f.store.run(root.id).current_attempt).toBe(1); // Disk writes never used the source connection.
+    } finally {
+      try { db?.close(); } finally { rmSync(dir, { recursive: true, force: true }); }
     }
   });
   it.each(['attempt','operation','lock','effect'] as const)('terminal descendant status does not hide a retained %s during retry admission', kind => {

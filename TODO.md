@@ -1,6 +1,6 @@
 # Hehebot progress and TODO
 
-**Last reviewed: 2026-09-21 (Asia/Jakarta). Not operational; production gates remain false.**
+**Last reviewed: 2026-09-24 (Asia/Jakarta). Not operational; production gates remain false.**
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
@@ -12,13 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-21):** automatic-retry reconstruction contract verified
-with two new SQLite regression cases: a late running grandchild or retained unknown
-effect fences the next root attempt without hiding independent work. Old receipts,
-native ancestry and checkpoint identity survive object reconstruction; only actual
-settlement in the running case permits attempt2. Removing recursive family checking
-fails both tests; restored production source is unchanged. Related126 tests and
-typecheck pass. This is not process-crash/native restoration or full E02 acceptance.
+**Current checkpoint (2026-09-24):** the two automatic-retry custody cases now
+restore a file-backed SQLite snapshot and close/reopen the resulting admission
+writes. Late running grandchildren and retained unknown effects still block root
+retry; unrelated work completes. Exact receipts, ancestry, checkpoint and effect
+evidence survive; only settled descendants permit attempt2. A second reopen retains
+that decision and denies sleep for outstanding work, not merely idle grace.
+Removing recursive checking fails both cases. Full backend1822, final related126
+and typecheck pass; production source is unchanged. This is SQLite persistence
+evidence, not native process-crash restoration, executor takeover or full E02.
 Tokenizer corrections remain with their existing worker; next is corrected-delivery
 review and independent verification, without polling or duplicate ownership.
 
