@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-24 Asia/Jakarta)
 
+Latest verified local unit: memory preparation orders by distinct lexical overlap
+with the admitted instruction, then ID. NFC/case normalization is ranking-only;
+raw counted bytes and zero-score explicit constraints are retained. Scope/expiry
+filtering and record/byte limits come first. Backend1868, final preparation23,
+typecheck and native service pass; three initial ordering failures are retained.
+Evidence hashes in IMPLEMENTATION.md. No active check/child/unintegrated delivery.
+Next versioned summaries/pointers and targeted retrieval; no semantic-search,
+SQL scan/storage or full E06 acceptance claim. Direct ownership is simpler for
+this bounded memory-context unit. No push, deploy or external gate changes.
+
 Verified local service adoption: ordinary/non-alpha createCodexService now
 passes the bounded counter through the lease/abort supervisor. Exact reviewed
 names are gpt-5, gpt-5.4, gpt-5.5 and gpt-5-codex; all other names refuse before
@@ -15,7 +25,7 @@ shutdown/launcher/service/typecheck/build stages passed. Log
 `628e39ff03bf247e7a849bd020f1e13b4e4864c52f5b98344ec4ad5069c966b2`.
 Separate desktop install/tests pass16. No workerd or host fixture residue;
 no active check, child or unintegrated delivery. Local only, no push/deploy.
-Next: stable relevance/summary/pointer/retrieval contracts; complete-or-block
+Next: summary/pointer/retrieval contracts; complete-or-block
 does not finish E06, native recovery/settlement or external acceptance.
 The initial native fixture failure is retained at `/tmp/hehe-service-native-1UxYWY`
 and `.local/memory-service-native-initial.log`: known GPT-5.5 enables MCP search,

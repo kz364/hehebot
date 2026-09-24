@@ -212,8 +212,16 @@ source/model/task-bound receipt into claim, and checks the returned memory bytes
 The supervisor aborts on recovery and checks lease authority at the actual send.
 Worker claims revalidate the source and visibly block over-budget work without
 truncating constraints. Encoding selection remains separate from model/account
-eligibility; production gates remain false. Summaries, stable relevance ordering
-and targeted retrieval are not implemented by this complete-or-block stage.
+eligibility; production gates remain false. Summaries and targeted retrieval
+are not implemented by this complete-or-block stage.
+
+Prepared buckets use stable literal relevance ordering: distinct Unicode
+letter/mark/number terms shared with the admitted task instruction, descending,
+then ordinal ID ascending. NFC normalization and lowercasing affect comparison
+only, never the raw counted text. This is not semantic retrieval, stemming or
+language-aware segmentation. Scope/expiry filtering and record/byte bounds come
+first; every eligible record remains, including zero-score explicit constraints.
+The sorted exact bytes are counted and digested, and claim recomputes the order.
 
 ## Methodology
 

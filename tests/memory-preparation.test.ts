@@ -12,7 +12,7 @@ function setup(){
  const add=(scope='persona',id:string|null=bot,text='Never submit without approval.',expires_at:string|null=null)=>{
   const key=randomUUID();f.store.put(key,'memory',{scope:{kind:scope,id},text,expires_at,explicit_constraint:true},0,'owner',f.core.now());return key;
  };
- const enqueue=()=>f.accept({schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'Read scoped memory'}}).resource_id!;
+ const enqueue=(text='Read scoped memory')=>f.accept({schema_version:1,type:'message.send',payload:{conversation_id:bot,text}}).resource_id!;
  const models={[bot]:'gpt-5.4'};
  const prepare=()=>{
   const value=life.prepareMemory(identity,models);
@@ -25,6 +25,56 @@ function setup(){
  };
  return {...f,life,identity,add,enqueue,models,prepare,receipt};
 }
+
+it('orders complete memory buckets by distinct lexical overlap then ID, not age or repetition',()=>{
+ const f=setup();try{
+  const ids=['00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002',
+   '00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000004'];
+  // Age reverses the equal-score ID tie. Repetition must not beat two distinct matches.
+  for(const [index,text] of [[3,'Never send without approval.'],[1,'pear pear pear'],[0,'mango'],[2,'MANGO, pear!']] as const){
+   f.store.put(ids[index],'memory',{scope:{kind:'persona',id:bot},text,expires_at:null,explicit_constraint:index===3},0,'owner',f.core.now());
+   f.setNow(new Date(Date.parse(f.core.now())+1).toISOString());
+  }
+  const foreign=f.add('persona',otherBot,'mango pear');
+  f.enqueue('mango PEAR PEAR');
+  const p=f.prepare(),expected=[ids[2],ids[0],ids[1],ids[3]];
+  expect(JSON.parse(p.scoped).map((m:{id:string})=>m.id)).toEqual(expected);
+  expect(p.scoped).not.toContain(foreign);
+  expect(f.prepare()).toEqual(p);
+  const context=JSON.parse(f.life.claim(f.identity,f.models,f.receipt(p,1,100))!.run.context_json);
+  expect(context.memories.map((m:{id:string})=>m.id)).toEqual(expected);
+  expect(context.memories.at(-1).body).toMatchObject({text:'Never send without approval.',explicit_constraint:true});
+  expect(JSON.stringify(context.memories)).toBe(p.scoped);
+ }finally{f.close();}
+});
+
+it('normalizes canonical Unicode and case for global ordering without changing the counted text',()=>{
+ const f=setup();try{
+  const unrelated='00000000-0000-4000-8000-000000000001',partial='00000000-0000-4000-8000-000000000002',
+   exact='00000000-0000-4000-8000-000000000003';
+  // Without NFC or lowercasing, exact ties partial and incorrectly loses by ID.
+  for(const [id,text] of [[unrelated,'Unrelated directive'],[partial,'上海 العربية'],[exact,'cafe\u0301 上海 العربية']]){
+   f.store.put(id,'memory',{scope:{kind:'global',id:null},text,expires_at:null,explicit_constraint:true},0,'owner',f.core.now());
+  }
+  f.enqueue('CAFÉ, 上海 العربية');const p=f.prepare();
+  expect(JSON.parse(p.global).map((m:{id:string})=>m.id)).toEqual([exact,partial,unrelated]);
+  expect(JSON.parse(p.global)[0].body.text).toBe('cafe\u0301 上海 العربية');
+  const context=JSON.parse(f.life.claim(f.identity,f.models,f.receipt(p,100,1))!.run.context_json);
+  expect(JSON.stringify(context.memories)).toBe(p.global);
+ }finally{f.close();}
+});
+
+it('uses deterministic ID order when the instruction has no lexical terms',()=>{
+ const f=setup();try{
+  const high='ffffffff-ffff-4fff-8fff-ffffffffffff',low='00000000-0000-4000-8000-000000000001';
+  for(const id of [high,low]){
+   f.store.put(id,'memory',{scope:{kind:'persona',id:bot},text:'Keep this constraint.',expires_at:null,explicit_constraint:true},0,'owner',f.core.now());
+   f.setNow(new Date(Date.parse(f.core.now())+1).toISOString());
+  }
+  f.enqueue('!?');
+  expect(JSON.parse(f.prepare().scoped).map((m:{id:string})=>m.id)).toEqual([low,high]);
+ }finally{f.close();}
+});
 
 it('prepares without claiming and admits exact bucket limits with full constraints and scope',()=>{
  const f=setup();try{

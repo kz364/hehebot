@@ -4,6 +4,27 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stable memory ordering (2026-09-24): after scope/expiry filtering and work bounds,
+preparation ranks by distinct lexical-term overlap with the admitted instruction,
+then ID. Terms are NFC-normalized/lowercased runs of Unicode letters/marks/numbers;
+matching is literal, not semantic, stemming or language-aware word segmentation.
+Only order changes: every eligible record and zero-score explicit constraint is
+retained, raw text is unchanged and the exact sorted buckets are counted/digested.
+Claim recomputes the same order. Legacy unbudgeted snapshots are unchanged.
+Three initial tests fail against age ordering; final tests also discriminate
+repeat-frequency weighting, age-based ties and missing Unicode normalization.
+Red log `.local/memory-relevance-red.log` SHA256
+`167872f52f864555392f7850207ed9d18d03eb3f38bdcbabec21bb9b3e687637`.
+Backend1868 and typecheck pass in `.local/memory-relevance-green.log` SHA256
+`7b1193d8361166b071fa5f37d67357dcd4607ea607e4e3b62977a06a05eeb406`.
+Final stronger query-repetition case, preparation23/typecheck and real native
+service pass in `.local/memory-relevance-final.log` SHA256
+`39a1c240f63dec8c85ac2afa8d7bc28d3fad808c833cb3e21ee01bb3aa0b02e6`.
+The full verifier below predates this localized change; it was not repeated.
+No inference on edits, truncation, summary generation, authority or gate change.
+Versioned summaries/pointers, targeted retrieval and bounded SQL/storage work
+remain open. No UI appearance change, push or deployment.
+
 Ordinary service memory adoption (2026-09-24, verified locally): the
 service now always supplies pre-claim counting outside staged alpha, for exact
 reviewed names gpt-5/gpt-5.4/gpt-5.5/gpt-5-codex. Unknown names refuse before

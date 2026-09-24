@@ -12,7 +12,19 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-24, verified locally):** ordinary service dispatch
+**Current checkpoint (2026-09-24, verified locally):** prepared memory now uses
+stable distinct lexical-term overlap against the admitted instruction, then ID.
+NFC/case normalization affects ranking only; counted text and all eligible
+constraints stay intact, including zero-score constraints. Scope/expiry and
+record/byte limits precede ranking. No inference, truncation or authority change.
+Three new tests fail against old age ordering; final preparation23/typecheck,
+backend1868 and real native service pass. The earlier full verifier below covers
+service adoption; it was not repeated for this localized ordering change.
+Next: versioned summaries/pointers and targeted retrieval. SQL scan/storage,
+legacy enqueue snapshots, native recovery/settlement and external gates remain
+open. No active check, child or unintegrated delivery. Local only, no push/deploy.
+
+**Previous checkpoint (2026-09-24, verified locally):** ordinary service dispatch
 now prepares and counts the complete eligible memory set before claiming.
 Reviewed exact model names are `gpt-5`, `gpt-5.4`, `gpt-5.5`, `gpt-5-codex`;
 unknown names fail without prefix fallback or an unbudgeted claim. This encoding
@@ -33,11 +45,11 @@ Separate desktop install/tests pass16/16. No workerd or host fixture residue.
 Mapping provenance distinguishes reference0.11.0 from upstream mapping4e71bbe;
 tokenizer4.0.0, rank/reference pins and notices are unchanged.
 
-Still open: stable relevance ordering, versioned summaries/pointers, targeted
+Still open: versioned summaries/pointers, targeted
 retrieval, bounded SQL scan/storage work, full native recovery/settlement and
 broader TODO acceptance. Complete-or-block is not full E06 acceptance. No active
 child, check or unintegrated delivery. Local only, not pushed or deployed.
-Next: stable relevance/summary/pointer/retrieval contracts. External blockers
+Next: summary/pointer/retrieval contracts. External blockers
 and production flags remain unchanged.
 
 **Previous checkpoint:** memory context now filters global/current-persona/
@@ -1029,7 +1041,7 @@ Order is dependency-oriented, not a promise to complete an external gate before 
 | [ ] | **E03 — Partial** | Keep coordinator responsive during background work; resolve status/new-task/ambiguous-steer/deferred-follow-up intent; independent admission, saturation and exact cancellation. Pass O01–O09, including two-task isolation and managed refresh ownership. | Synthetic routing/concurrency work now; model judgment and refresh require account access. |
 | [ ] | **E04 — Partial** | Finish quiet streaming/reconnect, approvals and attention, conversation search, attachments/previews/downloads, replies/reactions, stable references/mentions, read/unread, notification preferences and appearance. Verify desktop/mobile/keyboard/accessibility, stale/offline states and cross-bot isolation. | Most UI work is credential-free; push permissions/delivery and some device checks are external. |
 | [ ] | **E05 — Partial** | Complete teach-from-correction skill authoring, update-before-duplicate, review/diff/rollback, supporting-file policy and safe tests. Complete natural-language routine lifecycle, preflight, run history and execution-versus-delivery failure handling; evaluate the 20-enabled-routine cap with load/cost evidence. | Local contracts/UI first; actual model use and connector effects later. |
-| [ ] | **E06 — Partial** | Ordinary service complete-or-block budgets pass integrated verification: global ≤4,000 and scoped ≤8,000 tokens, with exact prepared-byte receipts and reviewed model mappings. No silent constraint truncation. Finish stable relevance/ID ordering, versioned summaries/pointers, disclosed truncation, targeted retrieval and bounded attributed bot/group communication (SPEC §9.3). Returned record/byte limits do not bound SQL scans, stored data or legacy enqueue snapshots. Verify native transcript/search/filesystem scope isolation, private facts excluded from shared procedures, zero-inference/wake publication, and closed-client discussion continuity. | Context packaging, isolation and zero-call fixtures are credential-free; model judgment and authenticated native retrieval validation later. |
+| [ ] | **E06 — Partial** | Ordinary service complete-or-block budgets pass integrated verification: global ≤4,000 and scoped ≤8,000 tokens, with exact prepared-byte receipts and reviewed model mappings. Stable literal relevance/ID ordering is verified; no silent constraint truncation. Finish versioned summaries/pointers, disclosed truncation, targeted retrieval and bounded attributed bot/group communication (SPEC §9.3). Returned record/byte limits do not bound SQL scans, stored data or legacy enqueue snapshots. Verify native transcript/search/filesystem scope isolation, private facts excluded from shared procedures, zero-inference/wake publication, and closed-client discussion continuity. | Context packaging, isolation and zero-call fixtures are credential-free; model judgment and authenticated native retrieval validation later. |
 | [ ] | **E07 — Unverified** | Complete remote browser/computer tool integration, authenticated view-only/control separation, locks, safe credential handoff, stale-frame rejection and reconnect. Exercise synthetic multistep forms, files/uploads/downloads and uncertain mutations without replay. | Linux fixtures now; personal browser accounts and real Mac permissions later. |
 | [ ] | **E08 — Not implemented** | Opt-in visible demonstration capture → reviewed skill → safe test, excluding microphone audio/secrets and never treating captured actions as authorization. | Credential-free synthetic demonstration possible; real device capture needs hardware. |
 | [ ] | **E09 — Partial** | Connector readiness catalog: distinguish advertised, installed, callable and individually authorized operations; named gaps and per-tool restrictions. Add curated discovery/install/enable/disable and packaged-skill workflows through supported surfaces; catalog metadata alone is insufficient and production app-server plugin installation remains unsupported (UX14). Complete migration workflows, provenance/watermarks/dedupe, flight hold/restore, no-send rules and scoped traveler handling. | Catalog/policy/install fixtures now; actual Google/WhatsApp/Messages/traveler data, supported account installation and adopted mappings are external. |
