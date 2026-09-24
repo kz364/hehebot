@@ -51,6 +51,18 @@ try{
   assert.match(details,/SEARCH objects USING INDEX objects_memory_scope/);
   assert.doesNotMatch(details,/SCAN objects|TEMP B-TREE/);
  }
+ const retention=await get(base,'/memory-retention-plan');
+ assert.equal(retention.due,'2026-12-09T00:00:00.000Z');assert.equal(retention.deleted,2);
+ assert.deepEqual(retention.remaining,[{key:'memory-read:11111111-2222-4333-8444-555555555555:01'}]);
+ assert.deepEqual(retention.attempts,[{n:1001}]);assert.equal(retention.plans.length,2);
+ for(const plan of retention.plans){
+  const details=plan.map(row=>row.detail).join('\n');
+  assert.match(details,/^SEARCH m USING COVERING INDEX .*\(key>\? AND key<\?\)/);
+  assert.match(details,/SEARCH a USING INDEX .*\(run_id=\? AND attempt=\?\)/);
+  assert.match(details,/SEARCH r USING INDEX .*\(id=\?\)/);
+  assert.doesNotMatch(details,/SCAN a\b|SCAN m\b/);
+ }
+ console.log('PASS: real workerd memory retention starts from ledger keys with exact attempt lookups, retains numeric aliases and all 1001 attempts; no total cleanup-scan or storage bound claimed.');
  console.log('PASS: real local Worker v12→v14 startup migration; retained live occurrence/run/attempt, version-write and FK-check rollback, enforced references, exact fresh schema, idempotent rerun, persistent reopen and all three bounded memory-scope index plans without temporary sorting. No account/provider calls.');
 }catch(error){console.error(logs.slice(-4000));throw error;}
 finally{await stop();await rm(directory,{recursive:true,force:true});}

@@ -4,7 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
-Current unit: ordinary enqueue/legacy memory snapshot bounds. Complete-or-refuse
+Current unit verified: read-ledger retention starts from the indexed key range,
+then exact attempt/run primary-key lookups, instead of terminal-run history first.
+Canonical-key equality rejects numeric aliases; settlement, 90-day retention and
+100-key transactional deletion rules are unchanged. Initial query-plan red and
+alias-guard mutation failures are retained. Final Node 32/workerd/typecheck and
+backend 1949/HTTP 31/dry-build pass; logs/hashes are in IMPLEMENTATION.md.
+This SQL-only unit did not rerun the previous runtime/browser/shutdown/desktop
+matrix. No active check/child/delivery, live action or production gate change.
+Next: remaining ledger/recursive scans, storage/index construction and inherited
+historical snapshot bounds, then native recovery/settlement. Existing schedule
+enabled; local commits only. Query-plan evidence is not total-work acceptance.
+
+Previous unit, local af06093: ordinary enqueue/legacy memory snapshot bounds. Complete-or-refuse
 64-record/131072-byte work limits now apply to context construction. Overflow
 parks without wake/attempt creation, retaining an unadmitted placeholder; explicit
 retry rebuilds current memory, and passive deletion does not resume work.

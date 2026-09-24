@@ -3,8 +3,14 @@ import {nativeDescendantsSettledSql} from './native-tasks';
 
 // A read charge is not an expiring cache. Only settled terminal history may be
 // removed; a future retry owns a different attempt and therefore a different key.
-const eligible=`FROM runtime_metadata m JOIN attempts a ON m.key='memory-read:'||a.run_id||':'||a.attempt
- JOIN runs r ON r.id=a.run_id
+// Canonical keys contain a UUID task ID and a variable-width integer attempt.
+// Drive the existing metadata key index before exact attempt/run primary-key
+// probes, not every terminal run's history. The exact-key check prevents CAST
+// aliases (such as :01 or :1junk) from being treated as owned ledger entries.
+const eligible=`FROM runtime_metadata m CROSS JOIN attempts a
+ ON a.run_id=substr(m.key,13,36) AND a.attempt=CAST(substr(m.key,50) AS INTEGER)
+ AND m.key='memory-read:'||a.run_id||':'||a.attempt
+ CROSS JOIN runs r ON r.id=a.run_id
  WHERE m.key GLOB 'memory-read:*' AND a.settled_at IS NOT NULL
  AND a.status IN ('completed','failed','cancelled','terminated') AND r.status IN ('completed','failed','cancelled')
  AND NOT EXISTS(SELECT 1 FROM attempts live WHERE live.run_id=r.id AND live.status IN ('claimed','running'))

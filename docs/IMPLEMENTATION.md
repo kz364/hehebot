@@ -4,6 +4,36 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Read-ledger cleanup query plan (2026-09-25 Asia/Jakarta): the shared `nextDue`/
+`prune` query now starts with the indexed memory-read key range, then probes exact
+attempt and run primary keys. The previous plan traversed terminal runs and their
+attempt histories before ledger lookup. Canonical UUID IDs and variable-width
+integer attempts follow the existing runtime contract; exact reconstructed-key
+equality prevents CAST aliases from gaining deletion eligibility. The 90-day,
+100-delete, transaction and recursive settlement predicates are unchanged.
+This removes broad outer run/attempt traversal, not remaining ledger scans,
+recursive family/obligation scans, sorting, total storage or index construction.
+
+Node and real workerd plan assertions cover both queries with 1001 attempts,
+exact deletion, preserved attempt records and retained numeric aliases. All 32
+retrieval/retention tests pass, including uncertainty/descendant/rollback cases.
+The initial plan test failed against the old query; removing reconstructed-key
+equality also failed (6 deletions instead of 1), then the guard was restored.
+Evidence: `.local/memory-retention-plan-red.log` SHA256
+`528654ef64d4761daa0ab60ad67ce69e921c6842332adfb08453f242fd558600`;
+`.local/memory-retention-alias-mutant.log` SHA256
+`3b71cfcf084a47e87f6fae69ef77a0ca46401d4405fa5fb683a8111344d4e4ed`.
+`npm test && npm run test:e2e && npm run build` passed backend 1949, HTTP 31,
+workerd migration/plan/occurrence checks, typecheck and dry build:
+`.local/memory-retention-plan-integrated.log` SHA256
+`f888e882ade283a090e6edd2e77dd43d39301fad88e6459c55466644c8c009ba`.
+Final stronger key-first/run-primary-key assertions also pass Node 32/workerd/
+typecheck in `.local/memory-retention-plan-final.log`, SHA256
+`2938ef6262e2fecc17d545e93a04af1fd2731815f3c6eacedc02b7c22c6b45da`.
+Runtime/browser/shutdown/desktop checks below predate this SQL-only unit; they
+were not rerun. No schema migration, live database, provider/account call,
+deployment, publication or production gate change.
+
 Ordinary memory snapshot bounds (2026-09-25 Asia/Jakarta): context construction
 now shares preparation's indexed 65-row sentinel, 64-record complete-or-refuse cap
 and 131072-byte combined serialized buckets. Expired rows still consume record

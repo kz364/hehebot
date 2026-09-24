@@ -176,6 +176,40 @@ it('real runtime counting reserves against SQLite before delivery and source cha
  }
 });
 
+it('retention starts from the memory-read key range and looks up exact attempts rather than scanning unrelated history',()=>{
+ const f=setup();try{
+  f.boundary.reserveMemoryRead(f.reservation(f.query()));f.life.complete(f.identity,f.run,1,{status:'failed',text:'Terminal'});
+  f.db.transaction(()=>{
+   for(let n=2;n<=1001;n++)f.db.exec('INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,settled_at) SELECT run_id,?,?,epoch,boot_id,status,deadline_at,settled_at FROM attempts WHERE run_id=? AND attempt=1',n,`unrelated-${n}`,f.run);
+  });
+  const retention=new MemoryReadRetention(f.store,()=>f.core.now());f.setNow('2026-12-09T00:00:00.000Z');
+  const read=vi.spyOn(f.db,'all');
+  expect(retention.nextDue()).toBe(f.core.now());expect(retention.prune()).toBe(1);
+  const calls=read.mock.calls.slice();read.mockRestore();
+  expect(calls).toHaveLength(2);
+  for(const [sql,...values] of calls){
+   const plan=f.db.all<{detail:string}>(`EXPLAIN QUERY PLAN ${sql}`,...values).map(row=>row.detail).join('\n');
+   expect(plan).toMatch(/^SEARCH m USING COVERING INDEX .*\(key>\? AND key<\?\)/);
+   expect(plan).toMatch(/SEARCH a USING INDEX .*\(run_id=\? AND attempt=\?\)/);
+   expect(plan).toMatch(/SEARCH r USING INDEX .*\(id=\?\)/);
+   expect(plan).not.toMatch(/SCAN a\b|SCAN m\b/);
+  }
+  expect(f.db.all('SELECT attempt FROM attempts')).toHaveLength(1001);
+ }finally{vi.restoreAllMocks();f.close();}
+});
+
+it('retention never adopts numeric aliases, noncanonical task keys or orphan ledgers',()=>{
+ const f=setup();try{
+  f.boundary.reserveMemoryRead(f.reservation(f.query()));f.life.complete(f.identity,f.run,1,{status:'failed',text:'Terminal'});
+  const keys=[...['01','1junk','1.0','+1','1:1'].map(suffix=>`memory-read:${f.run}:${suffix}`),
+   `memory-read:${randomUUID()}:1`,`memory-read:${f.run}:2`,`unrelated:${f.run}:1`];
+  for(const key of keys)f.db.exec("INSERT INTO runtime_metadata VALUES(?,'{}')",key);
+  const retention=new MemoryReadRetention(f.store,()=>f.core.now());f.setNow('2026-12-09T00:00:00.000Z');
+  expect(retention.prune()).toBe(1);expect(retention.nextDue()).toBeNull();expect(retention.prune()).toBe(0);
+  expect(f.db.all<{key:string}>('SELECT key FROM runtime_metadata WHERE key IN (SELECT value FROM json_each(?)) ORDER BY key',JSON.stringify(keys)).map(row=>row.key)).toEqual(keys.sort());
+ }finally{f.close();}
+});
+
 it('expires read ledgers at 90 days after terminal settlement without changing structural custody or reopening reads',()=>{
  const f=setup();try{
   const q=f.query();f.boundary.reserveMemoryRead(f.reservation(q));

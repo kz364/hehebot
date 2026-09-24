@@ -12,7 +12,18 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** ordinary enqueue and legacy
+**Current checkpoint (2026-09-25, verified locally):** read-ledger retention starts
+from indexed memory-read keys and probes exact attempt/run identities instead of
+walking terminal-run attempt histories first. Node 32/typecheck and real workerd
+query-plan/cleanup checks pass; removing the exact-key guard fails the alias test
+(six deletions instead of one). Backend 1949, HTTP 31/typecheck/dry-build pass;
+final Node/workerd checks assert key-first ordering and exact primary-key lookups.
+This is targeted verification; the prior runtime/browser/shutdown matrix was not
+rerun for this SQL-only change. Next: remaining ledger/recursive scans, storage/
+index construction and historical snapshot bounds, then native recovery and
+settlement. No active check/child/delivery; local only, external gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** ordinary enqueue and legacy
 claim now share the existing complete-or-refuse memory work limits. Overflow
 parks requests before wake/attempt creation; explicit retry rebuilds context.
 Focused 48/typecheck, backend 1946/runtime 682/HTTP 31 and desktop 16 pass.

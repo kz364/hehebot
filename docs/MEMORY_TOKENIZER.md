@@ -125,6 +125,11 @@ if result bodies were already pruned. Structural run/attempt records remain.
 An active/recovery attempt never loses its budget through this path; an explicit
 future retry owns a new attempt, not a reset of the old ledger. This is temporal
 retention with a bounded delete batch, not a total-storage or SQL-scan bound.
+Both retention queries start from the indexed memory-read key range and use exact
+attempt/run primary-key lookups, verified in Node and real workerd. Exact key
+equality rejects numeric CAST aliases. This removes the outer terminal-run/attempt
+history traversal; remaining ledger scans, recursive custody checks and sorting
+are still unbounded. No new index or schema migration is introduced.
 
 ## Runtime counting contract
 

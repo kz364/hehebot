@@ -3,6 +3,7 @@ import schema from '../DB/schema.sql';
 import {migrateApplication} from '../src/core/migrations';
 import {Store,type Database,type SqlValue} from '../src/core/store';
 import {legacyOccurrencesSql} from './legacy-occurrences';
+import {MemoryReadRetention} from '../src/core/memory-read-retention';
 
 // Disposable Wrangler fixture only. No production ingress or storage is exposed.
 export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
@@ -26,6 +27,20 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
  }
  async fetch(request:Request){
   const db=this.db,path=new URL(request.url).pathname;
+  if(path==='/memory-retention-plan'){
+   const id='11111111-2222-4333-8444-555555555555',settled='2026-09-10T00:00:00.000Z',now='2026-12-09T00:00:00.000Z';
+   db.transaction(()=>{
+    db.exec("INSERT INTO runs(id,persona_id,context_json,status,created_at,updated_at) VALUES(?,'persona-31','{}','failed',?,?)",id,settled,settled);
+    for(let n=1;n<=1001;n++)db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,settled_at) VALUES(?,?,?,1,'fixture','failed',?,?)",id,n,`memory-${n}`,settled,settled);
+    for(const suffix of ['1','101','01'])db.exec("INSERT INTO runtime_metadata VALUES(?,'{}')",`memory-read:${id}:${suffix}`);
+   });
+   const plans:unknown[]=[];
+   const retention=new MemoryReadRetention(new Store({...db,all:<T>(sql:string,...values:SqlValue[])=>{
+    plans.push(db.all(`EXPLAIN QUERY PLAN ${sql}`,...values));return db.all<T>(sql,...values);
+   }}),()=>now);
+   const due=retention.nextDue(),deleted=retention.prune();
+   return Response.json({plans,due,deleted,remaining:db.all("SELECT key FROM runtime_metadata WHERE key GLOB 'memory-read:*'"),attempts:db.all('SELECT COUNT(*) AS n FROM attempts WHERE run_id=?',id)});
+  }
   if(path==='/memory-plan'){
    const plans:unknown[]=[];
    new Store({...db,all:<T>(sql:string,...values:SqlValue[])=>{
