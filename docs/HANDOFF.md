@@ -13,6 +13,12 @@ the race test fails when that last fence is removed. Final backend1865/runtime66
 typecheck and real credential-free native service pass. Ordinary service still
 does not enable counting. Next: explicit model mapping/service wiring, then
 summaries/retrieval. No child, check or lost delivery remains at this checkpoint.
+Mapping-source correction: eedc856/0.11.0 has `gpt-5-`, not `gpt-5`, and no exact
+GPT-5 entry. It does not establish dotted 5.4/5.5 mappings. Separately pinned
+upstream `4e71bbe0c078468e00fefbf94b39849389f346e5` does map those names to
+o200k_base through its broader prefix. Both exact source files/hashes and AST
+lookup checks are documented in MEMORY_TOKENIZER.md. Do not repeat the earlier
+conflation or treat prefix lookup as model/account eligibility.
 Prior verifier PID735480 finished successfully. Evidence is segmented after the
 original browser failure, which remains retained. Review-frequency steering was
 misrouted and withdrawn; it did not change this thread's instructions.

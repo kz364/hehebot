@@ -4,6 +4,15 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Mapping provenance correction (2026-09-24): direct immutable-source reads and
+AST dictionary checks contradicted the earlier attribution. Reference `eedc856`
+has only `gpt-5-` and cannot map bare GPT-5 or dotted 5.4/5.5. Current upstream
+mapping was independently pinned at `4e71bbe0c078468e00fefbf94b39849389f346e5`;
+its exact/broad-prefix mappings select o200k_base for those names. Both map a
+deliberately nonexistent GPT-5 name too, so neither establishes eligibility.
+Source URLs, hashes and limitations are in MEMORY_TOKENIZER.md. No dependency,
+reference-version or application mapping change was made by this correction.
+
 Supervisor memory custody (2026-09-24): optional counting receives a supervisor-
 owned abort signal. Recovery/disconnect abort it; lease checks fence both count
 boundaries and the actual preparation/claim send after asynchronous journal work.

@@ -177,12 +177,26 @@ SOFTWARE.
 
 ### Model identity is separate from tokenizer-family mapping
 
-At the same pinned tiktoken revision, [`tiktoken/model.py`](https://github.com/openai/tiktoken/blob/eedc856364506a9d4651645a0290eb0ba81e6935/tiktoken/model.py)
-maps `gpt-5` exactly to `o200k_base`. `gpt-5.4`, `gpt-5.5` and `gpt-5-codex`
-match only its `gpt-5` prefix. The upstream lookup explicitly warns that prefix
-matching can match nonexistent models. Encoding parity therefore establishes
-neither model existence nor account eligibility. Unknown names must not become
-admitted models just because they share that prefix.
+Correction (2026-09-24): the earlier text conflated two upstream revisions.
+The reference-version [`tiktoken/model.py` at eedc856](https://github.com/openai/tiktoken/blob/eedc856364506a9d4651645a0290eb0ba81e6935/tiktoken/model.py)
+has a `gpt-5-` prefix and no exact `gpt-5` entry. It maps `gpt-5-codex`, but
+does **not** map `gpt-5`, `gpt-5.4` or `gpt-5.5`. Downloaded file SHA256:
+`c438d91dcac59786ab343e41d773afa9b3fcccef64db0121852c6fb16a3c9e31`.
+
+Separately pinned [upstream mapping at 4e71bbe](https://github.com/openai/tiktoken/blob/4e71bbe0c078468e00fefbf94b39849389f346e5/tiktoken/model.py)
+has exact `gpt-5` and the broader `gpt-5` prefix, all selecting `o200k_base`.
+That metadata maps `gpt-5.4`, `gpt-5.5` and `gpt-5-codex`; file SHA256:
+`600f26902d1cf6a1a5f54e37be988b3e0d911f1ff17ba7060bb361f9b5295521`.
+This is a mapping-source pin, **not** an upgrade of the 0.11.0 parity reference,
+rank artifact or installed runtime package. Both downloaded files are retained
+under `.local/tokenizer-provenance/`; AST-extracted dictionaries independently
+confirm these positive/negative lookups.
+
+Both revisions also map the nonexistent `gpt-5-NOT-A-MODEL` by prefix.
+The upstream lookup explicitly warns about this. Encoding parity and mapping
+therefore establish neither model existence nor account eligibility. Runtime
+adoption must use reviewed exact model names, never admit unknown names just
+because they share a prefix, and retain separate account-admission checks.
 
 The supported Codex 0.154.0 [`model/list` Model schema](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/schema/typescript/v2/Model.ts)
 contains model identity and availability metadata, but no tokenizer encoding.

@@ -28,7 +28,9 @@ back after counting failure or replay an uncertain claim. Supervisor counting
 now aborts on recovery and rechecks lease authority after counting and at the
 actual claim send. Removing that final fence fails the journal-yield race test;
 the real credential-free native service fixture passes. Explicit selected-model
-mapping and ordinary service wiring remain next.
+mapping and ordinary service wiring remain next. Mapping provenance was corrected:
+the 0.11.0 reference does not map dotted GPT-5 names; separately pinned upstream
+4e71bbe metadata does. This does not upgrade the parity reference or prove account eligibility.
 This does not yet enforce budgets on ordinary service dispatch, bound SQL scan
 cost, or provide summaries/retrieval. Corrected off-event-loop counter delivery
 is integrated with exact4.0.0 dependency/SRI and both MIT notices; independent
