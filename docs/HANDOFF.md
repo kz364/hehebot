@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-24 Asia/Jakarta)
 
+Scheduled local unit: memory scope is now filtered in SQLite before bodies enter
+Worker context construction. Expiry semantics, ordering, explicit constraints and
+final context stay unchanged. Backend1824/focused57/typecheck pass; restoring the
+old path fails both SQL-return-census tests. This is not a bounded SQL scan or a
+token budget. No child ownership, new migration or production change. Next remains
+bounded selected-model budgets/summaries/retrieval; evidence in IMPLEMENTATION.md.
+
 Latest: owner-requested warm-neutral portal refresh passes seven browser fixtures
 (questions/results/profile/roster/memory-search/recovery/skill-review) and typecheck.
 Representative desktop/narrow/dialog/drawer/error captures inspected. Native retry

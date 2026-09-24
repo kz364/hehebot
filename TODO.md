@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-24):** owner-requested portal visual refresh passes
+**Current checkpoint (2026-09-24):** memory context now filters global/current-persona/
+current-routine scope in SQLite before returning record bodies to the Worker.
+Deleted records stay excluded; existing ordering, expiry and explicit constraints
+are preserved. Backend1824, focused57 and typecheck pass; restoring the old scan
+fails both new SQL-return-census tests. This reduces unrelated-body hydration, not
+SQL scan cost or the eligible-memory count. No token budget, truncation, tokenizer
+adoption or production gate change. Next: bounded selected-model budget/summary/
+retrieval contracts; external blockers unchanged. Local only.
+
+**Previous checkpoint:** owner-requested portal visual refresh passes
 seven browser fixtures: warm neutral surfaces, charcoal controls, clearer spacing and compact
 question cards. Existing safety controls and command behavior are unchanged.
 Native checkpoint-input fixture passes against pinned Codex: a fresh retry receives

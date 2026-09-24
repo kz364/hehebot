@@ -508,7 +508,7 @@ export class ControlCore {
   const persona=this.activePersona(personaId);
   const routine=routineId?this.store.get<RoutinePut>(routineId,'routine'):null;
   const now=this.now();
-  const memories=this.store.list<MemoryPut>('memory').filter(m=>(!m.body.expires_at||Date.parse(m.body.expires_at)>Date.parse(now))&&(m.body.scope.kind==='global'||m.body.scope.kind==='persona'&&m.body.scope.id===personaId||m.body.scope.kind==='routine'&&m.body.scope.id===routineId));
+  const memories=this.store.scopedMemories(personaId,routineId).filter(m=>!m.body.expires_at||Date.parse(m.body.expires_at)>Date.parse(now));
   let contextEvents:ContextSnapshot['context_events']=[];
   let contextHistoryGap:ContextSnapshot['context_history_gap'];
   if(roomId){

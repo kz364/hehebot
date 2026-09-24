@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { expect, it } from 'vitest';
-import { fixture, bot, otherBot } from './helpers';
+import { expect, it, vi } from 'vitest';
+import { fixture, bot, otherBot, routine } from './helpers';
 import { LifecycleCore } from '../src/core/lifecycle';
 import { AgentCommandBoundary } from '../src/core/agent-commands';
 
@@ -11,6 +11,38 @@ function memory(f: ReturnType<typeof fixture>, overrides = {}) {
     text: 'Do not send messages without approval.', source_event_id: source, expires_at: null,
     sensitivity: 'ordinary' as const, ...overrides };
 }
+
+it.each([false, true])('filters memory scope before returning SQL bodies (routine=%s), preserving expiry and ordering', includeRoutine => {
+  const f = fixture();
+  const read = vi.spyOn(f.db, 'all');
+  try {
+    const selected = routine(), sibling = routine();
+    for (const payload of [selected, sibling]) expect(f.accept({ schema_version: 1, type: 'routine.put', payload }).status).toBe('applied');
+    const global = memory(f, { scope: { kind: 'global', id: null } });
+    const own = memory(f, { explicit_constraint: true });
+    const scoped = memory(f, { scope: { kind: 'routine', id: selected.id } });
+    const foreign = memory(f, { scope: { kind: 'persona', id: otherBot } });
+    const siblingMemory = memory(f, { scope: { kind: 'routine', id: sibling.id } });
+    const expired = memory(f, { expires_at: '2026-09-10T07:00:01+07:00' });
+    const future = memory(f, { expires_at: '2026-09-10T00:00:01.001Z' });
+    const deleted = memory(f);
+    for (const payload of [global, own, scoped, foreign, siblingMemory, expired, future, deleted]) {
+      expect(f.accept({ schema_version: 1, type: 'memory.put', payload }).status).toBe('applied');
+    }
+    expect(f.accept({ schema_version: 1, type: 'memory.delete', payload: { id: deleted.id, expected_revision: 1, purge_transcripts: false } }).status).toBe('applied');
+    f.setNow('2026-09-10T00:00:01.000Z');
+    read.mockClear();
+    const context = f.core.context(bot, 'Scoped request', includeRoutine ? selected.id : null, null);
+    const expected = [global.id, own.id, future.id, ...(includeRoutine ? [scoped.id] : [])].sort();
+    expect(context.memories.map(m => m.id)).toEqual(expected);
+    expect(context.memories.find(m => m.id === own.id)?.body.explicit_constraint).toBe(true);
+    // Observe actual SQLite results, not just the final post-filtered context:
+    // the old all-memory scan returns foreign/sibling bodies here and must fail.
+    const returned = read.mock.results.flatMap(result => result.type === 'return' ? result.value : []) as Array<{ kind?: string; id: string }>;
+    expect(returned.filter(row => row.kind === 'memory').map(row => row.id).sort()).toEqual([...expected, expired.id].sort());
+    expect(context.authorization_policy_ids).toEqual([]);
+  } finally { read.mockRestore(); f.close(); }
+});
 
 it('preserves an explicit constraint through legacy edits; only a current explicit false clears it', () => {
   const f = fixture();

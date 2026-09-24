@@ -4,6 +4,25 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Memory scope filtering before hydration (2026-09-24): `Store.scopedMemories`
+applies the existing global/persona/routine predicate in SQLite before returning
+bodies to `ControlCore.context`. Tombstones and created_at/id order remain intact;
+expiry still uses Date.parse, preserving offset and millisecond semantics. Tests
+inspect real SQLite returned rows as well as final context for personal/routine
+requests, sibling scopes, deletion, exact expiry and one millisecond after expiry,
+and explicit constraints. The former all-memory hydration path produces the same
+final context but fails both new returned-row checks when restored as a mutant.
+No record cap, token budget, new authority, truncation or schema migration; SQLite
+may still scan all memory rows and eligible context size remains unbounded.
+Full backend1824/91 files passes; final focused57/typecheck pass after mutation
+restoration. Logs: `.local/memory-scope-backend.log` SHA256
+`7852ce98c67fc463573873f7aa07402cedd6adcce2e9db1b803412f61eeaa6b8`,
+`.local/memory-scope-mutant.log` SHA256
+`cd5e3e9cb4aaed45a82605f4cf1db3c56659f232ee0d7b001c4caaa36a60e4ef`,
+`.local/memory-scope-final.log` SHA256
+`4713435789759ab4235553f6ad6c06419ef42d3b6381c14df13aaea3909e03b7`.
+Local only; no UI, runtime/provider or production flag change.
+
 Tokenizer harness integration (2026-09-24): corrected worker delivery44b6c08
 passed bundle hash/prerequisite/three-file inspection and independent execution
 (92 cases, offline23,100-record batch109715ms). Parent then found the named
