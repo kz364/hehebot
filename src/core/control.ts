@@ -22,7 +22,7 @@ import {OwnerAlphaWarm} from './owner-alpha-warm';
 import {OwnerAlphaBackground} from './owner-alpha-background';
 import {TestCampaign} from './test-campaign';
 import {timelineExpirySql} from './timeline-retention';
-import {memorySourceDigest} from './memory-context';
+import {memorySourceDigest,memorySnapshot as readMemorySnapshot} from './memory-context';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
@@ -516,7 +516,7 @@ export class ControlCore {
   const persona=this.activePersona(personaId);
   const routine=routineId?this.store.get<RoutinePut>(routineId,'routine'):null;
   const now=this.now();
-  const memories=memorySnapshot??this.store.scopedMemories(personaId,routineId).filter(m=>!m.body.expires_at||Date.parse(m.body.expires_at)>Date.parse(now));
+  const memories=memorySnapshot??readMemorySnapshot(this.store,personaId,routineId,now);
   let contextEvents:ContextSnapshot['context_events']=[];
   let contextHistoryGap:ContextSnapshot['context_history_gap'];
   if(roomId){
@@ -536,10 +536,17 @@ export class ControlCore {
   // A background-generation candidate uses the restricted per-task snapshot at
   // enqueue too, not only at claim; no shared memories, history or task titles.
   const backgroundCandidate=!this.options.executionEnabled&&this.background.messageAdmitted(personaId,commandId,routineId,occurrenceId,roomId);
-  const context=backgroundCandidate?this.backgroundContext(personaId,instruction,id):this.context(personaId,instruction,routineId,roomId,commandId);
+  let context:ContextSnapshot,memoryBlocked=false;
+  try{context=backgroundCandidate?this.backgroundContext(personaId,instruction,id):this.context(personaId,instruction,routineId,roomId,commandId);}
+  catch(error){
+   if(!(error instanceof ControlError)||error.code!=='MEMORY_PREPARATION_LIMIT')throw error;
+   // An unadmitted placeholder, never a partial execution context. Keep the
+   // request retryable without stalling unrelated routine occurrences.
+   context=this.context(personaId,instruction,routineId,roomId,commandId,[]);memoryBlocked=true;
+  }
   if(skill){context.skills=[skill];context.skill_invocation={skill_id:skill.id,skill_revision:skill.revision};}
   const admitted=this.options.executionEnabled||(!this.bootstrap.assignedManifest()&&this.ownerAlpha.available()&&this.ownerAlpha.directMessage(personaId,commandId,routineId,occurrenceId,roomId))||this.warmMessageAdmitted(personaId,commandId,routineId,occurrenceId,roomId)||this.backgroundMessageAdmitted(personaId,commandId,routineId,occurrenceId,roomId);
-  let status=admitted?'queued':'waiting',reason:string|null=admitted?null:'CAPABILITY_UNAVAILABLE';
+  let status=admitted&&!memoryBlocked?'queued':'waiting',reason:string|null=memoryBlocked?'MEMORY_PREPARATION_LIMIT':admitted?null:'CAPABILITY_UNAVAILABLE';
   this.store.db.exec('INSERT INTO runs(id,command_id,occurrence_id,persona_id,routine_id,context_json,status,error_code,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',id,commandId,occurrenceId,personaId,routineId,JSON.stringify(context),status,reason,now,now);
   if(this.budget.blocks(this.store.run(id))){
    status='waiting';reason=this.budget.summary().status;

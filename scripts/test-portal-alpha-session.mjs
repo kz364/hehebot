@@ -92,6 +92,7 @@ try{
   await evaluate('document.querySelector("#review-alpha-session").scrollIntoView({behavior:"instant",block:"center"});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
   await evaluate('globalThis.lastReviewClick=null;document.addEventListener("click",e=>{globalThis.lastReviewClick={id:e.target.id,text:e.target.textContent?.slice(0,100)}},{once:true,capture:true})');
   await browser('click','#review-alpha-session');
+  await wait('globalThis.lastReviewClick!==null');
   assert.equal((await evaluate('globalThis.lastReviewClick'))?.id,'review-alpha-session','The real review click must reach its enabled button.');
  };
  const review=async()=>{await clickReview();await wait('document.querySelector("#editor").open');};

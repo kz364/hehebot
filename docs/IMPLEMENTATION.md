@@ -4,6 +4,37 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Ordinary memory snapshot bounds (2026-09-25 Asia/Jakarta): context construction
+now shares preparation's indexed 65-row sentinel, 64-record complete-or-refuse cap
+and 131072-byte combined serialized buckets. Expired rows still consume record
+work; foreign scopes do not. Constraints remain verbatim. Oversized enqueue
+persists a waiting request with `MEMORY_PREPARATION_LIMIT` and an empty, unadmitted
+memory placeholder, without requesting a wake. Passive memory deletion does not
+resume it; explicit retry rebuilds current context. Legacy claims recheck growth
+and park before attempts, letting unrelated queued work continue. Due routine
+occurrences still commit independently. This does not add legacy token accounting
+or bound total storage, index construction, cleanup scans or historical snapshots.
+
+Focused 48/typecheck pass, including exact 131072/131073-byte boundaries, 64/65 rows,
+expired sentinels, scope, no-wake/delete/retry, preserved constraints and independent
+due routines. `.local/memory-legacy-focused-final.log` SHA256
+`5e0fe997f1a2e73572e89e9c965ed9f8473a747de8096e28c3d514600ec889a3`.
+The full verifier passed backend 1946/runtime 682, HTTP 31 and preceding browser/
+Worker stages, then failed at an unobserved second alpha review click. Its original
+log is retained in `.local/memory-legacy-combined.log`, SHA256
+`c8526406657951a9af67505c453ce18f075a55e52fdadd347a6abb4cd50a7927`.
+The fixture now waits for its click listener before asserting the exact target;
+no retry or application change. Standalone alpha-session passes all three sections:
+`.local/memory-legacy-alpha-click-wait.log` SHA256
+`2c77217821cc33a46dd7aeb3025e8e411f7e5400b745ad45ba17c61c20d3ef7e`.
+The final routine regression was added after the full backend segment and is in
+the 48 focused tests. Desktop 16 pass. The remaining verifier (PID968999) exited0,
+including browser/native/shutdown/strict-launcher/service/typecheck/dry-build:
+`.local/memory-legacy-remaining.log` SHA256
+`021088750365a7ef667679684c0c2448529fc115fa1196de59dd0f46dc4da747`.
+This is segmented verification, not a clean original full invocation. No
+push/deploy, live calls or production gate changes.
+
 Read-ledger retention (2026-09-25 Asia/Jakarta): Worker maintenance/alarms now use
 the existing90-day settled-history window for exact memory-read attempt keys.
 The attempt/run must be terminal, with no retry, live root attempt, operation,

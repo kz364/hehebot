@@ -36,17 +36,22 @@ const lexicalTerms=(text:string)=>new Set(text.normalize('NFC').toLowerCase().ma
  * bound returned records and counting input, not storage size or index creation.
  * Expired records count against the read-work cap until retention removes them.
  */
-export function prepareMemory(store:Store,run:Run,model:string,now:string,memoryReadPersonas:string[]=[]) {
- requireThat(typeof model==='string'&&/^[a-zA-Z0-9._-]{1,128}$/.test(model),'NATIVE_PERSONA_UNMAPPED','The runtime must declare the selected persona model.');
- const records=store.scopedMemories(run.persona_id,run.routine_id,65);
+export function memorySnapshot(store:Store,personaId:string,routineId:string|null,now:string) {
+ const records=store.scopedMemories(personaId,routineId,65);
  requireThat(records.length<=64,'MEMORY_PREPARATION_LIMIT','Memory preparation exceeds the record work limit. No memory was truncated.');
- let memories:MemoryContextEntry[]=records.filter(record=>!record.body.expires_at||Date.parse(record.body.expires_at)>Date.parse(now));
+ const memories=records.filter(record=>!record.body.expires_at||Date.parse(record.body.expires_at)>Date.parse(now));
  // These exact JSON array values are the versioned budget domains. Count
  // framing/metadata too, not just text or a sum of separately encoded records.
- let global=JSON.stringify(memories.filter(record=>record.body.scope.kind==='global'));
- let scoped=JSON.stringify(memories.filter(record=>record.body.scope.kind!=='global'));
+ const global=JSON.stringify(memories.filter(record=>record.body.scope.kind==='global'));
+ const scoped=JSON.stringify(memories.filter(record=>record.body.scope.kind!=='global'));
  requireThat(new TextEncoder().encode(global).byteLength+new TextEncoder().encode(scoped).byteLength<=131072,
   'MEMORY_PREPARATION_LIMIT','Memory preparation exceeds the byte work limit. No memory was truncated.');
+ return memories;
+}
+
+export function prepareMemory(store:Store,run:Run,model:string,now:string,memoryReadPersonas:string[]=[]) {
+ requireThat(typeof model==='string'&&/^[a-zA-Z0-9._-]{1,128}$/.test(model),'NATIVE_PERSONA_UNMAPPED','The runtime must declare the selected persona model.');
+ let memories:MemoryContextEntry[]=memorySnapshot(store,run.persona_id,run.routine_id,now);
  // Rank only after work bounds and scope/expiry filtering. Distinct literal
  // term overlap is deterministic, not semantic retrieval or authorization.
  // Reordering retains every record, including zero-score explicit constraints.
@@ -56,8 +61,8 @@ export function prepareMemory(store:Store,run:Run,model:string,now:string,memory
  // Do not promise retrieval from policy alone: the claiming host must expose it.
  if(memoryReadPersonas.includes(run.persona_id)&&store.get<PersonaPut>(run.persona_id,'persona').body.tool_policy_ids.includes(MEMORY_READ_POLICY))
   memories=memories.map(projectMemory);
- global=JSON.stringify(memories.filter(record=>record.body.scope.kind==='global'));
- scoped=JSON.stringify(memories.filter(record=>record.body.scope.kind!=='global'));
+ const global=JSON.stringify(memories.filter(record=>record.body.scope.kind==='global'));
+ const scoped=JSON.stringify(memories.filter(record=>record.body.scope.kind!=='global'));
  requireThat(new TextEncoder().encode(global).byteLength+new TextEncoder().encode(scoped).byteLength<=131072,
   'MEMORY_PREPARATION_LIMIT','Projected memory exceeds the byte work limit. No memory was truncated.');
  const identity={schema_version:1 as const,run_id:run.id,attempt:run.current_attempt+1,selected_model:model};

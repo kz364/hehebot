@@ -11,8 +11,15 @@ The standalone load harness keeps its disposable install.
 Preparation scope reads use schema14's ordered partial index: at most65 rows
 per scope, at most195 SQL-returned rows and65 parsed bodies before the64-record
 complete-or-block gate. Actual local workerd plans avoid full scans and temporary
-sorting. This does not bound index construction, storage size or unlimited legacy
-enqueue snapshots; query-plan evidence is not deployed CPU or latency acceptance.
+sorting. Ordinary context construction (including enqueue and legacy claims) now
+uses the same record and131072-byte combined JSON-bucket work limits. An oversized
+enqueue is parked with `MEMORY_PREPARATION_LIMIT`, no memory bodies and no wake;
+that placeholder is not an admitted context. An explicit retry rebuilds current
+memory. Passive edits do not resume it. Legacy claim overflow parks before attempt
+creation; unrelated queued work can proceed. Constraints are never partially
+selected to fit. These work limits do not give legacy callers token accounting.
+This does not bound index construction, total storage, cleanup scans or inherited
+historical snapshots; query-plan evidence is not deployed CPU or latency acceptance.
 
 ## Owner-adopted summaries and disclosed prompt projection
 

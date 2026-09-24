@@ -319,8 +319,13 @@ export class LifecycleCore {
    // (§9): no shared conversation history, task summaries, or WhatsApp grants
    // may reach A/S/B through the generic context composition.
    const backgroundRootRole=this.core.ownerAlpha.backgroundCompletionRole(run.id);
-   const context=backgroundRootRole?this.core.backgroundContext(run.persona_id,prior.instruction,run.id):
-    this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id,run.command_id,prepared?.memories);
+   let context:ContextSnapshot;
+   try{context=backgroundRootRole?this.core.backgroundContext(run.persona_id,prior.instruction,run.id):
+    this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id,run.command_id,prepared?.memories);}
+   catch(error){
+    if(!(error instanceof ControlError)||error.code!=='MEMORY_PREPARATION_LIMIT')throw error;
+    this.blockMemoryPreparation(run,error.code);return null;
+   }
    if(memoryBudget)context.memory_budget={...memoryBudget};
    if(personaModels!==undefined){
     const model=Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;

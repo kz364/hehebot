@@ -90,8 +90,8 @@ it('retrieves raw code-point ranges from a projected pointer and refuses same-re
 
 it('checks full-source byte work limits before summary projection',()=>{
  const f=setup();try{
-  for(let i=0;i<3;i++)f.add(false,undefined,'🧭'.repeat(16000));
   const {identity,run}=f.start();
+  for(let i=0;i<3;i++)f.add(false,undefined,'🧭'.repeat(16000));
   expect(f.life.prepareMemory(identity,f.models,[bot])).toMatchObject({blocked:true,reason:'MEMORY_PREPARATION_LIMIT',run_id:run});
   expect(f.db.all('SELECT * FROM attempts')).toEqual([]);
  }finally{f.close();}

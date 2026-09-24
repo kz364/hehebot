@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {expect,it,vi} from 'vitest';
-import {fixture,bot,otherBot} from './helpers';
+import {fixture,bot,otherBot,routine} from './helpers';
 import {LifecycleCore} from '../src/core/lifecycle';
 import {MEMORY_TOKENIZER,type MemoryPreparation,type MemoryBudgetReceipt} from '../src/core/memory-context';
 import validateRuntime from '../src/generated/validate-runtime.js';
@@ -150,10 +150,73 @@ it.each(['add','edit','move','delete','expire','model','task'] as const)('reject
 
 it('blocks work limits without emitting a truncated set or starting an attempt',()=>{
  const f=setup();try{
-  for(let i=0;i<65;i++)f.add();
   const id=f.enqueue();
+  for(let i=0;i<65;i++)f.add();
   expect(f.life.prepareMemory(f.identity,f.models)).toEqual({blocked:true,run_id:id,reason:'MEMORY_PREPARATION_LIMIT'});
   expect(f.store.run(id)).toMatchObject({status:'waiting',current_attempt:0});
+  expect(f.db.all('SELECT * FROM attempts')).toEqual([]);
+ }finally{f.close();}
+});
+
+it('parks oversized enqueue without waking, then rebuilds only after explicit retry',()=>{
+ const f=setup();try{
+  const ids=Array.from({length:65},()=>f.add());
+  const before=f.db.all('SELECT * FROM lifecycle'),read=vi.spyOn(f.store,'scopedMemories');
+  const id=f.enqueue('Preserve this exact request');
+  expect(read.mock.calls).toEqual([[bot,null,65]]);read.mockRestore();
+  expect(f.store.run(id)).toMatchObject({status:'waiting',error_code:'MEMORY_PREPARATION_LIMIT',current_attempt:0});
+  expect(JSON.parse(f.store.run(id).context_json)).toMatchObject({instruction:'Preserve this exact request',memories:[]});
+  expect(f.db.all('SELECT * FROM lifecycle')).toEqual(before);
+  expect(f.life.claim(f.identity)).toBeNull();
+  expect(f.accept({schema_version:1,type:'memory.delete',payload:{id:ids[0],expected_revision:1,purge_transcripts:false}}).status).toBe('applied');
+  expect(f.store.run(id).status).toBe('waiting');
+  expect(f.db.all('SELECT * FROM lifecycle')).toEqual(before);
+  expect(f.accept({schema_version:1,type:'run.retry',payload:{run_id:id,expected_attempt:0}}).status).toBe('applied');
+  const claimed=f.life.claim(f.identity)!;
+  expect(claimed.run.id).toBe(id);
+  const context=JSON.parse(claimed.run.context_json);
+  expect(context.memories.map((m:{id:string})=>m.id).sort()).toEqual(ids.slice(1).sort());
+  expect(context.memories.every((m:{body:{explicit_constraint:boolean}})=>m.body.explicit_constraint)).toBe(true);
+  expect(context.memory_budget).toBeUndefined(); // Work bounds are not token accounting.
+ }finally{vi.restoreAllMocks();f.close();}
+});
+
+it.each(['records','bytes'])('legacy claim refuses increased %s before admission and leaves unrelated work claimable',mode=>{
+ const f=setup();try{
+  const id=f.enqueue();f.setNow('2026-09-10T00:00:01.000Z');
+  const other=f.accept({schema_version:1,type:'message.send',payload:{conversation_id:otherBot,text:'Independent'}}).resource_id!;
+  if(mode==='records')for(let i=0;i<65;i++)f.add();
+  else for(let i=0;i<3;i++)f.add('persona',bot,'😀'.repeat(16000));
+  expect(f.life.claim(f.identity)).toBeNull();
+  expect(f.store.run(id)).toMatchObject({status:'waiting',error_code:'MEMORY_PREPARATION_LIMIT',current_attempt:0});
+  expect(f.db.all('SELECT * FROM attempts')).toEqual([]);
+  expect(f.life.claim(f.identity)!.run.id).toBe(other);
+ }finally{f.close();}
+});
+
+it('legacy context checks the record sentinel before filtering expired rows and preserves scope',()=>{
+ const f=setup();try{
+  const ids=Array.from({length:64},(_,i)=>f.add(i%2?'persona':'global',i%2?bot:null));
+  for(let i=0;i<70;i++)f.add('persona',otherBot);
+  expect(f.core.context(bot,'Read',null,null).memories.map(m=>m.id).sort()).toEqual(ids.sort());
+  f.add('persona',bot,'Expired constraint','2026-09-09T00:00:00.000Z');
+  expect(()=>f.core.context(bot,'Read',null,null)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
+ }finally{f.close();}
+});
+
+it('parks oversized routine snapshots without rolling back independent due occurrences',()=>{
+ const f=setup();try{
+  const blocked=routine(),independent=routine({persona_id:otherBot});
+  for(const payload of [blocked,independent])expect(f.accept({schema_version:1,type:'routine.put',payload}).status).toBe('applied');
+  for(let i=0;i<3;i++)f.add('routine',blocked.id,'😀'.repeat(16000));
+  f.setNow('2026-09-10T00:15:00.000Z');
+  f.core.tick();f.core.tick();
+  const [parked]=f.db.all<{status:string;error_code:string;context_json:string;current_attempt:number}>('SELECT * FROM runs WHERE routine_id=?',blocked.id);
+  expect(parked).toMatchObject({status:'waiting',error_code:'MEMORY_PREPARATION_LIMIT',current_attempt:0});
+  expect(JSON.parse(parked.context_json).memories).toEqual([]);
+  expect(f.db.all('SELECT status,current_attempt FROM runs WHERE routine_id=?',independent.id)).toEqual([{status:'queued',current_attempt:0}]);
+  expect(f.db.all('SELECT id FROM occurrences')).toHaveLength(2);
+  expect(f.db.all('SELECT next_due_at FROM schedule_state')).toEqual([{next_due_at:'2026-09-10T00:30:00.000Z'},{next_due_at:'2026-09-10T00:30:00.000Z'}]);
   expect(f.db.all('SELECT * FROM attempts')).toEqual([]);
  }finally{f.close();}
 });
@@ -188,7 +251,9 @@ it('bounds the exact combined UTF-8 arrays, not text length or each bucket separ
   f.store.put(key,'memory',{...old.body,text:'a'.repeat(remaining)},1,'owner',f.core.now());
   const exact=f.prepare();
   expect(Buffer.byteLength(exact.global+exact.scoped)).toBe(131072);
+  expect(f.core.context(bot,'Read',null,null).memories).toHaveLength(3);
   f.store.put(key,'memory',{...old.body,text:'a'.repeat(remaining+1)},2,'owner',f.core.now());
+  expect(()=>f.core.context(bot,'Read',null,null)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
   expect(f.life.prepareMemory(f.identity,f.models)).toMatchObject({blocked:true,reason:'MEMORY_PREPARATION_LIMIT'});
   expect(f.db.all('SELECT * FROM attempts')).toEqual([]);
  }finally{f.close();}

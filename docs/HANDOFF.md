@@ -4,7 +4,24 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
-Current unit: read-budget ledger retention. Maintenance/alarms prune at most100
+Current unit: ordinary enqueue/legacy memory snapshot bounds. Complete-or-refuse
+64-record/131072-byte work limits now apply to context construction. Overflow
+parks without wake/attempt creation, retaining an unadmitted placeholder; explicit
+retry rebuilds current memory, and passive deletion does not resume work.
+Independent claims/due routines continue. Constraints are never truncated.
+Focused 48/typecheck, backend 1946/runtime 682/HTTP 31 and desktop 16 pass.
+The combined verifier stopped on an unobserved alpha review-button click;
+waiting for its existing listener retains the exact-target assertion, without
+retry. The corrected fixture passes; remaining verifier PID968999 exited0 through
+browser/native/shutdown/launcher/service/build, with evidence in
+`.local/memory-legacy-remaining.log`. Verification is segmented, not an original
+clean full invocation. Original failure and hashes are retained in IMPLEMENTATION.md.
+No active check/child/unintegrated delivery; this checkpoint is local only.
+Next: storage/index construction/cleanup scans and inherited historical snapshot
+bounds, then native recovery/settlement. Existing follow-through schedule enabled;
+no push/deploy, live calls, legacy token accounting or production gate changes.
+
+Previous unit, locald690527: read-budget ledger retention. Maintenance/alarms prune at most100
 exact keys90 days after terminal settlement, independently of result-body cleanup.
 Retry/recovery, live root attempts, operations, locks, effects, pending delivery,
 root questions and unsettled descendants retain charges. Structural records stay;
