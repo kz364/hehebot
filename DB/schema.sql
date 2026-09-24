@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (14, '2026-09-24T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (15, '2026-09-24T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -70,6 +70,7 @@ CREATE TABLE runs (
  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX runs_status_created ON runs(status,created_at);
+CREATE INDEX runs_parent ON runs(parent_run_id,id);
 CREATE TABLE attempts (
  run_id TEXT NOT NULL REFERENCES runs(id), attempt INTEGER NOT NULL CHECK(attempt > 0),
  submission_key TEXT NOT NULL UNIQUE, epoch INTEGER NOT NULL, boot_id TEXT NOT NULL,

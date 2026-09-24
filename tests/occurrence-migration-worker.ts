@@ -14,7 +14,7 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
   ctx.blockConcurrencyWhile(async()=>{
    if(!this.db.all("SELECT name FROM sqlite_schema WHERE name='schema_versions'").length){
     if(env.PHASE!=='seed')throw Error('Expected retained v12 storage');
-    this.db.exec(schema.replace('PRAGMA foreign_keys = ON;','').replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (14,','VALUES (12,').replace(/^CREATE INDEX objects_memory_scope .*\n/m,''));
+    this.db.exec(schema.replace('PRAGMA foreign_keys = ON;','').replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (15,','VALUES (12,').replace(/^CREATE INDEX (objects_memory_scope|runs_parent) .*\n/gm,''));
     this.db.exec(`INSERT INTO objects VALUES('routine-19','routine',73,'{}',NULL,'t1','t2'),('persona-31','persona',2,'{}',NULL,'t1','t2');
      INSERT INTO occurrences VALUES('occurrence-43','routine-19',7,'2026-09-17T03:15:00.000Z','claimed',5,'t3');
      INSERT INTO runs(id,occurrence_id,persona_id,routine_id,context_json,status,current_attempt,created_at,updated_at)

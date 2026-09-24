@@ -4,6 +4,46 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Recursive parent lookup (2026-09-25 Asia/Jakarta): application schema15 adds
+`runs_parent(parent_run_id,id)`. Both the seed and recursive step of the unchanged
+descendant-settlement predicate use covering parent lookups instead of a table
+scan/automatic index. This is not a family-size, obligation-scan, total-storage or
+index-construction bound. No shared database migration was executed.
+
+The v14→v15 migration rejects conflicting named indexes and rolls back index
+creation if the version write fails; exact-index adoption and inert reruns are
+tested. Canonical schema SHA256 is
+`327be864123d24d2aa574a9bddb9b333948b7311e2eb0ea9363d4b37b3799c5c`;
+the pinned SQL file SHA256 is
+`d760d97d5e400a0d7e2ab3f2d5a2230fa354503d34a531304f02e780eabbd306`.
+Historical backup/export pins are unchanged. Imports reconstruct pre15 snapshots
+without the new index or invented migration history. Node coverage includes a
+live grandchild, settled family, cycle dedupe and an index-removal negative control.
+Real workerd verifies both recursive steps in retention queries, startup migration,
+exact fresh schema and persistent reopen. Its log plus typecheck is
+`.local/run-parent-workerd.log`, SHA256
+`1cd0c396b33f264defe04d375b66b594058631e6fec7cbbf1e4d23798a9c03d5`.
+Initial focused202:201 passed; one stale restore-version expectation failed and
+was corrected. Retained `.local/run-parent-focused.log` SHA256
+`29c82c80025b0345c98564be4f96421e1f37d5f06f3ac7e02a91ac744d844221`.
+Original combined verifier passed backend1956/runtime682, backup/restore, HTTP31
+and workerd migration/plans before failing the connector-catalog browser assertion:
+`scrollTop` was0.5 instead of0. Retained `.local/run-parent-combined.log` SHA256
+`25e34f31562ee6f5256e5cc2655dbea771d6bc355b8b704d5289f84f5f23bd85`.
+A diagnostic run sampled zero over9 frames and passed the unchanged assertion;
+this does not establish the first failure's cause. Temporary instrumentation was
+removed; neither portal nor fixture is changed. Diagnostic log
+`.local/run-parent-catalog-diagnostic.log` SHA256
+`8e907cce10f990858d440c47c8e0ecf6c588cac822b871404fbd5bb10eb03a91`.
+Remaining verifier stages exited0 through browser/native/shutdown/strict launcher/
+service/typecheck/dry build in `.local/run-parent-remaining.log`, SHA256
+`3bbe2145d5b2b6a1b1f34a53b0448434f4598eb312eaf974395a109c67bf8643`.
+Evidence is segmented, not an original clean invocation. Separate desktop16 passes in
+`.local/run-parent-desktop.log`, SHA256
+`13333bf2a5e741199fa2cad2a588caf0d843a8a084a5cd06f60bc098cde522d3`.
+No active check/child/delivery or host fixture residue remains. Local checkpoint
+only; no publication or clean full-verifier claim. Production gates remain false.
+
 Read-ledger cleanup query plan (2026-09-25 Asia/Jakarta): the shared `nextDue`/
 `prune` query now starts with the indexed memory-read key range, then probes exact
 attempt and run primary keys. The previous plan traversed terminal runs and their

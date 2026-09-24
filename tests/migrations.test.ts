@@ -29,7 +29,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual([{id:'run-1',status:'waiting',context_json:'{"synthetic":"preserve context"}',command_id:'command-1',role:'coordinator',parent_run_id:null,title:null}]);
    expect(db.all("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('native_task_links','resource_locks','task_followups','skill_proposals','skill_enablements')")).toHaveLength(5);
    expect(db.all('SELECT * FROM room_publications')).toEqual([]);
-   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(14);
+   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(15);
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=2')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=3')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=4')[0].applied_at).toBe('2026-09-10T00:00:00Z');
@@ -57,7 +57,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual(before);
    sqlite.exec('DROP INDEX room_publications_cause');
    migrateApplication(db,'2026-09-12T00:00:00Z');
-   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:14}]);
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:15}]);
   }finally{sqlite.close();}
  });
  it('preserves v7 followups and foreign keys, and rolls back a failed table replacement',()=>{

@@ -4,7 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
-Current unit verified: read-ledger retention starts from the indexed key range,
+Current unit verified: schema15 parent index; Node migration/plan tests and real
+workerd migration/reopen/recursive plans/typecheck pass. Combined verifier stopped
+at a fractional catalog scroll assertion after backend1956/runtime682/HTTP31.
+Diagnostic rerun passed with zero over9 observed frames; cause remains unproven,
+and temporary instrumentation was removed. Remaining verifier PID1015077 exited0
+through native/shutdown/strict launcher/service/build; desktop16 passes separately.
+Evidence in IMPLEMENTATION.md is segmented, not a clean combined pass. No active
+check/child/delivery or host fixture residue. Local only, no shared migration or
+external gate changes. Next: remaining family/obligation and ledger scans,
+storage/index construction and historical snapshot bounds, then native recovery/
+settlement and broader TODO. Existing follow-through schedule remains enabled.
+
+Previous unit verified: read-ledger retention starts from the indexed key range,
 then exact attempt/run primary-key lookups, instead of terminal-run history first.
 Canonical-key equality rejects numeric aliases; settlement, 90-day retention and
 100-key transactional deletion rules are unchanged. Initial query-plan red and

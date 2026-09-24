@@ -119,5 +119,13 @@ export function migrateApplication(db:Database,now:string):void {
    'SCHEMA_MISMATCH','Memory scope index needs explicit reconciliation.',503);
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(14,?)',now);
  });
- requireThat([13,14].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===13)version=14;
+ if(version===14)db.transaction(()=>{
+  const sql='CREATE INDEX runs_parent ON runs(parent_run_id,id)';
+  db.exec(sql.replace('CREATE INDEX','CREATE INDEX IF NOT EXISTS'));
+  requireThat(db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='runs_parent'")[0]?.sql===sql,
+   'SCHEMA_MISMATCH','Run parent index needs explicit reconciliation.',503);
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(15,?)',now);
+ });
+ requireThat([14,15].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

@@ -7,7 +7,7 @@ import type {Database,SqlValue} from '../src/core/store';
 import {legacyOccurrencesSql} from './legacy-occurrences';
 
 const schema=readFileSync(new URL('../DB/schema.sql',import.meta.url),'utf8');
-const prior=schema.replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (14,','VALUES (12,').replace(/^CREATE INDEX objects_memory_scope .*\n/m,'');
+const prior=schema.replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (15,','VALUES (12,').replace(/^CREATE INDEX (objects_memory_scope|runs_parent) .*\n/gm,'');
 const schemaRows=(sqlite:DatabaseSync)=>sqlite.prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name").all();
 function fixture(migrated=true){
  const sqlite=new DatabaseSync(':memory:');sqlite.exec(migrated?prior:schema);
@@ -31,7 +31,7 @@ describe('v13 occurrence origin migration',()=>{
    expect(db.all('SELECT * FROM occurrences')).toEqual(occurrences.map(row=>({...row as object,origin:'scheduled'})));
    expect(db.all('SELECT * FROM runs')).toEqual(runs);expect(db.all('SELECT * FROM attempts')).toEqual(attempts);
    expect(schemaRows(sqlite)).toEqual(schemaRows(fresh));
-   expect(createHash('sha256').update(JSON.stringify(schemaRows(sqlite))).digest('hex')).toBe('1fe0bfe3a7be6a29c66dc3b73bb3b8974de03fbda7773fe921c50e7b19558ddb');
+   expect(createHash('sha256').update(JSON.stringify(schemaRows(sqlite))).digest('hex')).toBe('327be864123d24d2aa574a9bddb9b333948b7311e2eb0ea9363d4b37b3799c5c');
    expect(db.all('PRAGMA foreign_key_check')).toEqual([]);
    expect(db.all('PRAGMA foreign_keys')).toEqual([{foreign_keys:1}]);
    expect(db.all('PRAGMA defer_foreign_keys')).toEqual([{defer_foreign_keys:0}]);

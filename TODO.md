@@ -12,7 +12,19 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** read-ledger retention starts
+**Current checkpoint (2026-09-25, verified locally with caveat):** schema15 adds
+indexed parent lookup for both recursive descendant-discovery steps. Migration
+rollback/conflict/custody tests and real workerd migration/reopen/plans pass.
+Legacy exports/backups retain their exact schema and migration history. Backend
+1956/runtime682/HTTP31/typecheck, desktop16 and remaining native/shutdown/strict
+launcher/service/dry-build checks pass. The original combined run stopped at a
+catalog scroll assertion (0.5 versus0); diagnostic rerun passed, cause unproven.
+No portal or fixture change; evidence is segmented, not a clean full invocation.
+No active check/child/delivery. Next: remaining family/obligation and ledger scans,
+storage/index construction and historical snapshot bounds, then native recovery/
+settlement. Local only; no shared migration, push/deploy or gate changes.
+
+**Previous checkpoint (2026-09-25, verified locally):** read-ledger retention starts
 from indexed memory-read keys and probes exact attempt/run identities instead of
 walking terminal-run attempt histories first. Node 32/typecheck and real workerd
 query-plan/cleanup checks pass; removing the exact-key guard fails the alias test

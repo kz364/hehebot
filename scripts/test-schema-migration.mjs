@@ -34,7 +34,7 @@ try{
   assert.deepEqual({...failed,rejected:false},before,`Exact rollback for ${path}`);
  }
  await stop();base=await start('migrate');const after=await get(base);
- assert.deepEqual(after.versions.map(row=>row.version),[12,13,14]);
+ assert.deepEqual(after.versions.map(row=>row.version),[12,13,14,15]);
  assert.deepEqual(after.occurrences,before.occurrences.map(row=>({...row,origin:'scheduled'})));
  assert.deepEqual(after.runs,before.runs);assert.deepEqual(after.attempts,before.attempts);
  assert.deepEqual(after.foreignKeys,[{foreign_keys:1}]);assert.deepEqual(after.deferred,[{defer_foreign_keys:0}]);assert.deepEqual(after.violations,[]);
@@ -60,9 +60,11 @@ try{
   assert.match(details,/^SEARCH m USING COVERING INDEX .*\(key>\? AND key<\?\)/);
   assert.match(details,/SEARCH a USING INDEX .*\(run_id=\? AND attempt=\?\)/);
   assert.match(details,/SEARCH r USING INDEX .*\(id=\?\)/);
-  assert.doesNotMatch(details,/SCAN a\b|SCAN m\b/);
+  assert.match(details,/SEARCH runs USING COVERING INDEX runs_parent \(parent_run_id=\?\)/);
+  assert.match(details,/SEARCH child USING COVERING INDEX runs_parent \(parent_run_id=\?\)/);
+  assert.doesNotMatch(details,/SCAN a\b|SCAN m\b|SCAN runs\b|SCAN child\b/);
  }
- console.log('PASS: real workerd memory retention starts from ledger keys with exact attempt lookups, retains numeric aliases and all 1001 attempts; no total cleanup-scan or storage bound claimed.');
- console.log('PASS: real local Worker v12→v14 startup migration; retained live occurrence/run/attempt, version-write and FK-check rollback, enforced references, exact fresh schema, idempotent rerun, persistent reopen and all three bounded memory-scope index plans without temporary sorting. No account/provider calls.');
+ console.log('PASS: real workerd memory retention starts from ledger keys with exact attempt lookups and indexed recursive parent lookups, retains numeric aliases and all 1001 attempts; no total cleanup-scan or storage bound claimed.');
+ console.log('PASS: real local Worker v12→v15 startup migration; retained live occurrence/run/attempt, version-write and FK-check rollback, enforced references, exact fresh schema, idempotent rerun, persistent reopen and all three bounded memory-scope index plans without temporary sorting. No account/provider calls.');
 }catch(error){console.error(logs.slice(-4000));throw error;}
 finally{await stop();await rm(directory,{recursive:true,force:true});}
