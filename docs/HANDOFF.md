@@ -4,7 +4,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
-Current unit: runtime memory-read counting/reservation and final delivery. Ordinary
+Current unit: disclosed owner-summary projection and exact-pointer retrieval.
+Host capability is captured before preparation and sent unchanged with claim;
+Worker also requires persona permission. True/unclassified constraints remain
+verbatim. Raw-source work limits still apply before projection; source digests
+and exact projected bodies are revalidated on reads. Backend1929/runtime682,
+HTTP31/native service/typecheck/build, focused75 and bridge/projection63 pass.
+PID945550 exited0; `.local/memory-projection-integrated-final.log` SHA256
+`cfdad2072ab519a23d96d50e393ac93afd22e462ccd7836316495816390d86fe`. Initial failures
+are retained: four missing-behavior reds, then one fixture range off-by-one (22
+requested versus23 expected; corrected request, exact assertion unchanged).
+Parent owns this tightly coupled protocol directly; no active check/child/delivery.
+Next storage/index-construction/legacy bounds and remaining native recovery/
+settlement work; no policy adoption, push, deployment or gate changes.
+
+Previous unit, local6191650: runtime memory-read counting/reservation and final delivery. Ordinary
 MCP grants persist the admitted selected model and baseline digest. MCP stdout and
 Codex dynamic transport materialize single-use body-free handles at the final
 synchronous write; abort/deadline rechecked there. Dynamic journals store no text

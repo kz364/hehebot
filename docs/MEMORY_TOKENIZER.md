@@ -3,8 +3,9 @@
 Status: **local complete-or-block service adoption, verified.** The root dependency
 is pinned to `gpt-tokenizer@4.0.0` with the verified SRI below. No existing package
 versions changed. Ordinary service dispatch now counts prepared buckets before
-claim for the exact model names listed below. This is not full summary/retrieval,
-model/account eligibility, or deployed acceptance. Staged alpha remains separate.
+claim for the exact model names listed below. Owner-summary projection and bounded
+retrieval are implemented locally; model/account eligibility, summary fidelity and
+deployed acceptance remain unverified. Staged alpha remains separate.
 The standalone load harness keeps its disposable install.
 
 Preparation scope reads use schema14's ordered partial index: at most65 rows
@@ -13,7 +14,7 @@ complete-or-block gate. Actual local workerd plans avoid full scans and temporar
 sorting. This does not bound index construction, storage size or unlimited legacy
 enqueue snapshots; query-plan evidence is not deployed CPU or latency acceptance.
 
-## Owner-adopted summary metadata (not prompt substitution)
+## Owner-adopted summaries and disclosed prompt projection
 
 `memory.put` accepts optional `summary: {schema_version: 1, source_sha256, text}`.
 Summary text is1..2000 Unicode code points. The owner must classify the memory
@@ -35,11 +36,29 @@ needs fresh summary adoption; omitting summary clears it rather than silently
 reusing a stale projection. Current/revision/command purge removes it alongside
 the source. No separate index or summary table is created.
 
-This is only a storage/adoption contract. Full source text remains in context,
-and both source and metadata count toward the existing byte/token budget. There
-is no automatic inference, wake, compression, or UI summary editor. The bounded
-read tool below does not replace the full prompt. Substitution requires exact revision pointers, disclosed
-compression and bounded authorized retrieval before adoption.
+The ordinary host captures `memory_read_personas` from explicitly listed
+`hehebot_read_memory` tools before any prepare/count await. The same optional
+bounded UUID list accompanies preparation and claim. Missing host capability or
+persona permission keeps full source; installing this code adopts neither.
+The Worker recomputes projection at claim, so changed source, summary or permission
+cannot reuse a receipt for different bytes. Legacy unbudgeted paths stay verbatim.
+
+Eligible entries replace `body.text` with owner-adopted summary text and omit the
+duplicate `body.summary`. Their `representation.kind` is `owner_summary`, with
+explicit disclosure that this is not the full source, its exact source digest and
+Unicode code-point length, and `load_with: hehebot_read_memory`. Entry ID/revision
+are the exact read pointer. True and unclassified constraints remain verbatim.
+Lexical ordering uses the original source, not summary wording. Both raw input
+and projected output must pass the preparation byte-work cap; projection cannot
+bypass storage/read-work limits. The host counts the entire projected JSON,
+including pointer/disclosure metadata, rather than only summary prose.
+
+Reads reproduce that exact projection from the current full source before exposing
+a range. Revision, source, summary, scope, expiry and authority fences remain in
+force; there is no fallback to historical or replacement text. Retrieval consumes
+the remaining bucket budget and may refuse, so a pointer is not a promise of
+unlimited access. No automatic summarization inference, wake, UI summary editor or
+semantic-fidelity guarantee is added. Owner storage retains the full source.
 
 ## Targeted-read protocol and runtime delivery
 
@@ -88,8 +107,8 @@ connection; the reserved charge remains and consumption is not acknowledged.
 Call journals retain only fingerprints/status, never memory text, and refuse all
 same-call replay after reconstruction. Mutation tool replay semantics are unchanged.
 Worker authorization is a linearization point, not atomic distributed erasure
-of an already authorized in-flight response. This stage adds no summarization,
-projection, deployed/native-model acceptance or retention policy for the new ledger.
+of an already authorized in-flight response. Local projection/retrieval adds no
+deployed/native-model acceptance or retention policy for the new ledger.
 
 ## Runtime counting contract
 

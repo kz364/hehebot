@@ -74,6 +74,7 @@ export class ExecutionBridge {
       // reach both Worker custody and native submission for this attempt.
       const personas = structuredClone(this.personas);
       const persona_models = Object.fromEntries(Object.entries(personas).map(([id, persona]) => [id, persona.model]));
+      const memory_read_personas = Object.entries(personas).filter(([, persona]) => persona.allowedTools?.includes('hehebot_read_memory')).map(([id]) => id);
       const prior = await this.journal.get(this.cursor);
       if (prior && !['complete', 'released'].includes(prior.phase)) return prior;
       if (prior?.phase === 'released' && !prior.families?.find(row => row.attemptId === prior.attemptId)?.coordinatorRelease?.acknowledged) return prior;
@@ -82,7 +83,7 @@ export class ExecutionBridge {
       if (this.memoryCounter) {
         // Preparation/counting cannot own an attempt. Do not journal claim_unknown
         // until a claim can actually be sent, and never fall back on count failure.
-        preparation = structuredClone(await this.control.request('memory-prepare', { identity: this.identity, persona_models }));
+        preparation = structuredClone(await this.control.request('memory-prepare', { identity: this.identity, persona_models, memory_read_personas }));
         if (preparation === null || preparation?.blocked === true &&
             preparation.reason === 'MEMORY_PREPARATION_LIMIT' && typeof preparation.run_id === 'string') {
           const empty = { phase: 'complete', claim: null, attemptId: null, nativeRunId: null, result: null };
@@ -108,7 +109,7 @@ export class ExecutionBridge {
       if (prior) await this.journal.update(this.cursor, { phase: 'claim_unknown', claim: null, attemptId: null, nativeRunId: null, result: null });
       else await this.journal.putIfAbsent(this.cursor, { phase: 'claim_unknown', identity: this.identity });
       let claim;
-      try { claim = await this.control.request('claim', { identity: this.identity, persona_models, ...(memory_budget ? { memory_budget } : {}) }); }
+      try { claim = await this.control.request('claim', { identity: this.identity, persona_models, ...(memory_budget ? { memory_budget, memory_read_personas } : {}) }); }
       catch { return this.journal.update(this.cursor, { phase: 'claim_unknown' }); }
       if (claim === null) return this.journal.update(this.cursor, { phase: 'complete' });
       if (!claim?.run?.id || !Number.isSafeInteger(claim.run.current_attempt) ||

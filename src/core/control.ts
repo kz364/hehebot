@@ -22,6 +22,7 @@ import {OwnerAlphaWarm} from './owner-alpha-warm';
 import {OwnerAlphaBackground} from './owner-alpha-background';
 import {TestCampaign} from './test-campaign';
 import {timelineExpirySql} from './timeline-retention';
+import {memorySourceDigest} from './memory-context';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
@@ -288,8 +289,7 @@ export class ControlCore {
      requireThat(body.explicit_constraint===false,'MEMORY_SUMMARY_CONSTRAINT','Only explicitly non-constraint memory may have an adopted summary.',422);
      // Bind the resulting revision and exact source metadata, not only prose.
      // Legacy edits omit summary and therefore invalidate it, never carry it forward.
-     const source=[1,p.id,p.expected_revision+1,p.scope.kind,p.scope.id,p.text,p.source_event_id,p.expires_at,p.sensitivity,false];
-     requireThat(body.summary.source_sha256===createHash('sha256').update(JSON.stringify(source)).digest('hex'),
+     requireThat(body.summary.source_sha256===memorySourceDigest(p.id,p.expected_revision+1,body),
       'MEMORY_SUMMARY_STALE','Adopt a summary bound to this exact memory revision and source.',422);
     }
     const revision=this.store.put(p.id,'memory',body,p.expected_revision,owner,now,p.source_event_id);

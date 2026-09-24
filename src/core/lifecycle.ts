@@ -261,14 +261,14 @@ export class LifecycleCore {
    return {lease_until:lease,cancellations:this.store.db.all<{id:string}>("SELECT id FROM runs WHERE status IN ('cancelling','recovery_required')").map(x=>x.id)};
   });
  }
- prepareMemory(identity:Identity,personaModels:Record<string,string>) {
+ prepareMemory(identity:Identity,personaModels:Record<string,string>,memoryReadPersonas:string[]=[]) {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled&&!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Memory preparation requires ordinary execution admission.');
    const run=this.nextClaimableRun();if(!run)return null;
    try {
     const model=Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
-    return prepareMemory(this.store,run,model!,this.core.now()).preparation;
+    return prepareMemory(this.store,run,model!,this.core.now(),memoryReadPersonas).preparation;
    } catch(error) {
     if(!(error instanceof ControlError)||error.code!=='MEMORY_PREPARATION_LIMIT')throw error;
     this.blockMemoryPreparation(run,error.code);
@@ -281,7 +281,7 @@ export class LifecycleCore {
   this.store.event(this.core.options.uuid(),run.persona_id,'run.waiting','system',run.command_id,
    {run_id:run.id,reason,message:'Memory preparation blocked before execution. No memory was truncated and no attempt was started.'},this.core.now());
  }
- claim(identity:Identity,personaModels?:Record<string,string>,memoryBudget?:MemoryBudgetReceipt):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
+ claim(identity:Identity,personaModels?:Record<string,string>,memoryBudget?:MemoryBudgetReceipt,memoryReadPersonas:string[]=[]):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled||this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
@@ -309,7 +309,7 @@ export class LifecycleCore {
    if(memoryBudget){
     requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Staged alpha does not permit generic memory preparation.');
     const model=personaModels&&Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
-    prepared=prepareMemory(this.store,run,model!,this.core.now());
+    prepared=prepareMemory(this.store,run,model!,this.core.now(),memoryReadPersonas);
     if(!validateMemoryBudget(prepared.preparation,memoryBudget)){
      this.blockMemoryPreparation(run,'MEMORY_BUDGET_EXCEEDED');return null;
     }

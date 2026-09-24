@@ -55,6 +55,7 @@
           "type":"object","additionalProperties":false,
           "properties": {
             "identity":{"$ref":"#/$defs/runtimeIdentity"},
+            "memory_read_personas":{"type":"array","maxItems":256,"uniqueItems":true,"items":{"type":"string","format":"uuid"}},
             "persona_models":{"type":"object","maxProperties":256,"propertyNames":{"format":"uuid"},"additionalProperties":{"type":"string","pattern":"^[a-zA-Z0-9._-]{1,128}$"}}
           },"required":["identity","persona_models"]
         }
@@ -504,6 +505,7 @@
           "additionalProperties": false,
           "properties": {
             "memory_budget": {"$ref":"#/$defs/memoryBudget"},
+            "memory_read_personas":{"type":"array","maxItems":256,"uniqueItems":true,"items":{"type":"string","format":"uuid"}},
             "persona_models": {
               "type": "object",
               "maxProperties": 256,

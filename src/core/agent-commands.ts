@@ -3,13 +3,13 @@ import {requireThat} from './errors';
 import type {LifecycleCore,Identity} from './lifecycle';
 import {parseCommand,type ControlCore} from './control';
 import type {Command,ContextSnapshot,RoutinePut,MemoryPut} from './types';
-import {MEMORY_TOKENIZER} from './memory-context';
+import {MEMORY_TOKENIZER,MEMORY_READ_POLICY,projectMemory} from './memory-context';
 
 // Stable IDs in the existing UUID tool-policy registry. Installing code does not
 // grant these capabilities: operator configuration and persona adoption are required.
 export const SKILL_PROPOSE_POLICY='46b2cbdd-d227-4f54-bffa-33148aad0134';
 export const ROUTINE_MANAGE_POLICY='f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
-export const MEMORY_READ_POLICY='748dbc8c-c4dd-4b54-9e3c-d13cbedf77fa';
+export {MEMORY_READ_POLICY} from './memory-context';
 
 export type AgentCommand=Extract<Command,{type:'skill.propose'|'routine.put'|'routine.run'|'routine.delete'}>;
 export type AgentScope={identity:Identity;run_id:string;attempt:number};
@@ -54,7 +54,10 @@ export class AgentCommandBoundary {
    AND json_extract(body_json,'$.scope.kind')=? AND json_extract(body_json,'$.scope.id') IS ?`,admitted.id,admitted.revision,scope.kind,scope.id)[0];
   requireThat(row,'MEMORY_PREPARATION_STALE','Memory changed after admission.');
   const memory={id:admitted.id,revision:admitted.revision,body:JSON.parse(row.body_json) as MemoryPut};
-  requireThat(JSON.stringify(memory.body)===JSON.stringify(admitted.body),'MEMORY_PREPARATION_STALE','Memory source changed after admission.');
+  const {representation,...source}=admitted;
+  const expected=representation?projectMemory({...source,body:memory.body}):{body:memory.body,representation:undefined};
+  requireThat(JSON.stringify(expected.body)===JSON.stringify(admitted.body)&&JSON.stringify(expected.representation)===JSON.stringify(admitted.representation),
+   'MEMORY_PREPARATION_STALE','Memory source changed after admission.');
   const expiry=memory.body.expires_at;
   requireThat(!expiry||Date.parse(expiry)>Date.parse(this.core.now()),'MEMORY_PREPARATION_STALE','Memory expired.');
   const points=Array.from(memory.body.text);

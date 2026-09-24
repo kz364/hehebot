@@ -4,6 +4,35 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Summary projection (2026-09-25 Asia/Jakarta): budgeted preparation/claim accepts
+an optional bounded host `memory_read_personas` declaration, captured before awaits.
+Only host-enabled, persona-authorized, owner-adopted non-constraint summaries
+replace prompt source text. Entries disclose omitted source, exact ID/revision,
+source digest/code-point length and bounded read tool. Lexical ranking and raw
+work limits precede projection; all projected metadata enters the token domain.
+Reads reproduce the admitted projection from current source before returning a
+range, retaining expiry/scope/deletion/attempt/lease fences and cumulative charging.
+Legacy paths and constraints remain verbatim. No policy or automatic inference
+is introduced. Representation is not summary-fidelity or deployed acceptance.
+
+Initial four failing behavior cases are retained in `.local/memory-projection-red.log`,
+SHA256 `21b04b127cf04a71dbe970877785db10a92c43b6d8b8d3a18ec9e6effa430290`.
+Focused75 and bridge/projection63 pass; the latter uses real worker-thread counts,
+schema validation, SQLite claim and exact adapter input, then reads the original
+source. Bridge log `.local/memory-projection-bridge.log`, SHA256
+`7fd17e5cd32ecd84eeaa971742fa7de4463ebe2aad2ea2676e77fe46ff4cda84`.
+The first backend run passed1928/1929; its sole failure was the new fixture asking
+for22 characters but expecting23 including punctuation. Corrected the requested
+range, not the exact assertion. Failure `.local/memory-projection-integrated.log`,
+SHA256 `3b879f705dd64ade8d2ee6b5475aa32cb42ac79f5934d1e7d81be0c1094c057a`.
+Final backend1929/runtime682, HTTP31, native service, typecheck/build pass in
+`.local/memory-projection-integrated-final.log`, SHA256
+`cfdad2072ab519a23d96d50e393ac93afd22e462ccd7836316495816390d86fe`.
+This unit uses targeted integrated checks, not another complete browser/shutdown
+matrix invocation. The preceding runtime-delivery
+checkpoint below retains the segmented full verifier evidence. Storage growth,
+index construction, read-ledger retention and legacy enqueue limits remain open.
+
 Runtime targeted reads (2026-09-25 Asia/Jakarta): `hehebot_read_memory` is an explicitly listed
 ordinary MCP/dynamic tool. The service binds admitted model/budget digest into its
 immutable grant. A shared model mapping governs pre-claim and read counts. The

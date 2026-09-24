@@ -11,6 +11,7 @@ import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { countMemory } from '../runtime/memory-tokenizer.mjs';
 import validateRuntime from '../src/generated/validate-runtime.js';
+import {MEMORY_READ_POLICY,AgentCommandBoundary} from '../src/core/agent-commands';
 
 let f: ReturnType<typeof fixture>, life: LifecycleCore, identity: Identity, directory: string;
 let nativeCalls: number, lose: string | undefined, nativeMessages: any[], nativeModels: string[];
@@ -38,8 +39,8 @@ function bridge(testMode = true, journal = new FileJournal(join(directory, 'brid
   } });
   const control = { request: async (type: string, p: any) => {
     let result;
-    if (type === 'memory-prepare') result = life.prepareMemory(p.identity, p.persona_models);
-    else if (type === 'claim') result = life.claim(p.identity, p.persona_models, p.memory_budget);
+    if (type === 'memory-prepare') result = life.prepareMemory(p.identity, p.persona_models, p.memory_read_personas);
+    else if (type === 'claim') result = life.claim(p.identity, p.persona_models, p.memory_budget, p.memory_read_personas);
     else if (type === 'submitted') result = life.submitted(p.identity, p.run_id, p.attempt, p.native_ref);
     else if (type === 'complete') result = life.complete(p.identity, p.run_id, p.attempt, p.result);
     else throw new Error('Unexpected control call');
@@ -68,6 +69,42 @@ it('counts the exact prepared arrays before claim and carries their receipt to n
   expect(nativeMessages[0].memory_budget).toMatchObject({ run_id: id, attempt: 1,
     selected_model: 'gpt-5.5', global_tokens: 1, scoped_tokens: 1 });
   expect(nativeMessages[0].memories).toEqual([]);
+});
+
+it.each([true,false])('counts and emits disclosed summaries only for captured host retrieval=%s', async host => {
+  const persona=f.store.get(bot);f.store.put(bot,'persona',{...persona.body,tool_policy_ids:[MEMORY_READ_POLICY]},persona.revision,'owner',f.core.now());
+  const id=randomUUID(),source=randomUUID(),text='Distinct raw source 73. '.repeat(80);
+  f.store.event(source,bot,'message.user','owner',null,{text:'Source'},f.core.now());
+  const source_sha256=createHash('sha256').update(JSON.stringify([1,id,1,'persona',bot,text,source,null,'ordinary',false])).digest('hex');
+  expect(f.accept({schema_version:1,type:'memory.put',payload:{id,expected_revision:0,scope:{kind:'persona',id:bot},text,
+    source_event_id:source,expires_at:null,sensitivity:'ordinary',explicit_constraint:false,
+    summary:{schema_version:1,source_sha256,text:'Owner summary 29.'}}}).status).toBe('applied');
+  const run=enqueue(),executor=bridge(),request=executor.control.request;
+  Object.assign(executor.personas[bot],{allowedTools:host?['hehebot_read_memory']:[]});
+  let counted:any;
+  executor.control.request=async (type:string,payload:any)=>{
+    if(['memory-prepare','claim'].includes(type)){
+      expect(validateRuntime({type,payload})).toBe(true);
+      expect(payload.memory_read_personas).toEqual(host?[bot]:[]);
+    }
+    return request(type,payload);
+  };
+  executor.memoryCounter=async (input:any)=>{
+    counted=input;
+    // A later host configuration edit cannot change this admitted selection.
+    Object.assign(executor.personas[bot],{allowedTools:[]});
+    return countMemory(input);
+  };
+  expect((await executor.claimNext()).phase).toBe('running');
+  expect(JSON.stringify(nativeMessages[0].memories)).toBe(counted.scoped);
+  expect(nativeMessages[0].memories[0].body.text).toBe(host?'Owner summary 29.':text);
+  if(host){
+    expect(JSON.stringify(nativeMessages[0])).not.toContain('Distinct raw source 73');
+    expect(nativeMessages[0].memories[0].representation).toMatchObject({kind:'owner_summary',source_sha256,source_code_points:text.length});
+    const boundary=new AgentCommandBoundary(f.core,life);
+    const read=boundary.prepareMemoryRead({identity,run_id:run,attempt:1,read_id:randomUUID(),memory_id:id,revision:1,offset:0,limit:23});
+    expect(JSON.parse(read.text).memory.text).toBe('Distinct raw source 73.');
+  }
 });
 
 it('preserves asymmetric bucket framing, metadata and explicit constraints without hydrating foreign memory', async () => {
