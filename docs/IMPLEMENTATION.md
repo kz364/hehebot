@@ -4,6 +4,47 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Ordinary service memory adoption (2026-09-24, verified locally): the
+service now always supplies pre-claim counting outside staged alpha, for exact
+reviewed names gpt-5/gpt-5.4/gpt-5.5/gpt-5-codex. Unknown names refuse before
+claim without prefix fallback. This is mapping, not account eligibility.
+The Worker owns source revalidation and visible overflow waiting; no attempt,
+native submission or truncation is substituted for failure. A 5,020-token
+synthetic global bucket is counted intact and sent for refusal; expected counts
+were derived independently using tiktoken0.11.0 encode_ordinary (5,000 text
+tokens plus20 framing tokens, scoped empty-array count1).
+
+Service65/typecheck pass in `.local/memory-service-unit-corrected.log` SHA256
+`c9f1736b7c01889dabe13ee2fc7ea2fc2a314f1a18c30392ef81057ecf099c0d`.
+Actual Codex → host → HTTPS Worker → SQLite passes with memoryBudgetInClaimCustody
+true in `.local/memory-service-native-corrected.log` SHA256
+`5d712822aef6172eb558561c20517e4b87a3e35472d9e44724eaa5647288e586`.
+Full `bash scripts/verify-codex.sh` PID782930 exited0: backend1865/runtime670,
+browser/native/service matrix, both warm/background automatic-stop variants,
+strict launcher, typecheck and build dry-run pass. Log
+`.local/memory-service-combined.log` SHA256
+`628e39ff03bf247e7a849bd020f1e13b4e4864c52f5b98344ec4ad5069c966b2`.
+Separate `npm ci --prefix desktop --no-audit --no-fund && npm test --prefix desktop`
+passes16/16. No remaining workerd process; host `/etc/codex` and `/.sprite`
+fixture paths are absent. No UI appearance change, live calls, push or deployment;
+production flags remain false. Initial failed evidence below remains retained.
+
+Initial native failure remains `.local/memory-service-native-initial.log`
+SHA256 `b958bfde35b9cfb3a85f8b766b8ca9ee874e8905d991d0cd6de2abad09ed214b`,
+private fixture `/tmp/hehe-service-native-1UxYWY`. Known GPT-5.5 catalog metadata
+enables search/deferred MCP, so the old synthetic fixture could not find its
+direct tool. The fixture now uses supported startup model_catalog_json with
+tool_mode direct, supports_search_tool false, use_responses_lite false and
+multi_agent_version null. This restores its previous direct-tool contract,
+not bundled/live GPT-5.5 behavior; no production configuration or dependency is
+patched and tool assertions stay strict. See pinned Codex
+[MCP exposure](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/core/src/mcp_tool_exposure.rs#L74-L95)
+and [search selection](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/core/src/tools/spec_plan.rs#L650-L663).
+Initial added unit tests also failed cleanup ordering; they now stop the service
+before shared fixture removal. Failed `.local/memory-service-unit-final.log`
+remains retained. Complete-or-block is not full E06: relevance, summaries,
+pointers, targeted retrieval, bounded SQL scan/storage and live gates remain open.
+
 Mapping provenance correction (2026-09-24): direct immutable-source reads and
 AST dictionary checks contradicted the earlier attribution. Reference `eedc856`
 has only `gpt-5-` and cannot map bare GPT-5 or dotted 5.4/5.5. Current upstream

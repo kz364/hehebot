@@ -4,15 +4,35 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-24 Asia/Jakarta)
 
-Latest: optional ExecutionBridge memoryCounter path is implemented and passes
+Verified local service adoption: ordinary/non-alpha createCodexService now
+passes the bounded counter through the lease/abort supervisor. Exact reviewed
+names are gpt-5, gpt-5.4, gpt-5.5 and gpt-5-codex; all other names refuse before
+claim, never prefix-fallback. Staged alpha stays separate. Service65/typecheck and
+the real native fixture pass with the budget receipt in claim custody.
+Full verifier PID782930 exited0: backend1865/runtime670 and all browser/native/
+shutdown/launcher/service/typecheck/build stages passed. Log
+`.local/memory-service-combined.log` SHA256
+`628e39ff03bf247e7a849bd020f1e13b4e4864c52f5b98344ec4ad5069c966b2`.
+Separate desktop install/tests pass16. No workerd or host fixture residue;
+no active check, child or unintegrated delivery. Local only, no push/deploy.
+Next: stable relevance/summary/pointer/retrieval contracts; complete-or-block
+does not finish E06, native recovery/settlement or external acceptance.
+The initial native fixture failure is retained at `/tmp/hehe-service-native-1UxYWY`
+and `.local/memory-service-native-initial.log`: known GPT-5.5 enables MCP search,
+so its direct MCP tool was absent. The corrected fixture uses supported startup
+model_catalog_json with tool_mode direct and supports_search_tool false; no
+production config/dependency patch or weaker tool assertion. Initial extra unit
+tests had cleanup ordering failures; corrected tests stop their service before
+the shared fixture removes its directory. Original failed logs remain retained.
+
+Prior checkpoint, before service adoption: optional ExecutionBridge memoryCounter path passes
 177 related Vitest +34 native/crash/family tests and typecheck. Exact preparation
 bytes/digest and returned claim receipt/snapshot are checked; no fallback on
 count errors or replay after uncertain claim. Supervisor integration now aborts
 counting on recovery and fences the actual claim send after journal yields;
 the race test fails when that last fence is removed. Final backend1865/runtime661,
-typecheck and real credential-free native service pass. Ordinary service still
-does not enable counting. Next: explicit model mapping/service wiring, then
-summaries/retrieval. No child, check or lost delivery remains at this checkpoint.
+typecheck and real credential-free native service passed before ordinary service
+counting was enabled. These aggregates do not verify the later service adoption.
 Mapping-source correction: eedc856/0.11.0 has `gpt-5-`, not `gpt-5`, and no exact
 GPT-5 entry. It does not establish dotted 5.4/5.5 mappings. Separately pinned
 upstream `4e71bbe0c078468e00fefbf94b39849389f346e5` does map those names to

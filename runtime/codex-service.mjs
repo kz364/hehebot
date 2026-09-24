@@ -14,6 +14,7 @@ import { CodexOperations } from './codex-operations.mjs';
 import { spawnCodex } from './codex-transport.mjs';
 import { CodexQuestionBinding } from './codex-questions.mjs';
 import { ExecutionSupervisor } from './execution-supervisor.mjs';
+import { countMemory } from './memory-tokenizer.mjs';
 import { SpritesActivityGuard } from './sprites-activity-guard.mjs';
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 import { stageWarmClaim, warmGenerationBinding } from './owner-alpha-warm-binding.mjs';
@@ -22,6 +23,10 @@ import { codexTextOnlyProfileSha256, createCodexTextOnlyCompletionReceipt,
   createCodexTextOnlyProfile, verifyCodexTextOnlyProfile } from './codex-text-only.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
+// Reviewed exact names, not a prefix admission rule. Mapping provenance:
+// openai/tiktoken 4e71bbe0c078468e00fefbf94b39849389f346e5 (MEMORY_TOKENIZER.md).
+// This selects o200k_base; it does not establish account/model eligibility.
+const MEMORY_MODELS = new Set(['gpt-5', 'gpt-5.4', 'gpt-5.5', 'gpt-5-codex']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ownerAlphaGeneration = value => {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
@@ -536,6 +541,10 @@ export function createCodexService(config, dependencies) {
         supervisor = new ExecutionSupervisor({ control, native, journal, identity, installationId: config.installationId,
           personas: config.personas, events: router, activity, operations, now, onRecovery: recover,
           admission: admit,
+          ...(!alpha ? { memoryCounter: (input, options) => {
+            if (!MEMORY_MODELS.has(input.selected_model)) fail('MEMORY_MODEL_UNSUPPORTED');
+            return countMemory(input, options);
+          } } : {}),
           ...(alphaWarm ? { claimStage: claim => stageWarmClaim(claim, {
             installationId: config.installationId, stateDirectory: config.stateDirectory,
             generation: { epoch: alphaGeneration.epoch, boot_id: alphaGeneration.boot_id,

@@ -1,10 +1,11 @@
 # Memory tokenizer: runtime counter and parity/load harness
 
-Status: **local bounded counter and verification harness.** The root dependency
+Status: **local complete-or-block service adoption, verified.** The root dependency
 is pinned to `gpt-tokenizer@4.0.0` with the verified SRI below. No existing package
-versions changed. The counter is not yet called by ordinary bridge dispatch;
-this is not enforced memory budgeting, model/account eligibility, or deployed
-acceptance. The standalone load harness keeps its disposable install.
+versions changed. Ordinary service dispatch now counts prepared buckets before
+claim for the exact model names listed below. This is not full summary/retrieval,
+model/account eligibility, or deployed acceptance. Staged alpha remains separate.
+The standalone load harness keeps its disposable install.
 
 ## Runtime counting contract
 
@@ -200,10 +201,19 @@ because they share a prefix, and retain separate account-admission checks.
 
 The supported Codex 0.154.0 [`model/list` Model schema](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/schema/typescript/v2/Model.ts)
 contains model identity and availability metadata, but no tokenizer encoding.
-Runtime wiring needs an explicit reviewed model-to-encoding mapping separately
-from its model/account admission checks. The preparation protocol currently binds
-the declared model identity only; it does not supply those admission checks or
-claim completed selected-model token accounting.
+Ordinary service wiring now uses the reviewed exact-name set `gpt-5`, `gpt-5.4`,
+`gpt-5.5`, `gpt-5-codex`, all selecting this pinned o200k_base counter. Unknown
+names (including plausible-looking suffixes) refuse before claim. This is a
+bounded initial mapping policy, not a claim that other models are nonexistent
+or unsupported by OpenAI. Staged alpha does not gain generic memory preparation.
+
+The service counts exact prepared JSON buckets before admission, carries the
+source/model/task-bound receipt into claim, and checks the returned memory bytes.
+The supervisor aborts on recovery and checks lease authority at the actual send.
+Worker claims revalidate the source and visibly block over-budget work without
+truncating constraints. Encoding selection remains separate from model/account
+eligibility; production gates remain false. Summaries, stable relevance ordering
+and targeted retrieval are not implemented by this complete-or-block stage.
 
 ## Methodology
 

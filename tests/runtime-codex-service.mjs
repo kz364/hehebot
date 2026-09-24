@@ -1,11 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCodexService } from '../runtime/codex-service.mjs';
 import { CODEX_TEXT_ONLY_FEATURES, createCodexTextOnlyProfile, codexTextOnlyProfileSha256 } from '../runtime/codex-text-only.mjs';
+
+function preparedMemory(run_id, selected_model = 'gpt-5.5') {
+  const value = { schema_version: 1, run_id, attempt: 1, selected_model, global: '[]', scoped: '[]' };
+  return { ...value, sha256: createHash('sha256').update(JSON.stringify(value)).digest('hex') };
+}
+function memoryContext(payload) {
+  return JSON.stringify({ instruction: 'fixture', selected_model: payload.persona_models.bot,
+    memories: [], ...(payload.memory_budget ? { memory_budget: payload.memory_budget } : {}) });
+}
 
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'hehe-service-unit-'));
@@ -26,7 +36,7 @@ async function fixture(t) {
   };
   const config = { disposableTest: true, stateDirectory: directory, runtimeTokenFile: tokenFile,
     portalOrigin: 'https://fixture.invalid/', binary: '/synthetic/codex', installationId: 'fixture',
-    personas: { bot: { agentId: 'assistant', model: 'fixture-model', allowedTools: ['hehebot_list_routines'] } } };
+    personas: { bot: { agentId: 'assistant', model: 'gpt-5.5', allowedTools: ['hehebot_list_routines'] } } };
   const dependencies = {
     tasks: { hold: async value => { calls.push('hold'); if (failHold) throw Error('private'); return { name: value.id, expiresAt: value.expiresAt }; },
       release: async () => assert.fail('must not release unverified activity') },
@@ -39,7 +49,8 @@ async function fixture(t) {
       if (type === 'ready' || type === 'submitted') return {};
       if (type === 'heartbeat') return { lease_until: new Date(now + 60000).toISOString(), cancellations: [] };
       if (type === 'steer-pending') return [];
-      if (type === 'claim') return { submission_key: 'run:1', run: { id: 'run', current_attempt: 1, persona_id: 'bot', context_json: '{"instruction":"fixture"}' } };
+      if (type === 'memory-prepare') return preparedMemory('run', payload.persona_models.bot);
+      if (type === 'claim') return { submission_key: 'run:1', run: { id: 'run', current_attempt: 1, persona_id: 'bot', context_json: memoryContext(payload) } };
       throw Error('unexpected control RPC');
     } },
   };
@@ -53,6 +64,51 @@ test('default production gate rejects before disk, provider, control or native a
   const service = createCodexService({ ...f.config, disposableTest: false }, f.dependencies);
   await assert.rejects(service.start(), { code: 'NATIVE_COMPATIBILITY_GATE_BLOCKED' });
   assert.deepEqual(f.calls, []); assert.deepEqual(await readdir(f.directory), ['token']);
+});
+
+for (const model of ['gpt-5', 'gpt-5.4', 'gpt-5.5', 'gpt-5-codex']) test(`ordinary service counts a reviewed encoding mapping for ${model}`, async t => {
+  const f = await fixture(t);
+  f.config.personas.bot.model = model;
+  const service = createCodexService(f.config, f.dependencies);
+  t.after(() => service.stop());
+  const row = await service.start(), budget = JSON.parse(row.claim.run.context_json).memory_budget;
+  assert.equal(row.phase, 'running');
+  assert.equal(budget.selected_model, model);
+  assert.equal(budget.global_tokens, 1); assert.equal(budget.scoped_tokens, 1);
+  assert.equal(f.calls.find(call => call.method === 'thread/start').params.model, model);
+  await service.stop();
+});
+
+for (const model of ['gpt-5-NOT-A-MODEL', 'gpt-5.5-unreviewed', 'gpt-4', 'GPT-5.5']) test(`ordinary service refuses unmapped ${model} before claim, without prefix fallback`, async t => {
+  const f = await fixture(t);
+  f.config.personas.bot.model = model;
+  const service = createCodexService(f.config, f.dependencies);
+  t.after(() => service.stop());
+  await assert.rejects(service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  assert.ok(f.calls.includes('memory-prepare'));
+  assert.equal(f.calls.includes('claim'), false);
+  assert.equal(f.calls.some(call => call.method === 'thread/start'), false);
+  assert.equal(await service.journal.get(service.supervisor.bridge.cursor), null);
+});
+
+test('ordinary service retains over-budget counts for Worker refusal instead of truncating or skipping preparation', async t => {
+  const f = await fixture(t), request = f.dependencies.control.request;
+  // Independent tiktoken0.11.0/o200k_base encode_ordinary reference: the text
+  // has 5,000 tokens, and this exact JSON bucket has 5,020 including framing.
+  const global = JSON.stringify([{ body: { scope: { kind: 'global' }, text: ' x'.repeat(5000), explicit_constraint: true } }]);
+  const preparation = { schema_version: 1, run_id: 'run', attempt: 1, selected_model: 'gpt-5.5', global, scoped: '[]' };
+  let receipt;
+  const service = createCodexService(f.config, { ...f.dependencies, control: { request: async (type, payload) => {
+    if (type === 'memory-prepare') return { ...preparation, sha256: createHash('sha256').update(JSON.stringify(preparation)).digest('hex') };
+    if (type === 'claim') { receipt = payload.memory_budget; return null; } // Worker owns the persisted waiting transition.
+    return request(type, payload);
+  } } });
+  t.after(() => service.stop());
+  assert.equal((await service.start()).phase, 'complete');
+  assert.equal(receipt.global_tokens, 5020); assert.equal(receipt.scoped_tokens, 1);
+  assert.equal(receipt.sha256, createHash('sha256').update(JSON.stringify(preparation)).digest('hex'));
+  assert.equal(f.calls.some(call => call.method === 'thread/start'), false);
+  await service.stop();
 });
 
 test('service validates Access files, carries both headers and persists only per-root file references', async t => {
@@ -106,6 +162,11 @@ test('assembly claims before creating a private root grant, binds events before 
   const f = await fixture(t), row = await f.service.start();
   assert.equal(row.phase, 'running');
   assert.ok(f.calls.indexOf('hold') < f.calls.indexOf('launch'));
+  assert.ok(f.calls.indexOf('memory-prepare') < f.calls.indexOf('claim'));
+  assert.deepEqual(JSON.parse(row.claim.run.context_json).memory_budget, {
+    schema_version: 1, run_id: 'run', attempt: 1, selected_model: 'gpt-5.5', sha256: preparedMemory('run').sha256,
+    tokenizer: 'gpt-tokenizer@4.0.0/o200k_base/ordinary-v1', global_tokens: 1, scoped_tokens: 1,
+  });
   assert.ok(f.calls.indexOf('claim') < f.calls.findIndex(call => call.method === 'thread/start'));
   const launch = f.calls.find(call => call.method === 'thread/start');
   const grantPath = launch.params.config.mcp_servers.hehebot.env.HEHEBOT_AGENT_TOOLS_CONFIG;
@@ -315,8 +376,9 @@ test('opt-in question waits for acknowledged admission, takes once, and resolves
     ...f.dependencies,
     launch: options => { launched = options; return f.transport; },
     control: { request: async (type, payload) => {
+      if (type === 'memory-prepare') return preparedMemory(runId);
       if (type === 'claim') return { submission_key: `${runId}:1`, deadline_at: new Date(Date.now() + 600000).toISOString(),
-        run: { id: runId, current_attempt: 1, persona_id: 'bot', context_json: '{"instruction":"fixture"}' } };
+        run: { id: runId, current_attempt: 1, persona_id: 'bot', context_json: memoryContext(payload) } };
       if (type === 'submitted') {
         await new Promise(resolve => setTimeout(resolve, 60)); assert.equal(recorded, undefined); submitted = true; return {};
       }
@@ -365,10 +427,11 @@ test('maintenance retains old-family coverage and late output after fresh coordi
   const heartbeats = [], previews = [], releases = [];
   const service = createCodexService(f.config, { ...f.dependencies, operations: undefined,
     control: { request: async (type, payload) => {
+      if (type === 'memory-prepare') return ids[claims] ? preparedMemory(ids[claims]) : null;
       if (type === 'claim') {
         const id = ids[claims++];
         return id ? { submission_key: `${id}:1`, deadline_at: new Date(Date.now() + 600000).toISOString(),
-          run: { id, persona_id: 'bot', current_attempt: 1, updated_at: new Date().toISOString(), context_json: '{}' } } : null;
+          run: { id, persona_id: 'bot', current_attempt: 1, updated_at: new Date().toISOString(), context_json: memoryContext(payload) } } : null;
       }
       if (type === 'coordinator-release') { releases.push(payload); return {}; }
       if (type === 'heartbeat') heartbeats.push(payload.operations);
@@ -448,8 +511,8 @@ async function hostedFixture(t) {
 
 async function successorFixture(t) {
   const f = await hostedFixture(t), catalogPath = join(f.directory, 'successor-catalog.json');
-  const profileInput = { codexVersion: '0.154.0', model: 'fixture-model', catalogPath,
-    modelCatalog: { models: [{ slug: 'fixture-model', tool_mode: 'direct', experimental_supported_tools: [] }] },
+  const profileInput = { codexVersion: '0.154.0', model: 'gpt-5.5', catalogPath,
+    modelCatalog: { models: [{ slug: 'gpt-5.5', tool_mode: 'direct', experimental_supported_tools: [] }] },
     catalogValidation: 'synthetic-fixture', syntheticFixture: true };
   const profile = createCodexTextOnlyProfile(profileInput);
   await writeFile(catalogPath, JSON.stringify(profile.modelCatalog), { mode: 0o600 });
@@ -533,8 +596,8 @@ test('fresh hosted alpha rejects an unexpected successor descriptor without loos
 
 for (const corruption of [null, 'catalog', 'output']) test(`text-only service completes with settled coverage or retains uncertainty: ${corruption}`, async t => {
   const f = await hostedFixture(t), catalogPath = join(f.directory, 'catalog.json');
-  const profileInput = { codexVersion: '0.154.0', model: 'fixture-model', catalogPath,
-    modelCatalog: { models: [{ slug: 'fixture-model', tool_mode: 'direct', experimental_supported_tools: [] }] },
+  const profileInput = { codexVersion: '0.154.0', model: 'gpt-5.5', catalogPath,
+    modelCatalog: { models: [{ slug: 'gpt-5.5', tool_mode: 'direct', experimental_supported_tools: [] }] },
     catalogValidation: 'synthetic-fixture', syntheticFixture: true };
   const profile = createCodexTextOnlyProfile(profileInput);
   await writeFile(catalogPath, JSON.stringify(profile.modelCatalog), { mode: 0o600 });
@@ -860,8 +923,9 @@ test('declared shell deadline flows from service config through journal events i
   const serviceConfig = { ...f.config, shellOperationTimeoutMs: 240000 };
   const service = createCodexService(serviceConfig, { ...f.dependencies, operations: undefined,
     control: { request: async (type, payload) => {
+      if (type === 'memory-prepare') return preparedMemory('88888888-0000-4000-8000-0000000000e1');
       if (type === 'claim') return { submission_key: '88888888-0000-4000-8000-0000000000e1:1', deadline_at: attemptDeadline,
-        run: { id: '88888888-0000-4000-8000-0000000000e1', persona_id: 'bot', current_attempt: 1, updated_at: new Date().toISOString(), context_json: '{"instruction":"fixture"}' } };
+        run: { id: '88888888-0000-4000-8000-0000000000e1', persona_id: 'bot', current_attempt: 1, updated_at: new Date().toISOString(), context_json: memoryContext(payload) } };
       if (type === 'heartbeat') { heartbeats.push(payload.operations); return { lease_until: new Date(f.dependencies.now() + 60000).toISOString(), cancellations: [] }; }
       return request(type, payload);
     } } });

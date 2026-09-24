@@ -23,6 +23,9 @@ const textOnlyMode = process.argv.includes('--text-only');
 const ownerAlphaBackgroundMode = process.argv.includes('--owner-alpha-background');
 const ownerAlphaMultiMode = process.argv.includes('--owner-alpha-multi');
 const ownerAlphaMode = process.argv.includes('--owner-alpha') || ownerAlphaMultiMode || ownerAlphaBackgroundMode || textOnlyMode;
+// A supported model name exercises ordinary tokenizer mapping, but every model
+// request still goes exclusively to the credential-free loopback fixture below.
+const selectedModel = ownerAlphaMode ? 'fixture-model' : 'gpt-5.5';
 const restrictedMode = process.argv.includes('--restricted-background') || ownerAlphaMode;
 const backgroundMode = process.argv.includes('--background-responsive') || process.argv.includes('--restricted-background') || ownerAlphaBackgroundMode;
 const effectsMode = process.argv.includes('--child-effects');
@@ -61,7 +64,7 @@ async function stop(child) {
 }
 async function send(res, output, duringPlan = undefined) {
   const response = { id: `resp_${randomUUID()}`, object: 'response', created_at: 1, status: 'completed', error: null,
-    incomplete_details: null, model: 'fixture-model', output, parallel_tool_calls: true, tools: [], tool_choice: 'auto',
+    incomplete_details: null, model: selectedModel, output, parallel_tool_calls: true, tools: [], tool_choice: 'auto',
     usage: { input_tokens: 31, input_tokens_details: { cached_tokens: 7 }, output_tokens: 13,
       output_tokens_details: { reasoning_tokens: 5 }, total_tokens: 44 } };
   res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -105,18 +108,22 @@ const nativeStarts = [];
 const errors = [], taskRequests = [];
 try {
   const workerPort = await port(), token = randomBytes(32).toString('hex');
-  const catalogPath = join(directory, 'text-only-models.json');
-  const textOnlyProfileInput = textOnlyMode ? { codexVersion: '0.154.0', model: 'fixture-model', catalogPath,
-    modelCatalog: { models: [{ slug: 'fixture-model', display_name: 'Synthetic text-only service fixture', description: null,
+  const catalogPath = join(directory, 'fixture-models.json');
+  // Supported startup catalog, not a dependency patch. Known GPT-5.5 metadata
+  // otherwise defers MCP to search; this deterministic fixture needs the same
+  // direct MCP exposure as the previous unknown fixture-model fallback.
+  const modelCatalog = { models: [{ slug: selectedModel, display_name: 'Synthetic service fixture', description: null,
       supported_reasoning_levels: [], shell_type: 'unified_exec', visibility: 'list', supported_in_api: true,
       priority: 1, upgrade: null, model_messages: { instructions_template: 'Synthetic credential-free native fixture.', instructions_variables: null },
       default_reasoning_summary: 'auto', support_verbosity: false, tool_mode: 'direct', default_verbosity: null,
+      supports_search_tool: false, use_responses_lite: false, multi_agent_version: null,
       apply_patch_tool_type: null, truncation_policy: { mode: 'bytes', limit: 10000 }, supports_image_detail_original: false,
       context_window: 272000, auto_compact_token_limit: null, effective_context_window_percent: 95,
-      experimental_supported_tools: [] }] },
+      experimental_supported_tools: [] }] };
+  const textOnlyProfileInput = textOnlyMode ? { codexVersion: '0.154.0', model: selectedModel, catalogPath, modelCatalog,
     catalogValidation: 'synthetic-fixture', syntheticFixture: true } : undefined;
   const textOnlyProfile = textOnlyMode ? createCodexTextOnlyProfile(textOnlyProfileInput) : undefined;
-  if (textOnlyProfile) await writeFile(catalogPath, JSON.stringify(textOnlyProfile.modelCatalog), { mode: 0o600 });
+  await writeFile(catalogPath, JSON.stringify(modelCatalog), { mode: 0o600 });
   const ownerAlpha = { session_id: randomUUID(), persona_id: '11111111-1111-4111-8111-111111111111',
     expires_at: new Date(Date.now() + 300000).toISOString(), max_runs: ownerAlphaBackgroundMode ? 3 : ownerAlphaMultiMode ? 2 : 1,
     max_task_seconds: ownerAlphaBackgroundMode ? 120 : textOnlyMode ? 120 : 15,
@@ -188,7 +195,7 @@ try {
       assert.equal(req.url, '/v1/responses');
       const chunks = []; for await (const chunk of req) chunks.push(chunk);
       const body = JSON.parse(Buffer.concat(chunks).toString());
-      assert.equal(body.model, 'fixture-model', 'Native requests use the host-declared selected model');
+      assert.equal(body.model, selectedModel, 'Native requests use the host-declared selected model');
       report.modelRequests++;
       assert.ok(report.modelRequests <= (ownerAlphaBackgroundMode ? 7 : ownerAlphaMultiMode ? 4 : backgroundMode ? 6 : childMode ? 4 : questionsMode && !questionCancelMode ? 3 : 2), 'Unexpected model continuation');
       if (restrictedMode) {
@@ -488,7 +495,7 @@ try {
     ...(restrictedMode ? { restrictedPermissions: true } : {}),
     portalOrigin: origin + '/', runtimeTokenFile, tlsCAFile: cert, installationId: 'service-fixture',
     ...(textOnlyProfileInput ? { textOnlyProfile: textOnlyProfileInput } : {}),
-    personas: { [persona.id]: { agentId: 'assistant', model: 'fixture-model',
+    personas: { [persona.id]: { agentId: 'assistant', model: selectedModel,
       allowedTools: textOnlyMode ? [] : ['hehebot_list_routines'] } } };
   const submissionRequests = [], heartbeatPages = [], coordinatorReleases = [];
   const dependencies = { spriteRequest, fetchImpl: async (url, init) => {
@@ -542,16 +549,26 @@ try {
         if (method === 'turn/interrupt') interrupts.push(structuredClone(params));
         if (planMode && method === 'initialize') params = { ...params, capabilities: { ...params.capabilities, experimentalApi: true } };
         if (planMode && method === 'turn/start') params = { ...params,
-          collaborationMode: { mode: 'plan', settings: { model: 'fixture-model', reasoning_effort: null, developer_instructions: null } } };
+          collaborationMode: { mode: 'plan', settings: { model: selectedModel, reasoning_effort: null, developer_instructions: null } } };
         return request(method, params);
       };
       return transport;
     },
-    prepareNative: home => writeFile(join(home, 'config.toml'), `model = "fixture-model"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\n${restrictedMode ? 'sleep_tool = { enabled = true, mode = "always_on" }\n' : ''}${questionsMode ? 'default_mode_request_user_input = true\n' : ''}[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) };
+    prepareNative: home => writeFile(join(home, 'config.toml'), `model = "${selectedModel}"\nmodel_catalog_json = "${catalogPath}"\nmodel_provider = "fixture"\n[features]\ncode_mode = false\n${restrictedMode ? 'sleep_tool = { enabled = true, mode = "always_on" }\n' : ''}${questionsMode ? 'default_mode_request_user_input = true\n' : ''}[model_providers.fixture]\nname = "Loopback"\nbase_url = "http://127.0.0.1:${model.address().port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\n`, { mode: 0o600 }) };
   service = ownerAlphaMode ? createCodexService(config, dependencies) : createSpriteCodexService(config, dependencies);
   const dispatched = await service.start(); bound = true;
   assert.equal(dispatched.phase, 'running'); assert.equal(dispatched.claim.run.id, queued.resource_id);
-  assert.equal(JSON.parse(dispatched.claim.run.context_json).selected_model, 'fixture-model');
+  assert.equal(JSON.parse(dispatched.claim.run.context_json).selected_model, selectedModel);
+  const memoryBudget = JSON.parse(dispatched.claim.run.context_json).memory_budget;
+  if (!ownerAlphaMode) {
+    assert.equal(memoryBudget.run_id, queued.resource_id);
+    assert.equal(memoryBudget.attempt, 1);
+    assert.equal(memoryBudget.selected_model, selectedModel);
+    assert.equal(memoryBudget.tokenizer, 'gpt-tokenizer@4.0.0/o200k_base/ordinary-v1');
+    assert.equal(memoryBudget.global_tokens, 1); // Each empty JSON array encodes to one token.
+    assert.equal(memoryBudget.scoped_tokens, 1);
+    report.memoryBudgetInClaimCustody = true;
+  } else assert.equal(memoryBudget, undefined, 'Staged alpha does not gain generic memory preparation');
   report.selectedModelInClaimCustody = true;
   if (ownerAlphaMode) {
     assert.equal(service.adapter.testMode, false);
