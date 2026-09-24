@@ -4,6 +4,32 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Portal visual refresh and native retry-input evidence (2026-09-24): owner requested
+a substantial visual improvement. Three generated concepts informed an independently
+written warm-neutral CSS theme; no third-party app code/assets, fonts or dependencies
+were imported. Conversation, question, workspace, dialog and narrow states share
+the theme; authorization, command handling and visibility rules remain unchanged.
+Executed `node scripts/test-portal-{questions,results,profile,roster,memory-search,recovery,skill-review}.mjs`
+as seven separate commands: all pass. These exercise literal untrusted text, scoped
+answers, stale/offline fencing, exact explicit retries, navigation without mutations,
+memory-search scope and narrow overflow. `npm run typecheck` passes. Inspected DPR2
+Chromium desktop question/results, narrow answer dialog, narrow memory drawer and
+desktop skill-error captures in `.amp/in/artifacts/`. Narrow page remains vertically
+scrollable; this is Chromium viewport emulation, not Mac or native-phone acceptance.
+
+`node scripts/test-codex-native.mjs` passes with three new report flags:
+freshRetryCheckpointInputVerified, checkpointIsolatedFromUnrelatedTask and
+retryJournalReopenDidNotResubmit. After the fixture's real native restart, synthetic
+claims pass through ExecutionBridge and CodexAdapter to the pinned native process.
+Attempt2 receives an exact checkpoint in a fresh native thread, top-level grants
+remain empty despite a checkpoint grant canary, unrelated input excludes the
+checkpoint, and reopened running journal custody issues no duplicate claim/start.
+This is actual request input evidence, not model judgment, Worker admission,
+crash takeover, full restoration or effect settlement. Sleep remains denied.
+Log `.local/checkpoint-native-first.log`, SHA256
+`efd84619dbb7a15e873c21b9e3572c0c84568277d2b080fbb87d2aa22ae4695b`.
+No live account calls, production flag changes, push or deployment.
+
 Disk-restored automatic retry custody (2026-09-24 Asia/Jakarta): the two existing
 retry reconstruction cases now use `node:sqlite` backup to create a closed
 file-backed snapshot, open it through the existing test database adapter without

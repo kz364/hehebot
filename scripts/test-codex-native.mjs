@@ -13,6 +13,7 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { CodexEventRouter } from '../runtime/codex-events.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
+import { ExecutionBridge } from '../runtime/execution-bridge.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
@@ -452,7 +453,69 @@ try {
   report.coldMissedChildInterruptionRecovered = true;
   report.coldChildCancellationNotReplayed = true;
 
-  assert.equal(requests, report.dynamicChildToolsAvailable ? 15 : 14);
+  // A fresh admitted retry is not thread/resume or restoration of an old callback.
+  // Worker checkpoint/settlement gates are tested separately with real SQLite;
+  // these synthetic claims exercise the actual bridge -> adapter -> native input.
+  const checkpoint = { cursor: 43, completed_step_ids: ['step-19'],
+    authorization_policy_ids: ['UNGRANTED_CHECKPOINT_71'], old_thread_id: threadId };
+  const retryIdentity = { epoch: 2, boot_id: randomUUID() }, personaId = randomUUID();
+  const checkpointClaims = [2, 1].map((attempt, index) => {
+    const id = randomUUID();
+    return { submission_key: `${id}:${attempt}`, deadline_at: new Date(Date.now() + 60000).toISOString(),
+      run: { id, current_attempt: attempt, persona_id: personaId, routine_id: null,
+        checkpoint_json: index === 0 ? JSON.stringify(checkpoint) : null,
+        context_json: JSON.stringify({ instruction: index === 0 ? 'FRESH_CHECKPOINT_RETRY_43' : 'UNRELATED_CHECKPOINT_TASK_19',
+          selected_model: 'fixture-model', authorization_policy_ids: [], skills: [] }) } };
+  });
+  const checkpointRequests = [], checkpointNativeCalls = [];
+  const checkpointJournal = new FileJournal(join(home, 'checkpoint-native'));
+  const checkpointAdapter = new CodexAdapter({ cwd: workspace, testMode: true, journal: checkpointJournal,
+    rpc: (method, params) => {
+      assert.ok(['thread/start', 'turn/start'].includes(method), 'fresh retries must not resume native history');
+      checkpointNativeCalls.push({ method, params }); return transport.request(method, params);
+    } });
+  const checkpointControl = { request: async (type, params) => {
+    checkpointRequests.push({ type, params });
+    if (type === 'claim') return checkpointClaims.shift() ?? null;
+    assert.equal(type, 'submitted'); return {};
+  } };
+  const checkpointBridge = journal => new ExecutionBridge({ control: checkpointControl, native: checkpointAdapter,
+    journal, identity: retryIdentity, installationId: 'checkpoint-fixture',
+    personas: { [personaId]: { agentId: 'checkpoint-persona', model: 'fixture-model' } } });
+  const retryJournal = new FileJournal(join(home, 'checkpoint-bridge'));
+  const beforeCheckpointRequests = requests;
+  const freshRetry = await checkpointBridge(retryJournal).claimNext();
+  assert.equal(freshRetry.phase, 'running');
+  await waitFor(() => bodies.some(body => JSON.stringify(body.input).includes('FRESH_CHECKPOINT_RETRY_43')), 'fresh retry native input');
+  const freshNative = await checkpointJournal.get(freshRetry.attemptId);
+  assert.notEqual(freshNative.threadId, threadId);
+  assert.notEqual(freshNative.nativeRunId, turn.turn.id);
+  // Reopening bridge journal custody must not start a second native retry.
+  assert.deepEqual(await checkpointBridge(new FileJournal(retryJournal.directory)).claimNext(), freshRetry);
+  assert.equal(checkpointRequests.filter(call => call.type === 'claim').length, 1);
+  assert.equal(checkpointNativeCalls.length, 2);
+  const unrelated = await checkpointBridge(new FileJournal(join(home, 'checkpoint-unrelated-bridge'))).claimNext();
+  assert.equal(unrelated.phase, 'running');
+  await waitFor(() => bodies.some(body => JSON.stringify(body.input).includes('UNRELATED_CHECKPOINT_TASK_19')), 'unrelated native input');
+  const unrelatedNative = await checkpointJournal.get(unrelated.attemptId);
+  assert.notEqual(unrelatedNative.threadId, freshNative.threadId);
+  for (const [marker, expectedCheckpoint] of [['FRESH_CHECKPOINT_RETRY_43', checkpoint], ['UNRELATED_CHECKPOINT_TASK_19', undefined]]) {
+    const body = bodies.find(body => JSON.stringify(body.input).includes(marker));
+    const texts = body.input.filter(item => item.role === 'user').flatMap(item => item.content)
+      .filter(part => part.type === 'input_text').map(part => part.text);
+    const input = JSON.parse(texts.find(text => text.includes(marker)));
+    assert.deepEqual(input.authorization_policy_ids, []);
+    assert.deepEqual(input.durable_checkpoint, expectedCheckpoint);
+    assert.equal(JSON.stringify(body.input).includes('UNGRANTED_CHECKPOINT_71'), expectedCheckpoint !== undefined);
+  }
+  assert.equal(requests - beforeCheckpointRequests, 2);
+  assert.deepEqual(checkpointNativeCalls.map(call => call.method), ['thread/start', 'turn/start', 'thread/start', 'turn/start']);
+  assert.equal(checkpointAdapter.sleepReadiness().allowed, false);
+  report.freshRetryCheckpointInputVerified = true;
+  report.checkpointIsolatedFromUnrelatedTask = true;
+  report.retryJournalReopenDidNotResubmit = true;
+
+  assert.equal(requests, report.dynamicChildToolsAvailable ? 17 : 16);
   assert.equal(toolContinuations, 1);
   assert.deepEqual(fixtureErrors, []);
   assert.ok(bodies.every(body => body.model === 'fixture-model' && body.stream === true));

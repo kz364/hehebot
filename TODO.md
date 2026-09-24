@@ -12,7 +12,18 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-24):** the two automatic-retry custody cases now
+**Current checkpoint (2026-09-24):** owner-requested portal visual refresh passes
+seven browser fixtures: warm neutral surfaces, charcoal controls, clearer spacing and compact
+question cards. Existing safety controls and command behavior are unchanged.
+Native checkpoint-input fixture passes against pinned Codex: a fresh retry receives
+the exact checkpoint without promoting its embedded grant canary, unrelated input
+stays isolated, and reopening running journal custody does not resubmit. Synthetic
+claims are not full Worker recovery or native restoration. Typecheck passes; desktop,
+narrow dialog, workspace drawer and error captures inspected. Local only, not deployed.
+Corrected tokenizer delivery has arrived and its bundle hash/scope are verified;
+parent review and independent execution are next. No duplicate dispatch.
+
+**Previous recovery checkpoint:** the two automatic-retry custody cases now
 restore a file-backed SQLite snapshot and close/reopen the resulting admission
 writes. Late running grandchildren and retained unknown effects still block root
 retry; unrelated work completes. Exact receipts, ancestry, checkpoint and effect

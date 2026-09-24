@@ -4,6 +4,18 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-24 Asia/Jakarta)
 
+Latest: owner-requested warm-neutral portal refresh passes seven browser fixtures
+(questions/results/profile/roster/memory-search/recovery/skill-review) and typecheck.
+Representative desktop/narrow/dialog/drawer/error captures inspected. Native retry
+fixture also passes actual checkpoint-input isolation and reopened-journal no-resubmit
+checks; synthetic claims do not prove full recovery or model judgment. Evidence in
+IMPLEMENTATION.md. No push/deploy. Corrected tokenizer bundle has now arrived:
+`.local/e06-tokenizer-harness-corrected.bundle`, SHA256
+`f19c57cf4604e7d9328271c4bc338261c6d510bebdeb82aaed8a28c08b2ba711`,
+verified against exact29d8806 with only the same three files. Ref
+`review/e06-tokenizer-corrected` preserves it. Parent review/independent execution
+remains required; older active-worker statements below describe the prior checkpoint.
+
 Scheduled independent unit: the two automatic-retry custody cases now restore a
 file-backed SQLite backup and close/reopen post-admission writes. Running grandchild
 and terminal metadata with unknown effect still block root advancement while
