@@ -144,7 +144,9 @@ try{
  malformed=true;await click('[data-action="routine-history"]');await wait(`document.querySelector('${panel}')?.textContent.includes('Invalid routine history')`);assert.equal(await evaluate(`!document.querySelector('${panel} [data-run-id]')`),true);malformed=false;
  // Transition to owner-alpha also invalidates pending reads, then blocks every new one.
  await click('[data-action="routine-history"]');
- await late(async()=>{state.summary.owner_alpha=true;state.summary.owner_alpha_session={persona_id:bot,expires_at:'2099-01-01T00:00:00Z',max_runs:3,admitted_runs:0,max_task_seconds:60};await refresh();});
+ // As with offline above, refresh() may return while an older poll is loading.
+ // Observe the alpha latch before releasing history, not just the server edit.
+ await late(async()=>{state.summary.owner_alpha=true;state.summary.owner_alpha_session={persona_id:bot,expires_at:'2099-01-01T00:00:00Z',max_runs:3,admitted_runs:0,max_task_seconds:60};await refresh();await wait('document.querySelector("#message").getAttribute("aria-describedby")==="runtime-banner"');});
  const count=requests.length;assert.equal(await evaluate('document.querySelectorAll("[data-action=routine-history]").length'),0);await refresh();await browser('reload');await wait('document.querySelector("#connection").textContent==="Connected"');assert.equal(requests.length,count);
  assert.equal(await evaluate('document.querySelectorAll("[data-action=routine-history]").length'),0);assert.deepEqual(violations,[]);
  console.log('PASS: exact routine GET scopes; UUID-exclusive 10+3 pages; all statuses/captured revisions; running retry distinct from prior portal delivery and asymmetric pending/delivered/failed/unknown counts; claim/application-settlement timestamps; completed/pruned and absent-attempt/no-outbox records; retained-body caveat; separate current-attempt provisional text; unfinished conversation feed unchanged; no new controls/polling/mutations; existing empty/error/offline/stale/deleted/hidden/persona/alpha late-response fences; owner-alpha zero new history reads; 2x desktop and 390px Chromium layout.');

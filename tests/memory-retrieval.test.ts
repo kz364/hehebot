@@ -11,6 +11,7 @@ import validateRuntime from '../src/generated/validate-runtime.js';
 import {AgentCommandBoundary,MEMORY_READ_POLICY,type AgentMemoryRead} from '../src/core/agent-commands';
 import {LifecycleCore} from '../src/core/lifecycle';
 import {MEMORY_TOKENIZER,type MemoryPreparation} from '../src/core/memory-context';
+import {prepareMemoryDelivery,countSelectedModelMemory} from '../runtime/memory-read.mjs';
 
 function setup(global=3900,scoped=7700){
  const f=fixture(true),life=new LifecycleCore(f.store,f.core);
@@ -141,4 +142,35 @@ it('validates both authenticated wire stages without permitting caller-selected 
    expect(validateRuntime({type:'memory-read-reserve',payload:{...r,...patch}})).toBe(false);
   }
  }finally{f.close();}
+});
+
+it('real runtime counting reserves against SQLite before delivery and source changes during counting refuse',async()=>{
+ for(const edit of [false,true]){
+  const f=setup(0,0);try{
+   const q=f.query(),p=f.boundary.prepareMemoryRead(q),calls:string[]=[];
+   const config={identity:f.identity,runId:f.run,attempt:1,memoryBudget:{selected_model:p.selected_model,sha256:p.baseline_sha256}};
+   const controlClient={request:async(type:string,payload:unknown)=>{
+    expect(validateRuntime({type,payload})).toBe(true);calls.push(type);
+    return type==='memory-read-prepare'?f.boundary.prepareMemoryRead(payload as AgentMemoryRead):
+     f.boundary.reserveMemoryRead(payload as Parameters<AgentCommandBoundary['reserveMemoryRead']>[0]);
+   }};
+   const operation=prepareMemoryDelivery({controlClient,config,args:{memory_id:q.memory_id,revision:1,offset:1,limit:3},
+    signal:undefined,now:()=>Date.parse(f.core.now()),counter:async(input:Parameters<typeof countSelectedModelMemory>[0],options:Parameters<typeof countSelectedModelMemory>[1])=>{
+     const counts=await countSelectedModelMemory(input,options);
+     if(edit){const m=f.store.get(q.memory_id);f.store.put(m.id,'memory',{...m.body,text:'Replacement 91'},m.revision,'owner',f.core.now());}
+     return counts;
+    }});
+   if(edit){
+    await expect(operation).rejects.toMatchObject({code:'MEMORY_PREPARATION_STALE'});
+    expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'memory-read:*'")).toEqual([]);
+   }else{
+    const take=await operation;
+    expect(take()).toBe(p.text);expect(()=>take()).toThrow('MEMORY_READ_DENIED');
+    const row=f.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key GLOB 'memory-read:*'")[0];
+    expect(JSON.parse(row.value_json).scoped).toBeGreaterThan(50);
+    expect(row.value_json).not.toContain('🧭');
+   }
+   expect(calls).toEqual(['memory-read-prepare','memory-read-reserve']);
+  }finally{f.close();}
+ }
 });

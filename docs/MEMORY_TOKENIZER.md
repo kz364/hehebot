@@ -37,18 +37,20 @@ the source. No separate index or summary table is created.
 
 This is only a storage/adoption contract. Full source text remains in context,
 and both source and metadata count toward the existing byte/token budget. There
-is no automatic inference, wake, compression, targeted-retrieval tool, or UI
-summary editor. Prompt substitution requires exact revision pointers, disclosed
+is no automatic inference, wake, compression, or UI summary editor. The bounded
+read tool below does not replace the full prompt. Substitution requires exact revision pointers, disclosed
 compression and bounded authorized retrieval before adoption.
 
-## Targeted-read Worker protocol (host delivery still pending)
+## Targeted-read protocol and runtime delivery
 
 Ordinary-runtime RPCs `memory-read-prepare` and `memory-read-reserve` implement
 the control-plane stages. They require an active exact task/attempt, current
 epoch/boot/lease/deadline, an admitted memory-budget receipt, and the explicitly
 adopted persona tool policy `748dbc8c-c4dd-4b54-9e3c-d13cbedf77fa`. Installing code
 does not adopt that policy. Staged alpha and warm/background task credentials
-cannot use these routes. There is no model-facing read tool yet.
+cannot use these routes. The ordinary runtime exposes `hehebot_read_memory` only
+when explicitly listed in its persona's `allowedTools`. Its immutable task grant
+also binds the admitted selected model and initial budget digest.
 
 The request binds a trusted-runtime UUID `read_id`, memory ID/revision from the
 admitted snapshot, code-point offset and limit1..2000. Membership is checked before
@@ -58,8 +60,8 @@ response text with source metadata and range/truncation disclosure, plus a diges
 binding task/epoch/read/range/model/initial receipt and those bytes. `not_after`
 is capped by current source expiry, attempt deadline and executor lease.
 
-The future host must count exactly that text with the admitted model tokenizer,
-then reserve before delivery. Reservation rechecks source and authority in the
+The host counts exactly that text with the admitted model tokenizer,
+then reserves before delivery. Reservation rechecks source and authority in the
 same transaction that charges the bucket. Accounting version1 is the initial
 bucket count plus separately counted additional response envelopes, including
 repeats. This is conservative exposure accounting, not exact concatenated/native
@@ -70,11 +72,24 @@ One bounded `runtime_metadata` record per task/attempt retains at most64 read
 identities/fingerprints and cumulative totals, never source/response bodies.
 An identical retry reconciles its charge but returns `delivery_allowed:false`;
 changed counts/bytes with the same identity conflict. Replays still revalidate
-current source before returning any authorization metadata. Future host code must
-not emit twice, cache completed memory text, or deliver after `not_after`/abort.
+current source before returning any authorization metadata. The runtime verifies
+all identity/digest/model/tokenizer fields, captures text before counting, then
+requires a fresh delivery authorization. Each new MCP invocation gets a runtime
+UUID, independent of the connection-local JSON-RPC ID. It never retries unknown
+reservation outcomes or refunds uncertain delivery.
+
+MCP and dynamic-tool responses cross host awaits as body-free, single-use handles.
+The MCP stdout writer and native transport materialize the captured text only
+immediately before their synchronous write, checking abort and the earlier of
+preparation/reservation deadlines again. A missing delivery step exposes no body.
+MCP cancellation notifications abort counting or suppress late delivery. Dynamic
+expiry/cancellation returns a tool denial without closing the shared native
+connection; the reserved charge remains and consumption is not acknowledged.
+Call journals retain only fingerprints/status, never memory text, and refuse all
+same-call replay after reconstruction. Mutation tool replay semantics are unchanged.
 Worker authorization is a linearization point, not atomic distributed erasure
 of an already authorized in-flight response. This stage adds no summarization,
-projection, native delivery acceptance or retention policy for the new ledger.
+projection, deployed/native-model acceptance or retention policy for the new ledger.
 
 ## Runtime counting contract
 

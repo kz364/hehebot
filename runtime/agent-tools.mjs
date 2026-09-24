@@ -7,8 +7,9 @@ import { resolve } from 'node:path';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import { ControlClient } from './control-client.mjs';
+import { prepareMemoryDelivery, deferMemoryResponse, materializeMemoryResponse } from './memory-read.mjs';
 
-export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills']);
+export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills', 'hehebot_read_memory']);
 const COMMAND_TYPES = Object.freeze({ hehebot_propose_skill: 'skill.propose', hehebot_save_routine: 'routine.put', hehebot_run_routine: 'routine.run', hehebot_delete_routine: 'routine.delete' });
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_OUTSTANDING = 16;
@@ -64,6 +65,12 @@ export function buildToolDefinitions(contracts) {
         query: { type: 'string', minLength: 1, maxLength: 200 }, after: resolveRefs(contracts.$defs.uuid, contracts),
       }, required: ['query'],
     } },
+    { name: AGENT_TOOL_NAMES[7], description: 'Read a bounded code-point range of an exact admitted memory ID and revision. Each read consumes the task memory budget. Expired, changed or deleted sources refuse; no new permissions are granted.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: {
+        memory_id: resolveRefs(contracts.$defs.uuid, contracts), revision: { type: 'integer', minimum: 1 },
+        offset: { type: 'integer', minimum: 0, maximum: 16000 }, limit: { type: 'integer', minimum: 1, maximum: 2000 },
+      }, required: ['memory_id', 'revision', 'offset', 'limit'],
+    } },
   ]);
 }
 
@@ -82,7 +89,7 @@ function validSkillSearchResult(result) {
     typeof skill.when_to_use === 'string' && skill.when_to_use.length >= 1 && [...skill.when_to_use].length <= 4000);
 }
 
-export function createAgentToolsHandler({ controlClient, config, contracts }) {
+export function createAgentToolsHandler({ controlClient, config, contracts, memoryCounter, now = Date.now }) {
   if (!controlClient || typeof controlClient.request !== 'function' || !validGrant(config)) throw new Error('INVALID_CONFIGURATION');
   config = clone(config);
   const tools = buildToolDefinitions(contracts);
@@ -92,7 +99,7 @@ export function createAgentToolsHandler({ controlClient, config, contracts }) {
   const ajv = new Ajv({ strict: true, allErrors: false }); addFormats(ajv);
   const validators = new Map(visible.map(tool => [tool.name, ajv.compile(tool.inputSchema)]));
 
-  return async function handle(message) {
+  return async function handle(message, { signal } = {}) {
     if (!message || typeof message !== 'object' || Array.isArray(message) || message.jsonrpc !== '2.0' || typeof message.method !== 'string')
       return rpcError(message?.id, -32600, 'Invalid Request');
     const notification = !Object.hasOwn(message, 'id');
@@ -113,6 +120,19 @@ export function createAgentToolsHandler({ controlClient, config, contracts }) {
     const payload = clone(args.payload);
     if (type === 'skill.propose') payload.provenance = { kind: 'model', source_ref: config.runId };
     try {
+      if (name === 'hehebot_read_memory') {
+        const id = message.id;
+        const take = await prepareMemoryDelivery({ controlClient, config, args, signal, now, counter: memoryCounter });
+        return deferMemoryResponse(() => {
+          try { return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: take() }] } }; }
+          catch {
+            // An expired/cancelled read is a tool denial, not corruption of the
+            // shared native connection. The charge is not refunded.
+            return { jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text',
+              text: 'Memory read delivery denied. The read budget remains reserved; no source content was returned.' }] } };
+          }
+        });
+      }
       if (name === 'hehebot_search_skills') {
         const result = await controlClient.request('agent-skill-search', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
         if (!validSkillSearchResult(result)) throw new Error('INVALID_SKILL_SEARCH_RESULT');
@@ -135,6 +155,7 @@ export function createAgentToolsHandler({ controlClient, config, contracts }) {
       if (!result || !['applied', 'rejected', 'pending'].includes(result.status)) throw new Error('INVALID_COMMAND_RECEIPT');
       return { jsonrpc: '2.0', id: message.id, result: { isError: result.status === 'rejected', content: [{ type: 'text', text: JSON.stringify(result) }] } };
     } catch {
+      if (name === 'hehebot_read_memory') return rpcError(message.id, -32000, 'Memory read denied or delivery unknown. No content was returned; a new read consumes a new budget reservation.');
       return rpcError(message.id, -32000, 'Agent command failed; outcome may be unknown. Reuse the same idempotency key when reconciling.');
     }
   };
@@ -148,7 +169,12 @@ function validGrant(config) {
     uuid(config.identity.boot_id) && uuid(config.runId) &&
     Number.isSafeInteger(config.attempt) && config.attempt >= 1 &&
     Array.isArray(config.allowedTools) && new Set(config.allowedTools).size === config.allowedTools.length &&
-    config.allowedTools.every(name => AGENT_TOOL_NAMES.includes(name));
+    config.allowedTools.every(name => AGENT_TOOL_NAMES.includes(name)) &&
+    (!config.allowedTools.includes('hehebot_read_memory') ||
+      (config.principal === undefined || config.principal === 'runtime') &&
+      config.memoryBudget && Object.keys(config.memoryBudget).sort().join(',') === 'selected_model,sha256' &&
+      typeof config.memoryBudget.selected_model === 'string' && /^[a-zA-Z0-9._-]{1,128}$/.test(config.memoryBudget.selected_model) &&
+      typeof config.memoryBudget.sha256 === 'string' && /^[a-f0-9]{64}$/.test(config.memoryBudget.sha256));
 }
 
 async function readPrivate(path, limit) {
@@ -170,15 +196,16 @@ export async function runAgentToolsCli() {
   const path = process.env[CONFIG_ENV];
   let config;
   try { config = JSON.parse(await readPrivate(path, 65536)); } catch { throw new Error('INVALID_CONFIGURATION'); }
-  if (!validGrant(config) || Object.keys(config).some(key => !['origin','tokenFile','identity','runId','attempt','allowedTools','accessClientIdFile','accessClientSecretFile','principal'].includes(key))) throw new Error('INVALID_CONFIGURATION');
+  if (!validGrant(config) || Object.keys(config).some(key => !['origin','tokenFile','identity','runId','attempt','allowedTools','accessClientIdFile','accessClientSecretFile','principal','memoryBudget'].includes(key))) throw new Error('INVALID_CONFIGURATION');
   if (config.principal !== undefined && !['runtime','warm-task','background-task'].includes(config.principal)) throw new Error('INVALID_CONFIGURATION');
   const token = (await readPrivate(config.tokenFile, 16384)).trim();
   const access = await readAccessCredentials(config);
   const contracts = JSON.parse(await readFile(new URL('../SCHEMAS/contracts.json', import.meta.url), 'utf8'));
   const handler = createAgentToolsHandler({ controlClient: new ControlClient({ origin: config.origin, token, principal: config.principal ?? 'runtime', ...access }), config, contracts });
   const pending = new Set();
+  const controllers = new Map();
   const write = async response => {
-    if (!process.stdout.write(JSON.stringify(response) + '\n')) await once(process.stdout, 'drain');
+    if (!process.stdout.write(JSON.stringify(materializeMemoryResponse(response)) + '\n')) await once(process.stdout, 'drain');
   };
   let buffered = Buffer.alloc(0);
   for await (const chunk of process.stdin) {
@@ -189,10 +216,16 @@ export async function runAgentToolsCli() {
     const line = buffered.subarray(0, newline).toString('utf8');
     buffered = buffered.subarray(newline + 1);
     let message; try { message = JSON.parse(line); } catch { await write(rpcError(null, -32700, 'Parse error')); continue; }
+    if (message?.method === 'notifications/cancelled' && !Object.hasOwn(message, 'id')) {
+      controllers.get(message.params?.requestId)?.abort(); continue;
+    }
+    if (controllers.has(message?.id)) { await write(rpcError(message.id, -32600, 'Request ID is already active')); continue; }
     if (pending.size >= MAX_OUTSTANDING) { if (Object.hasOwn(message ?? {}, 'id')) await write(rpcError(message.id, -32001, 'Server busy')); continue; }
-    const task = Promise.resolve(handler(message)).then(async response => { if (response) await write(response); }).catch(async () => {
+    const controller = new AbortController();
+    if (Object.hasOwn(message ?? {}, 'id')) controllers.set(message.id, controller);
+    const task = Promise.resolve(handler(message, { signal: controller.signal })).then(async response => { if (response) await write(response); }).catch(async () => {
       await write(rpcError(message?.id, -32603, 'Internal error'));
-    }).finally(() => pending.delete(task));
+    }).finally(() => { pending.delete(task); controllers.delete(message?.id); });
     pending.add(task);
    }
    if (buffered.length > MAX_FRAME_BYTES) throw new Error('FRAME_LIMIT');

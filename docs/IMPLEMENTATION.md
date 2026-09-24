@@ -4,6 +4,55 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Runtime targeted reads (2026-09-25 Asia/Jakarta): `hehebot_read_memory` is an explicitly listed
+ordinary MCP/dynamic tool. The service binds admitted model/budget digest into its
+immutable grant. A shared model mapping governs pre-claim and read counts. The
+host verifies preparation identity/hash, counts the exact response text, reserves,
+then holds a nonserializable single-use delivery closure. MCP stdout and native
+transport resolve it at the synchronous write boundary, after deadline/abort
+checks. Dynamic call journals retain no source bodies and refuse same-call replay;
+mutation receipts keep their existing replay behavior. MCP cancellation during
+an unknown reservation does not refund or retry it. No grant/policy is adopted.
+
+Focused77 runtime/service tests and17 SQLite retrieval tests plus typecheck pass
+in `.local/memory-delivery-service.log`, SHA256
+`94e6c544ca76fb8482c75a2ecbc8173eef248c49ae0d6c2133dffe95047b11d2`.
+Evidence includes real pinned worker-thread counting against the SQLite boundary,
+source edit during counting, exact61-token response checked independently with
+Python tiktoken0.11.0, body-free disk journal/reconstruction, final native write
+expiry, and an actual TLS MCP subprocess with cancellation-before-reservation-
+reply proved by a ping barrier. Transport fixtures are local, not native-model or
+deployed acceptance. Desktop16 passes separately. The combined run passed
+backend1911/runtime682 and HTTP31, then failed the routine-history fixture's alpha
+late-response assertion. The fixture did not prove the browser had observed alpha:
+`refresh()` can return early during an existing poll. The fixture now waits for
+the independent alpha accessibility marker before releasing held history; the
+original history/no-new-read assertions are unchanged, with no portal-code edit.
+Original failure retained in `.local/memory-delivery-combined.log`, SHA256
+`7db09ad984f7a47a16b490c3aa2cb8419eb4f8bfcdc60c5d266b5e24a0ef23be`.
+Resumed verifier from that fixture exited0 through all remaining browser/native/
+shutdown/strict-launcher/service/build stages in `.local/memory-delivery-remaining.log`,
+SHA256 `97e7f4f510dec42e689edf80fedc827b93abeacaef0352d4e48ebb01f29fdc1e`.
+Host fixture paths `/etc/codex` and `/.sprite` are absent after cleanup.
+Final focused122/typecheck pass in `.local/memory-delivery-final-focused.log`, SHA256
+`e03e4cb3b20c33ccc8a130fd08875601259318f65517b07e3c595328dfcb9ea6`;
+the final journal assertion preserves unknown consumption rather than claiming
+completed delivery. No full clean combined invocation is claimed.
+Self-review then found that expiry at final emission closed the shared native
+connection. Three strengthened assertions failed first in
+`.local/memory-delivery-expiry-red.log`, SHA256
+`4924b75a13077641450fa0648d76dc671093a03c4fc4a0c36050371b4560dd4a`.
+Final delivery now returns a tool denial, keeps the connection usable, and leaves
+the reserved charge intact. All122 focused checks and typecheck pass in
+`.local/memory-delivery-expiry-green.log`, SHA256
+`7647e7d8586a70caa1501b455563dfbfa6831c2eab8486480273f3b5cc7081e1`.
+The final denial-wording check passes11/11 in
+`.local/memory-delivery-wording.log`, SHA256
+`7858fdf106aec642e3bf9f4e41c1a4a6d89336db0654cef41bf0cc4cf5c989ba`.
+Source remains verbatim in initial prompts. Next summary projection requires
+explicit host read capability as well as persona policy; storage/legacy and full
+recovery/settlement remain open. No live accounts/providers or production changes.
+
 Targeted-read control plane (2026-09-24): ordinary authenticated prepare/reserve
 RPCs bind an exact admitted pointer, range, model and byte digest. Source revision
 and scope filter in SQL before body hydration. Reservation rechecks source and

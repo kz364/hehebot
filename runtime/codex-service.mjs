@@ -14,7 +14,7 @@ import { CodexOperations } from './codex-operations.mjs';
 import { spawnCodex } from './codex-transport.mjs';
 import { CodexQuestionBinding } from './codex-questions.mjs';
 import { ExecutionSupervisor } from './execution-supervisor.mjs';
-import { countMemory } from './memory-tokenizer.mjs';
+import { countSelectedModelMemory } from './memory-read.mjs';
 import { SpritesActivityGuard } from './sprites-activity-guard.mjs';
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 import { stageWarmClaim, warmGenerationBinding } from './owner-alpha-warm-binding.mjs';
@@ -23,10 +23,6 @@ import { codexTextOnlyProfileSha256, createCodexTextOnlyCompletionReceipt,
   createCodexTextOnlyProfile, verifyCodexTextOnlyProfile } from './codex-text-only.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
-// Reviewed exact names, not a prefix admission rule. Mapping provenance:
-// openai/tiktoken 4e71bbe0c078468e00fefbf94b39849389f346e5 (MEMORY_TOKENIZER.md).
-// This selects o200k_base; it does not establish account/model eligibility.
-const MEMORY_MODELS = new Set(['gpt-5', 'gpt-5.4', 'gpt-5.5', 'gpt-5-codex']);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ownerAlphaGeneration = value => {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
@@ -244,6 +240,7 @@ export function createCodexService(config, dependencies) {
             persona.allowedTools.some(tool => !AGENT_TOOL_NAMES.includes(tool))) fail('INVALID_SERVICE_CONFIGURATION');
         if (persona.allowedTools.includes('hehebot_search_skills') &&
             (alpha || !persona.allowedTools.includes('hehebot_propose_skill'))) fail('INVALID_SERVICE_CONFIGURATION');
+        if (alpha && persona.allowedTools.includes('hehebot_read_memory')) fail('INVALID_SERVICE_CONFIGURATION');
         if (config.restrictedPermissions && persona.allowedTools.some(tool => !['hehebot_list_routines', 'hehebot_read_skill'].includes(tool))) fail('INVALID_SERVICE_CONFIGURATION');
       }
       phase = 'starting';
@@ -508,6 +505,11 @@ export function createCodexService(config, dependencies) {
             const grant = { origin: config.portalOrigin, tokenFile: config.runtimeTokenFile,
               ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}),
               identity, runId: run.id, attempt: run.current_attempt, allowedTools: persona.allowedTools };
+            if (persona.allowedTools.includes('hehebot_read_memory')) {
+              const budget = JSON.parse(run.context_json).memory_budget;
+              if (!budget || budget.selected_model !== input.model || budget.run_id !== run.id || budget.attempt !== run.current_attempt) fail('TASK_GRANT_CONFLICT');
+              grant.memoryBudget = { selected_model: budget.selected_model, sha256: budget.sha256 };
+            }
             // Write once, fsync, never rewrite an admitted grant in place.
             const key = `grant-${input.attemptId}`;
             const existing = await journal.putIfAbsent(key, grant);
@@ -541,10 +543,7 @@ export function createCodexService(config, dependencies) {
         supervisor = new ExecutionSupervisor({ control, native, journal, identity, installationId: config.installationId,
           personas: config.personas, events: router, activity, operations, now, onRecovery: recover,
           admission: admit,
-          ...(!alpha ? { memoryCounter: (input, options) => {
-            if (!MEMORY_MODELS.has(input.selected_model)) fail('MEMORY_MODEL_UNSUPPORTED');
-            return countMemory(input, options);
-          } } : {}),
+          ...(!alpha ? { memoryCounter: countSelectedModelMemory } : {}),
           ...(alphaWarm ? { claimStage: claim => stageWarmClaim(claim, {
             installationId: config.installationId, stateDirectory: config.stateDirectory,
             generation: { epoch: alphaGeneration.epoch, boot_id: alphaGeneration.boot_id,

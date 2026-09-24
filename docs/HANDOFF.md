@@ -2,9 +2,24 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies, including one Worker-triggered staged wake, have canonical completion and full-reload persistence. Historical failed work remains recovery-required. Bounded policies expired and launchers stopped; this is not ongoing chat availability or production readiness. Production execution/native gates remain false.
 
-## Active follow-up (2026-09-24 Asia/Jakarta)
+## Active follow-up (2026-09-25 Asia/Jakarta)
 
-Current unit: exact-pointer memory-read-prepare/reserve Worker RPCs and body-free
+Current unit: runtime memory-read counting/reservation and final delivery. Ordinary
+MCP grants persist the admitted selected model and baseline digest. MCP stdout and
+Codex dynamic transport materialize single-use body-free handles at the final
+synchronous write; abort/deadline rechecked there. Dynamic journals store no text
+and never replay reads. Staged/restricted modes remain denied; no policy adopted.
+Backend1911/runtime682, final122 focused/typecheck and desktop16 pass. Resumed
+verifier exited0 through all remaining browser/native/shutdown/strict-launcher/
+service/build stages. The original combined failed a browser fixture observation
+race; retain that failure and describe verification as segmented. Final expiry
+returns a tool denial without closing the native connection (three red assertions,
+then122 green). No summary substitution yet. Next projection needs both persona
+policy and host-declared retrieval support,
+so a summary never replaces raw source for a runtime lacking the read tool.
+Parent directly owns this coupled protocol; no child or unintegrated delivery.
+
+Previous unit: exact-pointer memory-read-prepare/reserve Worker RPCs and body-free
 cumulative per-attempt ledger. Explicit persona policy, initial budget receipt,
 current lease/attempt/source/revision/scope/expiry required. Ranges ≤2000 code
 points;64 reservations max. Identical replay reconciles with delivery_allowed:false.

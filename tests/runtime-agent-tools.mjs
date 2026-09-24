@@ -12,7 +12,8 @@ import { AGENT_TOOL_NAMES, buildToolDefinitions, createAgentToolsHandler } from 
 
 const contracts = JSON.parse(await readFile(new URL('../SCHEMAS/contracts.json', import.meta.url)));
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const config = { identity: { epoch: 7, boot_id: uuid(10) }, runId: uuid(1), attempt: 3, allowedTools: [...AGENT_TOOL_NAMES] };
+const config = { identity: { epoch: 7, boot_id: uuid(10) }, runId: uuid(1), attempt: 3, allowedTools: [...AGENT_TOOL_NAMES],
+  memoryBudget: { selected_model: 'gpt-5.5', sha256: 'a'.repeat(64) } };
 const skill = { proposal_id: uuid(2), skill_id: uuid(3), expected_skill_revision: 0, body: {
   name: 'Useful skill', description: 'Does a useful thing', when_to_use: 'When useful', inputs_access: [], steps: ['Do it'], decision_rules: [], validation: ['Check it'], output: 'A result', failure_handling: ['Stop safely'], approval_boundaries: ['No effects'], contains_private_facts: false,
 }, executable_files_changed: false };

@@ -1,6 +1,6 @@
 # Hehebot progress and TODO
 
-**Last reviewed: 2026-09-24 (Asia/Jakarta). Not operational; production gates remain false.**
+**Last reviewed: 2026-09-25 (Asia/Jakarta). Not operational; production gates remain false.**
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
@@ -12,7 +12,20 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-24):** targeted-read Worker prepare/reserve RPCs
+**Current checkpoint (2026-09-25):** explicitly granted ordinary MCP memory reads
+count the exact delivered envelope with the selected model, reserve cumulative
+budget, and check deadline/abort at the final write. Dynamic read journals retain
+no bodies and never replay same-call content. Backend1911/runtime682, final122
+focused checks,17 SQLite retrieval tests, typecheck and desktop16 pass. Resumed
+verifier stages passed through shutdown, strict launcher, service modes and build
+after correcting a routine-history fixture observation race; the original failed
+log is retained, not claimed as a clean combined pass. Final expiry denies only
+the read and preserves the shared native connection, with red/green coverage.
+No prompt substitution yet. Next: disclosed owner-summary projection with exact
+revision pointers and explicit host retrieval availability. Full source remains
+counted; storage/legacy/recovery and external gates remain open. Local only.
+
+**Previous checkpoint (2026-09-24):** targeted-read Worker prepare/reserve RPCs
 bind exact admitted memory revisions and bounded code-point ranges. A body-free
 per-attempt ledger charges cumulative exposure and refuses redelivery on replay;
 source/expiry/task/lease are rechecked transactionally. A separate explicitly
@@ -1073,7 +1086,7 @@ Order is dependency-oriented, not a promise to complete an external gate before 
 | [ ] | **E03 — Partial** | Keep coordinator responsive during background work; resolve status/new-task/ambiguous-steer/deferred-follow-up intent; independent admission, saturation and exact cancellation. Pass O01–O09, including two-task isolation and managed refresh ownership. | Synthetic routing/concurrency work now; model judgment and refresh require account access. |
 | [ ] | **E04 — Partial** | Finish quiet streaming/reconnect, approvals and attention, conversation search, attachments/previews/downloads, replies/reactions, stable references/mentions, read/unread, notification preferences and appearance. Verify desktop/mobile/keyboard/accessibility, stale/offline states and cross-bot isolation. | Most UI work is credential-free; push permissions/delivery and some device checks are external. |
 | [ ] | **E05 — Partial** | Complete teach-from-correction skill authoring, update-before-duplicate, review/diff/rollback, supporting-file policy and safe tests. Complete natural-language routine lifecycle, preflight, run history and execution-versus-delivery failure handling; evaluate the 20-enabled-routine cap with load/cost evidence. | Local contracts/UI first; actual model use and connector effects later. |
-| [ ] | **E06 — Partial** | Ordinary service complete-or-block budgets pass integrated verification: global ≤4,000 and scoped ≤8,000 tokens, with exact prepared-byte receipts and reviewed model mappings. Stable literal relevance/ID ordering is verified; no silent constraint truncation. Indexed exact-scope preparation reads avoid full scans/sorts in Node and local workerd; ≤195 returned rows and ≤65 parsed bodies. Finish versioned summaries/pointers, disclosed truncation, targeted retrieval and bounded attributed bot/group communication (SPEC §9.3). Index construction, stored data and unlimited legacy enqueue snapshots remain unbounded. Verify native transcript/search/filesystem scope isolation, private facts excluded from shared procedures, zero-inference/wake publication, and closed-client discussion continuity. | Context packaging, isolation and zero-call fixtures are credential-free; model judgment and authenticated native retrieval validation later. |
+| [ ] | **E06 — Partial** | Ordinary service complete-or-block budgets pass integrated verification: global ≤4,000 and scoped ≤8,000 tokens, with exact prepared-byte receipts and reviewed model mappings. Stable literal relevance/ID ordering is verified; no silent constraint truncation. Indexed exact-scope preparation reads avoid full scans/sorts in Node and local workerd; ≤195 returned rows and ≤65 parsed bodies. Owner-bound summary storage and explicitly granted cumulative-budget targeted reads are implemented; initial prompts still contain raw source. Finish disclosed summary projection/exact pointers and bounded attributed bot/group communication (SPEC §9.3). Index construction, stored data, read-ledger retention and unlimited legacy enqueue snapshots remain unbounded. Verify native transcript/search/filesystem scope isolation, private facts excluded from shared procedures, zero-inference/wake publication, and closed-client discussion continuity. | Context packaging, isolation and zero-call fixtures are credential-free; model judgment and authenticated native retrieval validation later. |
 | [ ] | **E07 — Unverified** | Complete remote browser/computer tool integration, authenticated view-only/control separation, locks, safe credential handoff, stale-frame rejection and reconnect. Exercise synthetic multistep forms, files/uploads/downloads and uncertain mutations without replay. | Linux fixtures now; personal browser accounts and real Mac permissions later. |
 | [ ] | **E08 — Not implemented** | Opt-in visible demonstration capture → reviewed skill → safe test, excluding microphone audio/secrets and never treating captured actions as authorization. | Credential-free synthetic demonstration possible; real device capture needs hardware. |
 | [ ] | **E09 — Partial** | Connector readiness catalog: distinguish advertised, installed, callable and individually authorized operations; named gaps and per-tool restrictions. Add curated discovery/install/enable/disable and packaged-skill workflows through supported surfaces; catalog metadata alone is insufficient and production app-server plugin installation remains unsupported (UX14). Complete migration workflows, provenance/watermarks/dedupe, flight hold/restore, no-send rules and scoped traveler handling. | Catalog/policy/install fixtures now; actual Google/WhatsApp/Messages/traveler data, supported account installation and adopted mappings are external. |

@@ -79,6 +79,22 @@ for (const model of ['gpt-5', 'gpt-5.4', 'gpt-5.5', 'gpt-5-codex']) test(`ordina
   await service.stop();
 });
 
+test('ordinary memory read grant persists the admitted model and baseline, never a default or mutable selection', async t => {
+  const f = await fixture(t);
+  f.config.personas.bot.allowedTools = ['hehebot_read_memory'];
+  f.config.personas.bot.model = 'gpt-5.4';
+  const service = createCodexService(f.config, f.dependencies);
+  t.after(() => service.stop());
+  f.config.personas.bot.model = 'unreviewed-after-construction';
+  const row = await service.start();
+  const grant = await service.journal.get(`grant-${row.attemptId}`);
+  assert.deepEqual(grant.memoryBudget, { selected_model: 'gpt-5.4', sha256: JSON.parse(row.claim.run.context_json).memory_budget.sha256 });
+  assert.deepEqual(grant.allowedTools, ['hehebot_read_memory']);
+  const start = f.calls.find(call => call.method === 'thread/start');
+  assert.equal(start.params.model, 'gpt-5.4');
+  await service.stop();
+});
+
 for (const model of ['gpt-5-NOT-A-MODEL', 'gpt-5.5-unreviewed', 'gpt-4', 'GPT-5.5']) test(`ordinary service refuses unmapped ${model} before claim, without prefix fallback`, async t => {
   const f = await fixture(t);
   f.config.personas.bot.model = model;

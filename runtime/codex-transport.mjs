@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { StringDecoder } from 'node:string_decoder';
 import { spawn } from 'node:child_process';
+import { materializeMemoryResponse } from './memory-read.mjs';
 
 const validUserInputTimeout = value => value === undefined || Number.isSafeInteger(value) && value >= 1 && value <= 900000;
 
@@ -142,6 +143,7 @@ export class CodexTransport extends EventEmitter {
         this.write({ id, result: { answers: Object.fromEntries(questionIds.map(q => [q, { answers: answers[q].answers }])) } });
         return;
       }
+      result = materializeMemoryResponse(result);
       if (!result || typeof result.success !== 'boolean' || !Array.isArray(result.contentItems) ||
           !result.contentItems.every(item => item && typeof item === 'object' &&
             (item.type === 'inputText' && typeof item.text === 'string' ||
