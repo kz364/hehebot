@@ -4,6 +4,41 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Indexed pre-claim memory reads (2026-09-24): schema14 adds the active-memory
+scope/created_at/id partial index. Two or three exact-scope queries return at
+most65 records each; a deterministic merge selects at most65 before JSON parsing.
+The existing64-record complete-or-block gate includes expired records as work;
+deleted/foreign-scope records are excluded. Unlimited legacy calls retain their
+full eligible result. Neither index construction nor storage/legacy snapshots
+are bounded by this change. No record truncation or constraint authority change.
+Migration verifies canonical index SQL, refuses conflicts, and rolls back index
+creation on version-write failure. Export/import and backup retain older pins;
+schema14 canonical SHA256 is
+`1fe0bfe3a7be6a29c66dc3b73bb3b8974de03fbda7773fe921c50e7b19558ddb`.
+Raw schema SQL SHA256 is
+`15bb79308fca82dc553445cd7f4ce7e556c5adae390b6f136ce619e26bdc2e54`.
+
+Old OR-query implementation fails both new bounded-read tests. Final focused32
+and backend1875/typecheck pass. Node and real local workerd plans both show
+SEARCH using objects_memory_scope without full scans or temporary sorts; this
+is query-plan evidence, not a deployed CPU/latency threshold. Actual Worker
+v12→14 migration/reopen, HTTP31, backup/restore drill, native service and build
+dry-run pass. Full `bash scripts/verify-codex.sh` PID833755 exited0:
+backend1875/runtime670, all browser/native/shutdown/strict-launcher/service
+checks and build dry-run pass. Separate desktop install/tests pass16/16.
+No remaining workerd processes or host `/etc/codex` and `/.sprite` fixtures.
+Combined log `.local/memory-index-combined.log` SHA256
+`bec01da215678a67d0c4537248001a03361fbafc8508e4de570a05775e30a47f`.
+No push/deploy or production flag changes; no live account/provider/model calls.
+Evidence: `.local/memory-index-backend.log` SHA256
+`03e4a1f5991196d862d6232ba4c9ed13d77a5273c0a143ecc5d3517b8692900b`;
+`.local/memory-index-integrated.log` SHA256
+`049b9b6c80d8ace010a5cf4ffd1b6b6b4708d283d0da1aa9d5f1e6dd7c6ac9d7`;
+`.local/memory-index-red.log` SHA256
+`a0fdd92bd2fca017805e6f3b56b162f58bd90dd29aeed96d3beb3df0eb389807`.
+Initial compatibility failures in `.local/memory-index-migration.log` remain
+retained: missing export pin and stale version fixtures were corrected, not skipped.
+
 Stable memory ordering (2026-09-24): after scope/expiry filtering and work bounds,
 preparation ranks by distinct lexical-term overlap with the admitted instruction,
 then ID. Terms are NFC-normalized/lowercased runs of Unicode letters/marks/numbers;

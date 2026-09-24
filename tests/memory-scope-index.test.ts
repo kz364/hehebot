@@ -1,0 +1,63 @@
+import {expect,it,vi} from 'vitest';
+import {fixture,bot,otherBot} from './helpers';
+import {migrateApplication} from '../src/core/migrations';
+
+it.each([null,'routine-17'])('bounds each indexed scope read before merging (routine=%s)',routine=>{
+ const f=fixture();try{
+  // Interleaved ages exercise a global merge, not scope concatenation. IDs
+  // break ties; expired rows remain work, while deleted/foreign rows do not.
+  const scopes=[['global',null],['persona',bot],['routine','routine-17'],['persona',otherBot],['routine','routine-foreign']] as const;
+  const expected:Array<{id:string;created_at:string}>=[];
+  f.db.transaction(()=>{
+   for(let i=0;i<230;i++)for(const [j,[kind,id]] of scopes.entries()){
+    const key=`memory-${String(i).padStart(4,'0')}-${j}`,created=new Date(Date.UTC(2026,8,1,0,0,Math.floor(i/2))).toISOString();
+    f.store.put(key,'memory',{scope:{kind,id},text:'Keep constraint.',expires_at:i===0?'2020-01-01T00:00:00.000Z':null,explicit_constraint:true},0,'owner',created);
+    if(i%7===0&&i!==0)f.db.exec('UPDATE objects SET deleted_at=? WHERE id=?',created,key);
+    else if(j<2||j===2&&routine)expected.push({id:key,created_at:created});
+   }
+  });
+  expected.sort((a,b)=>a.created_at<b.created_at?-1:a.created_at>b.created_at?1:a.id<b.id?-1:1);
+  const read=vi.spyOn(f.db,'all');
+  const rows=f.store.scopedMemories(bot,routine,65);
+  const calls=read.mock.calls.slice(),results=read.mock.results.slice();read.mockRestore();
+  expect(rows.map(row=>row.id)).toEqual(expected.slice(0,65).map(row=>row.id));
+  expect(rows[0].body.expires_at).toBe('2020-01-01T00:00:00.000Z');
+  expect(calls).toHaveLength(routine?3:2);
+  for(const [i,[sql,...values]] of calls.entries()){
+   expect(results[i].type).toBe('return');expect(results[i].value).toHaveLength(65);
+   const plan=f.db.all<{detail:string}>(`EXPLAIN QUERY PLAN ${sql}`,...values).map(row=>row.detail).join('\n');
+   expect(plan).toContain('SEARCH objects USING INDEX objects_memory_scope');
+   expect(plan).not.toMatch(/SCAN objects|TEMP B-TREE/);
+  }
+  expect(f.store.scopedMemories(bot,routine).map(row=>row.id)).toEqual(expected.map(row=>row.id));
+ }finally{vi.restoreAllMocks();f.close();}
+});
+
+it('migrates the memory index without changing source records; version failure rolls back and rerun is inert',()=>{
+ const f=fixture();try{
+  const canonical=f.db.all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name");
+  f.store.put('memory-19','memory',{scope:{kind:'persona',id:bot},text:'Keep original.',expires_at:null},0,'owner',f.core.now());
+  const objects=f.db.all('SELECT * FROM objects'),revisions=f.db.all('SELECT * FROM object_revisions');
+  f.db.exec('DROP INDEX objects_memory_scope');f.db.exec('UPDATE schema_versions SET version=13');
+  f.db.exec("CREATE TRIGGER reject_v14 BEFORE INSERT ON schema_versions WHEN NEW.version=14 BEGIN SELECT RAISE(ABORT,'synthetic v14 failure'); END");
+  expect(()=>migrateApplication(f.db,f.core.now())).toThrow('synthetic v14 failure');
+  expect(f.db.all("SELECT name FROM sqlite_schema WHERE name='objects_memory_scope'")).toEqual([]);
+  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:13}]);
+  f.db.exec('DROP TRIGGER reject_v14');migrateApplication(f.db,f.core.now());
+  expect(f.db.all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")).toEqual(canonical);
+  expect(f.db.all('SELECT * FROM objects')).toEqual(objects);expect(f.db.all('SELECT * FROM object_revisions')).toEqual(revisions);
+  const changes=f.db.all('SELECT total_changes() AS n');migrateApplication(f.db,'later');
+  expect(f.db.all('SELECT total_changes() AS n')).toEqual(changes);
+  expect(f.db.all('PRAGMA foreign_key_check')).toEqual([]);
+ }finally{f.close();}
+});
+
+it('does not adopt a conflicting memory index or advance the schema version',()=>{
+ const f=fixture();try{
+  f.db.exec('DROP INDEX objects_memory_scope');f.db.exec('UPDATE schema_versions SET version=13');
+  f.db.exec('CREATE INDEX objects_memory_scope ON objects(id)');
+  expect(()=>migrateApplication(f.db,f.core.now())).toThrow(expect.objectContaining({code:'SCHEMA_MISMATCH'}));
+  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:13}]);
+  expect(f.db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='objects_memory_scope'")[0].sql).toBe('CREATE INDEX objects_memory_scope ON objects(id)');
+ }finally{f.close();}
+});

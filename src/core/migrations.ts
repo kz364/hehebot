@@ -111,5 +111,13 @@ export function migrateApplication(db:Database,now:string):void {
    db.exec('PRAGMA defer_foreign_keys=OFF');
   }
  });
- requireThat([12,13].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===12)version=13;
+ if(version===13)db.transaction(()=>{
+  const sql="CREATE INDEX objects_memory_scope ON objects(json_extract(body_json,'$.scope.kind'),json_extract(body_json,'$.scope.id'),created_at,id) WHERE kind='memory' AND deleted_at IS NULL";
+  db.exec(sql.replace('CREATE INDEX','CREATE INDEX IF NOT EXISTS'));
+  requireThat(db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='objects_memory_scope'")[0]?.sql===sql,
+   'SCHEMA_MISMATCH','Memory scope index needs explicit reconciliation.',503);
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(14,?)',now);
+ });
+ requireThat([13,14].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

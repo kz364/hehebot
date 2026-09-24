@@ -3,13 +3,14 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (13, '2026-09-17T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (14, '2026-09-24T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
  deleted_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE INDEX objects_kind_updated ON objects(kind,updated_at);
+CREATE INDEX objects_memory_scope ON objects(json_extract(body_json,'$.scope.kind'),json_extract(body_json,'$.scope.id'),created_at,id) WHERE kind='memory' AND deleted_at IS NULL;
 CREATE TABLE object_revisions (
  object_id TEXT NOT NULL REFERENCES objects(id), revision INTEGER NOT NULL,
  body_json TEXT NOT NULL CHECK(json_valid(body_json)), actor_id TEXT NOT NULL,

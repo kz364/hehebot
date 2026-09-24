@@ -20,11 +20,16 @@ export class Store {
   return this.db.all<ObjectRow>('SELECT * FROM objects WHERE kind=? AND deleted_at IS NULL ORDER BY created_at,id',kind).map(({body_json,...rest})=>({...rest,body:JSON.parse(body_json) as T}));
  }
  scopedMemories(personaId:string,routineId:string|null,limit?:number):StoredObject<MemoryPut>[] {
-  return this.db.all<ObjectRow>(`SELECT * FROM objects WHERE kind='memory' AND deleted_at IS NULL AND (
-   json_extract(body_json,'$.scope.kind')='global' OR
-   (json_extract(body_json,'$.scope.kind')='persona' AND json_extract(body_json,'$.scope.id')=?) OR
-   (json_extract(body_json,'$.scope.kind')='routine' AND json_extract(body_json,'$.scope.id')=?)
-  ) ORDER BY created_at,id LIMIT ?`,personaId,routineId,limit??-1).map(({body_json,...rest})=>({...rest,body:JSON.parse(body_json) as MemoryPut}));
+  // Each exact scope uses the partial index's ordering before LIMIT. An OR
+  // query can sort every eligible row before limiting, even with this index.
+  // The first N merged rows must occur within the first N of each partition.
+  const scopes:Array<[string,string|null]>=[['global',null],['persona',personaId]];
+  if(routineId)scopes.push(['routine',routineId]);
+  const rows=scopes.flatMap(([kind,id])=>this.db.all<ObjectRow>(`SELECT * FROM objects WHERE kind='memory' AND deleted_at IS NULL
+   AND json_extract(body_json,'$.scope.kind')=? AND json_extract(body_json,'$.scope.id') IS ?
+   ORDER BY created_at,id LIMIT ?`,kind,id,limit??-1));
+  rows.sort((a,b)=>a.created_at<b.created_at?-1:a.created_at>b.created_at?1:a.id<b.id?-1:a.id>b.id?1:0);
+  return (limit===undefined?rows:rows.slice(0,limit)).map(({body_json,...rest})=>({...rest,body:JSON.parse(body_json) as MemoryPut}));
  }
  put(id: string, kind: ObjectKind, body: unknown, expected: number, actor: string, now: string, source: string | null = null): number {
   const existing=this.db.all<{revision:number;kind:string}>('SELECT revision,kind FROM objects WHERE id=?',id)[0];

@@ -1,7 +1,7 @@
 import {DurableObject} from 'cloudflare:workers';
 import schema from '../DB/schema.sql';
 import {migrateApplication} from '../src/core/migrations';
-import type {Database,SqlValue} from '../src/core/store';
+import {Store,type Database,type SqlValue} from '../src/core/store';
 import {legacyOccurrencesSql} from './legacy-occurrences';
 
 // Disposable Wrangler fixture only. No production ingress or storage is exposed.
@@ -13,7 +13,7 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
   ctx.blockConcurrencyWhile(async()=>{
    if(!this.db.all("SELECT name FROM sqlite_schema WHERE name='schema_versions'").length){
     if(env.PHASE!=='seed')throw Error('Expected retained v12 storage');
-    this.db.exec(schema.replace('PRAGMA foreign_keys = ON;','').replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (13,','VALUES (12,'));
+    this.db.exec(schema.replace('PRAGMA foreign_keys = ON;','').replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (14,','VALUES (12,').replace(/^CREATE INDEX objects_memory_scope .*\n/m,''));
     this.db.exec(`INSERT INTO objects VALUES('routine-19','routine',73,'{}',NULL,'t1','t2'),('persona-31','persona',2,'{}',NULL,'t1','t2');
      INSERT INTO occurrences VALUES('occurrence-43','routine-19',7,'2026-09-17T03:15:00.000Z','claimed',5,'t3');
      INSERT INTO runs(id,occurrence_id,persona_id,routine_id,context_json,status,current_attempt,created_at,updated_at)
@@ -26,6 +26,13 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
  }
  async fetch(request:Request){
   const db=this.db,path=new URL(request.url).pathname;
+  if(path==='/memory-plan'){
+   const plans:unknown[]=[];
+   new Store({...db,all:<T>(sql:string,...values:SqlValue[])=>{
+    plans.push(db.all(`EXPLAIN QUERY PLAN ${sql}`,...values));return db.all<T>(sql,...values);
+   }}).scopedMemories('persona-31','routine-19',65);
+   return Response.json(plans);
+  }
   let rejected=false;
   if(path==='/rollback-version'||path==='/rollback-reference'||path==='/rollback-final-write'){
    if(path==='/rollback-version')db.exec("CREATE TRIGGER reject_v13 BEFORE INSERT ON schema_versions WHEN NEW.version=13 BEGIN SELECT RAISE(ABORT,'synthetic failure'); END");

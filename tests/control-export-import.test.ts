@@ -69,7 +69,7 @@ beforeEach(async () => {
     INSERT INTO flight_restore_deadlines VALUES('leg-83',2,'2026-09-20T21:00:00.000Z','Asia/Jakarta','2026-09-19T21:00:00.000Z','routine-29','source-43','outcome_unknown','child-83','{"observation":"${canary}"}');
   `);
   wire = { format: 'hehebot-control-export', version: 1, createdAt: originalTime,
-    schemaSha256: '0eaf3801cdd090fbeeb7d2d362f19c1e7157ae01bb7a09264409bbf504a17d2f', schemaVersions: [13], tables: tables(db) };
+    schemaSha256: '1fe0bfe3a7be6a29c66dc3b73bb3b8974de03fbda7773fe921c50e7b19558ddb', schemaVersions: [14], tables: tables(db) };
   await save();
 });
 afterEach(async () => { db.close(); await rm(directory, { recursive: true, force: true }); });
@@ -209,10 +209,14 @@ it.each(['same', 'parent', 'attempt', 'persona'])('roundtrips shared thread turn
   } finally { copy.close(); }
 });
 
-it.each([9, 10, 11, 12, 13])('preserves schema%s migration history and referenced occurrences without inventing attribution or upgrading legacy snapshots', async version => {
+it.each([9, 10, 11, 12, 13, 14])('preserves schema%s migration history and referenced occurrences without inventing attribution or upgrading legacy snapshots', async version => {
   db.exec(`INSERT INTO objects VALUES('routine-17','routine',19,'{}',NULL,'t1','t7');
     INSERT INTO occurrences(id,routine_id,routine_version,nominal_due_at,status,coalesced_count,created_at) VALUES('occurrence-43','routine-17',7,'2026-09-17T03:15:00.000Z','completed',5,'t3');
     UPDATE runs SET occurrence_id='occurrence-43',routine_id='routine-17' WHERE id='root-29'`);
+  if (version < 14) {
+    db.exec('DROP INDEX objects_memory_scope');
+    wire.schemaSha256 = '0eaf3801cdd090fbeeb7d2d362f19c1e7157ae01bb7a09264409bbf504a17d2f';
+  }
   if (version < 13) {
     legacyOccurrences(db);
     wire.schemaSha256 = 'a333b2b0ca9d5e7572e84d8aa3f8210b99e3b946a831bbd6dd4ff231173d0bf6';
@@ -221,7 +225,7 @@ it.each([9, 10, 11, 12, 13])('preserves schema%s migration history and reference
     db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision');
     wire.schemaSha256 = '8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a';
   }
-  db.prepare('UPDATE schema_versions SET version=? WHERE version=13').run(version);
+  db.prepare('UPDATE schema_versions SET version=? WHERE version=14').run(version);
   if (version < 11) {
     const links = db.prepare('SELECT * FROM native_task_links').all();
     db.exec('DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');
@@ -250,14 +254,14 @@ it.each([9, 10, 11, 12, 13])('preserves schema%s migration history and reference
   } finally { copy.close(); }
 });
 
-it.each([[], [8], [13, 8], [8, 8, 13], [0, 13], [1.5, 13], [14], [8, 13], [9], [10], [11], [12]].map(versions => ({ versions })))('rejects invalid or row-mismatched header history $versions', async ({ versions }) => {
+it.each([[], [8], [14, 8], [8, 8, 14], [0, 14], [1.5, 14], [15], [8, 14], [9], [10], [11], [12], [13]].map(versions => ({ versions })))('rejects invalid or row-mismatched header history $versions', async ({ versions }) => {
   wire.schemaVersions = versions; await save(); await rejected();
 });
 
 it('rejects omitted history rows in the header and missing flight data tables', async () => {
   db.prepare('INSERT INTO schema_versions VALUES(?,?)').run(8, '2026-08-17T01:23:45.678Z');
-  wire.tables = tables(db); await save(); await rejected(); // Header [13] omits real row8.
-  wire.schemaVersions = [8, 13]; wire.tables = wire.tables.filter(t => t.name !== 'flight_restore_deadlines');
+  wire.tables = tables(db); await save(); await rejected(); // Header [14] omits real row8.
+  wire.schemaVersions = [8, 14]; wire.tables = wire.tables.filter(t => t.name !== 'flight_restore_deadlines');
   await save(); await rejected();
 });
 

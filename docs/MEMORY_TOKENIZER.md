@@ -7,6 +7,12 @@ claim for the exact model names listed below. This is not full summary/retrieval
 model/account eligibility, or deployed acceptance. Staged alpha remains separate.
 The standalone load harness keeps its disposable install.
 
+Preparation scope reads use schema14's ordered partial index: at most65 rows
+per scope, at most195 SQL-returned rows and65 parsed bodies before the64-record
+complete-or-block gate. Actual local workerd plans avoid full scans and temporary
+sorting. This does not bound index construction, storage size or unlimited legacy
+enqueue snapshots; query-plan evidence is not deployed CPU or latency acceptance.
+
 ## Runtime counting contract
 
 `runtime/memory-tokenizer.mjs` exports async

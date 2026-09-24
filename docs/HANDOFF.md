@@ -4,7 +4,22 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-24 Asia/Jakarta)
 
-Latest verified local unit: memory preparation orders by distinct lexical overlap
+Current unit: schema14 ordered partial scope index plus per-scope limited queries
+bound pre-claim returned rows to195 and parsed bodies to65. Complete-or-block and
+expiry/constraint authority are unchanged. Backend1875/typecheck, actual Worker
+migration/query plans, HTTP31, restore drill, native service and build pass;
+full verifier PID833755 exited0: backend1875/runtime670 and all browser/native/
+shutdown/strict-launcher/service/build stages pass; separate desktop16 pass.
+Log `.local/memory-index-combined.log` SHA256
+`bec01da215678a67d0c4537248001a03361fbafc8508e4de570a05775e30a47f`.
+No active check or workerd/host fixture residue. Schema/source
+pins and legacy backup/import fixtures updated; initial failures retained.
+Index construction, storage growth and unlimited legacy snapshots remain open.
+Next summaries/pointers and targeted retrieval. No active child or unintegrated
+delivery; direct ownership is simpler for this coupled schema/store/backup unit.
+Local only, no push/deploy or changed external gates.
+
+Previous verified local unit: memory preparation orders by distinct lexical overlap
 with the admitted instruction, then ID. NFC/case normalization is ranking-only;
 raw counted bytes and zero-score explicit constraints are retained. Scope/expiry
 filtering and record/byte limits come first. Backend1868, final preparation23,

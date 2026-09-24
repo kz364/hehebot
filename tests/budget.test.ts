@@ -50,7 +50,7 @@ const protectedRows = () => ['commands', 'runs', 'attempts', 'effects', 'operati
 
 beforeEach(() => {
   db = new BudgetDatabase(); store = new Store(db); now = '2026-09-10T00:00:00.000Z'; ledger = new BudgetLedger(store, () => now, randomUUID);
-  expect(db.all('SELECT version FROM schema_versions')).toEqual([{ version: 13 }]);
+  expect(db.all('SELECT version FROM schema_versions')).toEqual([{ version: 14 }]);
   store.put(persona, 'persona', { name: 'Synthetic persona', instructions: 'Read fixture data.', tool_policy_ids: [], archived: false }, 0, 'owner', now);
   for (const id of [optional, required]) store.put(id, 'routine', { persona_id: persona, name: 'Synthetic routine', instructions: 'Read fixture data.', enabled: true,
     schedule: { cron: '0 * * * *', timezone: 'Asia/Jakarta' }, trigger_source_id: null, action_policy_ids: [],

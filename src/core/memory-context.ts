@@ -15,7 +15,8 @@ export type MemoryBudgetReceipt = Omit<MemoryPreparation,'global'|'scoped'> & {
 const lexicalTerms=(text:string)=>new Set(text.normalize('NFC').toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu)??[]);
 
 /** Complete-or-refuse first stage: never return a partial set as a complete one.
- * These limits bound returned records and counting input, not SQLite scan cost.
+ * Store uses at most three indexed 65-row reads before merging; these limits
+ * bound returned records and counting input, not storage size or index creation.
  * Expired records count against the read-work cap until retention removes them.
  */
 export function prepareMemory(store:Store,run:Run,model:string,now:string) {

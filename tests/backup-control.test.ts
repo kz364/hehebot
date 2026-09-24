@@ -59,7 +59,7 @@ it('includes committed WAL rows, excludes an uncommitted writer, preserves exact
   const before = await Promise.all(['', '-wal'].map(s => readFile(source + s)));
   db.exec("BEGIN IMMEDIATE; UPDATE objects SET revision=99 WHERE id='persona-a'");
   const manifest = await snapshotControl(source, destination);
-  expect(manifest.schemaVersions).toEqual([13]);
+  expect(manifest.schemaVersions).toEqual([14]);
   expect(manifest.counts).toMatchObject({ objects: 2, object_revisions: 2, runs: 2, attempts: 2, effects: 1, resource_locks: 1, webhook_receipts: 1 });
   // SQLite's shared-memory reader marks are coordination state, not immutable database pages.
   expect(await Promise.all(['', '-wal'].map(async s => digest(await readFile(source + s))))).toEqual(before.map(digest));
@@ -88,7 +88,7 @@ it('includes committed WAL rows, excludes an uncommitted writer, preserves exact
 it('verifies legacy schema8 without migrating the source or snapshot', async () => {
   legacyOccurrences(db);
   legacyLinks();
-  db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=13');
+  db.exec('DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=14');
   const before = digest(await readFile(source));
   const manifest = await snapshotControl(source, destination);
   expect(manifest.schemaVersions).toEqual([8]);
@@ -97,12 +97,13 @@ it('verifies legacy schema8 without migrating the source or snapshot', async () 
   expect(digest(await readFile(source))).toBe(before);
 });
 
-it.each([9,10,11,12])('preserves schema%s flight obligations and original migration history', async version => {
-  legacyOccurrences(db);
+it.each([9,10,11,12,13])('preserves schema%s flight obligations and original migration history', async version => {
+  db.exec('DROP INDEX objects_memory_scope');
+  if (version < 13) legacyOccurrences(db);
   if (version < 12) db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision');
   if (version < 11) legacyLinks();
   if (version === 9) db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json');
-  db.prepare('UPDATE schema_versions SET version=? WHERE version=13').run(version);
+  db.prepare('UPDATE schema_versions SET version=? WHERE version=14').run(version);
   db.exec("INSERT INTO schema_versions VALUES(8,'2026-08-17T01:23:45.678Z'); INSERT INTO flight_restore_deadlines VALUES('leg-83',2,'2026-09-20T21:00:00.000Z','Asia/Jakarta','2026-09-19T21:00:00.000Z','routine-29','source-43','outcome_unknown','child-z','{\"receipt\":73}')");
   const manifest = await snapshotControl(source, destination);
   expect(manifest.schemaVersions).toEqual([8, version]);
@@ -116,10 +117,10 @@ it.each([9,10,11,12])('preserves schema%s flight obligations and original migrat
   expect(await verifyControl(destination)).toEqual(manifest);
 });
 
-it('backs up migrated v13 with the canonical pin and retains an exact release independently of result', async () => {
+it('backs up migrated v14 with the canonical pin and retains an exact release independently of result', async () => {
   legacyOccurrences(db);
   legacyLinks();
-  db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; UPDATE schema_versions SET version=9 WHERE version=13');
+  db.exec('DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; UPDATE schema_versions SET version=9 WHERE version=14');
   migrateApplication({
     all: <T>(sql: string, ...values: SqlValue[]) => db.prepare(sql).all(...values) as T[],
     exec: (sql, ...values) => { db.prepare(sql).run(...values); },
@@ -131,8 +132,8 @@ it('backs up migrated v13 with the canonical pin and retains an exact release in
   const receipt = JSON.stringify({ native_ref: 'native-root-73', outcome: 'interrupted' });
   db.prepare("UPDATE attempts SET coordinator_release_json=? WHERE run_id='root-r'").run(receipt);
   const manifest = await snapshotControl(source, destination);
-  expect(manifest.schemaVersions).toEqual([9, 10, 11, 12, 13]);
-  expect(manifest.schemaSha256).toBe('0eaf3801cdd090fbeeb7d2d362f19c1e7157ae01bb7a09264409bbf504a17d2f');
+  expect(manifest.schemaVersions).toEqual([9, 10, 11, 12, 13, 14]);
+  expect(manifest.schemaSha256).toBe('1fe0bfe3a7be6a29c66dc3b73bb3b8974de03fbda7773fe921c50e7b19558ddb');
   expect(await verifyControl(destination)).toEqual(manifest);
   const copy = new DatabaseSync(join(destination, 'control.sqlite'), { readOnly: true });
   try {
@@ -189,7 +190,7 @@ it('pins one transaction when another connection commits paired changes after sn
 it('rejects unsupported versions, schema drift and native-like databases without leaving backups', async () => {
   db.exec('UPDATE schema_versions SET version=99');
   await expect(snapshotControl(source, destination)).rejects.toThrow('UNSUPPORTED_SCHEMA');
-  db.exec('UPDATE schema_versions SET version=13; CREATE TABLE sqliteXauth(secret TEXT)');
+  db.exec('UPDATE schema_versions SET version=14; CREATE TABLE sqliteXauth(secret TEXT)');
   await expect(snapshotControl(source, destination)).rejects.toThrow('UNSUPPORTED_SCHEMA');
   await expect(lstat(destination)).rejects.toMatchObject({ code: 'ENOENT' });
 });

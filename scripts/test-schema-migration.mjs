@@ -34,7 +34,7 @@ try{
   assert.deepEqual({...failed,rejected:false},before,`Exact rollback for ${path}`);
  }
  await stop();base=await start('migrate');const after=await get(base);
- assert.deepEqual(after.versions.map(row=>row.version),[12,13]);
+ assert.deepEqual(after.versions.map(row=>row.version),[12,13,14]);
  assert.deepEqual(after.occurrences,before.occurrences.map(row=>({...row,origin:'scheduled'})));
  assert.deepEqual(after.runs,before.runs);assert.deepEqual(after.attempts,before.attempts);
  assert.deepEqual(after.foreignKeys,[{foreign_keys:1}]);assert.deepEqual(after.deferred,[{defer_foreign_keys:0}]);assert.deepEqual(after.violations,[]);
@@ -45,6 +45,12 @@ try{
  assert.deepEqual(await get(base,'/rerun'),after);
  const invalid=await get(base,'/invalid-reference');assert.equal(invalid.rejected,true);assert.deepEqual({...invalid,rejected:false},after);
  await stop();base=await start('migrate');assert.deepEqual(await get(base),after);
- console.log('PASS: real local Worker v12→v13 startup migration; retained live occurrence/run/attempt, version-write and FK-check rollback, enforced references, exact fresh schema, idempotent rerun and persistent reopen. No account/provider calls.');
+ const plans=await get(base,'/memory-plan');assert.equal(plans.length,3);
+ for(const plan of plans){
+  const details=plan.map(row=>row.detail).join('\n');
+  assert.match(details,/SEARCH objects USING INDEX objects_memory_scope/);
+  assert.doesNotMatch(details,/SCAN objects|TEMP B-TREE/);
+ }
+ console.log('PASS: real local Worker v12→v14 startup migration; retained live occurrence/run/attempt, version-write and FK-check rollback, enforced references, exact fresh schema, idempotent rerun, persistent reopen and all three bounded memory-scope index plans without temporary sorting. No account/provider calls.');
 }catch(error){console.error(logs.slice(-4000));throw error;}
 finally{await stop();await rm(directory,{recursive:true,force:true});}
