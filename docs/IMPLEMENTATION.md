@@ -4,6 +4,30 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Optional bridge memory custody (2026-09-24): an injected counter enables
+prepare → count → claim without changing the default/staged service path.
+The bridge checks the preparation digest, counts the exact serialized buckets
+before journaling claim uncertainty, and compares the returned snapshot and
+receipt before native submission. Counting failure has no unbudgeted fallback;
+lost claim acknowledgement retains uncertainty and does not recount/reclaim.
+Asymmetric scope/constraint/framing tests, empty/no-work cases, overflow,
+counter errors, altered preparation/receipt/snapshot and native crash/family
+regressions pass:177 Vitest +34 Node tests and typecheck. Log
+`.local/memory-bridge-final.log` SHA256
+`205e5e97aa64c8ef4c001ab1f9fc8f91e798e9f16031c63d7510d1de00b6321b`.
+Service adoption, supervisor lease/abort integration, explicit encoding mapping,
+summaries and retrieval remain incomplete; this callback alone enforces none
+of them on the default service path.
+
+The preceding protocol/counter verification is now complete in segments:
+remaining verifier PID735480 exited0 through strict launcher, all service modes
+and dry-run build; final aggregate backend1849/runtime661/typecheck passed.
+The original failed browser run is still a failure, not relabelled green.
+Logs and SHA256:
+- `.local/memory-preclaim-remaining.log`: `c996c05ebd357e27306d2c5f214f6f6b4556921702906186913d3918eef9d6fa`.
+- `.local/memory-counter-runtime-final.log`: `60d5511b78f43a5b1e1605bb33b3a41d080329f528477dad1f54ec5f55c708b1`.
+- `.local/memory-preclaim-backend-final.log`: `d0ce27fa958115d0daa5a4f977d9f6d6a9d55dde3efd0f045f8dce7a6739b64c`.
+
 Bounded runtime counter integration (2026-09-24): corrected worker deliverycbf320f
 is integrated with exact `gpt-tokenizer@4.0.0`, its verified SRI, no runtime
 transitive dependencies and no other dependency-version changes. Both MIT notices

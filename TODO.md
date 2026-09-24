@@ -17,11 +17,16 @@ memory preparation returns the complete eligible set or visibly blocks before an
 attempt. It caps returned records at64 and combined serialized input at128KiB;
 claim rechecks scope, revisions, expiry, task, attempt and selected-model identity.
 Receipts over4000 global/8000 scoped tokens park the run without truncation.
-Backend1848/runtime644 and final focused72/typecheck pass; bypassing the digest
-fails five stale-source tests. The combined verifier stopped at an undelivered
-browser click; a layout-stabilized real-click assertion makes that fixture pass,
-and the remaining stages are running. Failed evidence is retained.
-This does not yet enforce budgets on ordinary bridge dispatch, bound SQL scan
+Final backend1849/runtime661/typecheck pass; bypassing the digest fails five
+stale-source tests. The initial combined verifier stopped at an undelivered
+browser click; the corrected fixture and all remaining native/launcher/service/
+build stages now pass separately. Failed evidence is retained, not a clean
+original combined run. Optional bridge counting passes177 related Vitest,
+34 native/crash/family tests and typecheck: count
+before claim, carry exact receipts, reject mismatched snapshots and never fall
+back after counting failure or replay an uncertain claim. Service wiring and
+supervisor lease/abort handling remain next.
+This does not yet enforce budgets on ordinary service dispatch, bound SQL scan
 cost, or provide summaries/retrieval. Corrected off-event-loop counter delivery
 is integrated with exact4.0.0 dependency/SRI and both MIT notices; independent
 and main-checkout40/40 tests pass. No existing package version changed. Parent

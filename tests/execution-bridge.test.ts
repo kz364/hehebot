@@ -9,6 +9,7 @@ import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { ExecutionBridge } from '../runtime/execution-bridge.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
+import { countMemory } from '../runtime/memory-tokenizer.mjs';
 import validateRuntime from '../src/generated/validate-runtime.js';
 
 let f: ReturnType<typeof fixture>, life: LifecycleCore, identity: Identity, directory: string;
@@ -37,7 +38,8 @@ function bridge(testMode = true, journal = new FileJournal(join(directory, 'brid
   } });
   const control = { request: async (type: string, p: any) => {
     let result;
-    if (type === 'claim') result = life.claim(p.identity, p.persona_models);
+    if (type === 'memory-prepare') result = life.prepareMemory(p.identity, p.persona_models);
+    else if (type === 'claim') result = life.claim(p.identity, p.persona_models, p.memory_budget);
     else if (type === 'submitted') result = life.submitted(p.identity, p.run_id, p.attempt, p.native_ref);
     else if (type === 'complete') result = life.complete(p.identity, p.run_id, p.attempt, p.result);
     else throw new Error('Unexpected control call');
@@ -53,6 +55,100 @@ function settled(row: any) {
     childrenSettled: true, effectsSettled: true, outputCommitted: true,
     result: { status: 'completed', text: 'Durably returned to the portal' } };
 }
+
+it('counts the exact prepared arrays before claim and carries their receipt to native input', async () => {
+  const id = enqueue(), executor = bridge();
+  executor.memoryCounter = async (input: any) => {
+    expect(f.store.run(id).current_attempt).toBe(0);
+    expect(await executor.journal.get(executor.cursor)).toBeNull();
+    expect(input).toEqual({ selected_model: 'gpt-5.5', global: '[]', scoped: '[]' });
+    return countMemory(input);
+  };
+  expect((await executor.claimNext()).phase).toBe('running');
+  expect(nativeMessages[0].memory_budget).toMatchObject({ run_id: id, attempt: 1,
+    selected_model: 'gpt-5.5', global_tokens: 1, scoped_tokens: 1 });
+  expect(nativeMessages[0].memories).toEqual([]);
+});
+
+it('preserves asymmetric bucket framing, metadata and explicit constraints without hydrating foreign memory', async () => {
+  const source = randomUUID();
+  f.store.event(source, bot, 'message.user', 'owner', null, { text: 'Owner constraints' }, f.core.now());
+  const records = [
+    { scope: { kind: 'global' as const, id: null }, text: 'Global α', explicit_constraint: true },
+    { scope: { kind: 'persona' as const, id: bot }, text: 'Scoped 東京, never send without approval.', explicit_constraint: true },
+    { scope: { kind: 'persona' as const, id: otherBot }, text: 'Foreign must not enter either bucket.' },
+  ].map(body => ({ id: randomUUID(), expected_revision: 0, source_event_id: source,
+    expires_at: null, sensitivity: 'ordinary' as const, ...body }));
+  for (const payload of records) expect(f.accept({ schema_version: 1, type: 'memory.put', payload }).status).toBe('applied');
+  enqueue(); const executor = bridge(); let captured: any;
+  executor.memoryCounter = async (input: any) => {
+    captured = input;
+    expect(JSON.parse(input.global)).toMatchObject([{ id: records[0].id, revision: 1, body: records[0] }]);
+    expect(JSON.parse(input.scoped)).toMatchObject([{ id: records[1].id, revision: 1, body: records[1] }]);
+    return { schema_version: 1, selected_model: 'gpt-5.5', tokenizer: 'gpt-tokenizer@4.0.0/o200k_base/ordinary-v1',
+      global_tokens: 137, scoped_tokens: 219 };
+  };
+  expect((await executor.claimNext()).phase).toBe('running');
+  expect(nativeMessages[0].memory_budget).toMatchObject({ global_tokens: 137, scoped_tokens: 219 });
+  expect(nativeMessages[0].memories).toHaveLength(2);
+  expect(JSON.stringify(nativeMessages[0].memories.filter((m: any) => m.body.scope.kind === 'global'))).toBe(captured.global);
+  expect(JSON.stringify(nativeMessages[0].memories.filter((m: any) => m.body.scope.kind !== 'global'))).toBe(captured.scoped);
+});
+
+it.each([null, { blocked: true as const, run_id: 'bounded-run', reason: 'MEMORY_PREPARATION_LIMIT' }])('does not count or claim when preparation returns %j', async reply => {
+  const executor = bridge(); let calls = 0;
+  executor.memoryCounter = async () => { throw new Error('must not count'); };
+  executor.control.request = async (type: string) => { expect(type).toBe('memory-prepare'); calls++; return reply; };
+  expect((await executor.claimNext()).phase).toBe('complete');
+  expect(calls).toBe(1); expect(nativeCalls).toBe(0);
+});
+
+it.each(['TOKENIZER_TIMEOUT', 'TOKENIZER_ABORTED', 'TOKENIZER_WORKER_FAILED'])('never claims or falls back after %s', async code => {
+  const id = enqueue(), executor = bridge();
+  executor.memoryCounter = async () => { throw Object.assign(new Error(code), { code }); };
+  await expect(executor.claimNext()).rejects.toMatchObject({ code });
+  expect(f.store.run(id).current_attempt).toBe(0);
+  expect(await executor.journal.get(executor.cursor)).toBeNull();
+  expect(nativeCalls).toBe(0);
+});
+
+it('an over-budget receipt blocks visibly before an attempt rather than dropping memory', async () => {
+  const id = enqueue(), executor = bridge();
+  executor.memoryCounter = async () => ({ schema_version: 1, selected_model: 'gpt-5.5',
+    tokenizer: 'gpt-tokenizer@4.0.0/o200k_base/ordinary-v1', global_tokens: 4001, scoped_tokens: 2 });
+  expect((await executor.claimNext()).phase).toBe('complete');
+  expect(f.store.run(id)).toMatchObject({ status: 'waiting', error_code: 'MEMORY_BUDGET_EXCEEDED', current_attempt: 0 });
+  expect(nativeCalls).toBe(0);
+});
+
+it('lost budgeted claim acknowledgment keeps uncertainty and never recounts or reclaims', async () => {
+  const id = enqueue(), executor = bridge(); let counts = 0;
+  executor.memoryCounter = async (input: any) => { counts++; return countMemory(input); };
+  lose = 'claim';
+  expect((await executor.claimNext()).phase).toBe('claim_unknown');
+  expect(f.store.run(id).current_attempt).toBe(1);
+  lose = undefined;
+  expect((await executor.claimNext()).phase).toBe('claim_unknown');
+  expect(counts).toBe(1); expect(nativeCalls).toBe(0);
+});
+
+it.each(['snapshot', 'receipt', 'preparation'])('refuses changed %s bytes rather than submitting mismatched memory', async mutation => {
+  enqueue(); const executor = bridge(), request = executor.control.request;
+  executor.memoryCounter = countMemory;
+  executor.control.request = async (type: string, payload: any) => {
+    const reply: any = await request(type, payload);
+    if (type === 'memory-prepare' && mutation === 'preparation') reply.global = '[ ]';
+    if (type === 'claim') {
+      const context = JSON.parse(reply.run.context_json);
+      if (mutation === 'snapshot') context.memories = [{ body: { scope: { kind: 'global' }, text: 'uncounted' } }];
+      if (mutation === 'receipt') delete context.memory_budget;
+      reply.run.context_json = JSON.stringify(context);
+    }
+    return reply;
+  };
+  await expect(executor.claimNext()).rejects.toMatchObject({ code: mutation === 'preparation' ? 'INVALID_MEMORY_PREPARATION' : 'MEMORY_CLAIM_MISMATCH' });
+  expect(nativeCalls).toBe(0);
+});
 
 it('binds the host-selected model into Worker custody and native input without trusting context text', async () => {
   const id = enqueue(), executor = bridge(), request = executor.control.request;
@@ -78,7 +174,7 @@ it('rejects a mismatched returned model before native submission while retaining
   const id = enqueue(), executor = bridge(), request = executor.control.request;
   executor.control.request = async (type: string, payload: any) => {
     const reply = await request(type, payload);
-    if (type === 'claim' && reply) reply.run.context_json = JSON.stringify({ ...JSON.parse(reply.run.context_json), selected_model: 'foreign-model' });
+    if (type === 'claim' && reply && 'run' in reply) reply.run.context_json = JSON.stringify({ ...JSON.parse(reply.run.context_json), selected_model: 'foreign-model' });
     return reply;
   };
   await expect(executor.claimNext()).rejects.toMatchObject({ code: 'SELECTED_MODEL_MISMATCH' });

@@ -9,12 +9,15 @@ const hash = value => createHash('sha256').update(JSON.stringify(value)).digest(
  */
 export class ExecutionBridge {
   #busy = false;
-  constructor({ control, native, journal, identity, installationId, personas, claimStage = null }) {
+  constructor({ control, native, journal, identity, installationId, personas, claimStage = null,
+    memoryCounter = /** @type {null | ((input: {selected_model: string, global: string, scoped: string}) => Promise<any>)} */ (null) }) {
     if (!control?.request || !native?.submit || !native?.admissionReadiness || !journal?.putIfAbsent ||
         !Number.isSafeInteger(identity?.epoch) || typeof identity.boot_id !== 'string' ||
         typeof installationId !== 'string' || !personas ||
-        claimStage !== null && typeof claimStage !== 'function') fail('INVALID_BRIDGE_CONFIGURATION');
+        claimStage !== null && typeof claimStage !== 'function' ||
+        memoryCounter !== null && typeof memoryCounter !== 'function') fail('INVALID_BRIDGE_CONFIGURATION');
     Object.assign(this, { control, native, journal, identity, installationId, personas, claimStage });
+    this.memoryCounter = memoryCounter;
     this.cursor = `dispatch-${hash(identity)}`;
   }
   /** Released coordinators remain active families, not completed tasks. */
@@ -75,11 +78,37 @@ export class ExecutionBridge {
       if (prior && !['complete', 'released'].includes(prior.phase)) return prior;
       if (prior?.phase === 'released' && !prior.families?.find(row => row.attemptId === prior.attemptId)?.coordinatorRelease?.acknowledged) return prior;
       if ((prior?.families ?? []).filter(row => row.phase !== 'complete').length >= 32) return prior;
+      let preparation, memory_budget;
+      if (this.memoryCounter) {
+        // Preparation/counting cannot own an attempt. Do not journal claim_unknown
+        // until a claim can actually be sent, and never fall back on count failure.
+        preparation = structuredClone(await this.control.request('memory-prepare', { identity: this.identity, persona_models }));
+        if (preparation === null || preparation?.blocked === true &&
+            preparation.reason === 'MEMORY_PREPARATION_LIMIT' && typeof preparation.run_id === 'string') {
+          const empty = { phase: 'complete', claim: null, attemptId: null, nativeRunId: null, result: null };
+          if (!prior) await this.journal.putIfAbsent(this.cursor, { ...empty, identity: this.identity });
+          else await this.journal.update(this.cursor, empty);
+          return this.journal.get(this.cursor);
+        }
+        if (!preparation || Object.keys(preparation).sort().join(',') !== 'attempt,global,run_id,schema_version,scoped,selected_model,sha256' ||
+            preparation.schema_version !== 1 || typeof preparation.run_id !== 'string' || !preparation.run_id ||
+            !Number.isSafeInteger(preparation.attempt) || preparation.attempt < 1 ||
+            !Object.values(persona_models).includes(preparation.selected_model) ||
+            typeof preparation.global !== 'string' || typeof preparation.scoped !== 'string') fail('INVALID_MEMORY_PREPARATION');
+        const { schema_version, run_id, attempt, selected_model, global, scoped } = preparation;
+        if (hash({ schema_version, run_id, attempt, selected_model, global, scoped }) !== preparation.sha256) fail('INVALID_MEMORY_PREPARATION');
+        const counts = await this.memoryCounter({ selected_model, global, scoped });
+        if (counts?.schema_version !== 1 || counts.selected_model !== selected_model ||
+            counts.tokenizer !== 'gpt-tokenizer@4.0.0/o200k_base/ordinary-v1' ||
+            ![counts.global_tokens, counts.scoped_tokens].every(count => Number.isSafeInteger(count) && count >= 0)) fail('INVALID_MEMORY_COUNT');
+        memory_budget = { schema_version, run_id, attempt, selected_model, sha256: preparation.sha256,
+          tokenizer: counts.tokenizer, global_tokens: counts.global_tokens, scoped_tokens: counts.scoped_tokens };
+      }
       // An unanswered claim can already own work. Never issue another claim after restart.
       if (prior) await this.journal.update(this.cursor, { phase: 'claim_unknown', claim: null, attemptId: null, nativeRunId: null, result: null });
       else await this.journal.putIfAbsent(this.cursor, { phase: 'claim_unknown', identity: this.identity });
       let claim;
-      try { claim = await this.control.request('claim', { identity: this.identity, persona_models }); }
+      try { claim = await this.control.request('claim', { identity: this.identity, persona_models, ...(memory_budget ? { memory_budget } : {}) }); }
       catch { return this.journal.update(this.cursor, { phase: 'claim_unknown' }); }
       if (claim === null) return this.journal.update(this.cursor, { phase: 'complete' });
       if (!claim?.run?.id || !Number.isSafeInteger(claim.run.current_attempt) ||
@@ -102,6 +131,11 @@ export class ExecutionBridge {
       if (!persona?.agentId || !persona.model) fail('NATIVE_PERSONA_UNMAPPED');
       const context = JSON.parse(claim.run.context_json);
       if (Object.hasOwn(context, 'selected_model') && context.selected_model !== persona.model) fail('SELECTED_MODEL_MISMATCH');
+      if (memory_budget && (claim.run.id !== memory_budget.run_id || claim.run.current_attempt !== memory_budget.attempt ||
+          context.selected_model !== memory_budget.selected_model || hash(context.memory_budget ?? null) !== hash(memory_budget) ||
+          !Array.isArray(context.memories) ||
+          JSON.stringify(context.memories.filter(record => record.body.scope.kind === 'global')) !== preparation.global ||
+          JSON.stringify(context.memories.filter(record => record.body.scope.kind !== 'global')) !== preparation.scoped)) fail('MEMORY_CLAIM_MISMATCH');
       const input = {
         attemptId: hash([this.installationId, claim.submission_key]), installationId: this.installationId,
         personaId: persona.agentId, model: persona.model,
