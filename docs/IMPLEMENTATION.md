@@ -4,6 +4,28 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Bounded runtime counter integration (2026-09-24): corrected worker deliverycbf320f
+is integrated with exact `gpt-tokenizer@4.0.0`, its verified SRI, no runtime
+transitive dependencies and no other dependency-version changes. Both MIT notices
+are preserved verbatim in MEMORY_TOKENIZER.md. The module owns a worker thread,
+caps input bytes and deadlines, handles abort, retains listeners through cleanup,
+and rejects unconfirmed termination instead of returning counts. It validates and
+echoes model identity only; no selected-model mapping or account admission is
+implied. Ordinary bridge dispatch does not call it yet.
+
+Parent inspection rejected the original natural-work termination evidence:20s
+subprocess bounds could pass after11s of natural completion. Corrected fixtures
+use a nonterminating tokenizer stub and execute no-termination mutants on both
+timeout and abort paths; mutants settle their promise but fail to exit until the
+fixture's bound kills them. Parent independent40/40 and main-checkout40/40 pass,
+plus typecheck. Independent log `.local/memory-counter-parent.log` SHA256
+`2fee778581a16580793e8ccf3609f2b7d04a72797eb1b927583a046738bdff74`;
+integrated log `.local/memory-counter-integrated.log` SHA256
+`7c733016728e1d50b41e5060ce111d5c3db04f84ab3c1c701490b0657c05ab80`.
+Original/corrected bundles remain retained; disposable parent review checkout and
+install are removed. This additive module is not imported by the concurrently
+running remaining native verifier stages. Budget enforcement and E06 remain open.
+
 Pre-claim memory protocol (2026-09-24, verification in progress): authenticated
 ordinary-runtime `memory-prepare` returns complete global/scoped JSON arrays for
 the next queued task, without starting an attempt or consuming room cursors. It

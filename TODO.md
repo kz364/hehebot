@@ -21,10 +21,12 @@ Backend1848/runtime644 and final focused72/typecheck pass; bypassing the digest
 fails five stale-source tests. The combined verifier stopped at an undelivered
 browser click; a layout-stabilized real-click assertion makes that fixture pass,
 and the remaining stages are running. Failed evidence is retained.
-This does not yet enforce budgets on ordinary bridge dispatch, adopt a tokenizer,
-bound SQL scan cost, or provide summaries/retrieval. Corrected off-event-loop
-counter delivery passes parent-independent40/40; parent owns its dependency,
-model mapping and integration. No active child or lost delivery.
+This does not yet enforce budgets on ordinary bridge dispatch, bound SQL scan
+cost, or provide summaries/retrieval. Corrected off-event-loop counter delivery
+is integrated with exact4.0.0 dependency/SRI and both MIT notices; independent
+and main-checkout40/40 tests pass. No existing package version changed. Parent
+owns selected-model mapping and bridge integration. No active child, lost or
+unintegrated delivery remains.
 External blockers and production flags remain unchanged. Local checkpoint only.
 
 **Previous checkpoint:** memory context now filters global/current-persona/

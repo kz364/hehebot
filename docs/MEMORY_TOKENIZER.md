@@ -1,9 +1,38 @@
-# Memory tokenizer parity and local-workerd load harness
+# Memory tokenizer: runtime counter and parity/load harness
 
-Status: **local harness deliverable only.** This document describes the
-repeatable, credential-free verification harness in `scripts/test-memory-tokenizer.mjs`.
-It is not application tokenizer adoption, not a memory-budget implementation,
-not a licensing conclusion, and not production or deployed acceptance.
+Status: **local bounded counter and verification harness.** The root dependency
+is pinned to `gpt-tokenizer@4.0.0` with the verified SRI below. No existing package
+versions changed. The counter is not yet called by ordinary bridge dispatch;
+this is not enforced memory budgeting, model/account eligibility, or deployed
+acceptance. The standalone load harness keeps its disposable install.
+
+## Runtime counting contract
+
+`runtime/memory-tokenizer.mjs` exports async
+`countMemory({selected_model, global, scoped}, {timeoutMs = 30000, signal} = {})`.
+The two buckets are exact serialized strings, not separate-record token sums.
+Combined UTF-8 input is capped at131072 bytes before starting an owned Node worker
+thread; model identity is syntax-checked and echoed, never mapped or admitted by
+this module. It returns schema_version1, that model, tokenizer identity
+`gpt-tokenizer@4.0.0/o200k_base/ordinary-v1`, and separate safe-integer token counts.
+Empty special-token sets preserve literals as ordinary text; merge caching is
+disabled. Runtime version mismatch fails instead of silently switching encoders.
+
+Timeouts1..60000ms and AbortSignal cancellation terminate the owned worker and
+await its termination before settling. Errors remain handled while termination
+is pending; unconfirmed termination rejects and never returns successful counts.
+Worker heap limits are safety controls, not measured total-memory acceptance.
+Counting does not perform inference, network access or external effects, and no
+memory edit invokes it automatically.
+
+`node --test tests/runtime-memory-tokenizer.mjs` verifies independently derived
+tiktoken vectors, Unicode and byte boundaries, event-loop responsiveness and
+cleanup. An isolated nonterminating tokenizer stub proves timeout/abort let the
+host exit; executed no-termination mutants must hang until the test harness kills
+them. Thus natural encoding completion cannot masquerade as termination. Parent
+independent execution with the verified tarball passed17 counter tests plus23
+harness tests. This does not establish full selected-model budgets or native
+task/tool/effect settlement.
 
 ## What the harness proves
 

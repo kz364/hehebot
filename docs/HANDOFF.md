@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-24 Asia/Jakarta)
 
+Counter deliverycbf320f is now integrated as a standalone runtime module with the
+exact4.0.0 dependency/SRI; existing package versions are unchanged. Parent review
+and independent/main executions each pass40 tests; typecheck passes. Both MIT
+notices are preserved. No active child or unintegrated delivery remains. Next is
+explicit selected-model mapping and pre-claim bridge wiring, retaining receipt/
+snapshot identity and claim-ack uncertainty; summaries/retrieval remain later
+required acceptance. Do not treat the counter's model syntax check as eligibility.
+
 Current local stage: optional pre-claim memory preparation/receipt protocol.
 Complete-set digest and row/byte bounds are tested before attempt creation;
 overflow becomes visible waiting without truncating constraints. Backend1848,
@@ -14,13 +22,14 @@ Instant scrolling/layout wait plus a real-click assertion fixes the fixture;
 isolated alpha cases pass. Remaining stages are running as PID735480 in
 `.local/memory-preclaim-remaining.log`; original and diagnostic failures retained.
 Do not rerun concurrently or call this a clean original combined run.
-Reference desktop16 passes. No bridge adoption, dependency
-change, selected-model encoding guarantee or E06 completion yet.
+Reference desktop16 passes. No bridge adoption, selected-model encoding guarantee
+or E06 completion yet. The additive counter is not used by those native stages.
 
 Counter worker T-01a0d37d-0a92-7168-bf60-80a77cd739f3 returnedfa89dae; bundle
 `.local/e06-memory-tokenizer.bundle` SHA256
 `b3cfc8263ef1212fa5fc36d8e2945e58bb471492ac6bb0c24789fa4fe8e577be`
-verified againstca71a9f, preserved at `review/e06-memory-tokenizer`, not integrated.
+verified againstca71a9f, preserved at `review/e06-memory-tokenizer`, superseded by
+the correction below.
 Correctedcbf320f replaces20s natural-work bounds with nonterminating-stub tests
 and executed no-termination mutants, retains error handling through termination,
 and rejects unconfirmed termination. New bundle
@@ -30,7 +39,7 @@ is preserved at `review/e06-memory-tokenizer-v2`. Parent-independent40/40 passes
 with the SRI-verified disposable tarball; log `.local/memory-counter-parent.log`
 SHA256`2fee778581a16580793e8ccf3609f2b7d04a72797eb1b927583a046738bdff74`.
 Review worktree/install removed. No active worker or duplicate assignment.
-Parent owns root dependency/adoption, mapping, and exact-byte bridge integration.
+Parent owns mapping and exact-byte bridge integration.
 Both MIT notices are now preserved verbatim in MEMORY_TOKENIZER.md.
 
 Scheduled local unit: memory scope is now filtered in SQLite before bodies enter
