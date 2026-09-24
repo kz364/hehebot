@@ -108,7 +108,16 @@ Call journals retain only fingerprints/status, never memory text, and refuse all
 same-call replay after reconstruction. Mutation tool replay semantics are unchanged.
 Worker authorization is a linearization point, not atomic distributed erasure
 of an already authorized in-flight response. Local projection/retrieval adds no
-deployed/native-model acceptance or retention policy for the new ledger.
+deployed/native-model acceptance.
+
+Ledger retention follows the90-day settled-history window. Maintenance and alarm
+scheduling retain charges until the attempt and run are terminal and retry,
+operations, locks, effects, delivery, root questions and native descendant custody
+are settled. Cleanup deletes at most100 exact attempt keys transactionally, even
+if result bodies were already pruned. Structural run/attempt records remain.
+An active/recovery attempt never loses its budget through this path; an explicit
+future retry owns a new attempt, not a reset of the old ledger. This is temporal
+retention with a bounded delete batch, not a total-storage or SQL-scan bound.
 
 ## Runtime counting contract
 

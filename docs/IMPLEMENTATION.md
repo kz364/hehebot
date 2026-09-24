@@ -4,6 +4,28 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Read-ledger retention (2026-09-25 Asia/Jakarta): Worker maintenance/alarms now use
+the existing90-day settled-history window for exact memory-read attempt keys.
+The attempt/run must be terminal, with no retry, live root attempt, operation,
+lock, uncertain effect, undelivered result, unresolved root question or unsettled
+native descendant. Cleanup is independent of result JSON and leaves structural
+custody unchanged; an old terminal attempt cannot restart read accounting.
+At most100 keys are deleted per transaction. Total storage and cleanup SQL scans
+are not bounded by this change. No live database or production gate was changed.
+
+Thirteen new retrieval/retention cases cover exact time boundary, terminal-read
+refusal independent of expired lease/source guards, uncertainty, recursive
+grandchild/effect custody, result-pruned rows, batch limits and atomic rollback.
+Focused73/typecheck pass in `.local/memory-read-retention-focused.log`, SHA256
+`ce92cb8b1b2c1e49bd53345d6df6b0ad4f552a5aab6597cf3567f20d197143bc`.
+Temporarily removing the descendant predicate fails both nested cases;
+`.local/memory-read-retention-mutant.log` SHA256
+`0055dbd5925fc527a55e69a03ce043a950b4847386d77b0763262a67e0bbff72`.
+The predicate is restored. Final backend1942, HTTP31, typecheck/build pass in
+`.local/memory-read-retention-integrated.log`, SHA256
+`7a93bc367ffdda0f37366ca1d82ab7ca24372d7273aa0870207519f39b96b037`.
+Runtime/native/browser evidence below predates this control-only cleanup unit.
+
 Summary projection (2026-09-25 Asia/Jakarta): budgeted preparation/claim accepts
 an optional bounded host `memory_read_personas` declaration, captured before awaits.
 Only host-enabled, persona-authorized, owner-adopted non-constraint summaries

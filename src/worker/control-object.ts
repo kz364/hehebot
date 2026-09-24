@@ -19,6 +19,7 @@ import { RootChildEffects } from '../core/root-child-effects';
 import { TaskSteering } from '../core/task-steering';
 import { OutputPreviews } from '../core/output-preview';
 import { TokenUsageSnapshots } from '../core/token-usage';
+import { MemoryReadRetention } from '../core/memory-read-retention';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { createProvider, type ProviderConfig, type RuntimeRef } from '../providers';
 import validateRuntime from '../generated/validate-runtime.js';
@@ -154,6 +155,7 @@ export class PersonalControl extends DurableObject<Env> {
   this.core.questions.prune();
   new OutputPreviews(this.store,()=>this.core.now()).prune();
   new TokenUsageSnapshots(this.store,()=>this.core.now()).prune();
+  new MemoryReadRetention(this.store,()=>this.core.now()).prune();
  }
  async accept(owner:string,key:string,hash:string,input:unknown){return this.rpc(async()=>{
   // Even rejected activation must leave retained predecessor history untouched.
@@ -614,6 +616,7 @@ export class PersonalControl extends DurableObject<Env> {
   const resultDue=this.resultRetention.nextDue();if(resultDue)times.push(Date.parse(resultDue));
   const previewDue=new OutputPreviews(this.store,()=>this.core.now()).nextDue();if(previewDue)times.push(Date.parse(previewDue));
   const usageDue=new TokenUsageSnapshots(this.store,()=>this.core.now()).nextDue();if(usageDue)times.push(Date.parse(usageDue));
+  const memoryReadDue=new MemoryReadRetention(this.store,()=>this.core.now()).nextDue();if(memoryReadDue)times.push(Date.parse(memoryReadDue));
   const steeringDue=new TaskSteering(this.store,()=>this.core.now()).nextExpiry();if(steeringDue)times.push(Date.parse(steeringDue));
   const questionDue=this.core.questions.nextExpiry();if(questionDue)times.push(Date.parse(questionDue));
   const callbackDue=this.core.questions.nextCallbackDeadline();if(callbackDue)times.push(Date.parse(callbackDue));

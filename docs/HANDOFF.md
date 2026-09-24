@@ -4,7 +4,18 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
-Current unit: disclosed owner-summary projection and exact-pointer retrieval.
+Current unit: read-budget ledger retention. Maintenance/alarms prune at most100
+exact keys90 days after terminal settlement, independently of result-body cleanup.
+Retry/recovery, live root attempts, operations, locks, effects, pending delivery,
+root questions and unsettled descendants retain charges. Structural records stay;
+terminal attempt reads remain refused. Focused73/typecheck, backend1942/HTTP31/
+build pass. Removing recursive descendant protection fails both nested cases.
+Logs/hashes are in IMPLEMENTATION.md. This is a time/delete-batch bound, not a
+SQL scan or total-storage bound. No active check/child/unintegrated delivery.
+Next storage/index-construction and legacy snapshot bounds, then native recovery/
+settlement; existing follow-through schedule enabled and external gates unchanged.
+
+Previous unit, local5be84d6: disclosed owner-summary projection and exact-pointer retrieval.
 Host capability is captured before preparation and sent unchanged with claim;
 Worker also requires persona permission. True/unclassified constraints remain
 verbatim. Raw-source work limits still apply before projection; source digests

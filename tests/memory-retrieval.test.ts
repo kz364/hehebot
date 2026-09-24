@@ -12,6 +12,7 @@ import {AgentCommandBoundary,MEMORY_READ_POLICY,type AgentMemoryRead} from '../s
 import {LifecycleCore} from '../src/core/lifecycle';
 import {MEMORY_TOKENIZER,type MemoryPreparation} from '../src/core/memory-context';
 import {prepareMemoryDelivery,countSelectedModelMemory} from '../runtime/memory-read.mjs';
+import {MemoryReadRetention} from '../src/core/memory-read-retention';
 
 function setup(global=3900,scoped=7700){
  const f=fixture(true),life=new LifecycleCore(f.store,f.core);
@@ -173,4 +174,66 @@ it('real runtime counting reserves against SQLite before delivery and source cha
    expect(calls).toEqual(['memory-read-prepare','memory-read-reserve']);
   }finally{f.close();}
  }
+});
+
+it('expires read ledgers at 90 days after terminal settlement without changing structural custody or reopening reads',()=>{
+ const f=setup();try{
+  const q=f.query();f.boundary.reserveMemoryRead(f.reservation(q));
+  f.life.complete(f.identity,f.run,1,{status:'failed',text:'Terminal result'});
+  const retention=new MemoryReadRetention(f.store,()=>f.core.now());
+  const records=['runs','attempts','outbox'].map(table=>f.db.all(`SELECT * FROM ${table}`));
+  expect(retention.nextDue()).toBe('2026-12-09T00:00:00.000Z');
+  f.setNow('2026-12-08T23:59:59.999Z');expect(retention.prune()).toBe(0);
+  f.setNow('2026-12-09T00:00:00.000Z');expect(retention.prune()).toBe(1);
+  expect(retention.nextDue()).toBeNull();expect(retention.prune()).toBe(0);
+  expect(['runs','attempts','outbox'].map(table=>f.db.all(`SELECT * FROM ${table}`))).toEqual(records);
+  // Isolate the terminal-state fence from expired lease/source time guards.
+  f.setNow('2026-09-10T00:00:01.000Z');
+  expect(()=>f.boundary.prepareMemoryRead(q)).toThrow(expect.objectContaining({code:'REVISION_CONFLICT'}));
+  expect(f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'memory-read:*'")).toEqual([]);
+ }finally{f.close();}
+});
+
+it.each(['running','waiting','recovery_required','retry','operation','lock','effect','delivery','question','grandchild','nested-effect'] as const)('retains read charges with %s custody even after 90 days',obstacle=>{
+ const f=setup();try{
+  f.boundary.reserveMemoryRead(f.reservation(f.query()));
+  f.life.complete(f.identity,f.run,1,{status:'completed',text:'Terminal root'});
+  if(['running','waiting','recovery_required'].includes(obstacle))f.db.exec('UPDATE runs SET status=? WHERE id=?',obstacle,f.run);
+  if(obstacle==='retry')f.db.exec("INSERT INTO retry_queue VALUES(?,?,'synthetic')",f.run,f.core.now());
+  if(obstacle==='operation')f.db.exec("INSERT INTO operations VALUES('op',?,1,'tool','unknown',?,?,?)",f.run,f.core.now(),f.core.now(),f.core.now());
+  if(obstacle==='lock')f.db.exec("INSERT INTO resource_locks VALUES('resource',?,1,?)",f.run,f.core.now());
+  if(obstacle==='effect')f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES('effect',?,'key','mutation','outcome_unknown','policy','digest',?)",f.run,f.core.now());
+  if(obstacle==='delivery')f.db.exec("UPDATE outbox SET status='pending' WHERE run_id=?",f.run);
+  if(obstacle==='question')f.db.exec('INSERT INTO runtime_metadata VALUES(?,?)','native-question:fixture',JSON.stringify({run_id:f.run,state:'response_unknown'}));
+  if(obstacle==='grandchild'||obstacle==='nested-effect'){
+   for(const [id,parent,status] of [['child',f.run,'completed'],['grandchild','child',obstacle==='grandchild'?'running':'completed']])
+    f.db.exec("INSERT INTO runs(id,persona_id,context_json,role,parent_run_id,status,created_at,updated_at) VALUES(?,?,'{}','background',?,?,?,?)",id,bot,parent,status,f.core.now(),f.core.now());
+   if(obstacle==='nested-effect')f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES('nested','grandchild','key','mutation','outcome_unknown','policy','digest',?)",f.core.now());
+  }
+  const before=f.db.all('SELECT * FROM runtime_metadata');
+  const retention=new MemoryReadRetention(f.store,()=>f.core.now());f.setNow('2026-12-09T00:00:00.000Z');
+  expect(retention.nextDue()).toBeNull();expect(retention.prune()).toBe(0);
+  expect(f.db.all('SELECT * FROM runtime_metadata')).toEqual(before);
+ }finally{f.close();}
+});
+
+it('bounds ledger deletion to 100 exact attempt keys, is independent of result-body pruning and rolls back failure',()=>{
+ const f=setup();try{
+  f.boundary.reserveMemoryRead(f.reservation(f.query()));f.life.complete(f.identity,f.run,1,{status:'completed',text:'Result'});
+  const original=f.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key GLOB 'memory-read:*'")[0].value_json;
+  for(let n=2;n<=101;n++){
+   f.db.exec('INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at,settled_at) SELECT run_id,?,?,epoch,boot_id,status,deadline_at,settled_at FROM attempts WHERE run_id=? AND attempt=1',n,`synthetic-${n}`,f.run);
+   f.db.exec('INSERT INTO runtime_metadata VALUES(?,?)',`memory-read:${f.run}:${n}`,original);
+  }
+  f.db.exec('UPDATE attempts SET result_json=NULL');
+  f.db.exec("INSERT INTO runtime_metadata VALUES('unrelated','{}')");
+  const retention=new MemoryReadRetention(f.store,()=>f.core.now());f.setNow('2026-12-09T00:00:00.000Z');
+  f.db.sqlite.exec("CREATE TRIGGER reject_memory_prune BEFORE DELETE ON runtime_metadata WHEN OLD.key LIKE '%:2' BEGIN SELECT RAISE(ABORT,'synthetic failure'); END");
+  expect(()=>retention.prune()).toThrow('synthetic failure');
+  expect(f.db.all("SELECT key FROM runtime_metadata WHERE key GLOB 'memory-read:*'")).toHaveLength(101);
+  f.db.sqlite.exec('DROP TRIGGER reject_memory_prune');
+  expect(retention.prune()).toBe(100);expect(retention.nextDue()).toBe(f.core.now());
+  expect(retention.prune()).toBe(1);expect(retention.nextDue()).toBeNull();
+  expect(f.db.all('SELECT key FROM runtime_metadata')).toContainEqual({key:'unrelated'});
+ }finally{f.close();}
 });
