@@ -8,11 +8,13 @@ import { LifecycleCore } from '../src/core/lifecycle';
 import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexOperations } from '../runtime/codex-operations.mjs';
 import { ExecutionSupervisor } from '../runtime/execution-supervisor.mjs';
+import { countMemory } from '../runtime/memory-tokenizer.mjs';
 
 let f: ReturnType<typeof fixture>, life: LifecycleCore, directory: string, supervisor: any;
 let calls: string[], cancellations: string[], releases: number, nativeCalls: number;
 let hook: ((type: string) => Promise<void>) | undefined;
 let eventBind: (id: string) => Promise<void>;
+let makeSupervisor: (counter?: ((input: any, options: {signal: AbortSignal}) => Promise<any>) | null) => ExecutionSupervisor;
 beforeEach(async () => {
   f = fixture(true); life = new LifecycleCore(f.store, f.core, { idleMode: true });
   f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until='2026-09-10T00:02:00.000Z'");
@@ -24,14 +26,15 @@ beforeEach(async () => {
     calls.push(type);
     await hook?.(type);
     if (type === 'heartbeat') return life.heartbeat(p.identity, p.operations);
-    if (type === 'claim') return life.claim(p.identity);
+    if (type === 'memory-prepare') return life.prepareMemory(p.identity, p.persona_models);
+    if (type === 'claim') return life.claim(p.identity, p.memory_budget ? p.persona_models : undefined, p.memory_budget);
     if (type === 'submitted') return life.submitted(p.identity, p.run_id, p.attempt, p.native_ref);
     if (type === 'complete') return life.complete(p.identity, p.run_id, p.attempt, p.result);
     if (type === 'prepare-sleep') return life.prepareSleep(p.identity);
     if (type === 'commit-sleep') return life.commitSleep(p.identity, p.stop_token, p.queue_sequence, p.checkpoint);
     throw new Error('Unexpected request');
   } };
-  supervisor = new ExecutionSupervisor({ control, identity, journal: new FileJournal(directory),
+  makeSupervisor = (memoryCounter = null) => new ExecutionSupervisor({ control, identity, journal: new FileJournal(directory), memoryCounter,
     installationId: 'test', personas: { [bot]: { agentId: 'assistant', model: 'gpt-5.4' } },
     native: {
       admissionReadiness: () => ({ allowed: true }), sleepReadiness: () => ({ allowed: true }),
@@ -42,6 +45,7 @@ beforeEach(async () => {
     events: { bind: (id: string) => eventBind(id) },
     activity: { ensure: async () => {}, releaseAfterDrain: async () => { releases++; } },
   });
+  supervisor = makeSupervisor();
 });
 afterEach(async () => {
   supervisor?.disconnect();
@@ -56,6 +60,70 @@ function settlement(row: any) {
     toolsSettled: true, childrenSettled: true, effectsSettled: true, outputCommitted: true,
     result: { status: 'completed', text: 'Exactly one result' } };
 }
+
+it('renews heartbeats independently while memory counting is pending, then claims exactly once', async () => {
+  const id = enqueue(); let counted!: () => void, finish!: () => void;
+  const entered = new Promise<void>(resolve => { counted = resolve; });
+  const pending = new Promise<void>(resolve => { finish = resolve; });
+  supervisor = makeSupervisor(async (input, options) => { counted(); await pending; return countMemory(input, options); });
+  const start = supervisor.start();
+  try {
+    await entered;
+    expect(calls).not.toContain('claim');
+    f.setNow('2026-09-10T00:01:00.000Z');
+    await supervisor.maintain();
+    expect(calls.filter(type => type === 'heartbeat')).toHaveLength(2);
+    f.setNow('2026-09-10T00:01:31.000Z'); // Past the original lease, inside renewed authority.
+    finish();
+    expect((await start).phase).toBe('running');
+    expect(f.store.run(id).current_attempt).toBe(1);
+    expect(calls.filter(type => type === 'claim')).toHaveLength(1);
+  } finally { finish(); await start.catch(() => {}); }
+});
+
+it('disconnect aborts pending counting before any claim or attempt', async () => {
+  const id = enqueue(); let counted!: () => void, signal!: AbortSignal;
+  const entered = new Promise<void>(resolve => { counted = resolve; });
+  supervisor = makeSupervisor(async (_input, options) => {
+    signal = options.signal;
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { code: 'TOKENIZER_ABORTED' })), { once: true });
+      counted();
+    });
+  });
+  const start = supervisor.start();
+  const rejection = expect(start).rejects.toMatchObject({ code: 'TOKENIZER_ABORTED' });
+  await entered; supervisor.disconnect(); await rejection;
+  expect(signal.aborted).toBe(true);
+  expect(calls).not.toContain('claim'); expect(nativeCalls).toBe(0);
+  expect(f.store.run(id).current_attempt).toBe(0);
+  expect(await supervisor.journal.get(supervisor.bridge.cursor)).toBeNull();
+});
+
+it('lease expiry during counting refuses admission even when the counter returns successfully', async () => {
+  const id = enqueue();
+  supervisor = makeSupervisor(async () => {
+    f.setNow('2026-09-10T00:01:30.000Z');
+    return { schema_version: 1, selected_model: 'gpt-5.4', tokenizer: 'gpt-tokenizer@4.0.0/o200k_base/ordinary-v1', global_tokens: 1, scoped_tokens: 1 };
+  });
+  await expect(supervisor.start()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  expect(calls).not.toContain('claim'); expect(nativeCalls).toBe(0);
+  expect(f.store.run(id).current_attempt).toBe(0);
+});
+
+it('recovery during the post-count journal write fences the actual claim send', async () => {
+  const id = enqueue(); supervisor = makeSupervisor(countMemory);
+  const put = supervisor.journal.putIfAbsent.bind(supervisor.journal);
+  supervisor.journal.putIfAbsent = async (key: string, value: any) => {
+    const result = await put(key, value);
+    if (key === supervisor.bridge.cursor && value.phase === 'claim_unknown') supervisor.disconnect();
+    return result;
+  };
+  expect((await supervisor.start()).phase).toBe('claim_unknown');
+  expect(calls).not.toContain('claim'); expect(nativeCalls).toBe(0);
+  expect(f.store.run(id).current_attempt).toBe(0);
+  expect(supervisor.phase).toBe('recovery');
+});
 
 it('scheduled heartbeats continue while the admission pump is unresolved', async () => {
   let release!: () => void, admissions = 0;

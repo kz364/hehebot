@@ -12,11 +12,13 @@ export class ExecutionSupervisor {
     children = /** @type {{sync: () => Promise<unknown>, cancel: (runIds: string[]) => Promise<unknown>, steer?: () => Promise<unknown>, publishOutputs?: () => Promise<unknown>} | null} */ (null),
     admission = /** @type {null | (() => Promise<unknown>)} */ (null),
     claimStage = /** @type {null | ((claim: unknown) => Promise<unknown>)} */ (null),
+    memoryCounter = /** @type {null | ((input: {selected_model: string, global: string, scoped: string}, options: {signal: AbortSignal}) => Promise<any>)} */ (null),
     now = Date.now, intervalMs = 20000, onRecovery = () => {} }) {
     if (!activity?.ensure || !activity?.releaseAfterDrain || typeof operations !== 'function' ||
         (events && typeof events.bind !== 'function') ||
         (children && (typeof children.sync !== 'function' || typeof children.cancel !== 'function')) ||
         (claimStage !== undefined && claimStage !== null && typeof claimStage !== 'function') ||
+        (memoryCounter !== null && typeof memoryCounter !== 'function') ||
         !Number.isInteger(intervalMs) || intervalMs < 1 || intervalMs > 30000) fail('INVALID_SUPERVISOR_CONFIGURATION');
     Object.assign(this, { control, native, journal, identity, activity, operations, children, admission, now, intervalMs, onRecovery });
     this.phase = 'stopped';
@@ -25,6 +27,7 @@ export class ExecutionSupervisor {
     this.maintenance = null;
     this.work = Promise.resolve();
     this.idleSince = null;
+    this.memoryAbort = new AbortController();
     // Revalidate immediately before native admission, including after a slow claim.
     const guardedNative = {
       admissionReadiness: () => native.admissionReadiness(),
@@ -41,7 +44,19 @@ export class ExecutionSupervisor {
         return submitted;
       },
     };
-    this.bridge = new ExecutionBridge({ control, native: guardedNative, journal, identity, installationId, personas,
+    const guardedControl = { request: (type, payload) => {
+      // A journal write can yield after counting. Recheck at the actual send,
+      // not only when the count finishes; recovery must never admit an attempt.
+      if (memoryCounter && ['memory-prepare', 'claim'].includes(type)) this.assertLease();
+      return control.request(type, payload);
+    } };
+    this.bridge = new ExecutionBridge({ control: guardedControl, native: guardedNative, journal, identity, installationId, personas,
+      ...(memoryCounter ? { memoryCounter: async input => {
+        this.assertLease();
+        const counts = await memoryCounter(input, { signal: this.memoryAbort.signal });
+        this.assertLease();
+        return counts;
+      } } : {}),
       ...(claimStage ? { claimStage } : {}) });
   }
 
@@ -52,6 +67,7 @@ export class ExecutionSupervisor {
   recover(code) {
     if (this.phase === 'recovery') return;
     this.phase = 'recovery';
+    this.memoryAbort.abort();
     clearTimeout(this.timer);
     this.timer = null;
     // No release, cancellation inference, process takeover, or replay on uncertainty.

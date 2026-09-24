@@ -4,6 +4,24 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Supervisor memory custody (2026-09-24): optional counting receives a supervisor-
+owned abort signal. Recovery/disconnect abort it; lease checks fence both count
+boundaries and the actual preparation/claim send after asynchronous journal work.
+Tests verify independent heartbeat renewal during counting, abort before any
+attempt, exact lease expiry and recovery during the post-count journal write.
+Deleting the final send check fails that race test by admitting an attempt after
+recovery. Restored source passes134 focused tests, full backend1865/runtime661,
+typecheck and the real credential-free native service fixture (two local model
+requests, native receipt verified, production admission unchanged).
+Logs and SHA256:
+- `.local/memory-supervisor-mutant.log`: `565b96e3a4862789b833e20aecc8f649c53bf584da8898dbf0b2c540c119a0d2`.
+- `.local/memory-supervisor-backend.log`: `df3b254846b7f862d74b90a42c3559af20c1786aa1d7155bbfe08f2d8791ba73`.
+- `.local/memory-supervisor-runtime.log`: `2dba50d3e7ecbfc035d986e164d2f9f34759216005f7390893a9706093685e84`.
+- `.local/memory-supervisor-native.log`: `8a753beb213685ead6b74990e4bc06102d615e0a2358d2b3d5c927e24929fe44`.
+This remains an optional integration seam, not ordinary service adoption or
+completed selected-model accounting. Explicit encoding mapping/service wiring
+and the remaining E06 summary/retrieval requirements are still open.
+
 Optional bridge memory custody (2026-09-24): an injected counter enables
 prepare → count → claim without changing the default/staged service path.
 The bridge checks the preparation digest, counts the exact serialized buckets

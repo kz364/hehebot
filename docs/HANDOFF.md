@@ -7,14 +7,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 Latest: optional ExecutionBridge memoryCounter path is implemented and passes
 177 related Vitest +34 native/crash/family tests and typecheck. Exact preparation
 bytes/digest and returned claim receipt/snapshot are checked; no fallback on
-count errors or replay after uncertain claim. Ordinary service still does not
-enable it. Next: supervisor lease/abort integration and explicit model mapping/
-service wiring, then summaries/retrieval. No child or lost delivery remains.
-Prior verifier PID735480 finished successfully; final aggregates1849 backend/
-661 runtime/typecheck pass. Evidence is segmented after the original browser
-failure, which remains retained. No check is running at this checkpoint.
-Owner explicitly permits concurrent independent reviews without an hourly cap;
-use exact source custody and distinct review scopes, not duplicate assignments.
+count errors or replay after uncertain claim. Supervisor integration now aborts
+counting on recovery and fences the actual claim send after journal yields;
+the race test fails when that last fence is removed. Final backend1865/runtime661,
+typecheck and real credential-free native service pass. Ordinary service still
+does not enable counting. Next: explicit model mapping/service wiring, then
+summaries/retrieval. No child, check or lost delivery remains at this checkpoint.
+Prior verifier PID735480 finished successfully. Evidence is segmented after the
+original browser failure, which remains retained. Review-frequency steering was
+misrouted and withdrawn; it did not change this thread's instructions.
 
 Counter deliverycbf320f is now integrated as a standalone runtime module with the
 exact4.0.0 dependency/SRI; existing package versions are unchanged. Parent review
