@@ -4,6 +4,32 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner summary adoption (2026-09-24): optional memory.put summary metadata has
+schema_version1, bounded text and a digest over the exact resulting revision and
+source fields. Wire algorithm and limitations are in MEMORY_TOKENIZER.md. Only
+explicit false constraint classification qualifies; inherited true/omitted flags
+do not. No model-facing mutation is added. Legacy omission drops stale summaries;
+existing canonical expiry purge covers current/revision/command summary content.
+Raw source stays in context, counted alongside metadata; this is not prompt
+compression, a retrieval tool, fidelity validation or a summary UI.
+
+Tests first:12 expected failures before the schema extension; five malformed
+inputs already refused. Final19 tests cover binding changes (including canonically
+equivalent but byte-distinct Unicode), inherited constraints, revision adoption,
+legacy invalidation,2000/2001 astral limits, zero wake/work and expiry purge.
+Backend1894/typecheck, HTTP31, migration/persistence checks and build dry-run pass.
+Runtime670 and credential-free native service also pass. Their evidence:
+`.local/memory-summary-runtime.log` SHA256
+`a7ee70aa8877f2e97bc47bd34f96873f0dac444f739a428076b596a0b5e5aa94`;
+`.local/memory-summary-native.log` SHA256
+`ec0c7d5c1dbcae2c88681caedf2110a454106fe6ee24838e8cb55ca9600ffb54`.
+The earlier full combined verifier predates this
+localized contract unit. No UI changes, live account/model/provider calls or gates.
+Evidence `.local/memory-summary-check.log` SHA256
+`d780b90781df17e222390fc67b3929a56a98e9046c17529eb5ba2ce2a96e043d`;
+intentional red `.local/memory-summary-red.log` SHA256
+`39e5b6dc841273756651f70316a765e8e767c00ea2c033d809696c95fa0c8b09`.
+
 Indexed pre-claim memory reads (2026-09-24): schema14 adds the active-memory
 scope/created_at/id partial index. Two or three exact-scope queries return at
 most65 records each; a deterministic merge selects at most65 before JSON parsing.

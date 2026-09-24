@@ -284,6 +284,14 @@ export class ControlCore {
     // current revision; clearing it requires an explicit false, not omission.
     const prior=p.explicit_constraint===undefined?this.store.db.all<{constraint_flag:number|null}>("SELECT json_extract(body_json,'$.explicit_constraint') AS constraint_flag FROM objects WHERE id=? AND kind='memory' AND deleted_at IS NULL AND revision=?",p.id,p.expected_revision)[0]?.constraint_flag:undefined;
     const body=prior===0||prior===1?{...p,explicit_constraint:prior===1}:p;
+    if(body.summary){
+     requireThat(body.explicit_constraint===false,'MEMORY_SUMMARY_CONSTRAINT','Only explicitly non-constraint memory may have an adopted summary.',422);
+     // Bind the resulting revision and exact source metadata, not only prose.
+     // Legacy edits omit summary and therefore invalidate it, never carry it forward.
+     const source=[1,p.id,p.expected_revision+1,p.scope.kind,p.scope.id,p.text,p.source_event_id,p.expires_at,p.sensitivity,false];
+     requireThat(body.summary.source_sha256===createHash('sha256').update(JSON.stringify(source)).digest('hex'),
+      'MEMORY_SUMMARY_STALE','Adopt a summary bound to this exact memory revision and source.',422);
+    }
     const revision=this.store.put(p.id,'memory',body,p.expected_revision,owner,now,p.source_event_id);
     this.store.event(this.options.uuid(),null,'memory.updated',owner,commandId,{id:p.id,revision,scope:p.scope},now);return p.id;
    }

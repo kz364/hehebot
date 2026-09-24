@@ -15,7 +15,7 @@ export type RoutinePut = BasePut & {
   policy: { misfire: 'coalesce' | 'skip' | 'replay'; overlap: 'queue_one' | 'skip'; max_replay: number; max_lateness_seconds: number };
   action_policy_ids: string[];
 };
-export type MemoryPut = BasePut & { scope: Scope; text: string; source_event_id: string; expires_at: string | null; sensitivity: 'ordinary' | 'sensitive'; explicit_constraint?: boolean };
+export type MemoryPut = BasePut & { scope: Scope; text: string; source_event_id: string; expires_at: string | null; sensitivity: 'ordinary' | 'sensitive'; explicit_constraint?: boolean; summary?:{schema_version:1;source_sha256:string;text:string} };
 export type SkillBody = { name:string; description:string; when_to_use:string; inputs_access:string[]; steps:string[]; decision_rules:string[]; validation:string[]; output:string; failure_handling:string[]; approval_boundaries:string[]; references?:{name:string;text:string}[]; contains_private_facts:false };
 export type SkillProvenance = { kind:'owner'|'task'|'notes'|'file'|'url'|'import'|'model'; source_ref:string };
 export type SkillProposal = { proposal_id:string; skill_id:string; expected_skill_revision:number; body:SkillBody; provenance:SkillProvenance; executable_files_changed:boolean };

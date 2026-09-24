@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-24):** schema14 adds an ordered partial memory-scope
+**Current checkpoint (2026-09-24):** owner `memory.put` can adopt bounded summary
+metadata tied to the exact resulting revision and source fields. Only explicitly
+non-constraint records qualify; inherited true and unclassified records refuse.
+Legacy edits invalidate omitted summaries; expiry purges source and summary
+together. Backend1894/runtime670/typecheck, HTTP31, native service and build
+dry-run pass. Full source remains in context and is counted alongside metadata:
+this does not yet implement compression, retrieval or a summary editor. Next:
+revision pointers, disclosed prompt substitution and bounded targeted retrieval.
+No inference/wake, new model authority, push/deploy or gate changes.
+
+**Previous checkpoint (2026-09-24):** schema14 adds an ordered partial memory-scope
 index. Preparation reads at most65 rows per exact eligible scope (at most195
 returned rows), merges before parsing at most65 bodies, and retains complete-or-block
 semantics. Node SQLite and actual local workerd query plans use the index without

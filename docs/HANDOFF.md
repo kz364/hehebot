@@ -4,7 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-24 Asia/Jakarta)
 
-Current unit: schema14 ordered partial scope index plus per-scope limited queries
+Current unit: owner-adopted summary metadata on memory.put, not prompt substitution.
+Digest binds resulting revision and exact source metadata; only explicit false
+constraints qualify. Legacy edits clear omitted summaries; canonical expiry purge
+removes them with source. Backend1894/runtime670/typecheck/HTTP31/native service/
+build pass.19 new tests, initial12 expected failures retained. Algorithm and
+limitations in MEMORY_TOKENIZER.md; hashes in IMPLEMENTATION.md. No automatic
+inference/wake, UI, model mutation authority or production gates changed.
+Next exact revision pointers, disclosed compression and bounded targeted retrieval.
+Direct parent ownership remains simpler for this schema/core contract; no children.
+
+Previous unit: schema14 ordered partial scope index plus per-scope limited queries
 bound pre-claim returned rows to195 and parsed bodies to65. Complete-or-block and
 expiry/constraint authority are unchanged. Backend1875/typecheck, actual Worker
 migration/query plans, HTTP31, restore drill, native service and build pass;

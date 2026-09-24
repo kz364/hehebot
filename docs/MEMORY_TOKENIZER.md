@@ -13,6 +13,34 @@ complete-or-block gate. Actual local workerd plans avoid full scans and temporar
 sorting. This does not bound index construction, storage size or unlimited legacy
 enqueue snapshots; query-plan evidence is not deployed CPU or latency acceptance.
 
+## Owner-adopted summary metadata (not prompt substitution)
+
+`memory.put` accepts optional `summary: {schema_version: 1, source_sha256, text}`.
+Summary text is1..2000 Unicode code points. The owner must classify the memory
+as `explicit_constraint: false` (including a previously adopted false preserved
+by an older editor). True or unclassified records cannot carry summaries.
+The source digest is lowercase SHA256 over UTF-8 `JSON.stringify` of this exact
+ordered array, with no Unicode normalization:
+
+```js
+[1, id, expected_revision + 1, scope.kind, scope.id, text,
+ source_event_id, expires_at, sensitivity, false]
+```
+
+Here `text` is the full source, not summary text. The digest binds the resulting
+record revision, scope, provenance reference, expiry and sensitivity. A digest
+does not establish summary fidelity: the verified owner adopts the supplied
+text. Summary text cannot grant tools or authority. Each subsequent revision
+needs fresh summary adoption; omitting summary clears it rather than silently
+reusing a stale projection. Current/revision/command purge removes it alongside
+the source. No separate index or summary table is created.
+
+This is only a storage/adoption contract. Full source text remains in context,
+and both source and metadata count toward the existing byte/token budget. There
+is no automatic inference, wake, compression, targeted-retrieval tool, or UI
+summary editor. Prompt substitution requires exact revision pointers, disclosed
+compression and bounded authorized retrieval before adoption.
+
 ## Runtime counting contract
 
 `runtime/memory-tokenizer.mjs` exports async
