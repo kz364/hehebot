@@ -4,6 +4,28 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Tokenizer harness integration (2026-09-24): corrected worker delivery44b6c08
+passed bundle hash/prerequisite/three-file inspection and independent execution
+(92 cases, offline23,100-record batch109715ms). Parent then found the named
+end-of-text case and seeded pool lacked that literal; a content assertion failed
+before restoring the escaped literal. Final main-checkout run passes92/92 exact
+Node/workerd parity, all boundary pairs and negative controls; offline23 and full
+runtime643 pass. Corpus SHA256 is now
+`8504940a4abde48d50b1ce036580808d54e9fa1c6ce44ec655aa0fa682a648df`.
+Workerd ready428ms, parity6746ms, batches1/10/100 in1532/11843/115338ms.
+JS heap used103796612/total175808512 after load is not total isolate memory;
+wall time is not billed CPU, and these observations are not deployed acceptance.
+No application dependency adoption or budget behavior change. Do not tokenize an
+unbounded memory scan inside claim's SQLite transaction.
+Final evidence `.local/memory-tokenizer-harness/2026-09-24T12-36-19-778Z-eacd7b59/`;
+log `.local/tokenizer-integrated-final.log` SHA256
+`1013cf1d2d355eaf27336b85a4766da4d1cff623bae20f8699b7a58de52be203`;
+runtime log `.local/tokenizer-integrated-runtime.log` SHA256
+`6f63f42180b190bd6c3c39e8ad416b15fd74c870a6acada7516f64b6670c9795`.
+Intentional red `.local/tokenizer-literal-red.log` retained. Original and corrected
+bundles and independent pre-fix evidence retained; review worktree removed and no
+workerd process remains. Harness accepted locally, broad E06 remains open.
+
 Portal visual refresh and native retry-input evidence (2026-09-24): owner requested
 a substantial visual improvement. Three generated concepts informed an independently
 written warm-neutral CSS theme; no third-party app code/assets, fonts or dependencies

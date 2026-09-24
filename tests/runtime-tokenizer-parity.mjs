@@ -49,6 +49,10 @@ test('corpus covers the required risk areas', () => {
     'maxMixed', 'oneOverMixed',
   ];
   for (const id of mustExist) assert.ok(byId.has(id), `missing corpus case ${id}`);
+  const endOfText = '<' + '|endoftext|' + '>';
+  assert.ok(byId.get('specialLiteralEndoftext').startsWith(endOfText), 'end-of-text case must contain the actual literal');
+  assert.ok(byId.get('specialLiteralChat').includes('<|im_start|>'));
+  assert.ok(byId.get('specialLiteralEndofprompt').includes('<|endofprompt|>'));
   // Seeded generated cases from both generators.
   assert.ok(corpus.filter(c => c.id.startsWith('generated-')).length >= 16);
   // Discriminator pairs are all present.

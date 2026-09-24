@@ -14,7 +14,12 @@ IMPLEMENTATION.md. No push/deploy. Corrected tokenizer bundle has now arrived:
 `f19c57cf4604e7d9328271c4bc338261c6d510bebdeb82aaed8a28c08b2ba711`,
 verified against exact29d8806 with only the same three files. Ref
 `review/e06-tokenizer-corrected` preserves it. Parent review/independent execution
-remains required; older active-worker statements below describe the prior checkpoint.
+is now complete: integrated locally with a parent end-of-text corpus correction,
+red/green content assertion,92/92 Node/workerd parity and runtime643 passing. Parent
+independent evidence and final run hashes are in IMPLEMENTATION.md. No worker remains
+assigned; no returned unit was lost. Next is bounded selected-model memory budgeting,
+summary and retrieval contracts, not unbounded tokenization inside claim. Older
+active-worker statements below describe the prior checkpoint, not current ownership.
 
 Scheduled independent unit: the two automatic-retry custody cases now restore a
 file-backed SQLite backup and close/reopen post-admission writes. Running grandchild

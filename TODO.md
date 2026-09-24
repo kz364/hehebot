@@ -20,8 +20,10 @@ the exact checkpoint without promoting its embedded grant canary, unrelated inpu
 stays isolated, and reopening running journal custody does not resubmit. Synthetic
 claims are not full Worker recovery or native restoration. Typecheck passes; desktop,
 narrow dialog, workspace drawer and error captures inspected. Local only, not deployed.
-Corrected tokenizer delivery has arrived and its bundle hash/scope are verified;
-parent review and independent execution are next. No duplicate dispatch.
+Corrected tokenizer harness is integrated locally after parent review and execution:
+92/92 Node/workerd parity, offline23 and runtime643 pass. Parent restored a missing
+end-of-text literal with a red/green content assertion. Next: bounded selected-model
+budget/summary/retrieval design; no application tokenizer adoption or external gate change.
 
 **Previous recovery checkpoint:** the two automatic-retry custody cases now
 restore a file-backed SQLite snapshot and close/reopen the resulting admission
@@ -46,18 +48,16 @@ Local source-custody only, no push or production change. Memory budgets, summari
 retrieval and full recovery/termination acceptance remain open. Next: tokenizer
 adoption gates and connected budget/constraint behavior; external gates unchanged.
 
-**Active follow-through:** tokenizer harness delivery is preserved but not accepted.
-Parent verified its bundle and three-file scope, then found unbounded workerd and
-inspector waits plus overwritten failure evidence. The same worker owns corrections
-and negative tests; no duplicate assignment. Parent independently ran the original
-under an external600-second limit:91/91 Node and workerd parity, negative control,
-schema boundaries and all batches passed; offline tests9/9. The100-record batch
-took129.8s (wall time, not CPU); corrected harness verification remains pending. Source-rank identity,
+**Active follow-through:** tokenizer harness is accepted as local evidence, not an
+application adoption. Corrected child-process bounds and unique evidence directories
+pass parent execution; the original and corrected bundles remain preserved. Final
+92/92 Node/workerd parity, boundary pairs and batches pass; offline23/runtime643 pass.
+The100-record batch took115.3s (wall time, not CPU). Source-rank identity,
 package SRI and both MIT notices are verified; the memory boundary is16000 Unicode
 code points, not UTF-16 units. No application dependency or budget change follows
 from parity alone. Context selection currently scans all eligible memories inside
 claim's transaction: bounded computation is required before tokenizer adoption.
-Corrected delivery and independent verification remain next; external gates unchanged.
+Bounded budgeting, summary and retrieval contracts remain next; external gates unchanged.
 
 **Latest bounded follow-through:** real native cold-question fixture passes18
 assertions: abrupt process loss, exact interrupted-turn readback, zero recreated

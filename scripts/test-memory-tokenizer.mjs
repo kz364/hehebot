@@ -127,7 +127,7 @@ export function buildCorpus() {
   add('markdown', '# Memory\n\n- item one\n- item two\n\n**bold** and `code`.');
   add('numbers', '16000 code points, 32000 UTF-16 units, 64000 UTF-8 bytes, 0.5, 1e3.');
   add('punctuation', '…“curly quotes” — em-dash, semi; colon: [brackets] (parens) {braces}');
-  add('specialLiteralEndoftext', ' is treated as ordinary text here.');
+  add('specialLiteralEndoftext', '\u003c|endoftext|> is treated as ordinary text here.');
   add('specialLiteralChat', '<|im_start|>assistant<|im_end|> as ordinary text.');
   add('specialLiteralEndofprompt', '<|endofprompt|> ordinary text.');
 
@@ -168,7 +168,7 @@ export function buildCorpus() {
     combining: ['\u0301', '\u0327', '\u0488', '\u0489', '\u035C'],
     emoji: ['😀', '🎉', '👍', '👩', '\u200D', '👧', '❤', '\uFE0F', '🔥', '🇮🇩'],
     whitespace: [' ', '\t', '\n', '\r\n', '\u00a0'],
-    specials: ['', '<|im_start|>', '<|im_end|>', '<|endofprompt|>'],
+    specials: ['\u003c|endoftext|>', '<|im_start|>', '<|im_end|>', '<|endofprompt|>'],
   };
   const poolNames = Object.keys(pools);
   for (let seed = 1; seed <= 12; seed++) {

@@ -100,7 +100,7 @@ clocks, no `Math.random`), so every run compares the identical inputs
 Arabic/mixed text, code/JSON/URL/markdown, whitespace and CRLF variants,
 contractions (ASCII and Unicode apostrophes), combining marks (decomposed and
 precomposed), emoji and ZWJ sequences, lone surrogates (high, low, consecutive,
-reversed), special literals as ordinary text (`` and `<|im_start|>` forms are
+reversed), special literals as ordinary text (the end-of-text delimiter and `<|im_start|>` forms are
 *not* control tokens here), exact token-boundary discriminator pairs that must
 tokenize differently, seeded generated strings from mixed alphabets and raw
 code-point ranges, long repeated and long non-repeated text, and memory-contract
