@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -94,6 +95,7 @@ const LIMIT_REFERENCE_CASES = [
 
 test('countMemory returns exact reference token counts for asymmetric Unicode and special literals', async () => {
   assert.ok(observe() && Number.isSafeInteger(observe().activeWorkers));
+  assert.ok(Number.isSafeInteger(observe().unconfirmedTerminations));
   const baseline = observe().activeWorkers;
   for (const testCase of FAST_REFERENCE_CASES) {
     const result = await countMemory({
@@ -251,6 +253,7 @@ test('timeout terminates and awaits the owned worker and leaves the unit usable'
   // The observation count only decreases once terminate() has been awaited,
   // so a return to baseline proves the owned worker actually stopped.
   assert.equal(observe().activeWorkers, baseline);
+  assert.equal(observe().unconfirmedTerminations, 0);
   const result = await countMemory({ selected_model: 'gpt-5.1', global: 'Hello, world!', scoped: '' });
   assert.deepEqual(result, {
     schema_version: 1,
@@ -274,6 +277,7 @@ test('aborting mid-count terminates the owned worker and rejects with TOKENIZER_
     clearTimeout(abortTimer);
   }
   assert.equal(observe().activeWorkers, baseline);
+  assert.equal(observe().unconfirmedTerminations, 0);
 });
 
 test('the supervisor event loop stays responsive during real tokenization work', async () => {
@@ -303,51 +307,121 @@ test('concurrent counts run in independent owned workers and return their own ex
     schema_version: 1, selected_model: 'gpt-5.1', tokenizer: TOKENIZER_ID, global_tokens: 12, scoped_tokens: 0,
   });
   assert.equal(observe().activeWorkers, 0);
+  assert.equal(observe().unconfirmedTerminations, 0);
 });
 
 // ---------------------------------------------------------------------------
-// Bounded subprocess checks: an owned worker that was not really terminated
-// keeps its host process alive, so a subprocess exiting (or being killed by a
-// bound shorter than the natural work) proves actual termination.
+// Deterministic termination evidence. A busy-loop tokenizer stub (pinned to
+// the same 4.0.0 version guard, installed in an isolated fixture directory
+// with a byte-identical copy of the module under test) never finishes
+// encoding, so a hosted count has no natural completion at all: it can only
+// settle by terminating the owned worker. A no-termination mutant that
+// settles its promise while leaving the worker running cannot let its host
+// process exit, so the bounded runner kills it and the same evidence fails.
 // ---------------------------------------------------------------------------
 
-async function runBoundedNode(scriptPath, { timeoutMs, killGraceMs = 2000 } = {}) {
+const STUB_BOUND_MS = 6000;
+const STUB_KILL_GRACE_MS = 1500;
+
+async function buildBusyTokenizerFixture() {
+  const dir = await mkdtemp(join(tmpdir(), 'hehebot-e06-term-'));
+  const moduleSource = await readFile(MODULE_PATH, 'utf8');
+  await mkdir(join(dir, 'node_modules', 'gpt-tokenizer', 'encoding'), { recursive: true });
+  await writeFile(
+    join(dir, 'node_modules', 'gpt-tokenizer', 'package.json'),
+    JSON.stringify({
+      name: 'gpt-tokenizer',
+      version: '4.0.0',
+      type: 'module',
+      exports: {
+        './encoding/o200k_base': './encoding/o200k_base.mjs',
+        './package.json': './package.json',
+      },
+    }, null, 2) + '\n',
+  );
+  await writeFile(
+    join(dir, 'node_modules', 'gpt-tokenizer', 'encoding', 'o200k_base.mjs'),
+    'export function encode() { for (;;) {} }\n' +
+    'export function setMergeCacheSize() {}\n',
+  );
+  const modulePath = join(dir, 'memory-tokenizer.mjs');
+  await writeFile(modulePath, moduleSource);
+  const moduleUrl = pathToFileURL(modulePath).href;
+  // The fixture module copy must be byte-identical to the module under test,
+  // so the evidence speaks for the real module.
+  assert.equal(
+    createHash('sha256').update(await readFile(modulePath)).digest('hex'),
+    createHash('sha256').update(moduleSource).digest('hex'),
+    'fixture module copy is not byte-identical to the module under test',
+  );
+  return { dir, moduleUrl, moduleSource };
+}
+
+// The exact abandonment shape this evidence must discriminate against: the
+// mutant settles its cleanup promise without ever terminating the owned
+// worker.
+function makeNoTerminationMutant(moduleSource) {
+  const marker = 'worker.terminate().then(';
+  assert.equal(moduleSource.split(marker).length - 1, 1, 'mutation point must be unique in the module source');
+  const mutant = moduleSource.replace(marker, 'Promise.resolve(0).then(');
+  assert.notEqual(mutant, moduleSource);
+  return mutant;
+}
+
+// Preserve failed evidence: on failure the disposable fixture is retained and
+// its location recorded in the thrown error, mirroring the repo harness
+// convention; on success it is removed.
+async function runFixtureTest(dir, run) {
+  try {
+    await run();
+  } catch (error) {
+    error.message = `${error.message}\n(retained failure evidence: ${dir})`;
+    throw error;
+  }
+  await rm(dir, { recursive: true, force: true });
+}
+
+async function runBoundedNode(scriptPath, { cwd = REPO, timeoutMs, killGraceMs = STUB_KILL_GRACE_MS } = {}) {
   return await new Promise((resolveRun, rejectRun) => {
-    const child = spawn(process.execPath, [scriptPath], { cwd: REPO, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '', stderr = '', timedOut = false, settled = false;
+    const child = spawn(process.execPath, [scriptPath], { cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '', timedOut = false, settled = false, killTimer = null;
     const killGroup = signal => { try { process.kill(-child.pid, signal); } catch { /* group already gone */ } };
+    const clearTimers = () => {
+      clearTimeout(timer);
+      if (killTimer !== null) clearTimeout(killTimer);
+    };
     const timer = setTimeout(() => {
       timedOut = true;
       killGroup('SIGTERM');
-      setTimeout(() => killGroup('SIGKILL'), killGraceMs);
+      killTimer = setTimeout(() => killGroup('SIGKILL'), killGraceMs);
     }, timeoutMs);
     child.stdout.on('data', chunk => { stdout += chunk; });
     child.stderr.on('data', chunk => { stderr += chunk; });
     const finish = result => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      // Subprocess exit is confirmed: clear the kill-escalation timers so no
+      // stale escalation outlives the run.
+      clearTimers();
       resolveRun(result);
     };
     child.on('error', error => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      clearTimers();
       rejectRun(error);
     });
     child.on('close', (code, signal) => finish({ timedOut, code, signal, stdout, stderr }));
   });
 }
 
-test('a timed-out owned worker is terminated so its host process can exit before natural completion', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'hehebot-e06-timeout-'));
-  try {
-    const script = join(dir, 'run.mjs');
-    await writeFile(script, `import { countMemory } from ${JSON.stringify(MODULE_URL)};
-// Natural completion of this synchronous encode takes far longer than the
-// harness bound, so the process only exits if the owned worker was terminated.
+test('a timed-out owned worker is terminated against a busy tokenizer stub with no natural completion', async () => {
+  const { dir, moduleUrl } = await buildBusyTokenizerFixture();
+  await runFixtureTest(dir, async () => {
+    const script = join(dir, 'timeout-run.mjs');
+    await writeFile(script, `import { countMemory } from ${JSON.stringify(moduleUrl)};
 try {
-  await countMemory({ selected_model: 'gpt-5.1', global: 'x'.repeat(131072), scoped: '' }, { timeoutMs: 1 });
+  await countMemory({ selected_model: 'gpt-5.1', global: 'x', scoped: '' }, { timeoutMs: 1 });
   console.log('UNEXPECTED-RESOLVE');
   process.exitCode = 1;
 } catch (error) {
@@ -355,24 +429,23 @@ try {
   else console.log('TERMINATED');
 }
 `);
-    const result = await runBoundedNode(script, { timeoutMs: 20000 });
-    assert.equal(result.timedOut, false, 'subprocess was killed by the harness bound');
+    const result = await runBoundedNode(script, { cwd: dir, timeoutMs: STUB_BOUND_MS });
+    assert.equal(result.timedOut, false,
+      `owned worker was not terminated: the busy stub never completes, so the host was killed by the bound instead (code ${result.code}, stdout ${JSON.stringify(result.stdout)}, stderr ${JSON.stringify(result.stderr)})`);
     assert.equal(result.code, 0);
     assert.match(result.stdout, /TERMINATED/);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  });
 });
 
-test('an aborted owned worker is terminated so its host process can exit before natural completion', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'hehebot-e06-abort-'));
-  try {
-    const script = join(dir, 'run.mjs');
-    await writeFile(script, `import { countMemory } from ${JSON.stringify(MODULE_URL)};
+test('an aborted owned worker is terminated against a busy tokenizer stub with no natural completion', async () => {
+  const { dir, moduleUrl } = await buildBusyTokenizerFixture();
+  await runFixtureTest(dir, async () => {
+    const script = join(dir, 'abort-run.mjs');
+    await writeFile(script, `import { countMemory } from ${JSON.stringify(moduleUrl)};
 const controller = new AbortController();
 setTimeout(() => controller.abort(), 300);
 try {
-  await countMemory({ selected_model: 'gpt-5.1', global: 'x'.repeat(131072), scoped: '' }, { signal: controller.signal });
+  await countMemory({ selected_model: 'gpt-5.1', global: 'x', scoped: '' }, { signal: controller.signal });
   console.log('UNEXPECTED-RESOLVE');
   process.exitCode = 1;
 } catch (error) {
@@ -380,13 +453,62 @@ try {
   else console.log('ABORTED');
 }
 `);
-    const result = await runBoundedNode(script, { timeoutMs: 20000 });
-    assert.equal(result.timedOut, false, 'subprocess was killed by the harness bound');
+    const result = await runBoundedNode(script, { cwd: dir, timeoutMs: STUB_BOUND_MS });
+    assert.equal(result.timedOut, false,
+      `owned worker was not terminated: the busy stub never completes, so the host was killed by the bound instead (code ${result.code}, stdout ${JSON.stringify(result.stdout)}, stderr ${JSON.stringify(result.stderr)})`);
     assert.equal(result.code, 0);
     assert.match(result.stdout, /ABORTED/);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  });
+});
+
+test('a no-termination mutant fails the busy-stub termination evidence (timeout path)', async () => {
+  const { dir, moduleSource } = await buildBusyTokenizerFixture();
+  const mutantPath = join(dir, 'memory-tokenizer-mutant.mjs');
+  await writeFile(mutantPath, makeNoTerminationMutant(moduleSource));
+  await runFixtureTest(dir, async () => {
+    const script = join(dir, 'mutant-timeout-run.mjs');
+    await writeFile(script, `import { countMemory } from ${JSON.stringify(pathToFileURL(mutantPath).href)};
+try {
+  await countMemory({ selected_model: 'gpt-5.1', global: 'x', scoped: '' }, { timeoutMs: 1 });
+  console.log('MUTANT-RESOLVED');
+  process.exitCode = 1;
+} catch (error) {
+  if (error.code !== 'TOKENIZER_TIMEOUT') { console.log('UNEXPECTED-CODE ' + error.code); process.exitCode = 1; }
+  else console.log('MUTANT-SETTLED');
+}
+`);
+    const result = await runBoundedNode(script, { cwd: dir, timeoutMs: STUB_BOUND_MS });
+    assert.equal(result.timedOut, true,
+      `no-termination mutant let its host process exit: the termination evidence does not discriminate (code ${result.code}, stdout ${JSON.stringify(result.stdout)}, stderr ${JSON.stringify(result.stderr)})`);
+    // The mutant must have settled its promise and still failed to exit,
+    // proving the hang is the live busy worker, not an early crash.
+    assert.match(result.stdout, /MUTANT-SETTLED/);
+  });
+});
+
+test('a no-termination mutant fails the busy-stub termination evidence (abort path)', async () => {
+  const { dir, moduleSource } = await buildBusyTokenizerFixture();
+  const mutantPath = join(dir, 'memory-tokenizer-mutant.mjs');
+  await writeFile(mutantPath, makeNoTerminationMutant(moduleSource));
+  await runFixtureTest(dir, async () => {
+    const script = join(dir, 'mutant-abort-run.mjs');
+    await writeFile(script, `import { countMemory } from ${JSON.stringify(pathToFileURL(mutantPath).href)};
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 300);
+try {
+  await countMemory({ selected_model: 'gpt-5.1', global: 'x', scoped: '' }, { signal: controller.signal });
+  console.log('MUTANT-RESOLVED');
+  process.exitCode = 1;
+} catch (error) {
+  if (error.code !== 'TOKENIZER_ABORTED') { console.log('UNEXPECTED-CODE ' + error.code); process.exitCode = 1; }
+  else console.log('MUTANT-SETTLED');
+}
+`);
+    const result = await runBoundedNode(script, { cwd: dir, timeoutMs: STUB_BOUND_MS });
+    assert.equal(result.timedOut, true,
+      `no-termination mutant let its host process exit: the termination evidence does not discriminate (code ${result.code}, stdout ${JSON.stringify(result.stdout)}, stderr ${JSON.stringify(result.stderr)})`);
+    assert.match(result.stdout, /MUTANT-SETTLED/);
+  });
 });
 
 test('a successful count leaves no live resource: the host process exits on its own', async () => {
@@ -402,7 +524,7 @@ if (result.global_tokens !== 4 || result.scoped_tokens !== 12) {
   console.log('CLEAN-EXIT');
 }
 `);
-    const result = await runBoundedNode(script, { timeoutMs: 20000 });
+    const result = await runBoundedNode(script, { timeoutMs: 10000 });
     assert.equal(result.timedOut, false, 'subprocess was killed by the harness bound');
     assert.equal(result.code, 0);
     assert.match(result.stdout, /CLEAN-EXIT/);

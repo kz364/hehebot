@@ -13,7 +13,7 @@
 // resourceLimits, deadline via timeoutMs). The supervisor event loop is never
 // blocked. The owned worker is terminated and awaited on success, timeout,
 // abort, and worker failure, so no worker is ever left running behind a
-// settled promise.
+// settled promise; if termination cannot be confirmed, the count fails closed.
 //
 // Boundaries: the combined UTF-8 byte size of global+scoped must not exceed
 // 131072 bytes (lone surrogates count as their U+FFFD replacement, matching
@@ -38,9 +38,13 @@ const isPlainObject = value => typeof value === 'object' && value !== null && !A
 const ENCODER = new TextEncoder();
 
 // Owned-worker observation. Private narrow hook for tests (Symbol.for-keyed,
-// non-enumerable): it reports how many owned workers are currently live.
-// Nothing else in the public surface exists for tests.
+// non-enumerable): it reports how many owned workers are currently believed
+// live, plus how many terminations could not be confirmed. An unconfirmed
+// termination never decrements the live count (termination is not claimed) and
+// instead increments the unconfirmed count; the count result itself fails
+// closed in that case. Nothing else in the public surface exists for tests.
 let activeWorkers = 0;
+let unconfirmedTerminations = 0;
 const OBSERVE = Symbol.for('hehebot.memory-tokenizer.observe');
 
 async function runWorkerEntry(port, data) {
@@ -130,15 +134,27 @@ export async function countMemory(input, options = {}) {
     };
     // Deterministic cleanup: the owned worker is terminated and the promise
     // only settles once termination has been awaited, on every exit path.
+    // Event listeners stay installed until termination settles, so a late
+    // 'error' or 'exit' event during termination can never race the cleanup
+    // into an unhandled event; and if termination cannot be confirmed, the
+    // count fails closed instead of resolving a token count, the live-worker
+    // count is not decremented (termination is not claimed), and the
+    // unconfirmed termination is recorded.
     const terminateAnd = decide => {
-      worker.removeAllListeners();
-      worker.terminate().then(() => {
-        activeWorkers -= 1;
-        decide();
-      }, () => {
-        activeWorkers -= 1;
-        decide();
-      });
+      worker.terminate().then(
+        () => {
+          worker.removeAllListeners();
+          activeWorkers -= 1;
+          decide();
+        },
+        terminateError => {
+          unconfirmedTerminations += 1;
+          reject(Object.assign(
+            new Error(`memory tokenizer worker termination could not be confirmed: ${terminateError && terminateError.message || terminateError}`),
+            { code: 'TOKENIZER_WORKER_FAILED' },
+          ));
+        },
+      );
     };
     const onAbort = () => settle(() => terminateAnd(() => reject(aborted())));
     const onTimeout = () => settle(() => terminateAnd(() => reject(Object.assign(
@@ -184,5 +200,5 @@ Object.defineProperty(countMemory, OBSERVE, {
   enumerable: false,
   configurable: false,
   writable: false,
-  value: () => ({ activeWorkers }),
+  value: () => ({ activeWorkers, unconfirmedTerminations }),
 });
