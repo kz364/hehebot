@@ -320,6 +320,38 @@
     {
       "type":"object", "additionalProperties":false,
       "properties": {
+        "type":{"const":"memory-read-prepare"},
+        "payload": {
+          "type":"object", "additionalProperties":false,
+          "properties": {
+            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
+            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
+            "read_id":{"type":"string","format":"uuid"},"memory_id":{"type":"string","format":"uuid"},"revision":{"type":"integer","minimum":1},
+            "offset":{"type":"integer","minimum":0,"maximum":16000},"limit":{"type":"integer","minimum":1,"maximum":2000}
+          },"required":["identity","run_id","attempt","read_id","memory_id","revision","offset","limit"]
+        }
+      },"required":["type","payload"]
+    },
+    {
+      "type":"object", "additionalProperties":false,
+      "properties": {
+        "type":{"const":"memory-read-reserve"},
+        "payload": {
+          "type":"object", "additionalProperties":false,
+          "properties": {
+            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
+            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
+            "read_id":{"type":"string","format":"uuid"},"memory_id":{"type":"string","format":"uuid"},"revision":{"type":"integer","minimum":1},
+            "offset":{"type":"integer","minimum":0,"maximum":16000},"limit":{"type":"integer","minimum":1,"maximum":2000},
+            "sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"selected_model":{"type":"string","pattern":"^[a-zA-Z0-9._-]{1,128}$"},
+            "tokenizer":{"const":"gpt-tokenizer@4.0.0/o200k_base/ordinary-v1"},"tokens":{"type":"integer","minimum":1,"maximum":131072}
+          },"required":["identity","run_id","attempt","read_id","memory_id","revision","offset","limit","sha256","selected_model","tokenizer","tokens"]
+        }
+      },"required":["type","payload"]
+    },
+    {
+      "type":"object", "additionalProperties":false,
+      "properties": {
         "type":{"const":"agent-skill-search"},
         "payload": {
           "type":"object", "additionalProperties":false,

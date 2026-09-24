@@ -41,6 +41,41 @@ is no automatic inference, wake, compression, targeted-retrieval tool, or UI
 summary editor. Prompt substitution requires exact revision pointers, disclosed
 compression and bounded authorized retrieval before adoption.
 
+## Targeted-read Worker protocol (host delivery still pending)
+
+Ordinary-runtime RPCs `memory-read-prepare` and `memory-read-reserve` implement
+the control-plane stages. They require an active exact task/attempt, current
+epoch/boot/lease/deadline, an admitted memory-budget receipt, and the explicitly
+adopted persona tool policy `748dbc8c-c4dd-4b54-9e3c-d13cbedf77fa`. Installing code
+does not adopt that policy. Staged alpha and warm/background task credentials
+cannot use these routes. There is no model-facing read tool yet.
+
+The request binds a trusted-runtime UUID `read_id`, memory ID/revision from the
+admitted snapshot, code-point offset and limit1..2000. Membership is checked before
+loading a current body. Exact revision/body, scope and expiry must remain valid;
+there is no fallback to old or newer source. Preparation returns exact serialized
+response text with source metadata and range/truncation disclosure, plus a digest
+binding task/epoch/read/range/model/initial receipt and those bytes. `not_after`
+is capped by current source expiry, attempt deadline and executor lease.
+
+The future host must count exactly that text with the admitted model tokenizer,
+then reserve before delivery. Reservation rechecks source and authority in the
+same transaction that charges the bucket. Accounting version1 is the initial
+bucket count plus separately counted additional response envelopes, including
+repeats. This is conservative exposure accounting, not exact concatenated/native
+prompt tokenization. Global4000/scoped8000 limits remain; no refund follows lost
+delivery or compaction. Counts are trusted-runtime receipts, not model input.
+
+One bounded `runtime_metadata` record per task/attempt retains at most64 read
+identities/fingerprints and cumulative totals, never source/response bodies.
+An identical retry reconciles its charge but returns `delivery_allowed:false`;
+changed counts/bytes with the same identity conflict. Replays still revalidate
+current source before returning any authorization metadata. Future host code must
+not emit twice, cache completed memory text, or deliver after `not_after`/abort.
+Worker authorization is a linearization point, not atomic distributed erasure
+of an already authorized in-flight response. This stage adds no summarization,
+projection, native delivery acceptance or retention policy for the new ledger.
+
 ## Runtime counting contract
 
 `runtime/memory-tokenizer.mjs` exports async

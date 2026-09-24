@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-24):** owner `memory.put` can adopt bounded summary
+**Current checkpoint (2026-09-24):** targeted-read Worker prepare/reserve RPCs
+bind exact admitted memory revisions and bounded code-point ranges. A body-free
+per-attempt ledger charges cumulative exposure and refuses redelivery on replay;
+source/expiry/task/lease are rechecked transactionally. A separate explicitly
+adopted persona policy is required; staged alpha remains closed. Final backend1910,
+runtime670, HTTP31, native service, typecheck/build pass (segmented checks).
+No model-facing read tool or prompt substitution yet. Next: host counting,
+reservation/delivery and cached-read fencing, then disclosed summary projection.
+Source remains fully counted; storage/legacy/recovery and external gates remain open.
+
+**Previous checkpoint (2026-09-24):** owner `memory.put` can adopt bounded summary
 metadata tied to the exact resulting revision and source fields. Only explicitly
 non-constraint records qualify; inherited true and unclassified records refuse.
 Legacy edits invalidate omitted summaries; expiry purges source and summary

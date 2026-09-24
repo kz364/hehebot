@@ -4,6 +4,32 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Targeted-read control plane (2026-09-24): ordinary authenticated prepare/reserve
+RPCs bind an exact admitted pointer, range, model and byte digest. Source revision
+and scope filter in SQL before body hydration. Reservation rechecks source and
+current task/expiry/lease, then atomically charges initial bucket counts plus
+additional envelopes. One body-free runtime_metadata ledger per attempt caps64
+read identities; identical replay reconciles without authorizing redelivery.
+Policy adoption is explicit; alpha/task-scoped staged credentials stay denied.
+This is not a model-facing read tool: host counting, final delivery/replay fences
+and summary substitution remain pending. Accounting is versioned exposure, not
+exact concatenated/native prompt tokenization. See MEMORY_TOKENIZER.md.
+
+Sixteen focused tests cover cumulative bucket edges, range/Unicode disclosure,
+no foreign-body hydration, current authority/source races, replay after expiry,
+bounded work, strict schemas, class reconstruction and real SQLite snapshot/reopen.
+Token counts in these ledger tests are synthetic arithmetic inputs, not tokenizer
+or native-delivery evidence. Initial typecheck caught widened tokenizer literal
+typing; corrected the preparation return type rather than casting away the check.
+Integrated backend1909/runtime670/HTTP31/native service pass in
+`.local/memory-read-integrated.log` SHA256
+`44216e5145f0584377fe1390b10a0a35160b7cca27f58861ba1c954f37853d56`.
+Final SQL-before-hydration test and code pass backend1910/typecheck/build in
+`.local/memory-read-final.log` SHA256
+`7cce4c576301209c805f9e655a9d4e7c08e50d1536a4aeb253c381ea7430ac31`.
+The full combined verifier predates this unit; these are segmented checks.
+No inference, live accounts/providers, deployment, UI or production gate changes.
+
 Owner summary adoption (2026-09-24): optional memory.put summary metadata has
 schema_version1, bounded text and a digest over the exact resulting revision and
 source fields. Wire algorithm and limitations are in MEMORY_TOKENIZER.md. Only

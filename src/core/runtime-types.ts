@@ -2,7 +2,7 @@ import type {FlightRegistration,FlightReceipt,FlightReconciliation} from './flig
 import type { Identity, HeartbeatOperation, CoordinatorOutcome } from './lifecycle';
 import type {NativeChildReceipt} from './native-tasks';
 import type { EffectIntent } from './effects';
-import type {AgentCommandRequest,AgentRoutineQuery,AgentSkillQuery,AgentSkillSearch} from './agent-commands';
+import type {AgentCommandRequest,AgentRoutineQuery,AgentSkillQuery,AgentSkillSearch,AgentMemoryRead,AgentMemoryReserve} from './agent-commands';
 import type {RootChildEffectIntent,RootChildEffectResult} from './root-child-effects';
 import type {BudgetReport} from './budget';
 import type {SteeringTarget,SteeringOutcome} from './task-steering';
@@ -48,5 +48,7 @@ export type RuntimePayloads={
  'agent-routines':AgentRoutineQuery;
  'agent-skill':AgentSkillQuery;
  'agent-skill-search':AgentSkillSearch;
+ 'memory-read-prepare':AgentMemoryRead;
+ 'memory-read-reserve':AgentMemoryReserve;
 };
 export type RuntimeCommand={ [K in keyof RuntimePayloads]:{type:K;payload:RuntimePayloads[K]} }[keyof RuntimePayloads];

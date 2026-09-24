@@ -360,6 +360,8 @@ export class PersonalControl extends DurableObject<Env> {
    case 'agent-routines':result=new AgentCommandBoundary(this.core,this.lifecycle).routines(command.payload);break;
    case 'agent-skill':result=new AgentCommandBoundary(this.core,this.lifecycle).skill(command.payload);break;
    case 'agent-skill-search':result=new AgentCommandBoundary(this.core,this.lifecycle).searchSkills(command.payload);break;
+   case 'memory-read-prepare':result=new AgentCommandBoundary(this.core,this.lifecycle).prepareMemoryRead(command.payload);break;
+   case 'memory-read-reserve':result=new AgentCommandBoundary(this.core,this.lifecycle).reserveMemoryRead(command.payload);break;
   }
   await this.arm();return result;
  }

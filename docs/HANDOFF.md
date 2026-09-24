@@ -4,7 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-24 Asia/Jakarta)
 
-Current unit: owner-adopted summary metadata on memory.put, not prompt substitution.
+Current unit: exact-pointer memory-read-prepare/reserve Worker RPCs and body-free
+cumulative per-attempt ledger. Explicit persona policy, initial budget receipt,
+current lease/attempt/source/revision/scope/expiry required. Ranges ≤2000 code
+points;64 reservations max. Identical replay reconciles with delivery_allowed:false.
+Final backend1910/typecheck/build, runtime670/HTTP31/native service pass;16 new
+tests include real SQLite snapshot/reopen and no foreign replacement hydration.
+No model-facing read tool yet. Next implement shared MCP host counting/reservation/
+delivery and dynamic-tool no-content-cache behavior, then summary projection.
+Oracle advice identified cached dynamic results as a deletion/expiry risk; ordinary
+service uses MCP, so both paths need coverage. Parent directly owns this coupled
+protocol; no child or unintegrated delivery. No external or gate changes.
+
+Previous unit: owner-adopted summary metadata on memory.put, not prompt substitution.
 Digest binds resulting revision and exact source metadata; only explicit false
 constraints qualify. Legacy edits clear omitted summaries; canonical expiry purge
 removes them with source. Backend1894/runtime670/typecheck/HTTP31/native service/
