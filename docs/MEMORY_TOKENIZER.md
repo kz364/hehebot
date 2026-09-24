@@ -11,14 +11,25 @@ not a licensing conclusion, and not production or deployed acceptance.
    (narrow import `gpt-tokenizer/encoding/o200k_base`, `setMergeCacheSize(0)`,
    `encode(text, { allowedSpecial: new Set(), disallowedSpecial: new Set() })`)
    and the official OpenAI `tiktoken==0.11.0` Python `o200k_base`
-   `encode_ordinary` reference, on a deterministic varied corpus.
+   `encode_ordinary` reference, on a deterministic varied corpus — including
+   multilingual text, combining marks, emoji/ZWJ sequences, lone surrogates,
+   and special literals compared as **ordinary text** (never as control
+   tokens).
 2. **The same parity inside real local workerd** (installed Miniflare) with the
    actual application module (`src/worker/index.ts` and `src/core/control.ts`)
    bundled into the same isolate as the candidate.
 3. **Realistic load behavior** at the current memory-text contract limit,
-   including multi-record batches of maximum-size records.
+   including multi-record batches of maximum-size records (a selected stress
+   case at the contract maximum, not a proven worst-case admitted input).
 4. **Its own negative controls**: corrupted expected tokens, altered artifacts,
-   and non-discriminating corpus shapes are all detected as failures.
+   non-discriminating corpus shapes, never-replying/closed/erroring inspector
+   sockets, hung child process groups, and evidence-overwrite hazards are all
+   detected as failures.
+5. **Bounded execution**: every external operation runs in a detached process
+   group with a timeout, and on timeout the whole group is SIGTERMed and then
+   SIGKilled, which actually terminates owned workerd children instead of
+   leaving work running. Timeouts are harness safety failures, never
+   performance results or acceptance.
 
 ## How to run
 
@@ -33,11 +44,20 @@ tarball + packument), PyPI (tiktoken 0.11.0), and
 used or inherited; child processes get an isolated HOME, empty npm config, and
 an isolated cache. The candidate is installed only into a disposable
 `mkdtemp` directory with `--ignore-scripts`; the repository dependency tree is
-never modified. On any failure the disposable environment is retained (path
-printed) and failure evidence is written to
-`.local/memory-tokenizer-harness-failure.json`; on success the environment is
-removed and evidence lands in `.local/memory-tokenizer-harness.json`
-(`.local/` is gitignored).
+never modified.
+
+**Evidence.** Every invocation — success or failure — writes its own unique
+per-invocation directory under `.local/memory-tokenizer-harness/` (created on
+demand; a fresh checkout without `.local/` works), containing
+`evidence.json` (machine-readable summary including pinned hashes, corpus
+hash, all observations, and, on failure, the error and the retained disposable
+fixture location), `workerd-child.mjs`, `workerd-result.json` (written
+incrementally after each workerd step, so partial observations survive a crash
+or timeout), and `workerd-child.stdout`/`workerd-child.stderr`. Repeated runs
+never overwrite earlier evidence: each run gets a fresh directory, so a
+failure followed by another failure preserves both. On failure the disposable
+fixture directory is **retained** and its path recorded in the evidence; on
+success it is removed. `.local/` is gitignored.
 
 Focused offline tests of the harness logic (no network, no workerd):
 `node --test tests/runtime-tokenizer-parity.mjs`, also part of
@@ -92,13 +112,16 @@ than only bulk output.
 `ucs2length` = Unicode code points (astral code point counts as one). The
 maximum legal record is therefore 16000 astral code points = 32000 UTF-16
 units = up to 64000 UTF-8 bytes. Corpus cases include ASCII, BMP, astral and
-mixed maxima (exactly 16000 code points) plus one-over variants (16001), and
-the harness validates max and one-over payloads against the real generated
-memory command schema through the real application `parseCommand` path inside
-workerd: maxima must validate, one-over must be rejected `INVALID_INPUT`.
-One-over cases are workload-boundary probes only; parity is still compared.
-No product limit is changed, and no total-memory-count bound is claimed — the
-application currently has a per-record text limit only.
+mixed maxima (exactly 16000 code points) plus one-over variants (16001) for
+every variant — including the mixed composition (`oneOverMixed`). The harness
+validates max and one-over payloads against the real generated memory command
+schema through the real application `parseCommand` path inside workerd: maxima
+must validate, one-over must be rejected `INVALID_INPUT`. One-over cases are
+workload-boundary probes only; parity is still compared. The maximum-size
+records used for batches are selected stress cases at the contract maximum,
+not proven worst-case admitted inputs. No product limit is changed, and no
+total-memory-count bound is claimed — the application currently has a
+per-record text limit only.
 
 **Independence.** Inputs are generated by the harness; reference vectors are
 computed by the official Python implementation in a disposable virtual
@@ -113,6 +136,18 @@ expected values from the candidate.
   mirroring `scripts/verify-wappmcp.mjs`).
 - A non-discriminating corpus (discriminator pair tokenizing identically)
   fails the run.
+- The inspector protocol layer has executable negative tests: a socket that
+  never replies must time out with a classified harness-safety-failure error
+  (with listener/timer cleanup), an already-closed socket, a protocol error
+  reply, a socket that closes before the reply, an unparseable reply, and a
+  reply carrying a different request id must each be rejected — and only an
+  id-matching reply resolves.
+- The bounded child runner has executable negative tests: a hung child (with a
+  hung grandchild) must be actually terminated by the group kill — both PIDs
+  verified dead — not merely abandoned by a `Promise.race`.
+- Evidence retention has executable tests: unique per-invocation directories,
+  repeated failures preserved without overwriting, and missing parent
+  directories created (fresh checkout without `.local/`).
 - Correctness failures exit nonzero. There is no benchmark pass threshold
   masquerading as product acceptance.
 
@@ -127,12 +162,36 @@ compatibilityFlags: ['nodejs_compat'], manifest: { mainModule, modules: { … } 
 `inspectorPort: 0`, `telemetry: { enabled: false }`). The probe-only fetch
 handler serves `/probe/*` only; it imports the application entry module and
 control class (both must be present and loaded, asserted via `/probe/health`)
-but **never calls any application or provider route**. Heap usage is read via
-the inspector WebSocket (`Runtime.getHeapUsage`) after selecting the exact
-named user Worker target from `/json/list` (`/core:user:<name>`), never a
-router isolate. Batches of 1, 10, 100 maximum-size records are posted and their
-token counts checked against the reference. Workers and the temporary install
-are always disposed/removed.
+but **never calls any application or provider route**.
+
+**Bounded execution design.** The whole workerd phase runs in a generated child
+process (`workerd-child.mjs` inside the run's evidence directory) spawned in
+its own **detached process group**. Every step inside the child — esbuild,
+`getWorker`, the probe fetches (including response-body reads), inspector
+URL/`/json/list`/socket-open, each `Runtime.getHeapUsage`, the parity encode,
+each boundary validation and each batch — is individually bounded; the child
+writes its result file incrementally after every step (partial observations),
+disposes Miniflare in a `finally`, and exits nonzero on any failure. The
+parent bounds the child with a timeout larger than the sum of the child's
+internal bounds, so the child classifies its own overruns; if the child ever
+overruns anyway, the parent SIGTERMs and then SIGKills the entire process
+group, which actually terminates the owned workerd children rather than
+leaving them running behind a `Promise.race`. The npm/uv/Python/Node-runner
+phases use the same bounded group runner. A timeout is always reported as a
+harness safety failure and exits nonzero; it is never read as a performance
+measurement, threshold, or acceptance result.
+
+**Inspector protocol.** `getInspectorURL` is awaited and its WebSocket URL's
+HTTP origin is used for `/json/list`; the exact named user Worker target
+(`/core:user:<name>`) is selected, never a router isolate. Every inspector
+request (`Runtime.getHeapUsage`) matches the reply by request id, and rejects
+on a protocol error reply, socket close, socket error, unparseable reply, or
+timeout — with listener and timer cleanup on every exit path. Used/total JS
+heap is distinguished from total isolate memory (only the former is observable
+here). Batches of 1, 10, 100 maximum-size records are posted and their token
+counts checked against the reference. Workers and the temporary install are
+always disposed/removed on success; on failure the fixture is retained with
+its location recorded in the evidence.
 
 ## What the harness does not prove
 
@@ -143,6 +202,8 @@ are always disposed/removed.
 - Local workerd is **not** deployed acceptance.
 - All timings are workload observations on one machine, not thresholds, not
   gates, and not product acceptance.
+- A bounded-phase timeout is a **harness safety failure** that exits nonzero;
+  it proves nothing about performance, latency budgets, or acceptance.
 - No total-memory-count bound is claimed or tested; the application has a
   per-record memory-text limit only.
 - gpt-tokenizer's wider API (special-token handling, decoding, other encodings)
@@ -151,12 +212,18 @@ are always disposed/removed.
 
 ## Observed results (one local run)
 
-Run 2026-09-21 from the task branch at source-custody HEAD `29d8806`
-(orb, Node 26, Linux x64); machine-readable evidence in
-`.local/memory-tokenizer-harness.json` (corpus sha256
-`87f9eb3f1622cdadc2b468ef8007900efd59abe407b3fff820b9c167a709a603`, 91 cases).
+Corrected-harness run 2026-09-24 from the task branch at source-custody HEAD
+`29d8806` (orb, Node 26.5.1, Linux x64); machine-readable evidence in
+`.local/memory-tokenizer-harness/<run-id>/evidence.json` (corpus sha256
+`af1cee6fa1507923d8db81436a7a4be10dd3d56a924d595a134b8f793b5f389d`, 92 cases,
+including `oneOverMixed`). The same run directory retains
+`workerd-child.mjs`, the incremental `workerd-result.json`, and the child's
+stdout/stderr. An earlier invocation of this corrected harness failed on a
+generated-child syntax error; its evidence directory and disposable fixture
+were retained untouched by the later successful run (per-invocation
+directories), demonstrating repeated-failure preservation.
 
-- Parity: all 91 corpus cases matched the tiktoken 0.11.0 reference
+- Parity: all 92 corpus cases matched the tiktoken 0.11.0 reference
   token-for-token in Node and in real local workerd, including lone surrogates,
   ZWJ sequences, combining marks, special literals as ordinary text and all
   max-size records.
@@ -166,12 +233,20 @@ Run 2026-09-21 from the task branch at source-custody HEAD `29d8806`
   reference encodings.
 - Contract boundary in workerd: 16000-code-point ASCII/BMP/astral/mixed maxima
   validated through the real application `parseCommand` + generated schema; all
-  one-over variants were rejected `INVALID_INPUT`.
-- Load observations (not thresholds): workerd ready 521 ms; corpus parity in
-  workerd 8.6 s; JS heap 31912180/34865152 used/total before the workload and
-  123046616/172941312 after; batches of 1/10/100 maximum-size records
-  (32000 tokens per record) completed in 1.7 s/14.1 s/134.1 s; full run
-  175 s including installs.
+  one-over variants — including `oneOverMixed` — were rejected `INVALID_INPUT`.
+- Bounded-execution negative tests (offline, in
+  `tests/runtime-tokenizer-parity.mjs`): a never-replying inspector socket
+  timed out as a classified harness safety failure; already-closed, protocol
+  error, socket-close, and unparseable replies were each rejected; only an
+  id-matching reply resolved; a hung child process group (middle child +
+  grandchild) was actually terminated by the group kill — both PIDs verified
+  dead — not abandoned by `Promise.race`; repeated failures left distinct
+  preserved evidence directories.
+- Load observations (not thresholds): workerd ready 544 ms; corpus parity in
+  workerd 5.4 s; JS heap 31915888/34865152 used/total before the workload and
+  105012236/173993984 after; batches of 1/10/100 maximum-size records
+  (32000 tokens per record) completed in 1.4 s/13.2 s/135.0 s; full run
+  172 s including installs.
 
 Remaining adoption gates are parent-owned: contract wiring, memory-budget
 policy, provenance/licensing publication, and deployed acceptance.

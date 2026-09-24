@@ -9,21 +9,32 @@
 // bundled, and proves its own negative controls. It is NOT application tokenizer
 // adoption, memory-budget implementation, or a deployed-acceptance claim.
 //
+// Bounded execution: every external operation (npm, uv/pip, Python reference,
+// Node runner, workerd phase) runs in its own detached process group with a
+// timeout; on timeout the harness SIGTERMs and then SIGKills the whole group,
+// which actually terminates owned workerd children instead of leaving work
+// running. Timeouts are classified as harness safety failures, never as
+// performance results or acceptance.
+//
+// Evidence: each invocation writes a unique per-run evidence directory under
+// .local/memory-tokenizer-harness/ (created on demand; a fresh checkout without
+// .local works) containing machine-readable evidence, the workerd child result
+// with partial observations, and its stdout/stderr. Repeated runs never
+// overwrite earlier evidence. On failure the disposable fixture directory is
+// retained and its location recorded; on success it is removed.
+//
 // The candidate is installed only into a disposable directory with no lifecycle
 // scripts and no inherited credentials; nothing is added to the repository
 // dependency tree. Requires network access to registry.npmjs.org, PyPI, and
 // openaipublic.blob.core.windows.net (public package/rank downloads only).
 // Run from the repository root: node scripts/test-memory-tokenizer.mjs
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { promisify } from 'node:util';
-
-const run = promisify(execFile);
 
 // Pinned candidate: gpt-tokenizer 4.0.0 (no runtime dependencies).
 const CANDIDATE = {
@@ -43,13 +54,15 @@ const RANKS = {
 const REFERENCE = { package: 'tiktoken', version: '0.11.0' };
 // Current memory-text contract limit (Ajv maxLength = ucs2length = code points).
 const MEMORY_TEXT_MAX = 16000;
+const WORKER_NAME = 'hehebot-tokenizer-probe';
 
 const sha256hex = bytes => createHash('sha256').update(bytes).digest('hex');
 const sha512sri = bytes => `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
 
 // ---------------------------------------------------------------------------
 // Pure, exported helpers (deterministic corpus + comparison logic). Imported by
-// tests/runtime-tokenizer-parity.mjs; importing this file has no side effects.
+// tests/runtime-tokenizer-parity.mjs and by the generated workerd child runner;
+// importing this file has no side effects.
 // ---------------------------------------------------------------------------
 
 // Deterministic PRNG (mulberry32) so every run generates the identical corpus.
@@ -114,7 +127,7 @@ export function buildCorpus() {
   add('markdown', '# Memory\n\n- item one\n- item two\n\n**bold** and `code`.');
   add('numbers', '16000 code points, 32000 UTF-16 units, 64000 UTF-8 bytes, 0.5, 1e3.');
   add('punctuation', '…“curly quotes” — em-dash, semi; colon: [brackets] (parens) {braces}');
-  add('specialLiteralEndoftext', '<|endoftext|> is treated as ordinary text here.');
+  add('specialLiteralEndoftext', ' is treated as ordinary text here.');
   add('specialLiteralChat', '<|im_start|>assistant<|im_end|> as ordinary text.');
   add('specialLiteralEndofprompt', '<|endofprompt|> ordinary text.');
 
@@ -155,7 +168,7 @@ export function buildCorpus() {
     combining: ['\u0301', '\u0327', '\u0488', '\u0489', '\u035C'],
     emoji: ['😀', '🎉', '👍', '👩', '\u200D', '👧', '❤', '\uFE0F', '🔥', '🇮🇩'],
     whitespace: [' ', '\t', '\n', '\r\n', '\u00a0'],
-    specials: ['<|endoftext|>', '<|im_start|>', '<|im_end|>', '<|endofprompt|>'],
+    specials: ['', '<|im_start|>', '<|im_end|>', '<|endofprompt|>'],
   };
   const poolNames = Object.keys(pools);
   for (let seed = 1; seed <= 12; seed++) {
@@ -169,7 +182,7 @@ export function buildCorpus() {
     add(`generated-${seed}`, pieces.join(''));
   }
   // Seeded raw code-point cases, including astral and lone surrogates.
-  const ranges = [[0x20, 0x7E], [0x4E00, 0x9FFF], [0x0600, 0x06FF], [0x0300, 0x036F], [0x1F300, 0x1F6FF]];
+  const ranges = [[0x20, 0x7e], [0x4e00, 0x9fff], [0x0600, 0x06ff], [0x0300, 0x036f], [0x1f300, 0x1f6ff]];
   for (let seed = 13; seed <= 20; seed++) {
     const next = mulberry32(seed * 0x85EBCA6B);
     const count = 10 + Math.floor(next() * 60);
@@ -192,7 +205,7 @@ export function buildCorpus() {
   add('longNonRepeated', longWords.join(' '));
 
   // Memory-contract size cases: the limit is 16000 ucs2length (code points),
-  // so the maximum legal record may be 16000 astral code points = 32000 UTF-16
+  // so a maximum legal record may be 16000 astral code points = 32000 UTF-16
   // units = up to 64000 UTF-8 bytes. One-over cases exceed the contract limit
   // and are workload-boundary probes only: parity is still compared, and the
   // real application schema validation must reject them.
@@ -203,14 +216,16 @@ export function buildCorpus() {
   add('maxAstral', '𝐀'.repeat(MEMORY_TEXT_MAX));
   add('oneOverAstral', '𝐀'.repeat(MEMORY_TEXT_MAX + 1));
   add('maxMixed', 'a中𝐀'.repeat(Math.floor(MEMORY_TEXT_MAX / 3)) + 'a'.repeat(MEMORY_TEXT_MAX % 3));
+  add('oneOverMixed', 'a中𝐀'.repeat(Math.floor(MEMORY_TEXT_MAX / 3)) + 'a'.repeat(MEMORY_TEXT_MAX % 3 + 1));
 
   const ids = cases.map(c => c.id);
   assert.equal(new Set(ids).size, ids.length, 'corpus case ids must be unique');
   return cases;
 }
 
-// Maximum-size record used for multi-record batch load cases. The heaviest
-// record the current memory-text contract admits is 16000 astral code points.
+// Stress record for multi-record batch load cases: a selected maximum-size
+// record (16000 astral code points). This is a chosen stress case at the
+// contract maximum, not a proven worst-case admitted input.
 export function maxRecord() {
   return { id: 'maxAstral', text: '𝐀'.repeat(MEMORY_TEXT_MAX) };
 }
@@ -240,7 +255,7 @@ export function assertParity(cases, expected, actual, label = 'parity') {
 // position and return {expected, caseId, index, from, to} for reporting.
 export function corruptExpectation(cases, expected) {
   const corrupted = expected.map(e => e.slice());
-  let caseIndex = cases.findIndex((c, i) => expected[i].length >= 3);
+  const caseIndex = cases.findIndex((c, i) => expected[i].length >= 3);
   assert.ok(caseIndex >= 0, 'no case with >=3 tokens to corrupt');
   const index = Math.floor(corrupted[caseIndex].length / 2);
   const from = corrupted[caseIndex][index];
@@ -250,10 +265,132 @@ export function corruptExpectation(cases, expected) {
 }
 
 // ---------------------------------------------------------------------------
+// Bounded-execution helpers. These are the harness's safety net: a timeout is a
+// harness safety failure and exits nonzero; it is never read as a performance
+// measurement or an acceptance result.
+// ---------------------------------------------------------------------------
+
+// Race a promise against a deadline. On timeout this rejects with a classified
+// safety failure; the underlying work keeps running until the owning
+// runBoundedChild group kill (or process exit) terminates it, so callers must
+// always run untrusted/unbounded work inside runBoundedChild.
+export function bounded(promise, timeoutMs, label) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        reject(new Error(`${label}: bounded phase timed out after ${timeoutMs}ms (harness safety failure, not performance acceptance)`));
+      }
+    }, timeoutMs);
+    Promise.resolve(promise).then(
+      value => { if (!settled) { settled = true; clearTimeout(timer); resolve(value); } },
+      error => { if (!settled) { settled = true; clearTimeout(timer); reject(error instanceof Error ? error : new Error(`${label}: ${error}`)); } }
+    );
+  });
+}
+
+// One inspector request over an open WebSocket. Resolves only on a reply whose
+// id matches the request; rejects on a protocol error reply, socket close,
+// socket error, or timeout (classified harness safety failure with cleanup of
+// the listeners and timer).
+export function inspectorCall(ws, method, { params, timeoutMs = 15000, id = 1 } = {}) {
+  return new Promise((resolveCall, rejectCall) => {
+    const fail = error => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      ws.removeEventListener('message', onMessage);
+      ws.removeEventListener('close', onClose);
+      ws.removeEventListener('error', onError);
+      rejectCall(error);
+    };
+    const settle = result => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      ws.removeEventListener('message', onMessage);
+      ws.removeEventListener('close', onClose);
+      ws.removeEventListener('error', onError);
+      resolveCall(result);
+    };
+    let settled = false;
+    const onMessage = event => {
+      let message;
+      try { message = JSON.parse(event.data); } catch { return fail(new Error(`inspector ${method}: unparseable reply`)); }
+      if (message.id !== id) return; // ignore events and replies to other requests
+      if (message.error) return fail(new Error(`inspector ${method}: protocol error ${JSON.stringify(message.error)}`));
+      settle(message.result);
+    };
+    const onClose = () => fail(new Error(`inspector ${method}: socket closed before reply`));
+    const onError = () => fail(new Error(`inspector ${method}: socket error before reply`));
+    const timer = setTimeout(() => fail(new Error(`inspector ${method}: timed out after ${timeoutMs}ms (harness safety failure, not performance acceptance)`)), timeoutMs);
+    ws.addEventListener('message', onMessage);
+    ws.addEventListener('close', onClose);
+    ws.addEventListener('error', onError);
+    if (ws.readyState === WebSocket.CLOSED) return fail(new Error(`inspector ${method}: socket already closed`));
+    try { ws.send(JSON.stringify({ id, method, ...(params ? { params } : {}) })); }
+    catch (error) { fail(new Error(`inspector ${method}: send failed: ${error}`)); }
+  });
+}
+
+// Run a command in its own detached process group with a hard timeout. On
+// timeout the whole group gets SIGTERM and then SIGKILL, which actually
+// terminates the command and its children (including workerd processes); the
+// promise only settles after the child exits. Resolves with
+// {timedOut, code, signal, stdout, stderr}; rejects only if the command could
+// not be spawned.
+export function runBoundedChild(command, args, options) {
+  const { cwd, env, timeoutMs, killGraceMs = 8000 } = options ?? {};
+  assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0, 'runBoundedChild requires timeoutMs');
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(command, args, { cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '', stderr = '', timedOut = false, settled = false;
+    const killGroup = signal => { try { process.kill(-child.pid, signal); } catch { /* group already gone */ } };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killGroup('SIGTERM');
+      setTimeout(() => killGroup('SIGKILL'), killGraceMs);
+    }, timeoutMs);
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    const finish = result => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolveRun(result);
+    };
+    child.on('error', error => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      rejectRun(error);
+    });
+    child.on('close', (code, signal) => finish({ timedOut, code, signal, stdout, stderr }));
+  });
+}
+
+// Unique per-invocation evidence directory. Uniqueness uses the clock and a
+// random suffix; corpus determinism is unaffected.
+export function newRunDir(base) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  return join(base, `${stamp}-${randomUUID().slice(0, 8)}`);
+}
+
+// Write evidence without ever overwriting another run's evidence: each run has
+// its own directory. Creates the directory (and parents) on demand, so a fresh
+// checkout without .local works.
+export async function writeEvidence(runDir, evidence) {
+  await mkdir(runDir, { recursive: true });
+  await writeFile(join(runDir, 'evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
+}
+
+// ---------------------------------------------------------------------------
 // Main harness.
 // ---------------------------------------------------------------------------
 
 const REPO = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const HARNESS_URL = pathToFileURL(join(REPO, 'scripts', 'test-memory-tokenizer.mjs')).href;
 
 async function fetchBytes(url) {
   const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
@@ -267,6 +404,115 @@ function childEnv(root, home, extra = {}) {
     ...extra };
 }
 
+// The workerd child runs the whole Miniflare phase in its own process group so
+// the parent can hard-terminate the group (workerd children included) if any
+// phase overruns. It writes partial observations to its result file after each
+// step, so an overrun or crash still preserves evidence. No template literals
+// inside: it is interpolated into the parent's source as a string.
+const WORKERD_CHILD_SOURCE = [
+  '// Bounded workerd child: parent kills this whole process group on timeout.',
+  "import assert from 'node:assert/strict';",
+  "import { readFile, writeFile } from 'node:fs/promises';",
+  "import { build } from 'esbuild';",
+  "import { Miniflare } from 'miniflare';",
+  `import { bounded, inspectorCall, assertParity, BATCH_SIZES, ucs2length, utf16Length } from ${JSON.stringify(HARNESS_URL)};`,
+  `const REPO = ${JSON.stringify(REPO)};`,
+  `const WORKER_NAME = ${JSON.stringify(WORKER_NAME)};`,
+  "const [probeEntryPath, probeBundlePath, casesPath, referencePath, resultPath] = process.argv.slice(2);",
+  "const result = { partial: true, steps: [] };",
+  "const record = (step, value) => { result.steps.push({ step, ...value }); return writeFile(resultPath, JSON.stringify(result, null, 2) + '\\n'); };",
+  "const UUID = '123e4567-e89b-42d3-a456-426614174000';",
+  "function memoryPut(text) { return { schema_version: 1, type: 'memory.put', payload: {",
+  "  id: UUID, expected_revision: 0, scope: { kind: 'global', id: null }, text,",
+  "  source_event_id: UUID, expires_at: null, sensitivity: 'ordinary' } }; }",
+  "try {",
+  "  await record('start', { pid: process.pid });",
+  "  const cases = JSON.parse(await readFile(casesPath, 'utf8'));",
+  "  const reference = JSON.parse(await readFile(referencePath, 'utf8'));",
+  "  await bounded(build({ entryPoints: [probeEntryPath], outfile: probeBundlePath,",
+  "    bundle: true, format: 'esm', platform: 'browser', target: 'es2022',",
+  "    loader: { '.sql': 'text' }, external: ['cloudflare:*', 'node:*'], logLevel: 'silent' }),",
+  `    ${180000}, 'esbuild bundle');`,
+  "  result.bundleBytes = (await readFile(probeBundlePath)).length;",
+  "  await record('bundle', { bytes: result.bundleBytes });",
+  "  const contents = await readFile(probeBundlePath, 'utf8');",
+  "  const mainModule = 'probe.mjs';",
+  "  const workerdStart = Date.now();",
+  "  const mf = new Miniflare({ workers: [{ config: { name: WORKER_NAME, type: 'worker',",
+  "    compatibilityDate: '2026-09-10', compatibilityFlags: ['nodejs_compat'],",
+  "    manifest: { mainModule, modules: { [mainModule]: { type: 'esm', contents } } } } }],",
+  "    inspectorPort: 0, telemetry: { enabled: false } });",
+  "  try {",
+  "    const worker = await bounded(mf.getWorker(WORKER_NAME), 60000, 'getWorker');",
+  "    const health = await bounded(worker.fetch('https://probe.example/probe/health').then(r => r.json()), 30000, 'health fetch');",
+  "    assert.equal(health.ok, true);",
+  "    assert.equal(health.appEntry, 'object', 'actual application entry module must be bundled');",
+  "    assert.equal(health.control, 'function', 'actual application control class must be bundled');",
+  "    result.readyMs = Date.now() - workerdStart;",
+  "    await record('health', { readyMs: result.readyMs });",
+  "    const inspectorWs = await bounded(mf.getInspectorURL(WORKER_NAME), 15000, 'inspector url');",
+  "    const targets = await bounded(fetch('http://' + inspectorWs.host + '/json/list').then(r => r.json()), 15000, 'inspector target list');",
+  "    const target = targets.find(t => new URL(t.webSocketDebuggerUrl).pathname === '/core:user:' + WORKER_NAME);",
+  "    assert.ok(target, 'named user worker inspector target not found: ' + targets.map(t => t.title).join(', '));",
+  "    const ws = await bounded(new Promise((openResolve, openReject) => {",
+  "      const socket = new WebSocket(target.webSocketDebuggerUrl);",
+  "      socket.addEventListener('open', () => openResolve(socket));",
+  "      socket.addEventListener('error', () => openReject(new Error('inspector socket open failed')));",
+  "    }), 15000, 'inspector socket open');",
+  "    const heapBefore = await bounded(inspectorCall(ws, 'Runtime.getHeapUsage', { timeoutMs: 15000, id: 1 }), 20000, 'heap usage before');",
+  "    result.heapUsedBefore = heapBefore.usedSize; result.heapTotalBefore = heapBefore.totalSize;",
+  "    const parityStart = Date.now();",
+  "    const workerdEnc = await bounded(worker.fetch('https://probe.example/probe/encode',",
+  "      { method: 'POST', body: JSON.stringify({ records: cases.map(c => c.text), full: true }) }).then(r => r.json()), 300000, 'workerd parity encode');",
+  "    assertParity(cases, reference.encodings, workerdEnc.encodings, 'workerd');",
+  "    result.parityMs = Date.now() - parityStart; result.parityCases = cases.length;",
+  "    await record('parity', { cases: cases.length, ms: result.parityMs });",
+  "    const validate = {};",
+  "    const boundaryIds = ['maxAscii', 'oneOverAscii', 'maxBmp', 'oneOverBmp', 'maxAstral', 'oneOverAstral', 'maxMixed', 'oneOverMixed'];",
+  "    for (const id of boundaryIds) {",
+  "      const text = cases.find(c => c.id === id).text;",
+  "      assert.equal(ucs2length(text), id.startsWith('max') ? 16000 : 16001, 'boundary case accounting for ' + id);",
+  "      const v = await bounded(worker.fetch('https://probe.example/probe/validate',",
+  "        { method: 'POST', body: JSON.stringify({ text }) }).then(r => r.json()), 30000, 'validate ' + id);",
+  "      assert.equal(v.valid, id.startsWith('max'), 'schema validation boundary wrong for ' + id);",
+  "      if (!id.startsWith('max')) assert.equal(v.code, 'INVALID_INPUT', 'over-limit ' + id + ' must be rejected by the real schema');",
+  "      validate[id] = v;",
+  "    }",
+  "    result.schemaBoundary = validate;",
+  "    await record('boundary', { validate });",
+  "    const record_ = cases.find(c => c.id === 'maxAstral');",
+  "    assert.equal(ucs2length(record_.text), 16000, 'max record ucs2length');",
+  "    assert.equal(utf16Length(record_.text), 32000, 'max record UTF-16 length');",
+  "    const expectedCount = reference.encodings[cases.findIndex(c => c.id === 'maxAstral')].length;",
+  "    result.batches = {};",
+  "    for (const size of BATCH_SIZES) {",
+  "      const batchStart = Date.now();",
+  "      const res = await bounded(worker.fetch('https://probe.example/probe/encode',",
+  "        { method: 'POST', body: JSON.stringify({ records: Array.from({ length: size }, () => record_.text), full: false }) }).then(r => r.json()),",
+  "        600000, 'batch ' + size + ' encode');",
+  "      const batchMs = Date.now() - batchStart;",
+  "      assert.equal(res.counts.length, size, 'batch record count');",
+  "      for (const count of res.counts) assert.equal(count, expectedCount, 'batch token count mismatch');",
+  "      result.batches[size] = { records: size, ms: batchMs, tokensPerRecord: expectedCount };",
+  "      await record('batch-' + size, result.batches[size]);",
+  "    }",
+  "    const heapAfter = await bounded(inspectorCall(ws, 'Runtime.getHeapUsage', { timeoutMs: 15000, id: 2 }), 20000, 'heap usage after');",
+  "    result.heapUsedAfter = heapAfter.usedSize; result.heapTotalAfter = heapAfter.totalSize;",
+  "    ws.close();",
+  "    result.partial = false;",
+  "    await record('done', { heapUsedAfter: result.heapUsedAfter, heapTotalAfter: result.heapTotalAfter });",
+  "  } finally {",
+  "    await bounded(mf.dispose(), 30000, 'miniflare dispose');",
+  "  }",
+  "  process.exitCode = 0;",
+  "} catch (error) {",
+  "  result.error = String(error && error.stack || error);",
+  "  try { await writeFile(resultPath, JSON.stringify(result, null, 2) + '\\n'); } catch {}",
+  "  console.error(result.error);",
+  "  process.exitCode = 1;",
+  "}",
+].join('\n');
+
 const PY_REFERENCE_SCRIPT = `
 import json, sys, tiktoken
 data = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -276,7 +522,10 @@ json.dump({"version": tiktoken.__version__, "encodings": encodings}, sys.stdout)
 sys.stdout.write("\\n")
 `;
 
+const WORKERD_CHILD_TIMEOUT_MS = 3000000; // > sum of the child's internal bounds, so the child classifies its own overruns first.
+
 async function main() {
+  const started = Date.now();
   const evidence = {
     harness: 'scripts/test-memory-tokenizer.mjs',
     startedAt: new Date().toISOString(),
@@ -288,11 +537,12 @@ async function main() {
       'wall-clock startup/latency is not billed CPU time',
       'local workerd is not deployed acceptance',
       'timings are observations, not thresholds or product acceptance',
+      'timeouts are harness safety failures, never performance results',
       'the app has a per-record memory-text limit only; no total-memory-count bound is claimed',
     ],
   };
-  const failures = [];
-  const started = Date.now();
+  const runDir = newRunDir(join(REPO, '.local', 'memory-tokenizer-harness'));
+  evidence.runDir = runDir;
   const root = await mkdtemp(join(tmpdir(), 'hehebot-tokenizer-'));
   let retained = false;
   try {
@@ -319,13 +569,15 @@ async function main() {
     assert.equal(versionMeta.dist.integrity, CANDIDATE.integrity, 'registry SRI disagrees with pin');
     evidence.candidate = { gitHead: versionMeta.gitHead, sri: CANDIDATE.integrity, tarballBytes: tarball.length };
 
-    // Phase 2: disposable install, no lifecycle scripts.
+    // Phase 2: disposable install, no lifecycle scripts, bounded group.
     console.log('[2/7] disposable candidate install (no lifecycle scripts)');
     const install = join(root, 'install');
     await mkdir(install, { mode: 0o700 });
     await writeFile(join(install, 'package.json'), JSON.stringify({ name: 'disposable-tokenizer-probe', private: true }));
     await writeFile(join(install, 'hehebot-gpt-tokenizer.tgz'), tarball);
-    await run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', './hehebot-gpt-tokenizer.tgz'], { cwd: install, env: npmEnv, timeout: 180000 });
+    const npmInstall = await runBoundedChild('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', './hehebot-gpt-tokenizer.tgz'], { cwd: install, env: npmEnv, timeoutMs: 180000 });
+    assert.equal(npmInstall.code, 0, `npm install failed: ${npmInstall.stderr}`);
+    assert.equal(npmInstall.timedOut, false, 'npm install timed out (harness safety failure)');
     const installed = JSON.parse(await readFile(join(install, 'node_modules/gpt-tokenizer/package.json')));
     assert.equal(installed.name, CANDIDATE.name);
     assert.equal(installed.version, CANDIDATE.version);
@@ -342,8 +594,9 @@ async function main() {
     evidence.corpus = { cases: cases.length, sha256: corpusSha256 };
     console.log(`      ${cases.length} cases, corpus sha256 ${corpusSha256}`);
     await writeFile(join(root, 'corpus.json'), corpusJson);
+    await writeFile(join(root, 'cases.json'), JSON.stringify(cases));
 
-    // Phase 4: official reference vectors (independent generation).
+    // Phase 4: official reference vectors (independent generation, bounded group).
     console.log(`[4/7] reference ${REFERENCE.package}==${REFERENCE.version} o200k_base encode_ordinary`);
     const cacheDir = join(root, 'ranks');
     await mkdir(cacheDir, { mode: 0o700 });
@@ -358,19 +611,27 @@ async function main() {
     const venv = join(root, 'pyref');
     await mkdir(venv, { mode: 0o700 });
     let uvAvailable = true;
-    try { await run('uv', ['--version'], { env: pyEnv, timeout: 30000 }); }
-    catch { uvAvailable = false; }
+    const uvCheck = await runBoundedChild('uv', ['--version'], { env: pyEnv, timeoutMs: 30000 }).catch(() => null);
+    uvAvailable = uvCheck !== null && uvCheck.code === 0;
     if (uvAvailable) {
-      await run('uv', ['venv', '--python', 'python3', join(venv, '.venv')], { env: pyEnv, timeout: 180000 });
-      await run('uv', ['pip', 'install', '--python', join(venv, '.venv', 'bin', 'python'), `${REFERENCE.package}==${REFERENCE.version}`], { env: pyEnv, timeout: 300000 });
+      const venvOut = await runBoundedChild('uv', ['venv', '--python', 'python3', join(venv, '.venv')], { env: pyEnv, timeoutMs: 180000 });
+      assert.equal(venvOut.code, 0, `uv venv failed: ${venvOut.stderr}`);
+      const pipOut = await runBoundedChild('uv', ['pip', 'install', '--python', join(venv, '.venv', 'bin', 'python'), `${REFERENCE.package}==${REFERENCE.version}`], { env: pyEnv, timeoutMs: 300000 });
+      assert.equal(pipOut.code, 0, `uv pip install failed: ${pipOut.stderr}`);
     } else {
-      await run('python3', ['-m', 'venv', join(venv, '.venv')], { env: pyEnv, timeout: 180000 });
-      await run(join(venv, '.venv', 'bin', 'pip'), ['install', `${REFERENCE.package}==${REFERENCE.version}`], { env: pyEnv, timeout: 300000 });
+      const venvOut = await runBoundedChild('python3', ['-m', 'venv', join(venv, '.venv')], { env: pyEnv, timeoutMs: 180000 });
+      assert.equal(venvOut.code, 0, `python3 -m venv failed: ${venvOut.stderr}`);
+      const pipOut = await runBoundedChild(join(venv, '.venv', 'bin', 'pip'), ['install', `${REFERENCE.package}==${REFERENCE.version}`], { env: pyEnv, timeoutMs: 300000 });
+      assert.equal(pipOut.code, 0, `pip install failed: ${pipOut.stderr}`);
     }
     const python = join(venv, '.venv', 'bin', 'python');
     await writeFile(join(venv, 'reference.py'), PY_REFERENCE_SCRIPT);
-    const referenceOut = await run(python, [join(venv, 'reference.py'), join(root, 'corpus.json')], { env: pyEnv, timeout: 300000, maxBuffer: 256 * 1024 * 1024 });
-    const reference = JSON.parse(referenceOut.stdout);
+    const referencePath = join(root, 'reference.json');
+    const referenceRun = await runBoundedChild(python, [join(venv, 'reference.py'), join(root, 'corpus.json')], { env: pyEnv, timeoutMs: 300000 });
+    assert.equal(referenceRun.code, 0, `reference generation failed: ${referenceRun.stderr}`);
+    assert.equal(referenceRun.timedOut, false, 'reference generation timed out (harness safety failure)');
+    const reference = JSON.parse(referenceRun.stdout);
+    await writeFile(referencePath, JSON.stringify(reference));
     assert.equal(reference.version, REFERENCE.version, 'reference version mismatch');
     assert.equal(reference.encodings.length, cases.length, 'reference case count mismatch');
     evidence.reference = { package: REFERENCE.package, version: reference.version, ranksSha256: RANKS.sha256, cases: reference.encodings.length };
@@ -395,7 +656,9 @@ await writeFile(process.argv[3], JSON.stringify({ encodings }));
 `;
     await writeFile(join(install, 'node-runner.mjs'), nodeRunner);
     const nodeOutPath = join(root, 'node-encodings.json');
-    await run(process.execPath, [join(install, 'node-runner.mjs'), join(root, 'corpus.json'), nodeOutPath], { env: npmEnv, cwd: install, timeout: 300000 });
+    const nodeRun = await runBoundedChild(process.execPath, [join(install, 'node-runner.mjs'), join(root, 'corpus.json'), nodeOutPath], { cwd: install, env: npmEnv, timeoutMs: 300000 });
+    assert.equal(nodeRun.code, 0, `node runner failed: ${nodeRun.stderr}`);
+    assert.equal(nodeRun.timedOut, false, 'node runner timed out (harness safety failure)');
     const nodeEncodings = JSON.parse(await readFile(nodeOutPath)).encodings;
     assertParity(cases, reference.encodings, nodeEncodings, 'node');
     // Negative parity control: a corrupted expected token must be detected.
@@ -405,9 +668,9 @@ await writeFile(process.argv[3], JSON.stringify({ encodings }));
     evidence.nodeParity = { cases: cases.length, corruptedCase: corrupted.caseId, corruptedIndex: corrupted.index, detected: true };
     console.log(`      ${cases.length} cases match; corrupted ${corrupted.caseId}[${corrupted.index}] (${corrupted.from}->${corrupted.to}) detected`);
 
-    // Phase 6: candidate + actual application module in real local workerd.
+    // Phase 6: candidate + actual application module in real local workerd,
+    // executed by a bounded child process group (see WORKERD_CHILD_SOURCE).
     console.log('[6/7] workerd load harness (Miniflare, real app module bundled)');
-    const { build } = await import('esbuild');
     const probeEntry = join(install, 'probe-entry.mjs');
     const probeSource = `// Probe-only worker: tokenizes through the candidate and validates memory.put
 // payloads with the real application command validator. It never calls any
@@ -443,141 +706,65 @@ export default {
 };
 `;
     await writeFile(probeEntry, probeSource);
-    const probeBundle = join(root, 'probe-bundle.mjs');
-    await build({
-      entryPoints: [probeEntry], outfile: probeBundle,
-      bundle: true, format: 'esm', platform: 'browser', target: 'es2022',
-      loader: { '.sql': 'text' },
-      external: ['cloudflare:*', 'node:*'],
-      logLevel: 'silent',
-    });
-    const bundleBytes = (await readFile(probeBundle)).length;
-    const { Miniflare } = await import('miniflare');
-    const WORKER_NAME = 'hehebot-tokenizer-probe';
-    const mainModule = 'probe.mjs';
-    const contents = await readFile(probeBundle, 'utf8');
-    const workerdStart = Date.now();
-    const mf = new Miniflare({
-      workers: [{
-        config: {
-          name: WORKER_NAME,
-          type: 'worker',
-          compatibilityDate: '2026-09-10',
-          compatibilityFlags: ['nodejs_compat'],
-          manifest: { mainModule, modules: { [mainModule]: { type: 'esm', contents } } },
-        },
-      }],
-      inspectorPort: 0,
-      telemetry: { enabled: false },
-    });
-    try {
-      const worker = await mf.getWorker(WORKER_NAME);
-      const health = await (await worker.fetch(`https://probe.example/probe/health`)).json();
-      const readyMs = Date.now() - workerdStart;
-      assert.equal(health.ok, true);
-      assert.equal(health.appEntry, 'object', 'actual application entry module must be bundled');
-      assert.equal(health.control, 'function', 'actual application control class must be bundled');
-
-      // Heap usage via the exact named user Worker inspector target.
-      const inspectorWs = await mf.getInspectorURL(WORKER_NAME);
-      const targets = await (await fetch(`http://${inspectorWs.host}/json/list`)).json();
-      const target = targets.find(t => new URL(t.webSocketDebuggerUrl).pathname === `/core:user:${WORKER_NAME}`);
-      assert.ok(target, `named user worker inspector target not found: ${targets.map(t => t.title).join(', ')}`);
-      const heapUsage = await new Promise((resolveHeap, rejectHeap) => {
-        const ws = new WebSocket(target.webSocketDebuggerUrl);
-        ws.addEventListener('open', () => ws.send(JSON.stringify({ id: 1, method: 'Runtime.getHeapUsage' })));
-        ws.addEventListener('message', e => { resolveHeap(JSON.parse(e.data).result); ws.close(); });
-        ws.addEventListener('error', rejectHeap);
-      });
-      assert.equal(typeof heapUsage.usedSize, 'number');
-
-      // Parity path 2: the full corpus through real workerd.
-      const encodeStart = Date.now();
-      const workerdEnc = await (await worker.fetch('https://probe.example/probe/encode', {
-        method: 'POST', body: JSON.stringify({ records: cases.map(c => c.text), full: true }),
-      })).json();
-      const parityMs = Date.now() - encodeStart;
-      assertParity(cases, reference.encodings, workerdEnc.encodings, 'workerd');
-
-      // Memory-contract boundary through the real application validator.
-      const validate = {};
-      for (const id of ['maxAscii', 'oneOverAscii', 'maxBmp', 'oneOverBmp', 'maxAstral', 'oneOverAstral', 'maxMixed']) {
-        const c = cases.find(x => x.id === id);
-        const v = await (await worker.fetch('https://probe.example/probe/validate', {
-          method: 'POST', body: JSON.stringify({ text: c.text }),
-        })).json();
-        validate[id] = v;
-        assert.equal(v.valid, id.startsWith('max'), `schema validation boundary wrong for ${id}`);
-        if (!id.startsWith('max')) {
-          assert.equal(v.code, 'INVALID_INPUT', `over-limit ${id} must be rejected by the real schema`);
-        }
-      }
-      const record = maxRecord();
-      assert.equal(ucs2length(record.text), MEMORY_TEXT_MAX, 'max record ucs2length');
-      assert.equal(utf16Length(record.text), 2 * MEMORY_TEXT_MAX, 'max record UTF-16 length');
-
-      // Multi-record batches of maximum-size records.
-      const batches = {};
-      for (const size of BATCH_SIZES) {
-        const batchStart = Date.now();
-        const res = await (await worker.fetch('https://probe.example/probe/encode', {
-          method: 'POST', body: JSON.stringify({ records: Array.from({ length: size }, () => record.text), full: false }),
-        })).json();
-        const batchMs = Date.now() - batchStart;
-        assert.equal(res.counts.length, size);
-        const expectedCount = reference.encodings[cases.findIndex(c => c.id === record.id)].length;
-        for (const count of res.counts) assert.equal(count, expectedCount, 'batch token count mismatch');
-        batches[size] = { records: size, ms: batchMs, tokensPerRecord: expectedCount };
-      }
-
-      const heapAfter = await new Promise((resolveHeap, rejectHeap) => {
-        const ws = new WebSocket(target.webSocketDebuggerUrl);
-        ws.addEventListener('open', () => ws.send(JSON.stringify({ id: 2, method: 'Runtime.getHeapUsage' })));
-        ws.addEventListener('message', e => { resolveHeap(JSON.parse(e.data).result); ws.close(); });
-        ws.addEventListener('error', rejectHeap);
-      });
-      evidence.workerd = {
-        runtime: 'local workerd via installed Miniflare',
-        bundleBytes,
-        readyMs,
-        appModule: 'src/worker/index.ts + src/core/control.ts bundled (not called)',
-        parityCases: cases.length,
-        parityMs,
-        heapUsedBefore: heapUsage.usedSize,
-        heapTotalBefore: heapUsage.totalSize,
-        heapUsedAfter: heapAfter.usedSize,
-        heapTotalAfter: heapAfter.totalSize,
-        batches,
-        schemaBoundary: validate,
-      };
-      console.log(`      ready ${readyMs}ms, parity ${cases.length} cases in ${parityMs}ms, bundle ${bundleBytes} bytes`);
-      console.log(`      JS heap used/total before workload: ${heapUsage.usedSize}/${heapUsage.totalSize}, after: ${heapAfter.usedSize}/${heapAfter.totalSize}`);
-      console.log(`      batches (max-size records): ${BATCH_SIZES.map(s => `${s} records in ${batches[s].ms}ms`).join(', ')}`);
-    } finally {
-      await mf.dispose();
+    const childScript = join(runDir, 'workerd-child.mjs');
+    await mkdir(runDir, { recursive: true });
+    await writeFile(childScript, WORKERD_CHILD_SOURCE);
+    const childResultPath = join(runDir, 'workerd-result.json');
+    const probeBundlePath = join(root, 'probe-bundle.mjs');
+    const workerdChild = await runBoundedChild(process.execPath, [childScript, probeEntry, probeBundlePath, join(root, 'cases.json'), referencePath, childResultPath], { cwd: REPO, env: childEnv(root, home), timeoutMs: WORKERD_CHILD_TIMEOUT_MS });
+    await writeFile(join(runDir, 'workerd-child.stdout'), workerdChild.stdout || '');
+    await writeFile(join(runDir, 'workerd-child.stderr'), workerdChild.stderr || '');
+    if (workerdChild.timedOut) {
+      throw new Error(`workerd phase timed out after ${WORKERD_CHILD_TIMEOUT_MS}ms (harness safety failure, not performance acceptance); process group terminated; partial observations in ${childResultPath}`);
     }
+    let workerdResult = null;
+    try { workerdResult = JSON.parse(await readFile(childResultPath, 'utf8')); } catch { /* no result file */ }
+    if (workerdChild.code !== 0) {
+      throw new Error(`workerd child exited ${workerdChild.code}: ${(workerdResult && workerdResult.error) || workerdChild.stderr}`);
+    }
+    assert.ok(workerdResult && !workerdResult.partial, 'workerd child result incomplete');
+    evidence.workerd = {
+      runtime: 'local workerd via installed Miniflare (bounded child process group)',
+      bundleBytes: workerdResult.bundleBytes,
+      readyMs: workerdResult.readyMs,
+      appModule: 'src/worker/index.ts + src/core/control.ts bundled (not called)',
+      parityCases: workerdResult.parityCases,
+      parityMs: workerdResult.parityMs,
+      heapUsedBefore: workerdResult.heapUsedBefore,
+      heapTotalBefore: workerdResult.heapTotalBefore,
+      heapUsedAfter: workerdResult.heapUsedAfter,
+      heapTotalAfter: workerdResult.heapTotalAfter,
+      batches: workerdResult.batches,
+      schemaBoundary: workerdResult.schemaBoundary,
+    };
+    console.log(`      ready ${workerdResult.readyMs}ms, parity ${workerdResult.parityCases} cases in ${workerdResult.parityMs}ms, bundle ${workerdResult.bundleBytes} bytes`);
+    console.log(`      JS heap used/total before workload: ${workerdResult.heapUsedBefore}/${workerdResult.heapTotalBefore}, after: ${workerdResult.heapUsedAfter}/${workerdResult.heapTotalAfter}`);
+    console.log(`      batches (max-size records): ${BATCH_SIZES.map(s => `${s} records in ${workerdResult.batches[s].ms}ms`).join(', ')}`);
 
     // Phase 7: summary. Timings above are observations only, not thresholds.
     console.log('[7/7] summary');
     evidence.completedAt = new Date().toISOString();
     evidence.totalMs = Date.now() - started;
     evidence.result = 'pass';
-    await writeFile(join(REPO, '.local', 'memory-tokenizer-harness.json'), JSON.stringify(evidence, null, 2) + '\n');
+    evidence.disposableFixtureRemoved = true;
+    await writeEvidence(runDir, evidence);
+    console.log(`evidence: ${join(runDir, 'evidence.json')}`);
     console.log(JSON.stringify({ result: 'pass', cases: cases.length, totalMs: evidence.totalMs }, null, 2));
-    console.log('limitations: JS heap is not isolate memory; wall-clock is not billed CPU; local workerd is not deployed acceptance; timings are observations, not thresholds; no total-memory-count bound is claimed.');
+    console.log('limitations: JS heap is not isolate memory; wall-clock is not billed CPU; local workerd is not deployed acceptance; timings are observations, not thresholds; timeouts are safety failures, never performance acceptance; no total-memory-count bound is claimed.');
   } catch (error) {
-    failures.push(String(error && error.stack || error));
     evidence.result = 'fail';
-    evidence.failures = failures;
-    try {
-      await mkdir(join(REPO, '.local'), { recursive: true });
-      await writeFile(join(REPO, '.local', 'memory-tokenizer-harness-failure.json'), JSON.stringify(evidence, null, 2) + '\n');
-    } catch { /* evidence best-effort */ }
+    evidence.failedAt = new Date().toISOString();
+    evidence.failure = String(error && error.stack || error);
+    evidence.disposableFixtureRemoved = false;
+    evidence.disposableFixtureRetained = root;
     retained = true;
-    console.error(`FAIL: ${failures[0]}`);
-    console.error(`disposable environment retained for inspection: ${root}`);
+    await writeEvidence(runDir, evidence).catch(() => {});
+    console.error(`FAIL: ${evidence.failure}`);
+    console.error(`evidence preserved in ${runDir}; disposable fixture retained at ${root}`);
     process.exitCode = 1;
   } finally {
+    // Owned workers are terminated by the child's dispose plus the group kill;
+    // the disposable fixture is removed only on success and retained on failure.
     if (!retained) await rm(root, { recursive: true, force: true });
   }
 }
