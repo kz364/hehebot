@@ -9,7 +9,7 @@ import {randomUUID} from 'node:crypto';
 const bot=randomUUID(),other=randomUUID(),room=randomUUID(),session='alpha-'+randomUUID().slice(0,8);
 const state={objects:[{id:bot,kind:'persona',revision:1,body:{name:'Travel'}},{id:other,kind:'persona',revision:1,body:{name:'Inbox'}},{id:room,kind:'room',revision:1,body:{name:'Planning room'}}],runs:[],summary:{phase:'STOPPED',execution_enabled:false,queued_runs:0,blocked_runs:0}};
 const run={id:randomUUID(),persona_id:bot,title:'Synthetic in-flight reply',role:'coordinator',status:'running',current_attempt:1};
-const commands=[],commandKeys=[];let reads=0,deniedReads=0,offline=false,failMessage=false;
+const commands=[],commandKeys=[];let reads=0,deniedReads=0,offline=false,failMessage=false,reviewNumber=0;
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
 const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
 const wait=code=>browser('wait','--fn',code);
@@ -87,7 +87,13 @@ try{
  // Explicit adoption changes only local reviewed policy; it never submits or
  // discards a draft, renews an old deadline, or replays an uncertain command.
  const nextPolicy=(revision,ttl=120000)=>({policy_revision:revision,persona_id:bot,expires_at:new Date(Date.now()+ttl).toISOString(),max_task_seconds:83,message_admission_available:true});
- const clickReview=async()=>{await wait('!document.querySelector("#review-alpha-session").disabled');await browser('click','#review-alpha-session');};
+ const clickReview=async()=>{
+  reviewNumber++;await wait('!document.querySelector("#review-alpha-session").disabled');
+  await evaluate('document.querySelector("#review-alpha-session").scrollIntoView({behavior:"instant",block:"center"});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+  await evaluate('globalThis.lastReviewClick=null;document.addEventListener("click",e=>{globalThis.lastReviewClick={id:e.target.id,text:e.target.textContent?.slice(0,100)}},{once:true,capture:true})');
+  await browser('click','#review-alpha-session');
+  assert.equal((await evaluate('globalThis.lastReviewClick'))?.id,'review-alpha-session','The real review click must reach its enabled button.');
+ };
  const review=async()=>{await clickReview();await wait('document.querySelector("#editor").open');};
  const confirm=async()=>{await browser('check','#editor [name=confirm]');await browser('click','#editor-form button[type=submit]');};
  const dismiss=async()=>{await browser('click','#cancel-editor');await wait('!document.querySelector("#editor").open');};
@@ -130,7 +136,9 @@ try{
  assert.equal(await evaluate('document.querySelector("#send").disabled'),true);assert.equal(await evaluate('document.querySelector("#editor").open'),false);await capture('session-pending-blocked');
  console.log('PASS explicit session adoption: no reload/commands, reviewed identity+fresh recheck, cancel/stale/persona/offline/monotonic expiry/old revision refusal, draft preservation, and uncertain message bytes/key retained without replay.');
 }catch(error){
+ console.error({reviewNumber,policy:state.summary.owner_alpha_bootstrap?.policy_revision});
  console.error((await browser('errors').catch(()=>({stdout:'Browser diagnostics unavailable'}))).stdout);
- console.error(await evaluate('({connection:document.querySelector("#connection")?.textContent,error:document.querySelector("#error")?.textContent,editorError:document.querySelector("#editor-error")?.textContent})').catch(()=>null));
+ console.error(await evaluate('({connection:document.querySelector("#connection")?.textContent,error:document.querySelector("#error")?.textContent,editorError:document.querySelector("#editor-error")?.textContent,lastReviewClick:globalThis.lastReviewClick,reviewBounds:document.querySelector("#review-alpha-session")?.getBoundingClientRect().toJSON(),active:document.activeElement?.id})').catch(()=>null));
+ await browser('screenshot',new URL('../.local/portal-alpha-failure.png',import.meta.url).pathname).catch(()=>{});
  throw error;
 }finally{await browser('close').catch(()=>{});await new Promise(ok=>server.close(ok));}

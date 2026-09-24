@@ -4,6 +4,55 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Pre-claim memory protocol (2026-09-24, verification in progress): authenticated
+ordinary-runtime `memory-prepare` returns complete global/scoped JSON arrays for
+the next queued task, without starting an attempt or consuming room cursors. It
+refuses more than64 scoped rows (expired rows still count against this read-work
+cap) or more than131072 combined UTF-8 bytes. The SHA256 binds those exact arrays,
+record metadata/revisions, next attempt, run and declared selected model. Claim
+recomputes the complete bounded source set inside its transaction; stale sources,
+expiry, task or model fail before admission. A valid receipt above4000 global or
+8000 scoped tokens instead persists `waiting/MEMORY_BUDGET_EXCEEDED` and an event,
+with no attempt or truncation. Oversize preparation persists
+`waiting/MEMORY_PREPARATION_LIMIT`. Owner retry remains explicit; passive edits
+do not create a run, wake or count request.
+
+This is an **optional protocol foundation**, not enforced bridge budgeting.
+Counts are authenticated runtime assertions, not Worker-executed tokenization.
+Existing legacy/staged-alpha dispatch is unchanged; alpha, warm/background host
+and task clients do not gain preparation authority. Enqueue still captures legacy
+context; SQL scan cost, total stored memory, and eligible memory on the legacy
+path are not bounded by this change. No summary, retrieval, relevance ranking or
+silent constraint dropping is implemented. Model-to-encoding mapping remains
+separate from selected-model identity and account eligibility (see MEMORY_TOKENIZER.md).
+
+Boundary/core20, authenticated ingress47, client13 and alpha-denial checks pass,
+including both token bucket boundaries,64/65 rows,128KiB/exactly one byte over,
+all source mutations/expiry, lease/boot denial, persisted receipt, and cross-task
+selection races. Passive edits preserve waiting and runtime metadata; explicit
+retry readmits the same run at attempt1. Removing the digest comparison fails five
+stale-source cases; restored final focused72/typecheck pass. Reference desktop16
+passes separately. Logs: `.local/memory-preclaim-mutant.log` SHA256
+`695f9fdd4b926356c9c5dc9e82d03b0b35a2b6b424040046824d8c194b433b33`
+and `.local/memory-preclaim-final-focused.log`.
+
+Initial full verifier `.local/memory-preclaim-combined.log` passed backend1848,
+runtime644 and early HTTP/browser stages, then failed the existing alpha-session
+browser fixture. Diagnostic run captured no click event at a review button despite
+the browser click command returning; it failed later at the same review action.
+The fixture now scrolls that button instantly, waits two layout frames and asserts
+that the real click reaches it, without retrying or bypassing disabled controls.
+All alpha-session cases pass independently with this change; no portal code or
+behavior was changed. Remaining verifier stages run separately in
+`.local/memory-preclaim-remaining.log` (PID735480); do not report a clean original
+combined run. Failure log SHA256
+`f6fc4e8f4b2a8898fc9d5e935cf1558c4cd4477f168ffb28bc4a61b21a1f5c93`;
+diagnostic `.local/memory-preclaim-alpha-diagnostic.log`, passing fixture
+`.local/memory-preclaim-alpha-scroll.log`.
+The first mock-alpha test failed because its mock had no real custody; it was
+replaced by a real HTTP alpha-denial fixture, not a changed production gate.
+That failed log remains `.local/memory-preclaim-focused.log`.
+
 Memory scope filtering before hydration (2026-09-24): `Store.scopedMemories`
 applies the existing global/persona/routine predicate in SQLite before returning
 bodies to `ControlCore.context`. Tombstones and created_at/id order remain intact;

@@ -1,5 +1,6 @@
 import { ControlError, HostedWakeDeliveryError, requireThat } from './errors';
 import { Store } from './store';
+import {prepareMemory,validateMemoryBudget,type MemoryBudgetReceipt} from './memory-context';
 import type { ControlCore } from './control';
 import { nativeDescendantsSettledSql } from './native-tasks';
 import type { ContextSnapshot, Operation, Run } from './types';
@@ -260,7 +261,27 @@ export class LifecycleCore {
    return {lease_until:lease,cancellations:this.store.db.all<{id:string}>("SELECT id FROM runs WHERE status IN ('cancelling','recovery_required')").map(x=>x.id)};
   });
  }
- claim(identity:Identity,personaModels?:Record<string,string>):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
+ prepareMemory(identity:Identity,personaModels:Record<string,string>) {
+  return this.store.db.transaction(()=>{
+   const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
+   requireThat(this.core.options.executionEnabled&&!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Memory preparation requires ordinary execution admission.');
+   const run=this.nextClaimableRun();if(!run)return null;
+   try {
+    const model=Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
+    return prepareMemory(this.store,run,model!,this.core.now()).preparation;
+   } catch(error) {
+    if(!(error instanceof ControlError)||error.code!=='MEMORY_PREPARATION_LIMIT')throw error;
+    this.blockMemoryPreparation(run,error.code);
+    return {blocked:true as const,run_id:run.id,reason:error.code};
+   }
+  });
+ }
+ private blockMemoryPreparation(run:Run,reason:string):void {
+  this.store.db.exec("UPDATE runs SET status='waiting',error_code=?,updated_at=? WHERE id=?",reason,this.core.now(),run.id);
+  this.store.event(this.core.options.uuid(),run.persona_id,'run.waiting','system',run.command_id,
+   {run_id:run.id,reason,message:'Memory preparation blocked before execution. No memory was truncated and no attempt was started.'},this.core.now());
+ }
+ claim(identity:Identity,personaModels?:Record<string,string>,memoryBudget?:MemoryBudgetReceipt):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled||this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
@@ -284,13 +305,23 @@ export class LifecycleCore {
    )`,...(current?[current.epoch,current.boot_id]:[]))[0].count;
    if(unresolved>=32)return null;
    const run=this.nextClaimableRun();if(!run)return null;
+   let prepared:ReturnType<typeof prepareMemory>|undefined;
+   if(memoryBudget){
+    requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Staged alpha does not permit generic memory preparation.');
+    const model=personaModels&&Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
+    prepared=prepareMemory(this.store,run,model!,this.core.now());
+    if(!validateMemoryBudget(prepared.preparation,memoryBudget)){
+     this.blockMemoryPreparation(run,'MEMORY_BUDGET_EXCEEDED');return null;
+    }
+   }
    const prior=JSON.parse(run.context_json) as ContextSnapshot;
    // Background-generation admitted roots claim the restricted per-task snapshot
    // (§9): no shared conversation history, task summaries, or WhatsApp grants
    // may reach A/S/B through the generic context composition.
    const backgroundRootRole=this.core.ownerAlpha.backgroundCompletionRole(run.id);
    const context=backgroundRootRole?this.core.backgroundContext(run.persona_id,prior.instruction,run.id):
-    this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id,run.command_id);
+    this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id,run.command_id,prepared?.memories);
+   if(memoryBudget)context.memory_budget={...memoryBudget};
    if(personaModels!==undefined){
     const model=Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
     requireThat(typeof model==='string'&&/^[a-zA-Z0-9._-]{1,128}$/.test(model),'NATIVE_PERSONA_UNMAPPED','The runtime must declare the selected persona model.');

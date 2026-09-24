@@ -4,6 +4,35 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-24 Asia/Jakarta)
 
+Current local stage: optional pre-claim memory preparation/receipt protocol.
+Complete-set digest and row/byte bounds are tested before attempt creation;
+overflow becomes visible waiting without truncating constraints. Backend1848,
+runtime644, final focused72/typecheck and client13 pass; removing digest validation
+fails five stale-source cases. Initial full verifier PID722456 failed in an alpha
+browser fixture: diagnostic showed the click never reached the review button.
+Instant scrolling/layout wait plus a real-click assertion fixes the fixture;
+isolated alpha cases pass. Remaining stages are running as PID735480 in
+`.local/memory-preclaim-remaining.log`; original and diagnostic failures retained.
+Do not rerun concurrently or call this a clean original combined run.
+Reference desktop16 passes. No bridge adoption, dependency
+change, selected-model encoding guarantee or E06 completion yet.
+
+Counter worker T-01a0d37d-0a92-7168-bf60-80a77cd739f3 returnedfa89dae; bundle
+`.local/e06-memory-tokenizer.bundle` SHA256
+`b3cfc8263ef1212fa5fc36d8e2945e58bb471492ac6bb0c24789fa4fe8e577be`
+verified againstca71a9f, preserved at `review/e06-memory-tokenizer`, not integrated.
+Correctedcbf320f replaces20s natural-work bounds with nonterminating-stub tests
+and executed no-termination mutants, retains error handling through termination,
+and rejects unconfirmed termination. New bundle
+`.local/e06-memory-tokenizer-v2.bundle` SHA256
+`aa41c9f52ad0d82c492de0729ed54808ad9a7a2b4248fac390b018edbedfa588`
+is preserved at `review/e06-memory-tokenizer-v2`. Parent-independent40/40 passes
+with the SRI-verified disposable tarball; log `.local/memory-counter-parent.log`
+SHA256`2fee778581a16580793e8ccf3609f2b7d04a72797eb1b927583a046738bdff74`.
+Review worktree/install removed. No active worker or duplicate assignment.
+Parent owns root dependency/adoption, mapping, and exact-byte bridge integration.
+Both MIT notices are now preserved verbatim in MEMORY_TOKENIZER.md.
+
 Scheduled local unit: memory scope is now filtered in SQLite before bodies enter
 Worker context construction. Expiry semantics, ordering, explicit constraints and
 final context stay unchanged. Backend1824/focused57/typecheck pass; restoring the

@@ -117,8 +117,9 @@ it.each(publicCases.flatMap(route => ['missing', 'foreign', 'runtime'].map(actor
 ('denies $actor on owner $route before durable access', async ({ route, actor }) => {
  const [path, body] = ownerRoute(route); await denied(path, actor, body);
 });
-const nativeCases = ['question-record', 'question-take', 'question-resolve', 'whatsapp-read-authorize'] as const;
+const nativeCases = ['question-record', 'question-take', 'question-resolve', 'whatsapp-read-authorize', 'memory-prepare'] as const;
 function nativeBody(route: typeof nativeCases[number]) {
+ if (route === 'memory-prepare') return { identity, persona_models: { [bot]: 'gpt-5.4' } };
  if (route === 'whatsapp-read-authorize') return { identity, run_id: runs[0], attempt: 1, name: 'whatsapp_get_chat_messages', chatId: 'family@g.us' };
  if (route === 'question-record') return { identity, run_id: runs[0], attempt: 1, question: { ...question, request_id: 0,
   params: { threadId: 'thread-0', turnId: 'turn-0', itemId: 'item-0', isBlocking: true, questions: [{ id: 'secret', header: 'Private', question: canaries[3] }] } } };
@@ -127,6 +128,40 @@ function nativeBody(route: typeof nativeCases[number]) {
 it.each(nativeCases.flatMap(route => ['missing', 'foreign', 'owner'].map(actor => ({ route, actor }))))
 ('denies $actor on runtime $route before durable access', async ({ route, actor }) => {
  await denied(`/internal/${route}`, actor, nativeBody(route));
+});
+it('prepares memory through authenticated ingress and rejects a stale receipt before attempt creation', async () => {
+ // Existing families stay in custody; release only their coordinator inference.
+ for (const [index, id] of runs.entries()) {
+  const response = await request('/internal/coordinator-release', 'runtime', {
+   identity, run_id: id, attempt: 1, native_ref: `turn-${index}`, outcome: 'completed',
+  });
+  expect(response.status).toBe(200);
+ }
+ const store = new Store(db), id = randomUUID();
+ store.put(id, 'memory', { scope: { kind: 'persona', id: bot }, text: 'Never send without approval.', explicit_constraint: true }, 0, 'owner', new Date().toISOString());
+ const sent = await request('/v1/commands', 'owner', command('message.send', { conversation_id: bot, text: 'New independent work' }));
+ const admitted = await sent.json() as { resource_id: string };
+ const body = nativeBody('memory-prepare');
+ const response = await request('/internal/memory-prepare', 'runtime', body);
+ expect(response.status).toBe(200);
+ const prepared = await response.json() as Record<string, any>;
+ expect(prepared.run_id).toBe(admitted.resource_id);
+ expect(JSON.parse(prepared.scoped)[0].body.explicit_constraint).toBe(true);
+ const { global: _global, scoped: _scoped, ...binding } = prepared;
+ const memory_budget = { ...binding, tokenizer: 'gpt-tokenizer@4.0.0/o200k_base/ordinary-v1', global_tokens: 1, scoped_tokens: 50 };
+ const original = store.get(id);
+ store.put(id, 'memory', { ...original.body, text: 'Never send or delete without approval.' }, 1, 'owner', new Date().toISOString());
+ const stale = await request('/internal/claim', 'runtime', { ...body, memory_budget });
+ expect(stale.status).toBe(409);expect(await stale.json()).toMatchObject({ error: { code: 'MEMORY_PREPARATION_STALE' } });
+ expect(db.all('SELECT * FROM attempts WHERE run_id=?', admitted.resource_id)).toEqual([]);
+ const refreshed = await (await request('/internal/memory-prepare', 'runtime', body)).json() as Record<string, any>;
+ const claim = await request('/internal/claim', 'runtime', { ...body, memory_budget: { ...memory_budget, sha256: refreshed.sha256 } });
+ expect(claim.status).toBe(200);
+ const result = await claim.json() as { run: { id: string; context_json: string } };
+ expect(result.run.id).toBe(admitted.resource_id);
+ expect(JSON.parse(result.run.context_json).memory_budget.sha256).toBe(refreshed.sha256);
+ expect(db.all('SELECT * FROM attempts WHERE run_id=?', admitted.resource_id)).toHaveLength(1);
+ expect(network).not.toHaveBeenCalled();
 });
 it('authorized owner reads real canaries but conversation history and tasks exclude the other persona', async () => {
  for (const route of ['state', 'history', 'tasks', 'receipt', 'export', 'recovery'] as const) {

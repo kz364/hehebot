@@ -92,6 +92,76 @@ root MIT notice (copyright 2022 OpenAI, Shantanu Jain) SHA-256
 `418cb499b436128d653d79941333a5437b7be2ea9213dcc2f04d15d5d2c51d86`.
 Licensing and provenance conclusions remain parent-owned.
 
+### Notices for the runtime dependency
+
+The pinned npm package is unmodified; the Hehebot worker-thread wrapper is
+independently written. The runtime uses `esm/encoding/o200k_base.js` and its
+package-internal encoder/rank modules, not upstream branding, UI or assets.
+The verified package declares no runtime dependencies. Its generated o200k_base
+data corresponds to the pinned OpenAI ranks above. Preserve both notices below
+when distributing the runtime dependency or a bundle incorporating it. This is
+the narrow dependency's provenance record, not a repository-wide legal audit.
+
+**gpt-tokenizer — MIT License**
+
+Copyright (c) 2023-2024 Bazyli Brzoska
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+**OpenAI tiktoken — MIT License**
+
+Copyright (c) 2022 OpenAI, Shantanu Jain
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+### Model identity is separate from tokenizer-family mapping
+
+At the same pinned tiktoken revision, [`tiktoken/model.py`](https://github.com/openai/tiktoken/blob/eedc856364506a9d4651645a0290eb0ba81e6935/tiktoken/model.py)
+maps `gpt-5` exactly to `o200k_base`. `gpt-5.4`, `gpt-5.5` and `gpt-5-codex`
+match only its `gpt-5` prefix. The upstream lookup explicitly warns that prefix
+matching can match nonexistent models. Encoding parity therefore establishes
+neither model existence nor account eligibility. Unknown names must not become
+admitted models just because they share that prefix.
+
+The supported Codex 0.154.0 [`model/list` Model schema](https://github.com/openai/codex/blob/rust-v0.154.0/codex-rs/app-server-protocol/schema/typescript/v2/Model.ts)
+contains model identity and availability metadata, but no tokenizer encoding.
+Runtime wiring needs an explicit reviewed model-to-encoding mapping separately
+from its model/account admission checks. The preparation protocol currently binds
+the declared model identity only; it does not supply those admission checks or
+claim completed selected-model token accounting.
+
 ## Methodology
 
 **Corpus.** `buildCorpus()` is pure and deterministic (mulberry32 PRNG, no

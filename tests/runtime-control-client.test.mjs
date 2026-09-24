@@ -54,6 +54,18 @@ test('rejects endpoint injection and oversize payload before fetch', async () =>
 test('accepts null empty claim response', async () => {
   assert.equal(await new ControlClient({ ...settings, fetchImpl: async () => response(null) }).request('claim', { identity: {} }), null);
 });
+test('memory preparation is runtime-only; staged hosts and tasks cannot dispatch it', async () => {
+  const payload = { identity: { epoch: 1, boot_id: 'synthetic' }, persona_models: {} };
+  const client = new ControlClient({ ...settings, fetchImpl: async (url, options) => {
+    assert.equal(url, 'https://portal.example/internal/memory-prepare');
+    assert.deepEqual(JSON.parse(options.body), payload); return response(null);
+  } });
+  assert.equal(await client.request('memory-prepare', payload), null);
+  for (const principal of ['manager', 'warm-manager', 'warm-host', 'warm-task', 'background-manager', 'background-host', 'background-task']) {
+    const restricted = new ControlClient({ ...settings, principal, fetchImpl: () => assert.fail('denied before network') });
+    await assert.rejects(restricted.request('memory-prepare', payload), { code: 'UNSUPPORTED_RUNTIME_ENDPOINT' });
+  }
+});
 test('accepts only bounded arrays for steering polling without widening other response contracts', async () => {
   for (const rows of [[], [{ command_id: 'synthetic' }], [{}, {}, {}, {}]]) {
     const client = new ControlClient({ ...settings, fetchImpl: async () => response(rows) });

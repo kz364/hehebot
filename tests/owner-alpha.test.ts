@@ -43,6 +43,16 @@ it('defaults off and keeps normal runtime admission disabled',async()=>{
  expect(db.all("SELECT * FROM runtime_metadata WHERE key='owner_alpha'")).toEqual([]);
 });
 
+it('does not grant staged alpha access to ordinary memory preparation',async()=>{
+ await initialize();const receipt=await message(),identity=await boot();
+ const before=db.all('SELECT * FROM runs');
+ const response=await request('/internal/memory-prepare',{identity,persona_models:{[bot]:'gpt-5.4'}});
+ expect(response.status).toBe(409);expect(await response.json()).toMatchObject({error:{code:'CAPABILITY_UNAVAILABLE'}});
+ expect(db.all('SELECT * FROM runs')).toEqual(before);
+ expect(db.all('SELECT * FROM attempts')).toEqual([]);
+ expect(db.all('SELECT status FROM runs WHERE id=?',receipt.resource_id)).toEqual([{status:'queued'}]);
+});
+
 it.each([null,{},[],{extra:true},{max_runs:0},{max_runs:4},{max_runs:1.5},{max_task_seconds:0},{max_task_seconds:301},{max_task_seconds:'3'},{session_id:'bad'},{persona_id:'bad'},{expires_at:'2026-09-10T00:01:00Z'},{expires_at:'2026-09-10T08:01:00.000+08:00'},{expires_at:'2026-02-30T00:00:00.000Z'}])('rejects invalid policy %j',invalid=>{
  const value=invalid&&typeof invalid==='object'&&!Array.isArray(invalid)&&Object.keys(invalid).length?{...policy,...invalid}:invalid;
  expect(()=>parseOwnerAlpha(JSON.stringify(value),base)).toThrow();

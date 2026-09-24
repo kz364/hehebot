@@ -11,6 +11,7 @@ import type {TokenUsageSnapshot} from './token-usage';
 import type {NativeQuestionInput} from './native-questions';
 import type {WhatsAppReadRequest} from './whatsapp-access';
 import type {TextOnlyProfile} from './owner-alpha';
+import type {MemoryBudgetReceipt} from './memory-context';
 type Base={identity:Identity};type Attempt={run_id:string;attempt:number};
 export type TextOnlyReceipt=TextOnlyProfile&{thread_id:string;turn_id:string;output_sha256:string};
 export type BackgroundReceipt={thread_id:string;turn_id:string;output_sha256:string};
@@ -31,7 +32,8 @@ export type RuntimePayloads={
  'native-child':Base & {child:NativeChildReceipt;started?:boolean};
  'resource-acquire':Base & Attempt & {resources:string[]};
  'resource-release':Base & Attempt & {resources:string[]};
- boot:{boot_id:string};ready:Base;claim:Base & {persona_models?:Record<string,string>};
+ boot:{boot_id:string};ready:Base;claim:Base & {persona_models?:Record<string,string>;memory_budget?:MemoryBudgetReceipt};
+ 'memory-prepare':Base & {persona_models:Record<string,string>};
  heartbeat:Base & {operations:HeartbeatOperation[]};
  submitted:Base & Attempt & {native_ref:string};
  'coordinator-release':Base & Attempt & {native_ref:string;outcome:CoordinatorOutcome};

@@ -1,6 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
+    "memoryBudget": {
+      "type":"object","additionalProperties":false,
+      "properties": {
+        "schema_version":{"const":1},
+        "run_id":{"type":"string","format":"uuid"},
+        "attempt":{"type":"integer","minimum":1},
+        "selected_model":{"type":"string","pattern":"^[a-zA-Z0-9._-]{1,128}$"},
+        "sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},
+        "tokenizer":{"const":"gpt-tokenizer@4.0.0/o200k_base/ordinary-v1"},
+        "global_tokens":{"type":"integer","minimum":0,"maximum":9007199254740991},
+        "scoped_tokens":{"type":"integer","minimum":0,"maximum":9007199254740991}
+      },
+      "required":["schema_version","run_id","attempt","selected_model","sha256","tokenizer","global_tokens","scoped_tokens"]
+    },
     "tokenCounts": {
       "type":"object","additionalProperties":false,
       "properties": {
@@ -33,6 +47,19 @@
     }
   },
   "oneOf": [
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
+        "type":{"const":"memory-prepare"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "identity":{"$ref":"#/$defs/runtimeIdentity"},
+            "persona_models":{"type":"object","maxProperties":256,"propertyNames":{"format":"uuid"},"additionalProperties":{"type":"string","pattern":"^[a-zA-Z0-9._-]{1,128}$"}}
+          },"required":["identity","persona_models"]
+        }
+      },"required":["type","payload"]
+    },
     {
       "type":"object","additionalProperties":false,
       "properties": {
@@ -444,6 +471,7 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "memory_budget": {"$ref":"#/$defs/memoryBudget"},
             "persona_models": {
               "type": "object",
               "maxProperties": 256,

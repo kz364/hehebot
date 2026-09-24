@@ -19,12 +19,12 @@ export class Store {
  list<T = Record<string, unknown>>(kind: ObjectKind): StoredObject<T>[] {
   return this.db.all<ObjectRow>('SELECT * FROM objects WHERE kind=? AND deleted_at IS NULL ORDER BY created_at,id',kind).map(({body_json,...rest})=>({...rest,body:JSON.parse(body_json) as T}));
  }
- scopedMemories(personaId:string,routineId:string|null):StoredObject<MemoryPut>[] {
+ scopedMemories(personaId:string,routineId:string|null,limit?:number):StoredObject<MemoryPut>[] {
   return this.db.all<ObjectRow>(`SELECT * FROM objects WHERE kind='memory' AND deleted_at IS NULL AND (
    json_extract(body_json,'$.scope.kind')='global' OR
    (json_extract(body_json,'$.scope.kind')='persona' AND json_extract(body_json,'$.scope.id')=?) OR
    (json_extract(body_json,'$.scope.kind')='routine' AND json_extract(body_json,'$.scope.id')=?)
-  ) ORDER BY created_at,id`,personaId,routineId).map(({body_json,...rest})=>({...rest,body:JSON.parse(body_json) as MemoryPut}));
+  ) ORDER BY created_at,id LIMIT ?`,personaId,routineId,limit??-1).map(({body_json,...rest})=>({...rest,body:JSON.parse(body_json) as MemoryPut}));
  }
  put(id: string, kind: ObjectKind, body: unknown, expected: number, actor: string, now: string, source: string | null = null): number {
   const existing=this.db.all<{revision:number;kind:string}>('SELECT revision,kind FROM objects WHERE id=?',id)[0];

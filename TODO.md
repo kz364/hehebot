@@ -12,7 +12,22 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-24):** memory context now filters global/current-persona/
+**Current checkpoint (2026-09-24, in progress):** optional authenticated pre-claim
+memory preparation returns the complete eligible set or visibly blocks before an
+attempt. It caps returned records at64 and combined serialized input at128KiB;
+claim rechecks scope, revisions, expiry, task, attempt and selected-model identity.
+Receipts over4000 global/8000 scoped tokens park the run without truncation.
+Backend1848/runtime644 and final focused72/typecheck pass; bypassing the digest
+fails five stale-source tests. The combined verifier stopped at an undelivered
+browser click; a layout-stabilized real-click assertion makes that fixture pass,
+and the remaining stages are running. Failed evidence is retained.
+This does not yet enforce budgets on ordinary bridge dispatch, adopt a tokenizer,
+bound SQL scan cost, or provide summaries/retrieval. Corrected off-event-loop
+counter delivery passes parent-independent40/40; parent owns its dependency,
+model mapping and integration. No active child or lost delivery.
+External blockers and production flags remain unchanged. Local checkpoint only.
+
+**Previous checkpoint:** memory context now filters global/current-persona/
 current-routine scope in SQLite before returning record bodies to the Worker.
 Deleted records stay excluded; existing ordering, expiry and explicit constraints
 are preserved. Backend1824, focused57 and typecheck pass; restoring the old scan
