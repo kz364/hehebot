@@ -48,6 +48,62 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it.each([
+ {field:'persona',value:`{"id":"foreign","id":"${bot}"}`,allowed:true},
+ {field:'persona',value:`{"id":"${bot}","id":"foreign"}`,allowed:false},
+ {field:'persona',value:`{"\\u0069d":"${bot}"}`,allowed:true},
+ {field:'persona',value:`{"id\\u0000":"foreign","id":"${bot}"}`,allowed:true},
+ {field:'persona',value:`{"id\\u0000":"${bot}","id":"foreign"}`,allowed:false},
+ {field:'persona',value:'{"id":null}',allowed:false},
+ {field:'routine',value:'{"id":"foreign","id":null}',allowed:true},
+ {field:'routine',value:'{"id":null,"id":"foreign"}',allowed:false},
+ {field:'routine',value:'{}',allowed:true},
+ {field:'routine',value:'{"id":null}',allowed:true},
+])('preserves nested $field representation $value',({field,value,allowed})=>{
+ const existing=intent();boundary.intent(existing);
+ const fields=JSON.parse(f.store.run(child).context_json);delete fields[field];
+ const snapshot=JSON.stringify(fields).slice(0,-1)+`,"${field}":${value}}`;
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
+ const fresh=intent();fresh.resources=[];fresh.effect.classification='read_only';
+ if(allowed){expect(boundary.intent(fresh).status).toBe('intent');boundary.transition(result(existing,'outcome_unknown'));}
+ else{
+  const before=effects(),held=locks();
+  rejects(()=>boundary.intent(fresh),'FORBIDDEN');
+  rejects(()=>boundary.transition(result(existing,'outcome_unknown')),'FORBIDDEN');
+  expect(effects()).toEqual(before);expect(locks()).toEqual(held);
+ }
+ expect(f.store.run(child).context_json).toBe(snapshot);
+});
+
+it.each(['persona','routine'].flatMap(field=>['intent','outcome'].map(mode=>({field,mode}))))('projects $field body during child $mode',({field,mode})=>{
+ if(field==='routine'){
+  const scheduled=routine({enabled:false});f.store.put(scheduled.id,'routine',scheduled,0,'owner',f.core.now());
+  for(const id of [root,child,grandchild]){
+   f.db.exec('UPDATE runs SET routine_id=? WHERE id=?',scheduled.id,id);
+   context(id,{routine:f.store.get(scheduled.id,'routine'),scope_key:`${bot}/routine/${scheduled.id}`});
+  }
+ }
+ const input=intent(grandchild);if(mode==='outcome')boundary.intent(input);
+ const snapshots=new Map<string,string>();
+ for(const id of mode==='intent'?[root,child]:[root,child,grandchild]){
+  const parsed=JSON.parse(f.store.run(id).context_json);
+  parsed[field].body={padding:'界'.repeat(400000)+'\n"\\\ud800'};
+  const snapshot=JSON.stringify(parsed);snapshots.set(id,snapshot);
+  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
+ }
+ const read=vi.spyOn(f.db,'all');
+ try{
+  if(mode==='intent')expect(boundary.intent(input).status).toBe('intent');
+  else boundary.transition(result(input,'outcome_unknown'));
+  const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]) as Array<{context_json?:string}>;
+  const bodies=rows.filter(row=>typeof row.context_json==='string');expect(bodies.length).toBeGreaterThan(0);
+  for(const row of bodies)expect(Buffer.byteLength(row.context_json!)).toBeLessThan(8192);
+ }finally{read.mockRestore();}
+ for(const [id,snapshot] of snapshots)expect(f.store.run(id).context_json).toBe(snapshot);
+ expect(effects()).toEqual([expect.objectContaining({id:input.effect.id,status:mode==='intent'?'intent':'outcome_unknown'})]);
+ expect(locks()).toHaveLength(2);
+});
+
 it.each(['room_id','scope_key','persona','authorization_policy_ids'])('preserves escaped authority key %s',key=>{
  const input=intent();boundary.intent(input);
  const snapshot=f.store.run(child).context_json.replace(`"${key}":`,`"\\u${key.charCodeAt(0).toString(16).padStart(4,'0')}${key.slice(1)}":`);
@@ -62,6 +118,17 @@ it.each([false,true])('keeps last-key authority with escaped duplicate room key 
  const input=intent();boundary.intent(input);
  const original=JSON.stringify({...JSON.parse(f.store.run(child).context_json),room_id:allowed?'foreign':null});
  const snapshot=original.replace('"room_id":','"\\u0072oom_id":').slice(0,-1)+`,"room_id":${allowed?'null':'"foreign"'}}`;
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
+ if(allowed)boundary.transition(result(input,'outcome_unknown'));
+ else rejects(()=>boundary.transition(result(input,'outcome_unknown')),'FORBIDDEN');
+ expect(effects()).toEqual([expect.objectContaining({id:input.effect.id,status:allowed?'outcome_unknown':'intent'})]);
+ expect(f.store.run(child).context_json).toBe(snapshot);
+});
+
+it.each([false,true])('does not confuse NUL-suffixed room keys with authority (allowed=%s)',allowed=>{
+ const input=intent();boundary.intent(input);
+ const fields=JSON.parse(f.store.run(child).context_json);delete fields.room_id;
+ const snapshot=JSON.stringify(fields).slice(0,-1)+`,"room_id\\u0000":${allowed?'"foreign"':'null'},"room_id":${allowed?'null':'"foreign"'}}`;
  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
  if(allowed)boundary.transition(result(input,'outcome_unknown'));
  else rejects(()=>boundary.transition(result(input,'outcome_unknown')),'FORBIDDEN');

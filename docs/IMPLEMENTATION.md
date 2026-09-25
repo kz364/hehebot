@@ -4,6 +4,37 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Nested authority ID projection and NUL-key correction (2026-09-25): persona/routine
+objects with exactly one unescaped string ID return only that ID; all other nested
+shapes keep original JSON. Stored snapshots and independent EffectLedger checks are
+unchanged. Body hydration regressions fail4; omitting nested uniqueness fails4.
+After an initial passing suite, an additional SQLite probe found that -> '$.id'
+matches id\\u0000 before the true id. Four grant/denial regressions reproduced this
+at nested persona and top-level room keys, including an incorrect grant in the
+earlier local escape-guard projection. NUL-containing decoded keys now disable
+projection at both boundaries; no prior external publication is claimed.
+Final focused293/backend2309/typecheck/dry-run build and real workerd pass. Workerd
+now exercises >1MiB escaped memory, persona and routine bodies individually, and
+both NUL-key grant/denial directions for room/persona ID. Returned context remains
+<8KiB in these fixtures, source bytes unchanged, late outcomes available. Duplicate,
+escaped, null and missing nested IDs retain JS behavior. Initial successful logs
+are retained but superseded by the final runs after the discovered NUL-key failure.
+No fixed selected-field/fallback size, SQL-work or storage bound claimed. Full
+runtime/native service/browser/shutdown/desktop matrix not rerun; original
+intermittent failures and production gates unchanged.
+- .local/authority-id-red.log SHA256:
+  `e8e1c9a0abbabda7a9300d6928e0ecdc8939cac1532589a44dd10546ca863d6c`
+- .local/authority-id-mutant.log SHA256:
+  `e641169c86fd0847d1e20c2356551896fb4614d579fadc269abd800e4791d811`
+- .local/authority-id-nul-red.log SHA256:
+  `4ba07138adf28ca7b71a338b8ef6a201fee68f87ffcd41aaaa2692cb68bf3edc`
+- .local/authority-id-focused-final.log SHA256:
+  `f7e614d450ba4ca6d658ce1b46151d35294d0bb7f60a732279679aff673c4483`
+- .local/authority-id-integrated-final.log SHA256:
+  `871915d7fcaad7615cf83eacf7d8d64aee23aeea716c2c737d524fca7f4f413d`
+- .local/authority-id-workerd-final.log SHA256:
+  `9dbec5a60c46c76c149dd3fa62f19ccad5686d26ac59a042e70f82eb85803c12`
+
 Authority escape guard narrowing (2026-09-25): inspect only selected JSON fragments
 for backslashes, falling back if a selected key cannot be extracted. Escapes in
 discarded memory/instruction content no longer force whole-snapshot hydration.

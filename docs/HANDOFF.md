@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Persona/routine projection now reduces unique unescaped string IDs without their
+retained bodies; other nested shapes preserve JSON. Additional adversarial checking
+found SQLite path NUL-suffix aliasing after initial green checks: top-level room and
+nested ID guards now prevent incorrect grants/denials. Body red4/uniqueness mutant4/
+NUL red4; final focused293/backend2309/workerd/typecheck/build pass. No source rewrite
+or late-outcome restriction. Next remaining authority-field/fallback sizes and
+historical/storage/native recovery; no whole-request bound. No active checks/children/
+delivery; schedule enabled. Full matrix not rerun; original intermittent failures
+remain. Earlier local guard checkpoint must not be mistaken for the corrected one.
+
 Escape guard now checks only selected authority fragments (and extraction presence),
 not irrelevant body escapes. Red2/focused277/backend2293/workerd/typecheck/build pass.
 Node/workerd escaped >1MiB memory remains stored but excluded from authority reads;

@@ -54,15 +54,39 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
    const boundary=new RootChildEffects(observed,core,life);
    const effect={id:crypto.randomUUID(),run_id:child.id,attempt:1,action_key:crypto.randomUUID(),classification:'read_only' as const,authorization_ref:'',request_digest:'authority-request',provider_idempotency_key:null};
    boundary.intent({identity,root_run_id:root,root_attempt:1,effect,resources:[]});
-   const snapshots=[root,child.id].map(id=>{
-    const snapshot=JSON.stringify({...JSON.parse(store.run(id).context_json),memories:[{body:'界'.repeat(400000)+'\n"\\\ud800'}]});
-    db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);return {id,snapshot};
-   });
-   returned.length=0;
-   boundary.transition({identity,root_run_id:root,root_attempt:1,run_id:child.id,attempt:1,effect_id:effect.id,status:'outcome_unknown',receipt:null});
-   const bodies=returned.filter(row=>typeof row.context_json==='string');
-   return Response.json({projected:bodies.length>0&&bodies.every(row=>new TextEncoder().encode(row.context_json).length<8192),
-    unchanged:snapshots.every(({id,snapshot})=>store.run(id).context_json===snapshot),
+   const sources=[root,child.id].map(id=>({id,source:store.run(id).context_json}));
+   let projected=true,unchanged=true;
+   for(const field of ['memories','persona','routine']){
+    const snapshots=sources.map(({id,source})=>{
+     const parsed=JSON.parse(source),body={padding:'界'.repeat(400000)+'\n"\\\ud800'};
+     if(field==='memories')parsed.memories=[{body}];
+     else if(field==='persona')parsed.persona.body=body;
+     else{parsed.routine={id:'routine-19',body};parsed.scope_key=`${persona}/routine/routine-19`;}
+     const snapshot=JSON.stringify(parsed);
+     db.exec('UPDATE runs SET context_json=?,routine_id=? WHERE id=?',snapshot,field==='routine'?'routine-19':null,id);
+     return {id,snapshot};
+    });
+    returned.length=0;
+    boundary.transition({identity,root_run_id:root,root_attempt:1,run_id:child.id,attempt:1,effect_id:effect.id,status:'outcome_unknown',receipt:null});
+    const bodies=returned.filter(row=>typeof row.context_json==='string');
+    projected&&=bodies.length>0&&bodies.every(row=>new TextEncoder().encode(row.context_json).length<8192);
+    unchanged&&=snapshots.every(({id,snapshot})=>store.run(id).context_json===snapshot);
+   }
+   for(const {id,source} of sources)db.exec('UPDATE runs SET context_json=?,routine_id=NULL WHERE id=?',source,id);
+   let nulKeys=true;
+   for(const field of ['room','persona'])for(const allowed of [false,true]){
+    const parsed=JSON.parse(sources[1].source);delete parsed[field==='room'?'room_id':'persona'];
+    const good=field==='room'?'null':JSON.stringify(persona),bad='"foreign"';
+    const fragment=field==='room'?`"room_id\\u0000":${allowed?bad:good},"room_id":${allowed?good:bad}`:
+     `"persona":{"id\\u0000":${allowed?bad:good},"id":${allowed?good:bad}}`;
+    const snapshot=JSON.stringify(parsed).slice(0,-1)+','+fragment+'}';
+    db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child.id);
+    let rejected=false;
+    try{boundary.transition({identity,root_run_id:root,root_attempt:1,run_id:child.id,attempt:1,effect_id:effect.id,status:'outcome_unknown',receipt:null});}
+    catch(error){if(error&&typeof error==='object'&&'code' in error&&error.code==='FORBIDDEN')rejected=true;else throw error;}
+    nulKeys&&=rejected===!allowed&&store.run(child.id).context_json===snapshot;
+   }
+   return Response.json({projected,unchanged,nulKeys,
     status:db.all<{status:string}>('SELECT status FROM effects WHERE id=?',effect.id)[0].status});
   }
   if(path==='/run-room'||path==='/run-falsy-room'){

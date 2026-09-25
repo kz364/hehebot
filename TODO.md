@@ -12,7 +12,18 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** authority projection now
+**Current checkpoint (2026-09-25, verified locally):** unique unescaped string
+persona/routine IDs now project without their retained bodies. Duplicate/missing/
+non-string IDs preserve original representation. Adversarial verification found
+SQLite path matching NUL-suffixed keys; top-level and nested guards now preserve
+JS authority instead, correcting possible incorrect grants in the earlier local
+projection. Body red4/uniqueness mutant4/NUL red4; final focused293/backend2309/
+workerd/typecheck/build pass. Sources/late outcomes retained. Remaining selected
+field/fallback size, SQL-work/storage/native recovery remain open; no whole-request
+bound. Full runtime/native service/browser/shutdown/desktop matrix not rerun.
+Local only; production gates and original intermittent failures unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** authority projection now
 ignores escapes in irrelevant fields instead of hydrating the whole snapshot.
 Escaped selected fragments or missing extraction results retain JS fallback;
 escaped keys/duplicate-key order covered. Red2/focused277/backend2293/workerd/

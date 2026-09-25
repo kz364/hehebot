@@ -74,8 +74,8 @@ try{
  const falsyRooms=await get(base,'/run-falsy-room');assert.equal(falsyRooms.length,31);
  for(const result of falsyRooms)assert.deepEqual(result,{index:result.index,matched:true,projection:true,hydration:true,unchanged:true});
  console.log('PASS: real workerd falsy-room projection; 31 vectors including numeric JS fallback, NUL strings and strict-null distinctions.');
- assert.deepEqual(await get(base,'/child-authority'),{projected:true,unchanged:true,status:'outcome_unknown'});
- console.log('PASS: real workerd RootChildEffects authority projection excludes >1MiB memory bodies while preserving source snapshots and late unknown outcome custody.');
+ assert.deepEqual(await get(base,'/child-authority'),{projected:true,unchanged:true,nulKeys:true,status:'outcome_unknown'});
+ console.log('PASS: real workerd RootChildEffects excludes >1MiB memory/persona/routine bodies, preserves sources and late outcomes, and distinguishes NUL-suffixed room/persona ID keys.');
  const indexLimits=await get(base,'/memory-index-limits');
  const refused={code:'MIGRATION_WORK_LIMIT',version:13,indexAbsent:true};
  assert.deepEqual(indexLimits,{exactKeys:true,keys:refused,keysIntact:true,exactRows:true,rows:refused,retainedRows:100001});
