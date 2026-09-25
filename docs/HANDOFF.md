@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Latest task-page projection selects run metadata plus request_status, not context/
+checkpoint bodies. Persona, room and routine regressions fail on the old query;
+focused107/typecheck and backend1980/HTTP31/workerd/typecheck/build pass. Counts,
+keyset lookahead, unfinished-only conversation scope and attempt/delivery/recovery
+semantics remain unchanged. Prior runtime/browser/shutdown/desktop matrix not
+rerun. No active checks/children/deliveries; schedule enabled, external gates false.
+Continue remaining historical reads/cloning and SQL/storage/scan bounds, preserving
+native-child custody. This is not a SQL-work bound; catalog intermittency is open.
+
 Latest recovery-page projection returns metadata only from SQL, retaining all
 response fields, persona/room filtering, keyset lookahead/cursor and recovery
 decisions. Old query fails the returned-column regression with >1MiB snapshots;

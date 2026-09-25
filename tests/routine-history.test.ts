@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ResultRetention } from '../src/core/result-retention';
 import { bot, fixture, otherBot, routine } from './helpers';
 
@@ -8,6 +8,30 @@ beforeEach(() => { f = fixture(); });
 afterEach(() => f.close());
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+it.each(['persona','room','routine'])('does not hydrate historical bodies for %s task pages',scope=>{
+  const target=routine({id:uuid(80),persona_id:bot}),room=uuid(81);
+  f.store.put(target.id,'routine',target,0,'owner',f.core.now());
+  f.store.put(room,'room',{name:'Scoped room',member_ids:[bot],default_responder_id:bot},0,'owner',f.core.now());
+  insertRun(uuid(1),target.id,bot,'waiting');insertRun(uuid(2),target.id,bot,'completed');
+  f.db.exec("UPDATE runs SET context_json=json_set(context_json,'$.room_id',?,'$.padding',?),checkpoint_json=?",
+    room,'界'.repeat(400000),JSON.stringify({private_checkpoint:'x'.repeat(1100000)}));
+  const before=f.db.all('SELECT * FROM runs ORDER BY id');
+  const read=vi.spyOn(f.db,'all');
+  try{
+    const page=scope==='routine'?f.core.routineTaskPage(target.id,undefined,1):f.core.taskPage(scope==='room'?room:bot,undefined,1);
+    const index=read.mock.calls.findIndex(([sql])=>sql.includes('FROM runs r LEFT JOIN commands'));
+    expect(index).toBeGreaterThanOrEqual(0);
+    const rows=read.mock.results[index].value;
+    expect(rows.map((row:{id:string})=>row.id)).toEqual(scope==='routine'?[uuid(1),uuid(2)]:[uuid(1)]);
+    for(const row of rows){expect(row).not.toHaveProperty('context_json');expect(row).not.toHaveProperty('checkpoint_json');}
+    const {context_json,checkpoint_json,...metadata}=f.store.run(uuid(1));
+    expect(page.runs[0]).toMatchObject({...metadata,request_status:null});
+    expect(page.counts).toEqual({total:scope==='routine'?2:1,waiting:1,recovery:0});
+    expect(page.next_cursor).toBe(scope==='routine'?uuid(1):null);
+  }finally{read.mockRestore();}
+  expect(f.db.all('SELECT * FROM runs ORDER BY id')).toEqual(before);
+});
 
 function insertRun(id: string, routineId: string, personaId: string, status: string, attempt = 0, occurrenceId: string | null = null) {
   f.db.exec(`INSERT INTO runs(id,occurrence_id,persona_id,routine_id,context_json,status,current_attempt,error_code,checkpoint_json,created_at,updated_at)

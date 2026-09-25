@@ -668,11 +668,11 @@ export class ControlCore {
   requireThat(Number.isInteger(limit)&&limit>=1&&limit<=10,'INVALID_INPUT','Limit must be 1–10.',422);
   const eligible=`${scope}=?${unfinishedOnly?" AND r.status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')":''}`;
   const counts=this.store.db.all<{total:number;waiting:number;recovery:number}>(`SELECT COUNT(*) AS total,COALESCE(SUM(r.status='waiting'),0) AS waiting,COALESCE(SUM(r.status='recovery_required'),0) AS recovery FROM runs r WHERE ${eligible}`,id)[0];
-  const rows=this.store.db.all<Run & {request_status:string|null}>(`SELECT r.*,c.status AS request_status FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE ${eligible} AND r.id>? ORDER BY r.id LIMIT ?`,id,after??'',limit+1);
+  const rows=this.store.db.all<Omit<Run,'context_json'|'checkpoint_json'> & {request_status:string|null}>(`SELECT r.id,r.command_id,r.occurrence_id,r.persona_id,r.routine_id,r.status,r.current_attempt,r.error_code,r.created_at,r.updated_at,r.role,r.parent_run_id,r.title,c.status AS request_status FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE ${eligible} AND r.id>? ORDER BY r.id LIMIT ?`,id,after??'',limit+1);
   const runs=rows.slice(0,limit),previews=new OutputPreviews(this.store,()=>this.now()),steering=new TaskSteering(this.store,()=>this.now());
   const usage=new TokenUsageSnapshots(this.store,()=>this.now());
   const questions=this.questions.list();
-  return {observed_at:this.now(),counts,runs:runs.map(({context_json,checkpoint_json,...run})=>{
+  return {observed_at:this.now(),counts,runs:runs.map(run=>{
    if(unfinishedOnly)return run;
    const attempt_revisions=this.store.db.all<{attempt:number;captured_routine_revision:number|null}>('SELECT attempt,captured_routine_revision FROM attempts WHERE run_id=? AND attempt<=? ORDER BY attempt DESC LIMIT 3',run.id,run.current_attempt);
    const attempt=this.store.db.all<{attempt:number;status:string;started_at:string|null;settled_at:string|null;result_body_retained:number}>('SELECT attempt,status,started_at,settled_at,result_json IS NOT NULL AS result_body_retained FROM attempts WHERE run_id=? AND attempt=?',run.id,run.current_attempt)[0];

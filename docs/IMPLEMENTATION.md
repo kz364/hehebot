@@ -4,6 +4,23 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Task-page projection (2026-09-25 Asia/Jakarta): scopedTaskPage now selects run
+metadata plus joined request_status instead of full historical bodies. Counts,
+scope predicates, keyset ordering/lookahead, attempt/delivery/recovery lookups
+and unfinished-only conversation pages are unchanged. Room filtering still
+inspects context in SQLite; this is not a SQL-work, storage or total-memory bound.
+Three regressions cover persona/room/routine with >1MiB Unicode contexts and
+checkpoints, exact returned columns/IDs, public metadata, counts/cursors and
+unchanged storage. Old query fails3, `.local/task-page-projection-red.log`, SHA256
+`a69a70e514fcd3361befd897c3fb169e2a8ffeaceec0ff1ff90ba809d6c5c6d2`.
+Focused107/typecheck pass, `.local/task-page-projection-focused.log`, SHA256
+`6dc2b2dce01a04dfbb9e305d78c788e18136032384d081a1f9fdcd1b98adcf4f`.
+Backend1980/HTTP31/workerd/typecheck/build pass, PID1150153 exit0,
+`.local/task-page-projection-integrated.log`, SHA256
+`b4fad30ec6e2e173bf25f80071fb133c78429c8a45ad71be67b2e640daec03cd`.
+Prior runtime/browser/shutdown/desktop matrix not rerun for this SQL-only unit.
+No UI or native-child changes, push/deploy, account calls or gate changes.
+
 Recovery-page projection (2026-09-25 Asia/Jakarta): recoveryPage now selects its
 13 public metadata fields rather than reading and discarding context_json and
 checkpoint_json. recoveryMetadata requires only id/current_attempt; its custody

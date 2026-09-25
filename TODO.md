@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** recovery pages select
+**Current checkpoint (2026-09-25, verified locally):** persona/room/routine task
+pages now select metadata without historical context/checkpoint bodies. Counts,
+cursor lookahead, unfinished-only conversation scope, attempt/delivery metadata
+and recovery decisions are preserved. Old-query regressions fail3; focused107/
+typecheck and backend1980/HTTP31/workerd/typecheck/build pass. No active checks/
+children/deliveries; local only. Prior runtime/browser/shutdown/desktop matrix
+not rerun. Remaining historical reads/cloning, SQL/storage/scan bounds and native
+restoration/settlement remain next; catalog intermittency still open.
+
+**Previous checkpoint (2026-09-25, verified locally):** recovery pages select
 metadata only, avoiding historical context/checkpoint hydration. Exact response
 metadata, persona/room scope, keyset cursor and recovery authority are preserved.
 Old-query regression fails; focused142/typecheck and backend1977/HTTP31/workerd/
