@@ -12,7 +12,18 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** RootChildEffects replay lookup
+**Current checkpoint (2026-09-25, verified locally):** new RootChildEffects action
+keys refuse ancestry beyond64 runs (root included) with ANCESTRY_PREPARATION_LIMIT,
+before effect/lock writes. Existing keys and outcome transitions still validate
+the complete historical ancestry. Red1/focused254/backend2270/native child-effects
+service/typecheck/build pass; corrected test typing failure retained. Exact64/65,
+deep replay/unknown/confirmed, conflicting key and far-ancestor stale custody tested.
+Existing-key traversal, context parsing, storage/SQL-work and native recovery remain
+open; next authority-context representation preserving JS semantics/late outcomes.
+Full runtime/browser/shutdown/desktop matrix not rerun. Local only; production
+gates and original intermittent failures unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** RootChildEffects replay lookup
 omits retained destination receipts. Oversized unknown receipts remain stored;
 exact expired replay succeeds while changed digest still conflicts before deadline
 checks. Red2/focused253/backend2269/typecheck/build pass. Context parsing/ancestry

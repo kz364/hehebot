@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+New effect action keys now refuse ancestry beyond64 runs including root, before
+effect/lock writes. Existing keys and transitions retain full historical traversal
+and authority checks. Native registration unchanged. Red1/focused254/backend2270/
+native child-effects service/typecheck/build pass; test typing failure retained and
+corrected. No bound claimed for existing-key traversal, context parsing or SQL work.
+Next authority-context representation preserving JS semantics and late outcomes,
+then remaining storage/native recovery. No active checks/children/delivery; schedule
+enabled. Full runtime/browser/shutdown/desktop matrix not rerun; original intermittent
+failures unresolved. New64 limit is local admission policy, not upstream capability.
+
 RootChildEffects replay lookup now excludes destination receipt bodies. Oversized
 unknown receipts stay intact; exact replay after expiry succeeds, changed digest
 still conflicts. Red2/focused253/backend2269/typecheck/build pass. Next remaining

@@ -4,6 +4,29 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+New effect ancestry admission limit (2026-09-25): previously unseen action keys
+require at most64 runs including the coordinator root. After64 validated lineage
+entries, before reading another parent, new keys refuse ANCESTRY_PREPARATION_LIMIT.
+Existing keys continue full validation and exact identity comparison; outcomes
+remain uncapped to preserve historical custody. This bounds new-key traversal only,
+not arbitrary existing-key requests, per-context parsing, SQL work or storage.
+Native child registration is unchanged: observed children are never dropped.
+The limit is an explicit local admission policy, not an upstream Codex depth limit.
+Test admits depth64, refuses depth65 without effect/lock changes or further attempt
+authorization, and simulates a historical deep effect through exact task custody.
+Deep intent replay, unknown/confirmed outcomes pass; another effect's key conflicts;
+stale root linkage beyond the limit still rejects existing replay and transition.
+Initial regression fails1; focused254 passes, followed by a test-only unknown-row
+typing failure (retained). Corrected assertion then backend2270/typecheck/native
+child-effects service/dry-run build pass. Full runtime/browser/shutdown/desktop
+matrix not repeated; original intermittent failures and production gates unchanged.
+- .local/child-depth-red.log SHA256:
+  `7dee2b79ce5549e599e9ca5de8216114ccb0e1335f90400f78597da2138b5441`
+- .local/child-depth-focused.log SHA256 (includes test typing failure):
+  `12c1cc5dc3ff0515d303360c58d2d47c892725e9fb4de82bf71da5653995aa28`
+- .local/child-depth-integrated.log SHA256:
+  `19a76739ea0dfc602baa4b630ee81e6ce8298feea632d9d31b14391d11779731`
+
 Root-child replay receipt projection (2026-09-25): intent lookup selects only the
 EffectRow identity/status fields, excluding receipt_json. Two grandchild vectors
 retain >1MiB UTF-8 unknown receipt evidence after deadline expiry: exact replay

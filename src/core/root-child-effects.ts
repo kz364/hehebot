@@ -17,7 +17,7 @@ type EffectRow = Omit<EffectIntent, 'attempt'> & { status: string };
 export class RootChildEffects {
  constructor(private store: Store, private core: ControlCore, private lifecycle: LifecycleCore) {}
 
- private admitted(identity: Identity, rootId: string, rootAttempt: number, runId: string, attempt: number) {
+ private admitted(identity: Identity, rootId: string, rootAttempt: number, runId: string, attempt: number, effectActionKey?: string) {
   this.lifecycle.authorizeAttempt(identity, rootId, rootAttempt);
   type AuthorityRun = Pick<Run, 'id'|'current_attempt'|'role'|'parent_run_id'|'persona_id'|'routine_id'|'context_json'|'status'>;
   const readRun = (id: string): AuthorityRun => {
@@ -50,6 +50,12 @@ export class RootChildEffects {
    requireThat(current.role === 'background' && link && link.parent_run_id === current.parent_run_id, 'FORBIDDEN', 'Native descendant mapping is unavailable.', 403);
    const native = this.store.db.all<{ native_run_ref: string | null }>('SELECT native_run_ref FROM attempts WHERE run_id=? AND attempt=?', current.id, current.current_attempt)[0];
    requireThat(native?.native_run_ref === link.native_run_ref, 'FORBIDDEN', 'Native descendant attempt does not match its receipt.', 403);
+   // Refuse new admissions, never truncate existing effect custody. Existing
+   // keys still traverse and validate the entire ancestry and exact identity.
+   if (lineage.length === 64 && effectActionKey !== undefined) {
+    requireThat(this.store.db.all('SELECT id FROM effects WHERE action_key=? LIMIT 1', effectActionKey).length,
+     'ANCESTRY_PREPARATION_LIMIT', 'New effects require ancestry of at most 64 runs. Existing task and effect custody were retained.');
+   }
    const parent = readRun(link.parent_run_id);
    requireThat(parent.current_attempt === link.parent_attempt, 'STALE_EPOCH', 'Native ancestry belongs to an older parent attempt.');
    current = parent;
@@ -61,7 +67,7 @@ export class RootChildEffects {
  intent(input: RootChildEffectIntent): { id: string; status: string } {
   return this.store.db.transaction(() => {
    const { effect, resources } = input;
-   const admitted = this.admitted(input.identity, input.root_run_id, input.root_attempt, effect.run_id, effect.attempt);
+   const admitted = this.admitted(input.identity, input.root_run_id, input.root_attempt, effect.run_id, effect.attempt, effect.action_key);
    requireThat(Array.isArray(resources) && resources.length <= 8 && (effect.classification === 'read_only' || resources.length > 0) && new Set(resources).size === resources.length &&
     resources.every(resource => typeof resource === 'string' && /^[a-zA-Z0-9:._/-]{1,256}$/.test(resource)), 'INVALID_INPUT', 'Invalid resource lock set.', 422);
    requireThat(typeof effect.request_digest === 'string' && effect.request_digest.length > 0 && effect.request_digest.length <= 256,

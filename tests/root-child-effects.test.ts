@@ -48,6 +48,37 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it('bounds new intent ancestry at 64 runs without blocking deeper existing outcomes',()=>{
+ let parent=root,first='';
+ for(let depth=2;depth<=64;depth++){parent=spawn(parent);if(depth===2)first=parent;}
+ const allowed=intent(parent);allowed.resources=[];allowed.effect.classification='read_only';
+ expect(boundary.intent(allowed).status).toBe('intent');
+ // Admit on a short path, then retain the same exact task/attempt custody in a
+ // deeper historical tree. Existing records must remain reconcilable.
+ const legacy=spawn(root),existing=intent(legacy);existing.resources=[];existing.effect.classification='read_only';
+ boundary.intent(existing);
+ f.db.exec('UPDATE runs SET parent_run_id=? WHERE id=?',parent,legacy);
+ f.db.exec('UPDATE native_task_links SET parent_run_id=? WHERE run_id=?',parent,legacy);
+ const pending=intent(legacy);pending.resources=[];pending.effect.classification='read_only';
+ const before=effects(),held=locks(),authorize=vi.spyOn(life,'authorizeAttempt');
+ try{
+  rejects(()=>boundary.intent(pending),'ANCESTRY_PREPARATION_LIMIT');
+  // Root custody plus no more than 64 lineage attempts are authorized.
+  expect(authorize.mock.calls.length).toBeLessThanOrEqual(65);
+ }finally{authorize.mockRestore();}
+ expect(effects()).toEqual(before);expect(locks()).toEqual(held);
+ expect(boundary.intent(existing)).toEqual({id:existing.effect.id,status:'intent'});
+ boundary.transition(result(existing,'outcome_unknown'));
+ expect(boundary.intent(existing)).toEqual({id:existing.effect.id,status:'outcome_unknown'});
+ boundary.transition(result(existing,'confirmed',{evidence:'retained-deep-custody'}));
+ expect(effects()).toEqual(expect.arrayContaining([expect.objectContaining({id:existing.effect.id,status:'confirmed'})]));
+ rejects(()=>boundary.intent({...pending,effect:{...pending.effect,action_key:allowed.effect.action_key}}),'IDEMPOTENCY_CONFLICT');
+ // The existing-key exception is not a shortcut around the 65th ancestor.
+ f.db.exec('UPDATE native_task_links SET parent_attempt=2 WHERE run_id=?',first);
+ rejects(()=>boundary.intent(existing),'STALE_EPOCH');
+ rejects(()=>boundary.transition(result(existing,'confirmed',{evidence:'retained-deep-custody'})),'STALE_EPOCH');
+});
+
 it.each([false,true])('omits retained receipt during expired child replay (conflict=%s)',conflict=>{
  const input=intent(grandchild);boundary.intent(input);
  const receipt={evidence:'界'.repeat(400000)};
