@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** complete credential-free
+**Current checkpoint (2026-09-26, verified locally):** existing-key replay and
+late-outcome authority SQL no longer includes unused admission byte counting or
+budget predicates. Full snapshots/JS authority remain available; new-key1MiB/4MiB
+limits and independent EffectLedger checks are unchanged. Red1/focused309/backend2325/
+workerd/typecheck/build pass. This removes unnecessary SQL work, not an existing-key
+hydration or storage bound. Those limits and native recovery remain next. Prior
+full matrix below was not rerun for this query-only unit; original intermittency,
+desktop advisories and external gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** complete credential-free
 verifier on local3815bc3 passed in one invocation (1472439 exit0): backend2324,
 runtime682, HTTP31, encrypted backup drill, workerd aggregate authority boundaries,
 browser/native/warm+background timed shutdown/strict launcher/service/build stages.

@@ -43,9 +43,10 @@ export class RootChildEffects {
    // Keep JSON fragments, not SQL scalar conversions. Ambiguous keys/authority escapes,
    // numeric rooms and non-objects retain the original JS representation. This
    // removes irrelevant bodies on the fast path, not SQLite's JSON scan work.
+   // Existing custody does not consume a budget; omit its byte inspection entirely.
    const run = this.store.db.all<AuthorityRun & {authority_bytes:number}>(`SELECT id,current_attempt,role,parent_run_id,persona_id,routine_id,status,
-    length(CAST(context_json AS BLOB)) AS authority_bytes,
-    CASE WHEN ? OR length(CAST(context_json AS BLOB))<=? THEN context_json END AS context_json
+    ${existingCustody?'0':'length(CAST(context_json AS BLOB))'} AS authority_bytes,
+    ${existingCustody?'context_json':'CASE WHEN length(CAST(context_json AS BLOB))<=? THEN context_json END'} AS context_json
     FROM (SELECT id,current_attempt,role,parent_run_id,persona_id,routine_id,status,
     CASE WHEN instr(context_json,char(0))=0 AND json_type(context_json)='object'
      AND NOT EXISTS(SELECT 1 FROM json_each(context_json) WHERE instr(key,char(0))>0)
@@ -55,7 +56,7 @@ export class RootChildEffects {
      AND NOT EXISTS(SELECT 1 FROM json_each(context_json) WHERE key='room_id' AND type IN ('integer','real'))
     THEN (SELECT '{'||coalesce(group_concat(json_quote(key)||':'||(${fragment})), '')||'}'
      FROM json_each(context_json) f WHERE key IN (${authorityKeys}))
-    ELSE context_json END AS context_json FROM runs WHERE id=?)`, existingCustody?1:0,Math.min(1048576,remainingAuthorityBytes),id)[0];
+    ELSE context_json END AS context_json FROM runs WHERE id=?)`, ...(existingCustody?[]:[Math.min(1048576,remainingAuthorityBytes)]),id)[0];
    requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404);
    if(!existingCustody&&run.context_json!==null)remainingAuthorityBytes-=run.authority_bytes;
    return run;

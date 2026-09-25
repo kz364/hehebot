@@ -4,6 +4,23 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Existing-custody SQL byte-work removal (2026-09-26 Asia/Jakarta): the previous
+budget query calculated authority_bytes for existing keys/outcomes despite never
+consuming that value. Those queries now select0 and the original context directly,
+without byte-count or preparation-budget expressions. New-key queries retain exact
+1MiB/4MiB UTF-8 checks; scope projection, JS fallback and independent EffectLedger
+validation are unchanged. Regression fails on old SQL, then verifies absence of
+byte-count expressions across existing replay and late-confirmation reads with
+oversized fallback snapshots, fresh-key refusal, conflict detection and retained
+source/locks. Focused309/backend2325/typecheck/workerd/dry-run build pass;1512436
+exited0. No existing-key hydration/SQL-scan/storage bound claimed. Prior complete
+matrix on3815bc3 is not repeated for this localized query unit; original catalog/
+alpha intermittency and desktop advisories remain unresolved.
+- .local/authority-existing-bytes-red.log SHA256: `ad1e2ff1dfaa81485ff9a6a1702fbd16d2d52d3ec364e74450e4bc8c8d300bc2`
+- .local/authority-existing-bytes-focused.log SHA256: `7d51e53d8031e453f4c4964f0ed7d75249555119b5bad4b0356372793ab3bbf4`
+- .local/authority-existing-bytes-integrated.log SHA256: `876f2569e62588262339dd4834038c943ed001b2aa8dc465dc2e3a4f355023ef`
+- .local/authority-existing-bytes-workerd.log SHA256: `de2b91330510c412881409b37d9356716a006024fb70a2c957e55c30a7079e02`
+
 Complete authority checkpoint verification (2026-09-26 Asia/Jakarta): on exact
 local3815bc3, `bash scripts/verify-codex.sh` passed in one uninterrupted invocation,
 PID1472439 exit0. Backend2324/runtime682/HTTP31, actual workerd1MiB/4MiB authority

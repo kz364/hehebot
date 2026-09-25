@@ -48,6 +48,30 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it('omits admission byte-count work from existing replay and late-outcome authority SQL',()=>{
+ const input=intent(grandchild);boundary.intent(input);boundary.transition(result(input,'outcome_unknown'));
+ const snapshots=new Map<string,string>();
+ for(const id of [root,child,grandchild]){
+  const original=f.store.run(id).context_json;
+  const snapshot=original.slice(0,-1)+`,"scope_key":${JSON.stringify(JSON.parse(original).scope_key)},"padding":"${'界'.repeat(400000)}"}`;
+  snapshots.set(id,snapshot);f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
+ }
+ const held=locks(),read=vi.spyOn(f.db,'all');
+ try{
+  expect(boundary.intent(input).status).toBe('outcome_unknown');
+  boundary.transition(result(input,'confirmed',{evidence:'no-unused-byte-inspection'}));
+  const queries=read.mock.calls.filter(([sql])=>sql.includes('AS authority_bytes'));
+  expect(queries.length).toBeGreaterThan(0);
+  for(const [sql] of queries)expect(sql).not.toContain('length(CAST(context_json AS BLOB))');
+  const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]) as Array<{authority_bytes?:number}>;
+  expect(rows.filter(row=>'authority_bytes' in row).every(row=>row.authority_bytes===0)).toBe(true);
+ }finally{read.mockRestore();}
+ rejects(()=>boundary.intent(intent(grandchild)),'CONTEXT_PREPARATION_LIMIT');
+ rejects(()=>boundary.intent({...input,effect:{...input.effect,request_digest:'different'}}),'IDEMPOTENCY_CONFLICT');
+ for(const [id,snapshot] of snapshots)expect(f.store.run(id).context_json).toBe(snapshot);
+ expect(locks()).toEqual(held);
+});
+
 it.each(['x','界'])('bounds aggregate new-action authority hydration at 4MiB (%s) without restricting existing effects',unit=>{
  const leaf=spawn(grandchild),input=intent(leaf);boundary.intent(input);
  const snapshots=new Map<string,string>();

@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Existing-key/outcome SQL now omits unused byte inspection entirely (authority_bytes
+is0); new-key queries retain1MiB/4MiB enforcement. Red1/focused309/backend2325/
+workerd/typecheck/build pass; oversized fallback replay/conflict/late outcome/source/
+lock checks retained. No existing-key hydration/storage bound claimed. Next remaining
+SQL/storage and native recovery; no active checks/children/delivery, schedule enabled.
+Prior full matrix below not rerun for this query-only unit. Original intermittency,
+desktop advisories and external gates unchanged.
+
 Full integrated verification of local3815bc3 passed in one uninterrupted invocation:
 1472439 exit0, backend2324/runtime682/HTTP31, workerd, encrypted backup drill,
 browser/native/shutdown/strict launcher/service/build. Desktop1472561 exit0,16 tests;
