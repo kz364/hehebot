@@ -23,19 +23,22 @@ export class Store {
   // Each exact scope uses the partial index's ordering before LIMIT. An OR
   // query can sort every eligible row before limiting, even with this index.
   // The first N merged rows must occur within the first N of each partition.
-  // Legacy/imported bodies need not obey current write contracts. Bound each
-  // limited read before returning body bytes to JS; NULL means refusal, not
-  // truncated memory. Unlimited reads retain their existing behavior.
-  const body=limit===undefined?'body_json':'CASE WHEN length(CAST(body_json AS BLOB))<=131072 THEN body_json END AS body_json';
+  // Preflight legacy/imported raw body sizes before loading any selected body.
+  // Only the merged selection consumes this aggregate budget; unrelated or
+  // later rows cannot force refusal. Unlimited reads retain existing behavior.
+  const body=limit===undefined?'body_json':'length(CAST(body_json AS BLOB)) AS body_bytes';
   const scopes:Array<[string,string|null]>=[['global',null],['persona',personaId]];
   if(routineId)scopes.push(['routine',routineId]);
-  const rows=scopes.flatMap(([kind,id])=>this.db.all<Omit<ObjectRow,'body_json'>&{body_json:string|null}>(`SELECT id,kind,revision,${body},deleted_at,created_at,updated_at FROM objects WHERE kind='memory' AND deleted_at IS NULL
+  const rows=scopes.flatMap(([kind,id])=>this.db.all<Omit<ObjectRow,'body_json'>&{body_json?:string;body_bytes?:number}>(`SELECT id,kind,revision,${body},deleted_at,created_at,updated_at FROM objects WHERE kind='memory' AND deleted_at IS NULL
    AND json_extract(body_json,'$.scope.kind')=? AND json_extract(body_json,'$.scope.id') IS ?
    ORDER BY created_at,id LIMIT ?`,kind,id,limit??-1));
   rows.sort((a,b)=>a.created_at<b.created_at?-1:a.created_at>b.created_at?1:a.id<b.id?-1:a.id>b.id?1:0);
-  return (limit===undefined?rows:rows.slice(0,limit)).map(({body_json,...rest})=>{
-   if(body_json===null)throw new ControlError('MEMORY_PREPARATION_LIMIT','Memory preparation exceeds the per-record read-work limit. No memory was truncated.');
-   return {...rest,body:JSON.parse(body_json) as MemoryPut};
+  const selected=limit===undefined?rows:rows.slice(0,limit);
+  if(limit!==undefined&&selected.reduce((bytes,row)=>bytes+row.body_bytes!,0)>131072)
+   throw new ControlError('MEMORY_PREPARATION_LIMIT','Memory preparation exceeds the aggregate raw-body read-work limit. No memory was truncated.');
+  return selected.map(({body_json,body_bytes,...rest})=>{
+   const text=limit===undefined?body_json!:this.db.all<{body_json:string}>('SELECT body_json FROM objects WHERE id=?',rest.id)[0].body_json;
+   return {...rest,body:JSON.parse(text) as MemoryPut};
   });
  }
  put(id: string, kind: ObjectKind, body: unknown, expected: number, actor: string, now: string, source: string | null = null): number {

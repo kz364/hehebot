@@ -16,7 +16,8 @@ it.each(['x','界','🧭'])('bounds legacy body bytes before returning them to J
   const read=vi.spyOn(f.db,'all');
   expect(()=>f.store.scopedMemories(bot,null,65)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
   const returned=read.mock.results.flatMap(result=>result.value);read.mockRestore();
-  expect(returned).toHaveLength(1);expect(returned[0].body_json).toBeNull();
+  expect(returned).toHaveLength(1);expect(returned[0].body_json).toBeUndefined();
+  expect(returned[0].body_bytes).toBe(131073);
   expect(()=>f.core.context(bot,'Keep every constraint.',null,null)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
   expect(f.db.all('SELECT * FROM runs')).toEqual([]);
   expect(f.store.scopedMemories(bot,null)[0].body).toEqual(body);
@@ -69,15 +70,36 @@ it.each([null,'routine-17'])('bounds each indexed scope read before merging (rou
   const calls=read.mock.calls.slice(),results=read.mock.results.slice();read.mockRestore();
   expect(rows.map(row=>row.id)).toEqual(expected.slice(0,65).map(row=>row.id));
   expect(rows[0].body.expires_at).toBe('2020-01-01T00:00:00.000Z');
-  expect(calls).toHaveLength(routine?3:2);
-  for(const [i,[sql,...values]] of calls.entries()){
+  const partitions=routine?3:2;
+  expect(calls).toHaveLength(partitions+65);
+  for(const [i,[sql,...values]] of calls.slice(0,partitions).entries()){
    expect(results[i].type).toBe('return');expect(results[i].value).toHaveLength(65);
+   expect(results[i].value.every((row:Record<string,unknown>)=>!('body_json' in row))).toBe(true);
    const plan=f.db.all<{detail:string}>(`EXPLAIN QUERY PLAN ${sql}`,...values).map(row=>row.detail).join('\n');
    expect(plan).toContain('SEARCH objects USING INDEX objects_memory_scope');
    expect(plan).not.toMatch(/SCAN objects|TEMP B-TREE/);
   }
   expect(f.store.scopedMemories(bot,routine).map(row=>row.id)).toEqual(expected.map(row=>row.id));
  }finally{vi.restoreAllMocks();f.close();}
+});
+
+it.each(['x','界','🧭'])('refuses aggregate raw bytes before loading either selected body (%s)',unit=>{
+ const f=fixture();try{
+  const first={scope:{kind:'global',id:null},text:'Keep constraint.',expires_at:null};
+  const second={scope:{kind:'persona',id:bot},text:'',expires_at:null};
+  const remaining=131072-Buffer.byteLength(JSON.stringify(first))-Buffer.byteLength(JSON.stringify(second));
+  const width=Buffer.byteLength(unit);second.text=unit.repeat(Math.floor(remaining/width))+'x'.repeat(remaining%width);
+  f.store.put('first','memory',first,0,'owner','t0');f.store.put('second','memory',second,0,'owner','t1');
+  expect(f.store.scopedMemories(bot,null,65).map(row=>row.body)).toEqual([first,second]);
+  second.text+='x';f.store.put('second','memory',second,1,'owner','t1');
+  const read=vi.spyOn(f.db,'all');
+  try{
+   expect(()=>f.store.scopedMemories(bot,null,65)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
+   expect(read.mock.calls).toHaveLength(2);
+   expect(read.mock.results.flatMap(result=>result.value).every(row=>!('body_json' in row))).toBe(true);
+  }finally{read.mockRestore();}
+  expect(f.store.scopedMemories(bot,null).map(row=>row.body)).toEqual([first,second]);
+ }finally{f.close();}
 });
 
 it('migrates the memory index without changing source records; version failure rolls back and rerun is inert',()=>{

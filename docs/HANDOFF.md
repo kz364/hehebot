@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Limited memory reads now preflight selected aggregate raw bytes before loading
+bodies:131072 inclusive; over-limit refuses without truncation. Metadata merge
+retains indexed scope/order and ignores later unselected bodies. Raw whitespace/
+escapes count independently of normalized token budgets. Mutant3/focused45/
+backend2102/HTTP31/typecheck/build pass. No active checks/children/delivery;
+schedule enabled. Full runtime matrix not rerun. Next SQL/storage/index construction
+and historical snapshot bounds; this does not bound SQL byte inspection or metadata.
+
 Root-child admission now reuses the selected child's lineage parse. Root parsing,
 authorization order and independent EffectLedger validation remain unchanged.
 Duplicate-parse mutant fails1; focused46/backend2099/typecheck/build pass, including

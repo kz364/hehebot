@@ -4,6 +4,24 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Aggregate memory raw-body preflight (2026-09-25): limited scopedMemories reads
+at most three indexed metadata partitions, merges/slices in the original order,
+and refuses selected raw UTF-8 body totals above131072 before loading any body.
+Accepted selection then uses bounded primary-key reads (at most65 in preparation).
+This synchronous read path has no await or intervening application write. Unlimited
+reads retain their semantics. Raw whitespace/escapes count toward this work limit;
+normalized selected-model token budgets remain separate. No source is truncated.
+Tests cover exact/one-over aggregate ASCII/BMP/astral bytes split across scopes,
+no body return on refusal, exact source preservation, foreign/deleted/unselected
+exclusion and index query plans without scan/temp sort. Weakened262144 limit fails3.
+Focused45/typecheck/backend2102/build and real local Worker HTTP31 pass.
+Logs .local/memory-aggregate-{focused,mutant,integrated}.log; integrated SHA256
+`23bca453b2298bddf593e388be4a74745750c4a104b481bb26ab6d430c8293f5`, mutant
+`10d98f5125d03ae0ad2d19b8fc40474ccd11ef2d6c3273b2fa08063c9796efd9`.
+This is a hydration bound, not a bound on SQL byte inspection, legacy metadata,
+database storage/index construction or historical run snapshots. Full runtime/
+browser/native/shutdown/desktop matrix not rerun; no external/gate changes.
+
 Selected-child parse reuse (2026-09-25): RootChildEffects.admitted retains the
 selected child's first lineage parse for later policy checks. Attempt authorization
 still precedes parsing; root parsing and the separate EffectLedger authorization

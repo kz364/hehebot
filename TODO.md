@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** root-child effect admission
+**Current checkpoint (2026-09-25, verified locally):** limited memory reads preflight
+merged selected raw-body UTF-8 sizes and refuse totals over131072 before hydrating
+any body. Exact-limit/one-over ASCII/BMP/astral regressions pass; weakened-limit
+mutant fails3, focused45/backend2102/HTTP31/typecheck/build pass. Stable scope/order,
+unlimited reads and stored bytes preserved. This bounds raw-body hydration, not SQL
+byte inspection, metadata size, storage/index construction or historical run context.
+Full runtime/browser/native/shutdown/desktop matrix not rerun; local only, gates false.
+
+**Previous checkpoint (2026-09-25, verified locally):** root-child effect admission
 reuses the selected child's lineage parse without moving attempt checks or removing
 independent EffectLedger authorization. Duplicate-key >1MiB snapshot and stale-boot
 precedence regressions pass; duplicate-parse mutant fails1, focused46/backend2099/
