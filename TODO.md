@@ -18,6 +18,9 @@ rows/schema version. Follow-up also caps the table at100000 objects and aggregat
 ID/created_at key bytes at4 MiB. Exact/one-over multibyte cases and rollback pass;
 focused18/backend2107/HTTP31/typecheck/build pass. Engineering limits are not
 storage quotas; over-limit legacy v13 startup needs explicit reconciliation.
+Real workerd follow-through now passes aggregate128KiB ASCII/BMP/astral memory
+reads and index4MiB key/100000-object exact/one-over gates, plus existing migration,
+reopen, rollback and64 room vectors; typecheck passes. Test-only follow-up.
 Preflight byte inspection, ongoing metadata hydration, total storage and historical
 snapshots remain open. Full runtime matrix not rerun; local only, gates unchanged.
 

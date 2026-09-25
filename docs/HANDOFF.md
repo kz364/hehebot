@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Real-workerd verification follow-up passes: aggregate128KiB memory raw-body reads
+(ASCII/BMP/astral),4MiB index key and100000 total-object construction gates, exact
+and one-over, source/schema preservation. Existing schema rollback/reopen and64
+room vectors plus typecheck pass. Test-only changes; log/hash in IMPLEMENTATION.
+No active process/child/delivery. Remaining metadata/storage/historical snapshot
+and native recovery work unchanged; schedule confirmed enabled this wake-up.
+
 New memory-scope index builds now require <=100000 total objects, <=10000 active
 memories, <=64 MiB raw JSON and <=4 MiB active ID/created_at key input.
 Over-limit legacy v13 startup refuses MIGRATION_WORK_LIMIT before DDL;

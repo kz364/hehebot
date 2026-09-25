@@ -64,13 +64,20 @@ try{
   assert.match(details,/SEARCH child USING COVERING INDEX runs_parent \(parent_run_id=\?\)/);
   assert.doesNotMatch(details,/SCAN a\b|SCAN m\b|SCAN runs\b|SCAN child\b/);
  }
- assert.deepEqual(await get(base,'/memory-body-limit'),{exact:true,code:'MEMORY_PREPARATION_LIMIT',returnedBodies:[null],bytes:131073});
+ assert.deepEqual(await get(base,'/memory-body-limit'),{exact:true,code:'MEMORY_PREPARATION_LIMIT',noBodies:true,bytes:131073});
+ const aggregate=await get(base,'/memory-aggregate-limit');
+ assert.deepEqual(aggregate,['x','界','🧭'].map(unit=>({unit,exact:true,code:'MEMORY_PREPARATION_LIMIT',noBodies:true,metadataRows:2,rawBytes:131073,unchanged:true})));
+ console.log('PASS: real workerd aggregate memory raw-body preflight at 131072 bytes; ASCII/BMP/astral one-byte-over refusal returns metadata only and preserves sources.');
  const rooms=await get(base,'/run-room');assert.equal(rooms.length,33);
  for(const result of rooms)assert.deepEqual(result,{index:result.index,matched:true,projection:true,hydration:true,unchanged:true});
  console.log('PASS: real workerd strict-null room projection, duplicate/non-object/raw NUL fallback, escaped/NUL keys, >1MiB source preservation; 33 vectors. No SQL scan bound claimed.');
  const falsyRooms=await get(base,'/run-falsy-room');assert.equal(falsyRooms.length,31);
  for(const result of falsyRooms)assert.deepEqual(result,{index:result.index,matched:true,projection:true,hydration:true,unchanged:true});
  console.log('PASS: real workerd falsy-room projection; 31 vectors including numeric JS fallback, NUL strings and strict-null distinctions.');
+ const indexLimits=await get(base,'/memory-index-limits');
+ const refused={code:'MIGRATION_WORK_LIMIT',version:13,indexAbsent:true};
+ assert.deepEqual(indexLimits,{exactKeys:true,keys:refused,keysIntact:true,exactRows:true,rows:refused,retainedRows:100001});
+ console.log('PASS: real workerd new-index gates at 4 MiB multibyte key input and 100000 total objects; one-over refusal preserves rows and schema version.');
  console.log('PASS: real workerd returns an exact 131072-byte memory body, refuses one byte over before JS hydration, and preserves the oversized source.');
  console.log('PASS: real workerd memory retention starts from ledger keys with exact attempt lookups and indexed recursive parent lookups, retains numeric aliases and all 1001 attempts; no total cleanup-scan or storage bound claimed.');
  console.log('PASS: real local Worker v12→v15 startup migration; retained live occurrence/run/attempt, version-write and FK-check rollback, enforced references, exact fresh schema, idempotent rerun, persistent reopen and all three bounded memory-scope index plans without temporary sorting. No account/provider calls.');

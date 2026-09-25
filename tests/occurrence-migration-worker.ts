@@ -79,8 +79,58 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
    }});
    let code:unknown=null;
    try{observed.scopedMemories('persona-31',null,65);}catch(error){if(error&&typeof error==='object'&&'code' in error)code=error.code;else throw error;}
-   return Response.json({exact,code,returnedBodies:returned.map(row=>row.body_json),
+   return Response.json({exact,code,noBodies:returned.every(row=>!('body_json' in row)),
     bytes:db.all<{n:number}>("SELECT length(CAST(body_json AS BLOB)) AS n FROM objects WHERE id='legacy-memory'")[0].n});
+  }
+  if(path==='/memory-aggregate-limit'){
+   db.exec("UPDATE objects SET deleted_at='fixture-retired' WHERE id='legacy-memory'");
+   const store=new Store(db),results=[];
+   for(const [index,unit] of ['x','界','🧭'].entries()){
+    const first={scope:{kind:'global',id:null},text:'Keep this constraint.',expires_at:null};
+    const second={scope:{kind:'persona',id:'persona-31'},text:'',expires_at:null};
+    const bytes=(value:unknown)=>new TextEncoder().encode(JSON.stringify(value)).byteLength;
+    const remaining=131072-bytes(first)-bytes(second),width=new TextEncoder().encode(unit).byteLength;
+    second.text=unit.repeat(Math.floor(remaining/width))+'x'.repeat(remaining%width);
+    const a=`aggregate-${index}-a`,b=`aggregate-${index}-b`;
+    store.put(a,'memory',first,0,'owner','t1');store.put(b,'memory',second,0,'owner','t2');
+    const exact=store.scopedMemories('persona-31',null,65);
+    second.text+='x';store.put(b,'memory',second,1,'owner','t2');
+    const returned:Array<Record<string,unknown>>=[];
+    const observed=new Store({...db,all:<T>(sql:string,...values:SqlValue[])=>{
+     const rows=db.all<T>(sql,...values);returned.push(...rows as Array<Record<string,unknown>>);return rows;
+    }});
+    let code:unknown=null;
+    try{observed.scopedMemories('persona-31',null,65);}catch(error){if(error&&typeof error==='object'&&'code' in error)code=error.code;else throw error;}
+    results.push({unit,exact:exact.length===2&&exact[0].body.text===first.text&&exact[1].body.text===second.text.slice(0,-1),
+     code,noBodies:returned.every(row=>!('body_json' in row)),metadataRows:returned.length,
+     rawBytes:bytes(first)+bytes(second),unchanged:store.get(b).body.text===second.text});
+    db.exec("UPDATE objects SET deleted_at='fixture-retired' WHERE id IN (?,?)",a,b);
+   }
+   return Response.json(results);
+  }
+  if(path==='/memory-index-limits'){
+   const reset=()=>{db.exec('DROP INDEX objects_memory_scope');db.exec('DELETE FROM schema_versions WHERE version>13');};
+   const version=()=>db.all<{v:number}>('SELECT MAX(version) AS v FROM schema_versions')[0].v;
+   const refused=()=>{
+    let code:unknown=null;
+    try{migrateApplication(db,'fixture');}catch(error){if(error&&typeof error==='object'&&'code' in error)code=error.code;else throw error;}
+    return {code,version:version(),indexAbsent:db.all("SELECT name FROM sqlite_schema WHERE name='objects_memory_scope'").length===0};
+   };
+   reset();
+   const key='界'.repeat(349523)+'x'; // 1048570 bytes, plus six-byte ID.
+   for(let i=0;i<4;i++)db.exec("INSERT INTO objects(id,kind,revision,body_json,created_at,updated_at) VALUES(?,'memory',1,'{}',?,'t0')",`key0-${i}`,key);
+   migrateApplication(db,'fixture');const exactKeys=version()===15;
+   reset();db.exec("UPDATE objects SET created_at=? WHERE id='key0-3'",key+'x');
+   const keys=refused(),keysIntact=db.all<{ok:number}>("SELECT created_at=? AS ok FROM objects WHERE id='key0-3'",key+'x')[0].ok===1;
+   db.exec("UPDATE objects SET deleted_at='fixture-retired' WHERE kind='memory'");
+   const count=db.all<{n:number}>('SELECT COUNT(*) AS n FROM objects')[0].n;
+   db.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?)
+    INSERT INTO objects(id,kind,revision,body_json,created_at,updated_at)
+    SELECT 'foreign-'||i,'persona',1,'{}','t0','t0' FROM n`,100000-count);
+   migrateApplication(db,'fixture');const exactRows=version()===15;
+   reset();db.exec("INSERT INTO objects(id,kind,revision,body_json,created_at,updated_at) VALUES('extra','persona',1,'{}','t0','t0')");
+   const rows=refused(),retainedRows=db.all<{n:number}>('SELECT COUNT(*) AS n FROM objects')[0].n;
+   return Response.json({exactKeys,keys,keysIntact,exactRows,rows,retainedRows});
   }
   let rejected=false;
   if(path==='/rollback-version'||path==='/rollback-reference'||path==='/rollback-final-write'){

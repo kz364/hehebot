@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Real workerd memory-bound follow-through (2026-09-25): extended the disposable
+Durable Object fixture and existing test-schema-migration runner. Aggregate raw
+body128KiB boundaries execute in ASCII/BMP/astral compositions across two scopes;
+one-over returns metadata only and retains exact source text. The older single-body
+assertion now explicitly checks absence of body_json rather than serializing an
+undefined array element as null. Four sub-row-size multibyte timestamp records
+exercise4MiB aggregate key admission and one-byte-over refusal.100000 total object
+admission and100001 refusal preserve rows/version/no index. Existing rollback,
+persistent reopen, exact schema, query plans and64 room vectors continue to pass.
+`node scripts/test-schema-migration.mjs` and `npm run typecheck` exit0; log
+.local/workerd-memory-bounds.log SHA256
+`67fabc8406e3783da63105d97b3a1572605670882a321d91066fb1d64134cb58`.
+No application behavior changes or full runtime/browser/desktop rerun in this
+test-only follow-up.10000-active-row/64MiB-JSON construction boundaries retain Node
+SQLite evidence, not new workerd boundary evidence. No live data/account calls.
+
 Index scan/key follow-up (2026-09-25): new builds first count at most100001 total
 object rows and refuse above100000 before inspecting active memory JSON. This
 bounds rows visited by subsequent scans, not disk bytes/CPU time. Aggregate active
