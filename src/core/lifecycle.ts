@@ -364,7 +364,9 @@ export class LifecycleCore {
  }
  submitted(identity:Identity,runId:string,attempt:number,nativeRef:string):void {
   this.store.db.transaction(()=>{
-   this.authorizeAttempt(identity,runId,attempt);const run=this.store.run(runId);
+   this.authorizeAttempt(identity,runId,attempt);
+   const run=this.store.db.all<Pick<Run,'current_attempt'|'status'|'error_code'>>('SELECT current_attempt,status,error_code FROM runs WHERE id=?',runId)[0];
+   requireThat(run,'NOT_FOUND','Run unavailable.',404);
    requireThat(run.current_attempt===attempt,'REVISION_CONFLICT','Attempt has changed.');
    const row=this.store.db.all<{native_run_ref:string|null;status:string;deadline_at:string}>('SELECT native_run_ref,status,deadline_at FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
    requireThat(row.native_run_ref===null||row.native_run_ref===nativeRef,'REVISION_CONFLICT','Native submission identity already belongs to a different receipt.');

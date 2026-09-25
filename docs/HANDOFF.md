@@ -4,6 +4,21 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Latest prerequisite: submitted reads current_attempt/status/error_code after
+unchanged authorizeAttempt. Red2/focused129/backend1985/HTTP31/workerd/typecheck/
+build pass; prior runtime/browser/shutdown/desktop matrix not rerun. No active
+checks/children/deliveries. Native registration remains unbounded, not completed.
+Focused advisor review recommends same-persona SQL copy with metadata-only
+registration responses, separate target-persona composition and room validation,
+plus removal of indirect reads in register/ack and alpha identity/custody paths.
+This preserves authority but does not bound SQL copying/storage. Do not substitute
+{} or a partial snapshot: reconciliation and alpha context access need explicit
+semantics. Do not cancel valid children merely to optimize a read. Full denial
+representation would be a separate authority design, not a proven fallback.
+Next implement the complete registration read boundary with replay, nested,
+cross-persona, late-effect and alpha tests; keep observed receipt custody intact.
+Schedule enabled; external gates false; catalog intermittency remains open.
+
 Latest retryDue projection reads id/status only and preserves the old NOT_FOUND
 error. Admission-disabled timers, cancellation and unresolved-question handling
 remain unchanged. Red2/focused128/backend1983/HTTP31/workerd/typecheck/build pass;

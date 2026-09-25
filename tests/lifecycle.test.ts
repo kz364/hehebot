@@ -29,6 +29,24 @@ function unknownEffect(runId: string) {
   f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','outcome_unknown','synthetic-authorization','synthetic-digest',?)", randomUUID(), runId, randomUUID(), f.core.now());
 }
 describe('executor leases and attempts', () => {
+  it.each([false,true])('acknowledges native receipts without historical body reads: expired=%s',expired=>{
+    const id=claimed().run.id,context=JSON.stringify({...JSON.parse(f.store.run(id).context_json),padding:'界'.repeat(400000)});
+    const checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+    f.db.exec("UPDATE runs SET context_json=?,checkpoint_json=?,error_code='RETAINED_REASON' WHERE id=?",context,checkpoint,id);
+    f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?',new Date(Date.parse(f.core.now())+(expired?-1:60000)).toISOString(),id);
+    const read=vi.spyOn(f.db,'all');
+    try{
+      life.submitted(identity,id,1,'bounded-ack');
+      life.submitted(identity,id,1,'bounded-ack');
+      const rows=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?[read.mock.results[index].value]:[]);
+      expect(rows).toEqual([
+        [{current_attempt:1,status:'claimed',error_code:'RETAINED_REASON'}],
+        [{current_attempt:1,status:expired?'cancelling':'running',error_code:expired?'DEADLINE_EXCEEDED':'RETAINED_REASON'}]
+      ]);
+    }finally{read.mockRestore();}
+    expect(f.store.run(id)).toMatchObject({context_json:context,checkpoint_json:checkpoint,status:expired?'cancelling':'running'});
+    expect(f.db.all('SELECT native_run_ref,status FROM attempts WHERE run_id=?',id)).toEqual([{native_run_ref:'bounded-ack',status:'running'}]);
+  });
   it('holds quiet claimed/running inference even without tool records', () => {
     const claim = claimed(); f.setNow('2026-09-10T00:01:00.000Z');
     expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));

@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** retryDue reads only run ID
+**Current checkpoint (2026-09-25, verified locally):** native submission ACK
+reads only current_attempt/status/error_code after existing authorization. Late
+receipt cancellation, replay and stored snapshots remain unchanged. Red2/focused129/
+backend1985/HTTP31/workerd/typecheck/build pass; prior runtime/browser/shutdown/
+desktop matrix not rerun. Native-child registration is NOT bounded yet: parent
+cloning, response reads and alpha authorization remain. Next implement that whole
+read path without replacing historical authority; SQL copy would not bound storage.
+No active checks/children/deliveries; local only, gates unchanged. Catalog issue open.
+
+**Previous checkpoint (2026-09-25, verified locally):** retryDue reads only run ID
 and status, preserving missing-run failure, admission pause, cancellation and
 question fences. Large stored snapshots and prior attempt remain unchanged.
 Old-query regressions fail2; focused128/backend1983/HTTP31/workerd/typecheck/build

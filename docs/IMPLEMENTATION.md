@@ -4,6 +4,24 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native ACK projection prerequisite (2026-09-25 Asia/Jakarta): submitted reads
+current_attempt/status/error_code after unchanged authorization, preserving
+missing-row errors, native receipt conflict/replay, late cancellation and reason
+retention. Tests inspect on-time/expired ACK and replay with >1MiB historical
+context/checkpoint and unchanged stored bodies. Old query fails2:
+`.local/native-ack-projection-red.log`, SHA256
+`a4a7fb57fc18a8224c36b3b5701d72b5eb441500d88d6de508b87e4742c8b7c4`.
+Focused129/backend1985/HTTP31/workerd/typecheck/build pass, PID1161426 exit0,
+`.local/native-ack-projection-final.log`, SHA256
+`993a10600ec5a903bb95cad887ffa77235dad7ba2563f5bb3bb7b19d7fe7f2a3`.
+Prior runtime/browser/shutdown/desktop matrix not rerun for this projection.
+Native-child registration remains unbounded: parent parsing/cloning, response
+reads and indirect alpha reads remain. Focused advisor review distinguished a
+SQL-copy/metadata-response path preserving snapshots from a new denial-context
+design requiring consumer/reconciliation changes. SQL copy would avoid JS
+hydration, not bound SQL work/storage. No registration/API change shipped here;
+no replacement authority, child cancellation policy or external gate change.
+
 Due-retry projection (2026-09-25 Asia/Jakarta): retryDue selects id/status rather
 than Store.run's full historical bodies. The missing-row NOT_FOUND/404 contract
 is retained. Admission pause, question/cancellation fences and queue transitions
