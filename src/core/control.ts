@@ -456,7 +456,11 @@ export class ControlCore {
    const due=this.store.db.all<{id:string;run_id:string;status:string;command_id:string}>("SELECT id,run_id,status,command_id FROM task_followups WHERE text!='' AND created_at<=? ORDER BY created_at,id LIMIT 100",cutoff);
    for(const followup of due){
     this.store.db.exec("UPDATE task_followups SET text='',status=CASE WHEN status='pending' THEN 'expired' ELSE status END WHERE id=?",followup.id);
-    if(followup.status==='pending')this.store.event(this.options.uuid(),this.store.run(followup.run_id).persona_id,'task.followup_expired','system:expiry',followup.command_id,{run_id:followup.run_id,followup_id:followup.id,reason:'MESSAGE_EXPIRED',requires_fresh_followup:true},now);
+    if(followup.status==='pending'){
+     const run=this.store.db.all<Pick<Run,'persona_id'>>('SELECT persona_id FROM runs WHERE id=?',followup.run_id)[0];
+     if(!run)throw new ControlError('NOT_FOUND','Run unavailable.',404);
+     this.store.event(this.options.uuid(),run.persona_id,'task.followup_expired','system:expiry',followup.command_id,{run_id:followup.run_id,followup_id:followup.id,reason:'MESSAGE_EXPIRED',requires_fresh_followup:true},now);
+    }
    }
    return due.length;
   });
@@ -465,9 +469,9 @@ export class ControlCore {
   const cutoff=new Date(this.options.now().getTime()-90*86400000).toISOString();
   // A completed descendant may release its own and its ancestors' deferred work,
   // but never another branch. UNION terminates even on inconsistent cyclic input.
-  const targets=this.store.db.all<Run>(`WITH RECURSIVE ancestors(id) AS (
+  const targets=this.store.db.all<Pick<Run,'id'|'persona_id'|'title'>>(`WITH RECURSIVE ancestors(id) AS (
    SELECT ? UNION SELECT r.parent_run_id FROM runs r JOIN ancestors a ON a.id=r.id WHERE r.parent_run_id IS NOT NULL
-  ) SELECT r.* FROM runs r JOIN ancestors a ON a.id=r.id
+  ) SELECT r.id,r.persona_id,r.title FROM runs r JOIN ancestors a ON a.id=r.id
    WHERE r.status IN ('completed','failed','cancelled') AND (${nativeDescendantsSettledSql})`,runId);
   for(const run of targets){
    // Enforce the cutoff even when bounded physical cleanup has a backlog.

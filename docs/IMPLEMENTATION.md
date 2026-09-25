@@ -4,6 +4,20 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Follow-up retention projections (2026-09-25): expiry reads only persona_id from
+the target run; dispatch reads id/persona_id/title from settled ancestors. Missing
+run errors, recursive settlement predicates, cutoff and ordering are unchanged.
+Fixtures retain >1MiB context and checkpoint bodies, assert exact projected rows,
+unchanged target records, exact continuation text and idempotent dispatch. Existing
+orchestration tests cover live descendants and unrelated sibling isolation.
+Old reads fail2, focused31/typecheck pass; npm test passes2096 and npm run build
+passes (dry run only). Evidence .local/followup-projection-{red,focused,integrated}.log:
+SHA256 red `96af2ab1971f4c79848b958098d9ca90bb436b43c3b9909e62849c836f3427ca`,
+focused `ff0957e7e49db91659aa3f2f4fd816fd020b11f62bc921b9a69f16df6d6f3345`,
+integrated `f72facd7cab574bd1a36146e019048ba60c7175ed7a8de512b3d128e2888d8f7`.
+No full runtime/browser/native/shutdown/desktop rerun for this SQL-only unit. This
+reduces hydration, not SQL work, scan counts or storage; no gate/external changes.
+
 Retention run projections (2026-09-25): memory purge reads id/status/context/updated
 time; queued expiry reads id/context/occurrence/persona/command/instruction age.
 Neither loads retained checkpoints or unrelated metadata. Existing purge/replay

@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Follow-up retention reads now omit historical context/checkpoint bodies during
+expiry notification and settled-ancestor dispatch. Old reads fail2; focused31,
+backend2096/typecheck/build pass. Existing recursive settlement predicates, title,
+persona, cutoff and ordering are unchanged; >1MiB snapshots remain exact. No active
+checks/children/delivery. Full runtime/browser/native/shutdown/desktop matrix below
+predates this SQL-only unit. Next: remaining context-body/scan/storage bounds and
+native restoration/settlement. Schedule enabled; local only, gates unchanged.
+
 Retention follow-up: memory purge and queued-context expiry now omit checkpoints
 and unused metadata from run reads. Old queries fail3; large checkpoint retention,
 exact purge/replay/expiry, grace and skill regressions pass. Focused54/backend2096/

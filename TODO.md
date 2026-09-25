@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** memory purge and queued
+**Current checkpoint (2026-09-25, verified locally):** follow-up expiry and settled
+ancestor dispatch no longer hydrate historical context/checkpoint bodies. Exact
+persona/task/title, expiry cutoff, recursive settlement and sibling isolation remain
+unchanged. Old reads fail2; focused31/backend2096/typecheck/build pass. The prior
+full runtime/browser/native/shutdown/desktop matrix was not rerun for this SQL-only
+unit. Remaining context-body/scan/storage bounds and native restoration/settlement
+stay open. Local only; external blockers and production gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** memory purge and queued
 context expiry select only consumed fields, excluding retained checkpoints.
 Old queries fail3; >1MiB checkpoint preservation and exact purge/expiry behavior
 pass. Focused54/backend2096/HTTP31/workerd/typecheck/build pass. Context bodies,
