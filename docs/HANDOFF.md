@@ -4,7 +4,20 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
-Current unit verified: schema15 parent index; Node migration/plan tests and real
+Current unit verified: limited scoped-memory SQL reads refuse raw bodies over
+131072 UTF-8 bytes before returning them to JavaScript. Source remains intact;
+oversized expired rows also consume read work until cleanup. Indexed ordering,
+scope and complete-or-refuse semantics remain. Initial focused42/workerd/typecheck
+pass; character-count mutant fails both Unicode cases and is restored. Final
+backend1962/HTTP31/workerd/typecheck/dry-build pass. Evidence/hashes are in
+IMPLEMENTATION.md. Prior runtime/browser/shutdown/desktop matrix was not rerun.
+No active check/child/delivery; local only, no migration or gate changes. Next:
+historical context_json bounds (native-child admission still parses/clones the
+parent snapshot), remaining scans/storage/index construction, then native recovery/
+settlement and broader TODO. Never discard observed child custody to enforce a
+preparation limit. Existing follow-through schedule remains enabled.
+
+Previous unit verified: schema15 parent index; Node migration/plan tests and real
 workerd migration/reopen/recursive plans/typecheck pass. Combined verifier stopped
 at a fractional catalog scroll assertion after backend1956/runtime682/HTTP31.
 Diagnostic rerun passed with zero over9 observed frames; cause remains unproven,

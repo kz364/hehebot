@@ -12,7 +12,19 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally with caveat):** schema15 adds
+**Current checkpoint (2026-09-25, verified locally):** limited scoped
+memory reads now refuse stored bodies over 131072 UTF-8 bytes before returning
+them to JavaScript. Source is retained; no truncation or inferred settlement.
+Initial focused42/workerd/typecheck pass; a character-count mutant fails both
+Unicode boundary cases and is restored. Final backend1962/HTTP31/typecheck/build
+pass, including expired-source parking without wake or attempts. This localized
+SQL change did not rerun the prior runtime/browser/shutdown/desktop matrix.
+This bounds individual returned body bytes, not SQLite work, metadata, historical
+run snapshots, storage or index construction. No active check/child/delivery or
+external action. Next: historical snapshot bounds and remaining scans/storage,
+then native recovery/settlement; production gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally with caveat):** schema15 adds
 indexed parent lookup for both recursive descendant-discovery steps. Migration
 rollback/conflict/custody tests and real workerd migration/reopen/plans pass.
 Legacy exports/backups retain their exact schema and migration history. Backend

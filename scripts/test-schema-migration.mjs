@@ -64,6 +64,8 @@ try{
   assert.match(details,/SEARCH child USING COVERING INDEX runs_parent \(parent_run_id=\?\)/);
   assert.doesNotMatch(details,/SCAN a\b|SCAN m\b|SCAN runs\b|SCAN child\b/);
  }
+ assert.deepEqual(await get(base,'/memory-body-limit'),{exact:true,code:'MEMORY_PREPARATION_LIMIT',returnedBodies:[null],bytes:131073});
+ console.log('PASS: real workerd returns an exact 131072-byte memory body, refuses one byte over before JS hydration, and preserves the oversized source.');
  console.log('PASS: real workerd memory retention starts from ledger keys with exact attempt lookups and indexed recursive parent lookups, retains numeric aliases and all 1001 attempts; no total cleanup-scan or storage bound claimed.');
  console.log('PASS: real local Worker v12→v15 startup migration; retained live occurrence/run/attempt, version-write and FK-check rollback, enforced references, exact fresh schema, idempotent rerun, persistent reopen and all three bounded memory-scope index plans without temporary sorting. No account/provider calls.');
 }catch(error){console.error(logs.slice(-4000));throw error;}

@@ -48,6 +48,22 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
    }}).scopedMemories('persona-31','routine-19',65);
    return Response.json(plans);
   }
+  if(path==='/memory-body-limit'){
+   const store=new Store(db),body={scope:{kind:'persona',id:'persona-31'},text:'',expires_at:null};
+   const remaining=131072-new TextEncoder().encode(JSON.stringify(body)).byteLength;
+   body.text='界'.repeat(Math.floor(remaining/3))+'x'.repeat(remaining%3);
+   store.put('legacy-memory','memory',body,0,'owner','t1');
+   const exact=store.scopedMemories('persona-31',null,65)[0].body.text===body.text;
+   body.text+='x';store.put('legacy-memory','memory',body,1,'owner','t2');
+   const returned:Array<{body_json:string|null}>=[];
+   const observed=new Store({...db,all:<T>(sql:string,...values:SqlValue[])=>{
+    const rows=db.all<T>(sql,...values);returned.push(...rows as Array<{body_json:string|null}>);return rows;
+   }});
+   let code:unknown=null;
+   try{observed.scopedMemories('persona-31',null,65);}catch(error){if(error&&typeof error==='object'&&'code' in error)code=error.code;else throw error;}
+   return Response.json({exact,code,returnedBodies:returned.map(row=>row.body_json),
+    bytes:db.all<{n:number}>("SELECT length(CAST(body_json AS BLOB)) AS n FROM objects WHERE id='legacy-memory'")[0].n});
+  }
   let rejected=false;
   if(path==='/rollback-version'||path==='/rollback-reference'||path==='/rollback-final-write'){
    if(path==='/rollback-version')db.exec("CREATE TRIGGER reject_v13 BEFORE INSERT ON schema_versions WHEN NEW.version=13 BEGIN SELECT RAISE(ABORT,'synthetic failure'); END");

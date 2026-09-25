@@ -23,13 +23,20 @@ export class Store {
   // Each exact scope uses the partial index's ordering before LIMIT. An OR
   // query can sort every eligible row before limiting, even with this index.
   // The first N merged rows must occur within the first N of each partition.
+  // Legacy/imported bodies need not obey current write contracts. Bound each
+  // limited read before returning body bytes to JS; NULL means refusal, not
+  // truncated memory. Unlimited reads retain their existing behavior.
+  const body=limit===undefined?'body_json':'CASE WHEN length(CAST(body_json AS BLOB))<=131072 THEN body_json END AS body_json';
   const scopes:Array<[string,string|null]>=[['global',null],['persona',personaId]];
   if(routineId)scopes.push(['routine',routineId]);
-  const rows=scopes.flatMap(([kind,id])=>this.db.all<ObjectRow>(`SELECT * FROM objects WHERE kind='memory' AND deleted_at IS NULL
+  const rows=scopes.flatMap(([kind,id])=>this.db.all<Omit<ObjectRow,'body_json'>&{body_json:string|null}>(`SELECT id,kind,revision,${body},deleted_at,created_at,updated_at FROM objects WHERE kind='memory' AND deleted_at IS NULL
    AND json_extract(body_json,'$.scope.kind')=? AND json_extract(body_json,'$.scope.id') IS ?
    ORDER BY created_at,id LIMIT ?`,kind,id,limit??-1));
   rows.sort((a,b)=>a.created_at<b.created_at?-1:a.created_at>b.created_at?1:a.id<b.id?-1:a.id>b.id?1:0);
-  return (limit===undefined?rows:rows.slice(0,limit)).map(({body_json,...rest})=>({...rest,body:JSON.parse(body_json) as MemoryPut}));
+  return (limit===undefined?rows:rows.slice(0,limit)).map(({body_json,...rest})=>{
+   if(body_json===null)throw new ControlError('MEMORY_PREPARATION_LIMIT','Memory preparation exceeds the per-record read-work limit. No memory was truncated.');
+   return {...rest,body:JSON.parse(body_json) as MemoryPut};
+  });
  }
  put(id: string, kind: ObjectKind, body: unknown, expected: number, actor: string, now: string, source: string | null = null): number {
   const existing=this.db.all<{revision:number;kind:string}>('SELECT revision,kind FROM objects WHERE id=?',id)[0];

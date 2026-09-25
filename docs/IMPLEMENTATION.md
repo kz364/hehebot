@@ -4,6 +4,34 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Scoped memory body read-work guard (2026-09-25 Asia/Jakarta): limited reads now
+return NULL instead of body bytes when stored JSON exceeds 131072 UTF-8 bytes,
+then refuse with MEMORY_PREPARATION_LIMIT if that row belongs to the merged
+selection. This is a per-record raw-read limit; the existing aggregate serialized
+memory budget remains independently enforced. No source is truncated or rewritten.
+Expired oversized rows still consume read work until retention removes them.
+Foreign/deleted rows and rows outside the merged selection cannot block it.
+Unlimited reads retain their existing behavior. SQLite may still inspect the
+whole stored value: this does not bound SQL work, metadata bytes, isolate memory,
+storage/index construction or historical run context_json parsing/cloning.
+
+Boundary cases cover exactly 131072 and 131073 bytes in ASCII, BMP and astral
+text. A character-count mutant failed both Unicode cases (2 failed/1 passed),
+then the byte implementation was restored. Tests observe NULL at the DB/JS return
+boundary, preserve source records, and prove parked messages produce no wake or
+attempt even with execution enabled. Real workerd confirms the same boundary
+and existing indexed plans. Initial focused42/workerd/typecheck log
+`.local/memory-body-limit-focused.log`, SHA256
+`ecb18c8fa7b0a3de38857938db239e906b8fbc1778f4a36a6834d2def3b7fd41`;
+mutant `.local/memory-body-character-mutant.log`, SHA256
+`550eb3683baa36e9f36f8a5529e920e5f2a0559fb33415ff860cfe1d0a5c7c21`.
+Final `npm test && npm run test:e2e && npm run build` passes backend1962,
+HTTP31/workerd/typecheck/dry-build, log `.local/memory-body-limit-integrated.log`,
+SHA256 `60a0537ea689d6e9d21f8de3cd01867f88d701523afec0f3e3d2af8af3e7b2d4`.
+The prior runtime/browser/shutdown/desktop matrix was not rerun for this localized
+SQL unit. No active check/child/delivery, schema migration, external action or
+production gate change. Local checkpoint only.
+
 Recursive parent lookup (2026-09-25 Asia/Jakarta): application schema15 adds
 `runs_parent(parent_run_id,id)`. Both the seed and recursive step of the unchanged
 descendant-settlement predicate use covering parent lookups instead of a table

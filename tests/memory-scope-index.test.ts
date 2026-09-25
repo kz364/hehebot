@@ -2,6 +2,53 @@ import {expect,it,vi} from 'vitest';
 import {fixture,bot,otherBot} from './helpers';
 import {migrateApplication} from '../src/core/migrations';
 
+it.each(['x','界','🧭'])('bounds legacy body bytes before returning them to JS (%s)',unit=>{
+ const f=fixture();try{
+  // Imported legacy data may exceed today's text schema. This bound concerns
+  // the raw stored JSON, not its character count or just the memory text.
+  const body={scope:{kind:'persona',id:bot},text:'',expires_at:null,explicit_constraint:true};
+  const remaining=131072-Buffer.byteLength(JSON.stringify(body)),width=Buffer.byteLength(unit);
+  body.text=unit.repeat(Math.floor(remaining/width))+'x'.repeat(remaining%width);
+  expect(Buffer.byteLength(JSON.stringify(body))).toBe(131072);
+  f.store.put('legacy-memory','memory',body,0,'owner',f.core.now());
+  expect(f.store.scopedMemories(bot,null,65)[0].body).toEqual(body);
+  body.text+='x';f.store.put('legacy-memory','memory',body,1,'owner',f.core.now());
+  const read=vi.spyOn(f.db,'all');
+  expect(()=>f.store.scopedMemories(bot,null,65)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
+  const returned=read.mock.results.flatMap(result=>result.value);read.mockRestore();
+  expect(returned).toHaveLength(1);expect(returned[0].body_json).toBeNull();
+  expect(()=>f.core.context(bot,'Keep every constraint.',null,null)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
+  expect(f.db.all('SELECT * FROM runs')).toEqual([]);
+  expect(f.store.scopedMemories(bot,null)[0].body).toEqual(body);
+ }finally{vi.restoreAllMocks();f.close();}
+});
+
+it.each([null,'2026-09-09T00:00:00.000Z'])('parks oversized legacy read work without wake or inference (expiry=%s)',expires_at=>{
+ const f=fixture(true);try{
+  f.store.put('legacy-memory','memory',{scope:{kind:'persona',id:bot},text:'x'.repeat(150000),expires_at,explicit_constraint:true},0,'owner',f.core.now());
+  const lifecycle=f.db.all('SELECT * FROM lifecycle'),source=f.db.all('SELECT * FROM objects');
+  const result=f.accept({schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'Keep all constraints.'}});
+  expect(result.status).toBe('applied');
+  expect(f.store.run(result.resource_id!)).toMatchObject({status:'waiting',current_attempt:0,error_code:'MEMORY_PREPARATION_LIMIT'});
+  expect(f.db.all('SELECT * FROM lifecycle')).toEqual(lifecycle);
+  expect(f.db.all('SELECT * FROM attempts')).toEqual([]);
+  expect(f.db.all('SELECT * FROM objects')).toEqual(source);
+ }finally{f.close();}
+});
+
+it('does not let an oversized foreign, deleted or later unselected row block the selected scope',()=>{
+ const f=fixture();try{
+  const huge={scope:{kind:'persona',id:otherBot},text:'x'.repeat(150000),expires_at:null};
+  f.store.put('foreign','memory',huge,0,'owner','t0');
+  f.store.put('deleted','memory',{...huge,scope:{kind:'persona',id:bot}},0,'owner','t0');
+  f.db.exec("UPDATE objects SET deleted_at='t1' WHERE id='deleted'");
+  f.store.put('selected','memory',{...huge,text:'Never send without approval.',scope:{kind:'persona',id:bot}},0,'owner','t1');
+  f.store.put('later','memory',{...huge,scope:{kind:'global',id:null}},0,'owner','t2');
+  expect(f.store.scopedMemories(bot,null,1).map(row=>row.id)).toEqual(['selected']);
+  expect(()=>f.store.scopedMemories(bot,null,65)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
+ }finally{f.close();}
+});
+
 it.each([null,'routine-17'])('bounds each indexed scope read before merging (routine=%s)',routine=>{
  const f=fixture();try{
   // Interleaved ages exercise a global merge, not scope concatenation. IDs
