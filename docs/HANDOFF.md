@@ -4,6 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Parent registration now selects metadata and defers context read until a genuinely
+new child. Ordinary replay reads no parent/child snapshots; alpha authority may
+still read root/generation context. Red2/focused269/backend1996/HTTP31/workerd/
+typecheck/build pass. Runtime682/native-child service passed on preceding response
+commit, not rerun after this two-line production change. Browser/shutdown/desktop
+matrix not rerun. Keep JS clone: executed duplicate-key probe and focused oracle
+decision reject naive json_set/raw copying. SQL consumers extract first keys while
+JS takes last; current cloning normalizes unknown fields too. Tests pin duplicate
+instruction/room/scope/grants, nested unknown fields, overflow number normalization,
+and quoted/newline/lone-surrogate instruction. Any SQL fast path needs a proven
+representation invariant and unchanged historical fallback; no size denial or
+invented authority. Next: remaining generation reads and representation design.
+
 Native registration now returns NativeChildRegistration (Run without context_json/
 checkpoint_json) for new, repeated and started receipts. All other metadata stays;
 runtime consumes identity/status only. Stored snapshot assertions now read storage

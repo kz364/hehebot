@@ -4,6 +4,32 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native parent deferred read (2026-09-25 Asia/Jakarta): registration reads parent
+metadata, fetching context only after duplicate receipt handling. The clone itself
+is unchanged. Extended actual-row regression proves no parent checkpoint on new
+registration and no parent/child body on ordinary replay, preserving both stored
+records. Alpha root/generation checks retain their separate context reads.
+Old query fails2: `.local/native-parent-read-red.log`, SHA256
+`1eac2af4399c1ff6eda2fda8f1c94131f4fbe64922fbffd14bc2db6562812d85`.
+Focused269/backend1996/HTTP31/workerd/typecheck/build pass, PID1189472 exit0,
+`.local/native-parent-read-final.log`, SHA256
+`ff44808d48075480c6f2cedce3633cf358619dce37ca91bf39b75c1d3a7d17c2`.
+Runtime682/native-child service passed on preceding response commit, not rerun
+after this localized change. Browser/shutdown/desktop matrix not rerun.
+
+SQL clone decision: retain JS parse/spread/stringify. Executed probe
+`.local/native-copy-json-semantics.log`, SHA256
+`cf7daece6ff9a0c686ad7ee861ebace3feaf696f50516468991e3f297041b45a`
+shows json_set replaces the first duplicate instruction, leaving the last one to
+override it in JavaScript. Raw copying also preserves duplicates where current
+cloning normalizes scope and authorization keys; SQL and JS consumers disagree.
+Focused oracle advised retaining cloning until a proven snapshot representation
+invariant permits a canonical-only fast path with unchanged historical fallback.
+New tests pin both final room variants, duplicate instruction/scope/grants,
+unknown nested duplicates, overflowing number normalization and escaped child
+instruction; child SQL-extracted scope/grant must agree with JS. No fabricated
+authority, cutoff-based rejection, SQL-work bound or storage bound introduced.
+
 Native registration response adoption (2026-09-25 Asia/Jakarta): returns all Run
 metadata except context_json/checkpoint_json, selecting those fields directly on
 new, duplicate and started paths. Stored snapshots remain available to authority

@@ -46,7 +46,7 @@ export class NativeTaskLedger {
   }
   return this.store.db.transaction(()=>{
    this.lifecycle.authorizeAttempt(identity,input.parent_run_id,input.parent_attempt);
-   const parent=this.store.run(input.parent_run_id);
+   const parent=this.registration(input.parent_run_id);
    requireThat(!this.core.ownerAlpha.policy||this.core.ownerAlpha.backgroundRoot(parent.id)&&parent.role==='coordinator'&&input.persona_id===parent.persona_id,'FORBIDDEN','Owner-alpha child must belong directly to the selected root and persona.',403);
    requireThat(parent.current_attempt===input.parent_attempt,'STALE_EPOCH','Native parent attempt is no longer current.');
    requireThat(input.persona_id===parent.persona_id||parent.role==='coordinator'&&this.core.options.delegations?.[parent.persona_id]?.includes(input.persona_id),'FORBIDDEN','Native delegation target is not authorized.',403);
@@ -56,7 +56,7 @@ export class NativeTaskLedger {
    requireThat(!conflictingThread.length,'IDEMPOTENCY_CONFLICT','Native child thread custody was reused.');
    const existing=this.store.db.all<{run_id:string;parent_run_id:string;parent_attempt:number;native_session_key:string}>('SELECT * FROM native_task_links WHERE native_run_ref=?',input.native_run_ref)[0];
    if(existing){requireThat(existing.parent_run_id===parent.id&&existing.parent_attempt===input.parent_attempt&&existing.native_session_key===input.native_session_key&&this.registration(existing.run_id).persona_id===input.persona_id,'IDEMPOTENCY_CONFLICT','Native child identity was reused.');this.core.ownerAlpha.authorize(existing.run_id,1);const run=this.registration(existing.run_id);return started?this.acknowledgeStart(identity,input,run):run;}
-   const oldContext=JSON.parse(parent.context_json) as ContextSnapshot;
+   const oldContext=JSON.parse(this.store.db.all<Pick<Run,'context_json'>>('SELECT context_json FROM runs WHERE id=?',parent.id)[0].context_json) as ContextSnapshot;
    let context:ContextSnapshot,memoryBlocked=false;
    try{context=input.persona_id===parent.persona_id?{...oldContext,instruction:input.title}:this.core.context(input.persona_id,input.title,null,oldContext.room_id);}
    catch(error){

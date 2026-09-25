@@ -12,7 +12,18 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** native child registration
+**Current checkpoint (2026-09-25, verified locally):** native registration parent
+reads use metadata; context is fetched only for new child composition. Ordinary
+duplicate receipts read neither parent nor child snapshots. Alpha root/generation
+authority checks still read context separately. Red2/focused269/backend1996/HTTP31/
+workerd/typecheck/build pass. Runtime682/native-child service passed immediately
+before this localized read change, not rerun after it. New child JS cloning stays:
+SQL json_set/raw copy changes duplicate-key instruction/scope/authority semantics.
+Next: establish a snapshot representation invariant before SQL-copy adoption;
+continue remaining root/generation read bounds and native restoration/settlement.
+No total registration/storage bound; catalog intermittency and external gates remain.
+
+**Previous checkpoint (2026-09-25, verified locally):** native child registration
 returns metadata on new, duplicate and started observations without hydrating child
 snapshots for its response. Stored snapshot/custody/recovery assertions remain.
 Red2/focused267/backend1994/runtime682/HTTP31/workerd/native-child service/typecheck/

@@ -31,7 +31,8 @@ function finish(id: string) { life.complete(identity, id, 1, { status: 'complete
 describe('O01–O08 local orchestration metadata boundaries', () => {
   it.each([false, true])('returns metadata without hydrating child snapshots on new/replayed observations (started=%s)', started => {
     const p = parent(), input = receipt(p);
-    f.db.exec("UPDATE runs SET context_json=json_set(context_json,'$.padding',?) WHERE id=?", '界'.repeat(400000), p);
+    f.db.exec("UPDATE runs SET context_json=json_set(context_json,'$.padding',?),checkpoint_json=? WHERE id=?", '界'.repeat(400000), JSON.stringify({padding:'p'.repeat(1100000)}), p);
+    const parentBefore=f.store.run(p);
     const read = vi.spyOn(f.db, 'all');
     try {
       const child = tasks.register(identity, input, started);
@@ -44,19 +45,43 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
         expect(row).not.toHaveProperty('context_json');
         expect(row).not.toHaveProperty('checkpoint_json');
       }
+      const parentReads=read.mock.calls.flatMap(([sql,id],i)=>sql.includes('FROM runs WHERE id=?')&&id===p?[read.mock.results[i].value]:[]);
+      expect(parentReads.length).toBeGreaterThan(0);
+      for(const rows of parentReads)for(const row of rows)expect(row).not.toHaveProperty('checkpoint_json');
       read.mockClear();
       f.db.exec('UPDATE runs SET checkpoint_json=? WHERE id=?', JSON.stringify({padding:'x'.repeat(1100000)}), child.id);
       const retained = f.store.run(child.id); read.mockClear();
       expect(tasks.register(identity, input, started)).toEqual(child);
       for (let i=0;i<read.mock.calls.length;i++) {
-        const [sql,id]=read.mock.calls[i];
-        if (sql.includes('FROM runs WHERE id=?') && id===child.id) for (const row of read.mock.results[i].value) {
+        const [sql]=read.mock.calls[i];
+        if (sql.includes('FROM runs WHERE id=?')) for (const row of read.mock.results[i].value) {
           expect(row).not.toHaveProperty('context_json');
           expect(row).not.toHaveProperty('checkpoint_json');
         }
       }
       expect(f.store.run(child.id)).toEqual(retained);
+      expect(f.store.run(p)).toEqual(parentBefore);
     } finally { read.mockRestore(); }
+  });
+
+  it.each([null, 'historical-room'])('normalizes historical duplicate keys before freezing native child authority: last room=%s', room => {
+    const p=parent(), original=JSON.parse(f.store.run(p).context_json);
+    const input=receipt(p,'Child "instruction"\n\ud800');
+    const source=JSON.stringify(original).slice(0,-1)+',"instruction":"first","instruction":"last",'+
+      '"room_id":"earlier-room","room_id":'+JSON.stringify(room)+','+
+      '"scope_key":"earlier-scope","scope_key":"frozen-scope",'+
+      '"authorization_policy_ids":["earlier-grant"],"authorization_policy_ids":["frozen-grant"],'+
+      '"unknown":{"nested":{"grant":"first","grant":"last"},"number":1e400}}';
+    f.db.exec('UPDATE runs SET context_json=? WHERE id=?',source,p);
+    const child=tasks.register(identity,input,true);
+    const stored=f.store.run(child.id);
+    expect(JSON.parse(stored.context_json)).toEqual({...original,instruction:input.title,room_id:room,
+      scope_key:'frozen-scope',authorization_policy_ids:['frozen-grant'],unknown:{nested:{grant:'last'},number:null}});
+    expect(f.db.all("SELECT json_extract(context_json,'$.room_id') AS room,json_extract(context_json,'$.scope_key') AS scope,json_extract(context_json,'$.authorization_policy_ids[0]') AS grant_id FROM runs WHERE id=?",child.id))
+      .toEqual([{room,scope:'frozen-scope',grant_id:'frozen-grant'}]);
+    expect(f.store.run(p).context_json).toBe(source);
+    expect(tasks.register(identity,input,true)).toEqual(child);
+    expect(f.store.run(child.id)).toEqual(stored);
   });
 
   it('records observed children idempotently and frees coordinator admission while a child remains active', () => {
