@@ -35,6 +35,26 @@ const message=(persona=bot)=>command('message.send',{conversation_id:persona,tex
 async function boot(){const identity=await runtime('boot',{boot_id:randomUUID()});expect(identity.epoch).toBe(1);await runtime('ready',{identity});return identity;}
 const custody=()=>JSON.parse(db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key='owner_alpha'")[0].value_json);
 
+it('validates alpha attempt custody without returning retained result bodies',async()=>{
+ await initialize();const identity=await boot();await message();
+ const claim=await runtime('claim',{identity});
+ const result=JSON.stringify({text:'界'.repeat(400000)});
+ db.exec('UPDATE attempts SET result_json=? WHERE run_id=?',result,claim.run.id);
+ const read=vi.spyOn(db,'all');
+ try{
+  await runtime('submitted',{identity,run_id:claim.run.id,attempt:1,native_ref:'projected-receipt'});
+  const validation=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM attempts WHERE run_id=? AND attempt=?')&&
+   (sql.includes('submission_key')||sql.startsWith('SELECT *'))?[read.mock.results[index].value]:[]);
+  expect(validation.length).toBeGreaterThan(0);
+  for(const rows of validation)for(const row of rows){
+   expect(Object.keys(row).sort()).toEqual(['boot_id','deadline_at','epoch','native_run_ref','started_at','submission_key']);
+   expect(row).toMatchObject({epoch:identity.epoch,boot_id:identity.boot_id,submission_key:`${claim.run.id}:1`});
+  }
+ }finally{read.mockRestore();}
+ expect(db.all('SELECT result_json,native_run_ref,status FROM attempts WHERE run_id=?',claim.run.id))
+  .toEqual([{result_json:result,native_run_ref:'projected-receipt',status:'running'}]);
+});
+
 it('defaults off and keeps normal runtime admission disabled',async()=>{
  await initialize(null);
  expect(await runtime('status',{})).toEqual({phase:'STOPPED',epoch:0,execution_enabled:false});

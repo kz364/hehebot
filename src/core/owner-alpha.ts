@@ -360,7 +360,7 @@ export class OwnerAlpha {
  }
  private validAttempt(runId:string,attempt:number,custody:Custody,epoch:number,bootId:string,cutoff=0):boolean {
   const run=this.store.db.all<Run>('SELECT * FROM runs WHERE id=?',runId)[0];
-  const row=this.store.db.all<{epoch:number;boot_id:string;deadline_at:string;started_at:string;native_run_ref:string|null;submission_key:string}>('SELECT * FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
+  const row=this.store.db.all<{epoch:number;boot_id:string;deadline_at:string;started_at:string;native_run_ref:string|null;submission_key:string}>('SELECT epoch,boot_id,deadline_at,started_at,native_run_ref,submission_key FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
   if(!run||!row||attempt!==1||run.current_attempt!==1||run.persona_id!==custody.policy.persona_id||row.epoch!==epoch||row.boot_id!==bootId)return false;
   if(custody.binding&&(runId!==custody.binding.run_id||run.command_id!==custody.binding.command_id||epoch!==custody.binding.epoch||bootId!==custody.binding.boot_id))return false;
   const link=this.store.db.all<{parent_run_id:string;parent_attempt:number;native_run_ref:string;native_session_key:string}>('SELECT * FROM native_task_links WHERE run_id=?',runId)[0];

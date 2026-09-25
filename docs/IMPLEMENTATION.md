@@ -4,6 +4,20 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Alpha attempt projection prerequisite (2026-09-25 Asia/Jakarta): validAttempt
+selects epoch, boot_id, deadline_at, started_at, native_run_ref and submission_key
+instead of the entire attempt including result_json. No predicate changed. The
+regression invokes the Worker submitted route with >1MiB retained Unicode result,
+checks actual returned columns and exact receipt/status with result preserved.
+Old query fails, `.local/alpha-attempt-projection-red.log`, SHA256
+`b223f4fafe4597788fa2d5f107fc1e883f7ce0c43952c11fd22d733f4f276722`.
+Alpha/orchestration236 and backend1986/HTTP31/workerd/typecheck/build pass,
+PID1165569 exit0, `.local/alpha-attempt-projection-final.log`, SHA256
+`a02b096dd280bd59729d1b413b60f7a9797953259dbad6833f029db50979f3f0`.
+Prior runtime/browser/shutdown/desktop matrix not rerun. Native registration still
+hydrates run contexts through alpha validation, parent cloning and return reads;
+this is not full registration, SQL-work or storage acceptance. No gate changes.
+
 Native ACK projection prerequisite (2026-09-25 Asia/Jakarta): submitted reads
 current_attempt/status/error_code after unchanged authorization, preserving
 missing-row errors, native receipt conflict/replay, late cancellation and reason

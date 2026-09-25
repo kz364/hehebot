@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Latest prerequisite: alpha validAttempt reads six used attempt fields without
+retained result_json. All validation predicates unchanged. Worker-route regression
+with >1MiB result fails against old SELECT*; alpha/orchestration236 and backend1986/
+HTTP31/workerd/typecheck/build pass. Prior runtime/browser/shutdown/desktop matrix
+not rerun. No active checks/children/deliveries; schedule enabled. Alpha run-context
+reads (including propagation/generation validation), parent cloning and registration
+responses remain unbounded. Continue the full native registration read boundary;
+do not claim it complete from these prerequisites. No external/gate change.
+
 Latest prerequisite: submitted reads current_attempt/status/error_code after
 unchanged authorizeAttempt. Red2/focused129/backend1985/HTTP31/workerd/typecheck/
 build pass; prior runtime/browser/shutdown/desktop matrix not rerun. No active

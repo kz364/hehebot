@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** native submission ACK
+**Current checkpoint (2026-09-25, verified locally):** alpha validAttempt selects
+six identity/deadline/receipt fields, excluding retained result bodies. Validation
+predicates are unchanged. Old-query regression fails; alpha/orchestration236 and
+backend1986/HTTP31/workerd/typecheck/build pass. Prior runtime/browser/shutdown/
+desktop matrix not rerun. Native registration remains unbounded: alpha run-context
+reads, parent cloning and response reads remain next. No active checks/children/
+deliveries; local only, gates unchanged. Catalog intermittency still open.
+
+**Previous checkpoint (2026-09-25, verified locally):** native submission ACK
 reads only current_attempt/status/error_code after existing authorization. Late
 receipt cancellation, replay and stored snapshots remain unchanged. Red2/focused129/
 backend1985/HTTP31/workerd/typecheck/build pass; prior runtime/browser/shutdown/
