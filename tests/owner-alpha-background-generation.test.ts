@@ -96,6 +96,32 @@ function grantPersonaPolicy(db:InstanceType<typeof TestDatabase>){
 
 type CommandReceipt={id:string;resource_id:string;status:string;error:{code:string;message:string}|null};
 
+it('validates background generation fields without checkpoints and preserves strict room authority',async()=>{
+ vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-09-19T00:00:00.000Z'));
+ const h=harness();
+ try{
+  await h.reopen(true);retireEpochOne(h.lifecycle());
+  const response=await h.request('/v1/commands',{schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'Projection fixture'}},await ownerAssertion());
+  expect(response.status).toBe(202);const receipt=await response.json() as CommandReceipt;
+  const original=h.db.all<{context_json:string}>('SELECT context_json FROM runs WHERE id=?',receipt.resource_id)[0].context_json;
+  const context=JSON.stringify({...JSON.parse(original),padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+  h.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,receipt.resource_id);
+  const read=vi.spyOn(h.db,'all');
+  try{
+   expect(h.core().ownerAlpha.activeGeneration()?.epoch).toBe(2);
+   const rows=read.mock.calls.flatMap(([sql,id],i)=>sql.includes('FROM runs WHERE id=?')&&id===receipt.resource_id&&(sql.includes('context_json')||sql.startsWith('SELECT *'))?read.mock.results[i].value:[]);
+   expect(rows.length).toBeGreaterThan(0);
+   for(const row of rows)expect(Object.keys(row).sort()).toEqual(['command_id','context_json','occurrence_id','parent_run_id','persona_id','role','routine_id']);
+  }finally{read.mockRestore();}
+  expect(h.db.all('SELECT context_json,checkpoint_json FROM runs WHERE id=?',receipt.resource_id)).toEqual([{context_json:context,checkpoint_json:checkpoint}]);
+  for(const [roomContext,allowed] of [['{"room_id":null,"room_id":"foreign"}',false],['{"room_id":"foreign","room_id":null}',true],['{"room_id":false}',false],['{}',false]] as const){
+   h.db.exec('UPDATE runs SET context_json=? WHERE id=?',roomContext,receipt.resource_id);
+   if(allowed)expect(h.core().ownerAlpha.activeGeneration()?.epoch).toBe(2);
+   else expect(()=>h.core().ownerAlpha.activeGeneration()).toThrow('Background manifest differs from its admitted run.');
+  }
+ }finally{h.db.close();vi.useRealTimers();}
+});
+
 it('admits the finite three-root A/S/B generation across real SQLite and signed HTTP',async()=>{
  vi.useFakeTimers({toFake:['Date']});
  vi.setSystemTime(new Date('2026-09-19T00:00:00.000Z'));

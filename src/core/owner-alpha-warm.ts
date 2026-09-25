@@ -260,7 +260,7 @@ export function validateWarmGenerationView(store:Store,view:unknown):asserts vie
    'SELECT type,status,owner_id,resource_id,accepted_at,body_hash FROM commands WHERE id=?',m.command_id)[0];
   requireThat(command&&command.type==='message.send'&&command.status==='applied'&&command.owner_id===c.owner_id&&command.resource_id===m.run_id&&
    command.accepted_at<=m.issued_at&&command.body_hash===m.command_sha256,'INVALID_CONFIGURATION','Warm manifest differs from its owner message.',503);
-  const run=db.all<Run>('SELECT * FROM runs WHERE id=?',m.run_id)[0];
+  const run=db.all<Pick<Run,'command_id'|'persona_id'|'role'|'parent_run_id'|'routine_id'|'occurrence_id'|'context_json'>>('SELECT command_id,persona_id,role,parent_run_id,routine_id,occurrence_id,context_json FROM runs WHERE id=?',m.run_id)[0];
   requireThat(run&&run.command_id===m.command_id&&run.persona_id===m.persona_id&&run.role==='coordinator'&&run.parent_run_id===null&&
    run.routine_id===null&&run.occurrence_id===null&&(JSON.parse(run.context_json) as {room_id?:string|null}).room_id===null,
    'INVALID_CONFIGURATION','Warm manifest differs from its admitted run.',503);

@@ -4,6 +4,24 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Warm/background generation projections (2026-09-25 Asia/Jakarta): validators select
+command/persona/role/parent/routine/occurrence/context, excluding unused checkpoints.
+Signed-owner HTTP admission fixtures create real generations, then pad contexts
+with400000 Unicode characters and checkpoints with1100000 ASCII characters.
+Actual returned columns and exact stored bodies are checked, followed by both
+duplicate room-key orders and false/absent strict-null rejection. Old queries
+fail2: `.local/warm-background-projection-red.log`, SHA256
+`de9a285a93117cb64bc9e3021e1f8c4cc29a018053d2431713ea00b80f443fd2`.
+An intermediate assertion also matched a legitimate background status-only read;
+the exact-column assertion was scoped to the authority read (including SELECT*
+negative control), not weakened. Retained test-correction log records that failure.
+Focused alpha/orchestration253/backend2003/HTTP31/workerd/typecheck/build pass,
+PID1237121 exit0; `.local/warm-background-projection-final.log`, SHA256
+`d44d73602c46d0365d9618d81a522a1258fb7b3b8f4cf896121c8be9a55ac8fc`.
+Prior full runtime/browser/native/shutdown/desktop matrix not rerun for this SQL
+unit. Full authority contexts still hydrate and parse; no total bound is claimed.
+No production-gate or external changes.
+
 Bootstrap generation projection (2026-09-25 Asia/Jakarta): OwnerAlpha.generations
 selects seven consumed run fields instead of SELECT*, excluding checkpoint_json.
 No admission predicates changed; strict room_id===null remains JS-parsed. Tests

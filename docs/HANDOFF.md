@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Warm/background generation validators now match bootstrap's seven-field authority
+projection, retaining full context for unchanged strict JS room checks but omitting
+checkpoints. Signed-owner admission fixtures assert actual read columns, large
+stored snapshot preservation, duplicate room-key orders and false/missing refusal.
+Old queries fail2; focused253/backend2003/HTTP31/workerd/typecheck/build pass. Prior
+full runtime/browser/native/shutdown/desktop matrix not rerun for this SQL-only
+unit. No active checks/children/delivery; schedule enabled. Next: representation
+invariant and remaining full-context parsing/SQL/storage bounds, then native
+restoration/recursive settlement. Preserve JS cloning pending the invariant.
+
 Latest bootstrap-generation projection selects command/persona/role/parent/routine/
 occurrence/context only, excluding unused checkpoints. Strict room_id===null stays
 in JavaScript. Regression with >1MiB context/checkpoint verifies actual columns and
