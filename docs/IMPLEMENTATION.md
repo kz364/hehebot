@@ -4,6 +4,40 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Strict-null generation room projection (2026-09-25 Asia/Jakarta): Store counts
+decoded root `room_id` keys with json_each and returns only a scalar for zero/one
+key. Bootstrap/warm/background metadata reads omit context. Duplicate room keys,
+non-object roots and trailing raw NUL use the original JS parse predicate, including
+its exceptions. The existing json_valid CHECK excludes other malformed/deep inputs;
+SQLite admits trailing raw NUL while JS rejects it. No stored snapshot is rewritten,
+and native child cloning remains unchanged. This bounds scalar return, not SQLite
+JSON scan work, historical fallback, total storage or registration work.
+
+33 shared Node/workerd vectors cover both duplicate orders, escaped-equivalent
+keys, all seven individually escaped key characters, NUL-containing keys, strict
+false/zero/empty/object/array refusal, nested/absent keys, null-root exception,
+trailing-NUL exception, overflow numbers and >1MiB context preservation. Existing
+signed-generation fixtures assert no body/checkpoint returned and exact storage.
+Old queries fail3 (`.local/room-predicate-red.log`, SHA256
+`4622ccff5c41bc04b308c0e7da8313e2d3caefe33fc01b7231f463f268cdc81d`).
+A temporary json_type path-extraction mutant fails5, including duplicate authority
+and a NUL-containing property name; restored afterward. Log
+`.local/room-predicate-first-key-mutant.log`, SHA256
+`910f4278f728756297db5550df005c9852c532501abedb376c1920019bbd2aac`.
+Initial test setup incorrectly attempted four contexts rejected by schema CHECK;
+removed those impossible stored cases, then fixed a mock-result TypeScript narrowing.
+Both failed logs remain as `.local/room-predicate-focused{,-final}.log`.
+
+Integrated `npm run typecheck`, real workerd harness, `npm test` (2036),
+`npm run test:e2e` (HTTP31 plus workerd), and `npm run build` pass, PID1242439 exit0.
+`.local/room-predicate-integrated.log`, SHA256
+`73ae79937aaf177ff62b58a43c2121721b7e65c86b3abe5829bdbc0184a3ce45`.
+After restoring the mutant, focused alpha/orchestration/room286 plus typecheck pass:
+`.local/room-predicate-final.log`, SHA256
+`36f565b400e898cac13f399f7cd7f0c500139e8d12562b97005672998521f307`.
+Prior full runtime/browser/native/shutdown/desktop matrix was not rerun for this
+predicate-only change. No push, deploy, live calls or production-gate changes.
+
 Warm/background generation projections (2026-09-25 Asia/Jakarta): validators select
 command/persona/role/parent/routine/occurrence/context, excluding unused checkpoints.
 Signed-owner HTTP admission fixtures create real generations, then pad contexts

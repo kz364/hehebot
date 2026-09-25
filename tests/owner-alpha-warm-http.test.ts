@@ -103,7 +103,9 @@ it('validates warm generation fields without checkpoints and preserves strict ro
    expect(h.core().ownerAlpha.activeGeneration()?.epoch).toBe(2);
    const rows=read.mock.calls.flatMap(([sql,id],i)=>sql.includes('FROM runs WHERE id=?')&&id===receipt.resource_id?read.mock.results[i].value:[]);
    expect(rows.length).toBeGreaterThan(0);
-   for(const row of rows)expect(Object.keys(row).sort()).toEqual(['command_id','context_json','occurrence_id','parent_run_id','persona_id','role','routine_id']);
+   for(const row of rows){expect(row).not.toHaveProperty('context_json');expect(row).not.toHaveProperty('checkpoint_json');}
+   expect(rows).toContainEqual({room_is_null:1});
+   for(const row of rows.filter(row=>'command_id' in row))expect(Object.keys(row).sort()).toEqual(['command_id','occurrence_id','parent_run_id','persona_id','role','routine_id']);
   }finally{read.mockRestore();}
   expect(h.db.all('SELECT context_json,checkpoint_json FROM runs WHERE id=?',receipt.resource_id)).toEqual([{context_json:context,checkpoint_json:checkpoint}]);
   for(const [roomContext,allowed] of [['{"room_id":null,"room_id":"foreign"}',false],['{"room_id":"foreign","room_id":null}',true],['{"room_id":false}',false],['{}',false]] as const){

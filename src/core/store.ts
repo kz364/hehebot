@@ -76,5 +76,21 @@ export class Store {
   return Math.max(retired,pending);
  }
  sequence():number { return this.db.all<{seq:number}>("SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='events'),0) AS seq")[0].seq; }
+ runHasNullRoom(id:string):boolean {
+  // Only project unambiguous strict-null authority. JS takes the last duplicate
+  // key; SQLite extraction takes the first. The schema enforces json_valid,
+  // but admits trailing raw NULs that JS rejects. These and non-objects retain
+  // JS behavior (including its exceptions); snapshots are never rewritten.
+  // This bounds returned data on the fast path, not SQLite's JSON scan work.
+  const row=this.db.all<{room_is_null:number|null}>(`SELECT CASE
+   WHEN instr(context_json,char(0))=0 AND json_type(context_json)='object' THEN
+    (SELECT CASE WHEN count(*)>1 THEN NULL ELSE coalesce(max(type='null'),0) END
+     FROM json_each(context_json) WHERE key='room_id')
+   END AS room_is_null FROM runs WHERE id=?`,id)[0];
+  if(!row)throw new ControlError('NOT_FOUND','Run unavailable.',404);
+  if(row.room_is_null!==null)return row.room_is_null===1;
+  const context=this.db.all<{context_json:string}>('SELECT context_json FROM runs WHERE id=?',id)[0].context_json;
+  return JSON.parse(context).room_id===null;
+ }
  run(id:string):Run { const run=this.db.all<Run>('SELECT * FROM runs WHERE id=?',id)[0]; if(!run) throw new ControlError('NOT_FOUND','Run unavailable.',404);return run; }
 }

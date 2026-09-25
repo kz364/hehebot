@@ -117,7 +117,7 @@ export class OwnerAlpha {
    const command=this.store.db.all<{payload_json:string;body_hash:string;type:string;owner_id:string;status:string;resource_id:string;accepted_at:string}>('SELECT payload_json,body_hash,type,owner_id,status,resource_id,accepted_at FROM commands WHERE id=?',generation.activation_command_id)[0];
    if('kind' in generation.authority&&generation.authority.kind!=='owner-message-warm-generation'&&generation.authority.kind!=='owner-message-background-generation'){
     const m=generation.authority.manifest;
-    const run=this.store.db.all<Pick<Run,'command_id'|'persona_id'|'role'|'parent_run_id'|'routine_id'|'occurrence_id'|'context_json'>>('SELECT command_id,persona_id,role,parent_run_id,routine_id,occurrence_id,context_json FROM runs WHERE id=?',m.run_id)[0];
+    const run=this.store.db.all<Pick<Run,'command_id'|'persona_id'|'role'|'parent_run_id'|'routine_id'|'occurrence_id'>>('SELECT command_id,persona_id,role,parent_run_id,routine_id,occurrence_id FROM runs WHERE id=?',m.run_id)[0];
     const policyRow=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_bootstrap_policy:${m.policy_revision}`)[0];
     const config=policyRow?JSON.parse(policyRow.value_json) as OwnerAlphaBootstrapConfig:undefined;
     const reservation=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_reservation:${generation.epoch}`)[0];
@@ -130,7 +130,7 @@ export class OwnerAlpha {
      m.reservation_micro_usd===config.reservation_micro_usd&&reservation&&JSON.parse(reservation.value_json).manifest_sha256===m.manifest_sha256&&JSON.parse(reservation.value_json).micro_usd===m.reservation_micro_usd&&
      JSON.stringify(m.text_only)===JSON.stringify(config.text_only)&&JSON.stringify(generation.policy.text_only)===JSON.stringify(config.text_only)&&generation.policy.max_runs===1&&generation.policy.max_task_seconds===config.max_task_seconds&&
      m.expires_at===generation.policy.expires_at&&m.expires_at<=config.expires_at&&m.expires_at>m.issued_at&&Date.parse(m.expires_at)<=Date.parse(m.issued_at)+config.session_seconds*1000&&
-     run&&run.command_id===m.command_id&&run.persona_id===m.persona_id&&run.role==='coordinator'&&run.parent_run_id===null&&run.routine_id===null&&run.occurrence_id===null&&JSON.parse(run.context_json).room_id===null&&
+     run&&run.command_id===m.command_id&&run.persona_id===m.persona_id&&run.role==='coordinator'&&run.parent_run_id===null&&run.routine_id===null&&run.occurrence_id===null&&this.store.runHasNullRoom(m.run_id)&&
      this.store.db.all("SELECT sequence FROM events WHERE id=? AND type='message.user' AND actor_id=? AND conversation_id=? AND sequence=? AND created_at<=?",m.command_id,command.owner_id,m.persona_id,m.event_sequence,m.issued_at).length===1&&
      this.directMessage(m.persona_id,m.command_id,null,null,null,m.event_sequence-1,m.persona_id),
      'INVALID_CONFIGURATION','Message-bound generation differs from its admission binding.',503);

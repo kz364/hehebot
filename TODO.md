@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** warm/background generation
+**Current checkpoint (2026-09-25, verified locally):** bootstrap/warm/background
+generation strict-null room checks return a scalar for unambiguous object keys,
+without context/checkpoint hydration. Duplicate keys, non-object roots and raw
+NULs retain JS fallback and its exceptions; no snapshot rewriting or clone change.
+Old queries fail3; first-key extraction mutant fails5. Final focused286/backend2036/
+HTTP31/workerd33 room vectors/typecheck/build pass. Prior full runtime/browser/
+native/shutdown/desktop matrix not rerun. Next: remaining root authority reads and
+snapshot representation before native clone changes; SQL/storage/scan bounds and
+restoration/recursive settlement remain open. Gates unchanged; local only.
+
+**Previous checkpoint (2026-09-25, verified locally):** warm/background generation
 validators now select only seven consumed run fields, matching bootstrap, without
 loading retained checkpoints. Strict JS room checks and stored snapshots retained.
 Red2/focused253/backend2003/HTTP31/workerd/typecheck/build pass. Prior full runtime/

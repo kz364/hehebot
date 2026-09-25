@@ -4,7 +4,19 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
-Warm/background generation validators now match bootstrap's seven-field authority
+Bootstrap/warm/background strict-null room checks now project a scalar through
+Store.runHasNullRoom for zero/one decoded root key. Duplicates/non-objects/raw NUL
+retain JS fallback; no snapshot rewrite or native clone change. Node/workerd33
+vectors pin escaped and NUL keys, both duplicate orders, strict-null behavior,
+exceptions and >1MiB source preservation. Old reads fail3, first-key mutant fails5;
+final focused286/backend2036/HTTP31/workerd/typecheck/build pass. Evidence hashes
+in IMPLEMENTATION.md. Prior full runtime/browser/native/shutdown/desktop matrix
+not rerun. No active checks/children/delivery; existing schedule enabled. Next:
+remaining root authority reads and snapshot representation before native clone
+changes, SQL/storage/scan bounds and native restoration/recursive settlement.
+Scalar return is not a SQL-work or historical-fallback bound. Local only, gates false.
+
+Previous checkpoint: warm/background generation validators matched bootstrap's seven-field authority
 projection, retaining full context for unchanged strict JS room checks but omitting
 checkpoints. Signed-owner admission fixtures assert actual read columns, large
 stored snapshot preservation, duplicate room-key orders and false/missing refusal.
