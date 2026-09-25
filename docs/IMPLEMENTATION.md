@@ -4,6 +4,19 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Settled native-child retry coverage (2026-09-25): prior tests rejected unsettled
+children before reaching the explicit background-role restriction. New ordinary,
+context-overflow and memory-overflow vectors settle the child, then assert exact
+CAPABILITY_UNAVAILABLE rejection and idempotent replay without changing snapshots,
+attempts, timers or lifecycle/wake state. Temporarily omitting only the role guard
+made all3 commands applied; mutant fails3. Restored control.ts has zero diff.
+Final orchestration/recovery/lifecycle136 and typecheck pass. No production change,
+no native execution or disk-reopen claim. Full matrix not repeated for test-only unit.
+- .local/settled-child-retry-mutant.log SHA256:
+  `e08b29323f11538495e22da85de8bbc5960b669785d457ad2b5a11f62bf0b84f`
+- .local/settled-child-retry-final.log SHA256:
+  `728bb283d894e9fbcb7b100ef0c83226660e1f5ab0326933c4f503c5e788e58a`
+
 Refusal provenance during recovery (2026-09-25): cancellation timeout, lease expiry
 and confirmed provider stop now copy a still-known native memory refusal into exact
 run/current-attempt metadata before replacing errors. SQL joins native parent and

@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** cancellation timeout, lease
+**Current checkpoint (2026-09-25, verified locally):** settled native-child retry
+coverage now reaches the explicit background-role refusal for ordinary, context-
+overflow and memory-overflow children. Exact rejection replay preserves snapshots,
+attempts, timers and lifecycle/wake state. Removing the role guard fails all3 tests;
+restored production code has zero diff. Focused136/typecheck pass. Test-only unit;
+prior full matrix not rerun. Next historical/storage bounds and native restoration/
+recursive settlement; production gates and unresolved historical evidence unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** cancellation timeout, lease
 expiry and confirmed provider stop retain known native memory refusal before error
 replacement. Recovery status/errors, unknown effects and original snapshots remain
 unchanged. Early watchdog writes no evidence; timeout followed by completion keeps

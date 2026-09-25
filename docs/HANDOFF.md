@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Settled native-child retry now has direct role-guard coverage, including both
+overflow markers. Role-guard omission fails3; restored production code unchanged.
+Final focused136/typecheck pass. Rejected command replay preserves attempts, timers,
+snapshots and lifecycle/wake state. Test-only unit, full matrix not repeated. Next
+historical/storage bounds and native restoration/recursive settlement; no active
+checks/children/delivery. Existing schedule enabled; external gates unchanged.
+
 Recovery transitions now retain known native memory refusal before cancellation
 timeout, lease expiry or provider-stop error replacement. Exact attempt/reference
 joins; lease generation fence retained. Recovery errors, effects and snapshots stay

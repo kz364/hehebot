@@ -347,6 +347,25 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(life.heartbeat(identity, []).cancellations).not.toContain(child.id);
   });
 
+  it.each(['ordinary','context-overflow','memory-overflow'])('refuses independent retry of a settled native child (%s)',kind=>{
+    const p=parent();f.core.options.delegations={[bot]:[otherBot]};
+    if(kind==='context-overflow')f.db.exec("UPDATE runs SET context_json=json_set(context_json,'$.padding',?) WHERE id=?",'界'.repeat(400000),p);
+    if(kind==='memory-overflow')f.store.put(randomUUID(),'memory',{scope:{kind:'persona',id:otherBot},text:'界'.repeat(50000),explicit_constraint:true,expires_at:null},0,'owner',f.core.now());
+    const child=tasks.register(identity,{...receipt(p),persona_id:otherBot},true);
+    life.complete(identity,child.id,1,{status:'cancelled',text:''});
+    const before=f.store.run(child.id),attempts=f.db.all('SELECT * FROM attempts WHERE run_id=?',child.id),state=life.get();
+    expect(before.status).toBe('cancelled');
+    expect(f.db.all("SELECT run_id FROM attempts WHERE run_id=? AND status IN ('claimed','running')",child.id)).toEqual([]);
+    const command={schema_version:1 as const,type:'run.retry' as const,payload:{run_id:child.id,expected_attempt:1}},key=randomUUID();
+    const rejected=f.accept(command,key);
+    expect(rejected).toMatchObject({status:'rejected',error:{code:'CAPABILITY_UNAVAILABLE'}});
+    expect(f.accept(command,key)).toEqual(rejected);
+    expect(f.store.run(child.id)).toEqual(before);
+    expect(f.db.all('SELECT * FROM attempts WHERE run_id=?',child.id)).toEqual(attempts);
+    expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+    expect(life.get()).toEqual(state);
+  });
+
   it.each(['cancel-timeout','lease-expiry','provider-stop'])('preserves legacy memory refusal before %s overwrites the error',mode=>{
     const p=parent();f.core.options.delegations={[bot]:[otherBot]};
     const child=tasks.register(identity,{...receipt(p),persona_id:otherBot},true);
