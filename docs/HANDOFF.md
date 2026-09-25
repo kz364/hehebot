@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Intermediate-ancestor intent reads now omit unused policies on the guarded path;
+root/selected-child checks retain their original grants and ordering. Red3/focused299/
+backend2315/workerd/typecheck/build pass. Node tests cover oversized arrays, duplicate
+keys and objects, plus independent root/child denial with unchanged effects/locks.
+No fixed selected-field/fallback/SQL-work/storage bound claimed. Continue those limits
+and native recovery; no active checks/children/delivery, existing schedule enabled.
+Full runtime/native service/browser/shutdown/desktop matrix not rerun.
+
 Outcome transitions now omit unused policy fields from guarded context projection;
 intent reads and checks retain prior ordering. Red3/focused296/backend2312/workerd/
 typecheck/build pass; source snapshots/locks and unknown→confirmed recording intact.

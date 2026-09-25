@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** guarded outcome-transition
+**Current checkpoint (2026-09-26, verified locally):** guarded intent reads now
+omit intermediate-ancestor policy bodies; root and selected-child grants retain
+their original checks. Oversized array/duplicate/object regressions fail before
+fix and pass afterward; focused299/backend2315/workerd/typecheck/build pass.
+Snapshots, locks and effects remain unchanged on denied grants. This is a read
+reduction, not a bound on selected fields, fallback parsing, SQL work or storage.
+Those limits and native recovery remain next. Full runtime/native service/browser/
+shutdown/desktop matrix not rerun; original intermittency and external gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** guarded outcome-transition
 reads omit unused authorization policy bodies; intent reads/checks remain unchanged.
 Large arrays, duplicate policy keys and object-shaped legacy values preserve late
 unknown/confirmed outcomes while fresh intents retain prior rejection behavior.

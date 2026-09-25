@@ -20,9 +20,6 @@ export class RootChildEffects {
  private admitted(identity: Identity, rootId: string, rootAttempt: number, runId: string, attempt: number, effectActionKey?: string) {
   this.lifecycle.authorizeAttempt(identity, rootId, rootAttempt);
   type AuthorityRun = Pick<Run, 'id'|'current_attempt'|'role'|'parent_run_id'|'persona_id'|'routine_id'|'context_json'|'status'>;
-  // Transitions validate custody/scope, not policy membership. Intent retains
-  // policy reads even for existing keys; its authorization order is unchanged.
-  const authorityKeys = "'persona','routine','room_id','scope_key'"+(effectActionKey===undefined?'':",'authorization_policy_ids'");
   // Only a unique, unescaped string ID can replace a stored persona/routine
   // object. All other nested representations retain their original JSON.
   // SQLite paths can match NUL-suffixed keys; those must use JS fallback.
@@ -33,6 +30,10 @@ export class RootChildEffects {
    THEN '{"id":'||(context_json -> ('$.'||f.key||'.id'))||'}'
    ELSE context_json -> ('$.'||f.key) END`;
   const readRun = (id: string): AuthorityRun => {
+   // Only intent root/selected-child checks consume policies. Intermediate
+   // ancestors and transitions validate custody/scope without policy membership.
+   const authorityKeys = "'persona','routine','room_id','scope_key'"+
+    (effectActionKey!==undefined&&(id===rootId||id===runId)?",'authorization_policy_ids'":'');
    // Keep JSON fragments, not SQL scalar conversions. Ambiguous keys/authority escapes,
    // numeric rooms and non-objects retain the original JS representation. This
    // removes irrelevant bodies on the fast path, not SQLite's JSON scan work.

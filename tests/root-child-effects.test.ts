@@ -48,6 +48,31 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it.each(['array','duplicates','object'] as const)('omits unused intermediate %s policies during intent without changing root/child grants',shape=>{
+ const original=f.store.run(child).context_json,padding='界'.repeat(400000)+'\n';
+ let snapshot=JSON.stringify({...JSON.parse(original),authorization_policy_ids:shape==='object'?{padding}:[padding]});
+ if(shape==='duplicates')snapshot=snapshot.slice(0,-1)+',"authorization_policy_ids":[]}';
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
+ const read=vi.spyOn(f.db,'all');
+ try{
+  expect(boundary.intent(intent(grandchild)).status).toBe('intent');
+  const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]) as Array<{id?:string;context_json?:string}>;
+  const bodies=rows.filter(row=>row.id===child&&typeof row.context_json==='string');
+  expect(bodies.length).toBeGreaterThan(0);
+  for(const row of bodies){
+   expect(Buffer.byteLength(row.context_json!)).toBeLessThan(8192);
+   expect(JSON.parse(row.context_json!)).not.toHaveProperty('authorization_policy_ids');
+  }
+ }finally{read.mockRestore();}
+ expect(f.store.run(child).context_json).toBe(snapshot);
+ const before=effects(),held=locks();
+ context(root,{authorization_policy_ids:[]});
+ rejects(()=>boundary.intent(intent(grandchild)),'FORBIDDEN');
+ context(root,{authorization_policy_ids:[policy]});context(grandchild,{authorization_policy_ids:[]});
+ rejects(()=>boundary.intent(intent(grandchild)),'FORBIDDEN');
+ expect(effects()).toEqual(before);expect(locks()).toEqual(held);
+});
+
 it.each(['array','duplicates','object'] as const)('omits unused %s policy bodies from late outcomes without relaxing intent authority',shape=>{
  const input=intent(grandchild);boundary.intent(input);
  const padding='界'.repeat(400000)+'\n',snapshots=new Map<string,string>();

@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Intermediate policy omission (2026-09-26 Asia/Jakarta): RootChildEffects intent
+reads project policies only for root and selected child. Intermediate ancestors
+still validate complete custody/scope; guarded reads omit policy-only duplicate/
+escaped/malformed bodies that no predicate consumes. JS fallback and source bytes
+remain unchanged. Three regressions fail on the old query (>1MiB returned), then
+pass with independent root/child grant refusals preserving effects and locks.
+Focused299/backend2315/typecheck/existing workerd regressions/dry-run build pass;
+PID1461400 exited0. Workerd regression coverage is existing outcome/root-child
+coverage, not a new intermediate-ancestor fixture. Full runtime/native service/
+browser/shutdown/desktop matrix not rerun. No selected-field/fallback/SQL-work/
+storage bound claimed; original intermittent failures and production gates unchanged.
+- .local/ancestor-policy-red.log SHA256: `d94e7aaff9ac9c315013cd1ebd4a93140ec2c00cbc1f40a53c95da01007c090a`
+- .local/ancestor-policy-focused.log SHA256: `047a3138ade04f2c5ab485b2def9eeb21dab5eba50127c5a7c1b259dc5e228f0`
+- .local/ancestor-policy-integrated.log SHA256: `7cee47d76498a107bec7129399de1b81b70d870527f2a23631d82a71b2bd15ee`
+- .local/ancestor-policy-workerd.log SHA256: `526277a630563e08cd659b1211fb78425b5a5e1d6e850ebba361d6200099053e`
+
 Outcome-only policy omission (2026-09-26 Asia/Jakarta): guarded RootChildEffects
 transition reads select four custody/scope fields without authorization_policy_ids.
 Intent reads still select five fields and preserve prior policy validation order.
