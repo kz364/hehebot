@@ -313,13 +313,17 @@ export class ControlCore {
     return run.id;
    }
    case 'run.retry': {
-    const run=this.store.run(command.payload.run_id);
+    const run=this.store.db.all<Omit<Run,'context_json'|'checkpoint_json'>&{context_json:string|null}>(`SELECT id,command_id,occurrence_id,persona_id,routine_id,status,current_attempt,error_code,created_at,updated_at,role,parent_run_id,title,
+     CASE WHEN current_attempt=0 AND length(CAST(context_json AS BLOB))<=1048576 THEN context_json END AS context_json
+     FROM runs WHERE id=?`,command.payload.run_id)[0];
+    if(!run)throw new ControlError('NOT_FOUND','Run unavailable.',404);
     requireThat(run.current_attempt===command.payload.expected_attempt,'REVISION_CONFLICT','The attempt has changed.');
     requireThat(['failed','waiting','cancelled','recovery_required'].includes(run.status),'INVALID_INPUT','This run is not eligible for retry.',422);
     requireThat(run.error_code!=='MESSAGE_EXPIRED','MESSAGE_EXPIRED','This input expired. Send a fresh request.');
     if(run.current_attempt===0){
      const received=run.command_id?this.store.db.all<{accepted_at:string}>('SELECT accepted_at FROM commands WHERE id=?',run.command_id)[0].accepted_at:run.created_at;
      requireThat(Date.parse(received)+90*86400000>this.options.now().getTime(),'MESSAGE_EXPIRED','This unstarted instruction expired. Send a fresh request.');
+     requireThat(run.context_json!==null,'CONTEXT_PREPARATION_LIMIT','Historical context exceeds the retry read limit. Stored data was retained; send a fresh request.');
      requireThat(!JSON.parse(run.context_json).skill_invocation||Date.parse(run.created_at)+30*86400000>this.options.now().getTime(),'MESSAGE_EXPIRED','This unstarted skill snapshot expired. Send a fresh request.');
     }
     requireThat(run.current_attempt<3,'DEADLINE_EXCEEDED','This run has reached its retry limit.');

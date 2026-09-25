@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** limited memory reads preflight
+**Current checkpoint (2026-09-25, verified locally):** explicit retry omits checkpoints
+and started context bodies. Unstarted context reads cap at1048576 UTF-8 bytes;
+overflow refuses without run/timer/lifecycle changes, preserving earlier rejection
+precedence and stored snapshots. Exact/one-over multibyte cases pass; character-count
+mutant fails1. Focused94/backend2117/HTTP31/typecheck/build pass. Full runtime matrix
+not rerun for this read boundary. Remaining historical parsing/storage/SQL byte
+inspection and native restoration/settlement remain open. Local only; gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** limited memory reads preflight
 candidate metadata strings at131072 aggregate UTF-8 bytes before hydration. This
 counts all bounded candidates needed for JS merging, not only final selected rows;
 oversized later candidate metadata may refuse, without dropping constraints.

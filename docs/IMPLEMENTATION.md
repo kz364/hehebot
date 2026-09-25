@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Explicit retry read boundary (2026-09-25): run.retry projects metadata and never
+loads checkpoint_json. Started attempts do not load context; unstarted attempts
+load at most1048576 raw UTF-8 bytes for the existing skill-expiry check. Over-limit
+unstarted retries reject CONTEXT_PREPARATION_LIMIT without rewriting snapshots,
+creating attempts, changing timers or requesting wake. Expected-attempt/status/
+expired-code/90-day receipt checks retain precedence. Started retry admission still
+uses existing custody checks and the later claim-time context gate. Budget predicate
+types now accept metadata; predicate behavior is unchanged. This bounds hydration,
+not SQL byte inspection, persisted snapshot size or total storage.
+Focused94/backend2117/HTTP31/typecheck/dry-build pass. Character-count mutant fails
+the multibyte one-byte-over case (incorrectly applied); restored byte check passes.
+Logs: .local/explicit-retry-integrated.log, .local/explicit-retry-character-mutant.log,
+.local/explicit-retry-focused-final.log. Initial .local/explicit-retry-focused.log
+records a fixture error (Receipt.resource_id corrected), not regression evidence.
+Full runtime/browser/native/shutdown/desktop matrix not rerun; no external actions.
+
 Candidate metadata hydration budget (2026-09-25): limited scopedMemories executes
 up to three indexed scalar SUM preflights over the same bounded candidate ranges.
 Combined id/kind/created_at/updated_at raw UTF-8 must fit131072 before any candidate

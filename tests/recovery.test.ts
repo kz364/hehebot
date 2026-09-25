@@ -12,6 +12,56 @@ function running(){
  return {life,identity,runId:claim.run.id};
 }
 describe('bounded recovery',()=>{
+ it('explicit retry omits started context and checkpoint without rewriting either',()=>{
+  const {life,identity,runId}=running();
+  life.complete(identity,runId,1,{status:'failed',text:'Transient',error_code:'TEMPORARY_UNAVAILABLE'});
+  const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+  f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,runId);
+  const before=life.get(),read=vi.spyOn(f.db,'all');
+  try{
+   expect(f.accept({schema_version:1,type:'run.retry',payload:{run_id:runId,expected_attempt:1}}).status).toBe('applied');
+   const index=read.mock.calls.findIndex(([sql])=>sql.includes('FROM runs WHERE id=?'));
+   expect(index).toBeGreaterThanOrEqual(0);
+   expect(read.mock.results[index].value).toEqual([expect.objectContaining({id:runId,context_json:null})]);
+   expect(read.mock.results[index].value[0]).not.toHaveProperty('checkpoint_json');
+  }finally{read.mockRestore();}
+  expect(f.store.run(runId)).toMatchObject({status:'queued',current_attempt:1,context_json:context,checkpoint_json:checkpoint});
+  expect(life.get().queue_sequence).toBe(before.queue_sequence+1);
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+  expect(f.db.all('SELECT status FROM attempts WHERE run_id=?',runId)).toEqual([{status:'failed'}]);
+ });
+ it.each([1048576,1048577])('bounds unstarted explicit retry context at %s UTF-8 bytes without loading checkpoints',bytes=>{
+  f=fixture(true);
+  const receipt=f.accept({schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'Read-only test.'}});
+  const runId=receipt.resource_id!;
+  const base=JSON.stringify({padding:'界'.repeat(349000)});
+  const context=base+' '.repeat(bytes-Buffer.byteLength(base)),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+  expect(Buffer.byteLength(context)).toBe(bytes);expect(context.length).toBeLessThan(1048576);
+  f.db.exec("UPDATE runs SET status='waiting',context_json=?,checkpoint_json=? WHERE id=?",context,checkpoint,runId);
+  const before=f.store.run(runId),state=f.db.all('SELECT * FROM lifecycle'),read=vi.spyOn(f.db,'all');
+  try{
+   const result=f.accept({schema_version:1,type:'run.retry',payload:{run_id:runId,expected_attempt:0}});
+   expect(result).toMatchObject(bytes===1048576?{status:'applied'}:{status:'rejected',error:{code:'CONTEXT_PREPARATION_LIMIT'}});
+   const index=read.mock.calls.findIndex(([sql])=>sql.includes('FROM runs WHERE id=?'));
+   expect(index).toBeGreaterThanOrEqual(0);
+   expect(read.mock.results[index].value[0].context_json).toBe(bytes===1048576?context:null);
+   expect(read.mock.results[index].value[0]).not.toHaveProperty('checkpoint_json');
+  }finally{read.mockRestore();}
+  expect(f.store.run(runId)).toMatchObject({context_json:context,checkpoint_json:checkpoint,current_attempt:0});
+  if(bytes>1048576){expect(f.store.run(runId)).toEqual(before);expect(f.db.all('SELECT * FROM lifecycle')).toEqual(state);}
+  else expect(f.store.run(runId).status).toBe('queued');
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+  expect(f.db.all('SELECT * FROM attempts')).toEqual([]);
+ });
+ it.each(['attempt','status','expired','age'])('preserves %s rejection precedence over historical context overflow',reason=>{
+  f=fixture(true);
+  const receipt=f.accept({schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'Read-only test.'}}),runId=receipt.resource_id!;
+  f.db.exec('UPDATE runs SET status=?,error_code=?,context_json=? WHERE id=?',reason==='status'?'completed':'waiting',reason==='expired'?'MESSAGE_EXPIRED':null,JSON.stringify({padding:'界'.repeat(400000)}),runId);
+  if(reason==='age')f.setNow('2026-12-09T00:00:00.000Z');
+  const before=f.store.run(runId),state=f.db.all('SELECT * FROM lifecycle');
+  expect(f.accept({schema_version:1,type:'run.retry',payload:{run_id:runId,expected_attempt:reason==='attempt'?1:0}})).toMatchObject({status:'rejected',error:{code:reason==='attempt'?'REVISION_CONFLICT':reason==='status'?'INVALID_INPUT':'MESSAGE_EXPIRED'}});
+  expect(f.store.run(runId)).toEqual(before);expect(f.db.all('SELECT * FROM lifecycle')).toEqual(state);
+ });
  it.each([false,true])('reads only retry metadata with execution enabled=%s',enabled=>{
   const {life,identity,runId}=running();
   life.complete(identity,runId,1,{status:'failed',text:'Transient',error_code:'TEMPORARY_UNAVAILABLE'});

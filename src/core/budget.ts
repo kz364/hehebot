@@ -161,7 +161,7 @@ export class BudgetLedger {
     bindings: [BUDGET_OVERRIDE_PREFIX, revision] };
   }
 
-  private matches(run: Run, predicate: BudgetAdmissionPredicate): boolean {
+  private matches(run: Omit<Run,'context_json'|'checkpoint_json'>, predicate: BudgetAdmissionPredicate): boolean {
     return Boolean(this.store.db.all<{ matched: number }>(`WITH r AS (SELECT ? AS id,? AS role,? AS parent_run_id,? AS current_attempt,
       ? AS status,? AS occurrence_id,? AS routine_id) SELECT COALESCE((${predicate.sql}),0) AS matched FROM r`,
     run.id, run.role, run.parent_run_id, run.current_attempt, run.status, run.occurrence_id, run.routine_id, ...predicate.bindings)[0].matched);
@@ -175,7 +175,7 @@ export class BudgetLedger {
     return { sql: `NOT ((${eligible.sql}) AND NOT (${exception.sql}))`, bindings: [...eligible.bindings, ...exception.bindings] };
   }
 
-  blocks(run: Run): boolean {
+  blocks(run: Omit<Run,'context_json'|'checkpoint_json'>): boolean {
     return !this.matches(run, this.admissionPredicate());
   }
 

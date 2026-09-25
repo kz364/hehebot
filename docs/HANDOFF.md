@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Explicit retry now avoids checkpoint and started-context hydration; unstarted
+context reads cap at1048576 UTF-8 bytes. Refusal preserves snapshots and lifecycle;
+started runs retain existing custody checks and later claim-time gating. Focused94/
+backend2117/HTTP31/typecheck/build pass; character-count mutant fails1 then restored.
+No full runtime matrix rerun for this read boundary. No active checks/children/
+delivery; existing schedule read/enabled. Continue remaining historical parsing,
+total storage and native recovery; SQL byte inspection still unbounded.
+
 Limited memory candidate metadata now has a131072-byte UTF-8 preflight before
 hydration. All bounded candidates count, even later unselected rows needed for JS
 merge ordering; oversized metadata refuses without source edits. Unlimited reads
