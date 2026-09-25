@@ -4,6 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+New effect action keys now have a 1048576-byte per-run authority-context hydration
+ceiling after guarded projection or original JS fallback. SQL returns NULL on
+overflow, then explicit CONTEXT_PREPARATION_LIMIT at the parse boundary; attempt/
+root-role checks retain precedence. Existing keys and transitions are exempt from
+this new ceiling, not from authority/digest checks or independent EffectLedger
+limits. Red3/focused306/backend2322/typecheck/build and new real-workerd exact/
+one-over/replay cases pass. No truncation or source rewrite. Continue aggregate/
+existing-key/SQL-work/storage bounds and native recovery. No active checks/children/
+delivery; schedule enabled. Full runtime/native service/browser/shutdown/desktop
+matrix not rerun; original intermittency and external gates unchanged.
+
 Intermediate-ancestor intent reads now omit unused policies on the guarded path;
 root/selected-child checks retain their original grants and ordering. Red3/focused299/
 backend2315/workerd/typecheck/build pass. Node tests cover oversized arrays, duplicate

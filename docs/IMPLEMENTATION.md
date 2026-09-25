@@ -4,6 +4,33 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+New-action authority read ceiling (2026-09-26 Asia/Jakarta): RootChildEffects
+returns at most 1048576 UTF-8 bytes of authority context per run for unseen action
+keys, covering both guarded projections and full JS fallback. An outer SQL CASE
+returns NULL on overflow; explicit CONTEXT_PREPARATION_LIMIT is checked at the
+parse boundary after existing attempt/root-role predicates. Original snapshots
+are never truncated or rewritten. Existing keys and outcome transitions bypass
+only this new ceiling and retain all authority/digest checks and independent
+EffectLedger limits. This is not a SQL-work, aggregate-memory or total-storage bound.
+Seven Node cases cover exact/one-over ASCII/BMP/astral fallback, root/selected
+policies and selected/intermediate fallback, NULL body return, retained effects/
+locks/snapshots, replay conflict and late unknown→confirmed custody. Three initial
+regressions failed before implementation. First post-fix run retained six failures:
+three stale-attempt fixture expectations corrected to existing REVISION_CONFLICT,
+three old oversized-policy expectations updated to explicit preparation refusal;
+below-limit malformed/denied policy behavior remains tested. Final focused306/
+backend2322/typecheck/build pass. Real workerd verifies exact1MiB multibyte fallback,
+one-byte-over NULL return/refusal and existing replay/outcome/source preservation.
+Final fixture typecheck initially found a nullable capture annotation, corrected
+after a string filter; final PID1467765 exited0. Full runtime/native service/browser/
+shutdown/desktop matrix not rerun; original intermittent failures remain unresolved.
+- .local/authority-bound-red.log SHA256: `476f03281976681f74fdc61ec90734669082bc490c9a368f41ca8be9777c9310`
+- .local/authority-bound-first.log SHA256: `56c7a69c67419dc7c07df812c3bba175bc577f7b1c6c5af850285092af350b8e`
+- .local/authority-bound-focused.log SHA256: `c0913e40c215ee864e03877585b7a4631bf292019c529e9acaa418ea6dcffc86`
+- .local/authority-bound-integrated.log SHA256: `045c63758af8565ed0c639da7a3c87c48a84b8befa522f99ca79ea299e3eee89`
+- .local/authority-bound-final.log (typecheck failure) SHA256: `632b77023a3a0e4522cca23d847cae8ac4500e84c9243ea97158618082666a20`
+- .local/authority-bound-workerd-final.log SHA256: `a67c632275e4b73c1c236e02c6630ac858c1d57b9504aa40c243c927fc84110b`
+
 Intermediate policy omission (2026-09-26 Asia/Jakarta): RootChildEffects intent
 reads project policies only for root and selected child. Intermediate ancestors
 still validate complete custody/scope; guarded reads omit policy-only duplicate/

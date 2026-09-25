@@ -49,8 +49,8 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
    life.submitted(identity,root,1,'authority-root');
    const child=new NativeTaskLedger(store,core,life).register(identity,{parent_run_id:root,parent_attempt:1,persona_id:persona,native_run_ref:'authority-child',native_session_key:'synthetic:authority-child',title:'Authority SQL child'});
    life.submitted(identity,child.id,1,'authority-child');
-   const returned:Array<{context_json?:string}>=[];
-   const observed=new Store({...db,all:<T>(sql:string,...values:SqlValue[])=>{const rows=db.all<T>(sql,...values);returned.push(...rows as Array<{context_json?:string}>);return rows;}});
+   const returned:Array<{context_json?:string|null}>=[];
+   const observed=new Store({...db,all:<T>(sql:string,...values:SqlValue[])=>{const rows=db.all<T>(sql,...values);returned.push(...rows as Array<{context_json?:string|null}>);return rows;}});
    const boundary=new RootChildEffects(observed,core,life);
    const effect={id:crypto.randomUUID(),run_id:child.id,attempt:1,action_key:crypto.randomUUID(),classification:'read_only' as const,authorization_ref:'',request_digest:'authority-request',provider_idempotency_key:null};
    boundary.intent({identity,root_run_id:root,root_attempt:1,effect,resources:[]});
@@ -70,7 +70,7 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
     returned.length=0;
     boundary.transition({identity,root_run_id:root,root_attempt:1,run_id:child.id,attempt:1,effect_id:effect.id,status:'outcome_unknown',receipt:null});
     const bodies=returned.filter(row=>typeof row.context_json==='string');
-    projected&&=bodies.length>0&&bodies.every(row=>new TextEncoder().encode(row.context_json).length<8192);
+    projected&&=bodies.length>0&&bodies.every(row=>new TextEncoder().encode(row.context_json!).length<8192);
     unchanged&&=snapshots.every(({id,snapshot})=>store.run(id).context_json===snapshot);
    }
    for(const {id,source} of sources)db.exec('UPDATE runs SET context_json=?,routine_id=NULL WHERE id=?',source,id);
@@ -87,7 +87,23 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
     catch(error){if(error&&typeof error==='object'&&'code' in error&&error.code==='FORBIDDEN')rejected=true;else throw error;}
     nulKeys&&=rejected===!allowed&&store.run(child.id).context_json===snapshot;
    }
-   return Response.json({projected,unchanged,nulKeys,
+   for(const {id,source} of sources)db.exec('UPDATE runs SET context_json=? WHERE id=?',source,id);
+   const empty=sources[0].source.slice(0,-1)+`,"scope_key":${JSON.stringify(JSON.parse(sources[0].source).scope_key)},"padding":""}`;
+   const remaining=1048576-new TextEncoder().encode(empty).length;
+   const exact=empty.slice(0,-2)+'界'.repeat(Math.floor(remaining/3))+'x'.repeat(remaining%3)+'"}';
+   const over=exact.slice(0,-2)+'x"}';
+   db.exec('UPDATE runs SET context_json=? WHERE id=?',exact,root);
+   const admitted=boundary.intent({identity,root_run_id:root,root_attempt:1,effect:{...effect,id:crypto.randomUUID(),action_key:crypto.randomUUID()},resources:[]});
+   db.exec('UPDATE runs SET context_json=? WHERE id=?',over,root);returned.length=0;
+   let refused=false;
+   try{boundary.intent({identity,root_run_id:root,root_attempt:1,effect:{...effect,id:crypto.randomUUID(),action_key:crypto.randomUUID()},resources:[]});}
+   catch(error){if(error&&typeof error==='object'&&'code' in error&&error.code==='CONTEXT_PREPARATION_LIMIT')refused=true;else throw error;}
+   const bounded=admitted.status==='intent'&&refused&&returned.some(row=>row.context_json===null)&&
+    returned.every(row=>typeof row.context_json!=='string'||new TextEncoder().encode(row.context_json).length<=1048576);
+   const replay=boundary.intent({identity,root_run_id:root,root_attempt:1,effect,resources:[]});
+   boundary.transition({identity,root_run_id:root,root_attempt:1,run_id:child.id,attempt:1,effect_id:effect.id,status:'outcome_unknown',receipt:null});
+   unchanged&&=store.run(root).context_json===over;
+   return Response.json({projected,unchanged,nulKeys,bounded:bounded&&replay.status==='outcome_unknown',
     status:db.all<{status:string}>('SELECT status FROM effects WHERE id=?',effect.id)[0].status});
   }
   if(path==='/run-room'||path==='/run-falsy-room'){

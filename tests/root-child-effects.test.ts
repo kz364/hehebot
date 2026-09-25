@@ -48,6 +48,51 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it.each(['x','界','😀'])('bounds new-action fallback hydration at 1MiB UTF-8 (%s) without blocking existing custody',unit=>{
+ const input=intent(grandchild);boundary.intent(input);
+ const base=f.store.run(root).context_json;
+ const scope=JSON.parse(base).scope_key;
+ // A duplicate selected key intentionally exercises the original JS fallback.
+ const empty=base.slice(0,-1)+`,"scope_key":${JSON.stringify(scope)},"padding":""}`;
+ const bytes=1048576-Buffer.byteLength(empty),width=Buffer.byteLength(unit);
+ const padding=unit.repeat(Math.floor(bytes/width))+'x'.repeat(bytes%width);
+ const exact=empty.slice(0,-2)+padding+'"}',over=empty.slice(0,-2)+padding+'x"}';
+ expect(Buffer.byteLength(exact)).toBe(1048576);expect(Buffer.byteLength(over)).toBe(1048577);
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',exact,root);
+ expect(boundary.intent(intent(grandchild)).status).toBe('intent');
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',over,root);
+ const before=effects(),held=locks(),read=vi.spyOn(f.db,'all');
+ try{
+  rejects(()=>boundary.intent(intent(grandchild)),'CONTEXT_PREPARATION_LIMIT');
+  const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]) as Array<{id?:string;context_json?:string|null}>;
+  expect(rows.filter(row=>row.id===root&&'context_json' in row)).toEqual([expect.objectContaining({context_json:null})]);
+ }finally{read.mockRestore();}
+ expect(effects()).toEqual(before);expect(locks()).toEqual(held);
+ // Attempt authorization retains precedence over overflow.
+ rejects(()=>boundary.intent({...intent(grandchild),root_attempt:2}),'REVISION_CONFLICT');
+ expect(boundary.intent(input).id).toBe(input.effect.id);
+ boundary.transition(result(input,'outcome_unknown'));
+ expect(boundary.intent(input).status).toBe('outcome_unknown');
+ rejects(()=>boundary.intent({...input,effect:{...input.effect,request_digest:'different'}}),'IDEMPOTENCY_CONFLICT');
+ boundary.transition(result(input,'confirmed',{evidence:'retained-oversized-fallback'}));
+ expect(f.store.run(root).context_json).toBe(over);expect(locks()).toEqual(held);
+});
+
+it.each(['root-policy','selected-policy','intermediate-fallback','selected-fallback'])('refuses oversized %s before hydration without changing custody',kind=>{
+ const id=kind==='root-policy'?root:kind==='intermediate-fallback'?child:grandchild;
+ const original=f.store.run(id).context_json,parsed=JSON.parse(original),padding='界'.repeat(400000);
+ const snapshot=kind.endsWith('policy')?JSON.stringify({...parsed,authorization_policy_ids:[policy,padding]}):
+  original.slice(0,-1)+`,"scope_key":${JSON.stringify(parsed.scope_key)},"padding":"${padding}"}`;
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
+ const before=effects(),held=locks(),read=vi.spyOn(f.db,'all');
+ try{
+  rejects(()=>boundary.intent(intent(grandchild)),'CONTEXT_PREPARATION_LIMIT');
+  const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]) as Array<{id?:string;context_json?:string|null}>;
+  expect(rows.filter(row=>row.id===id&&'context_json' in row)).toEqual([expect.objectContaining({context_json:null})]);
+ }finally{read.mockRestore();}
+ expect(effects()).toEqual(before);expect(locks()).toEqual(held);expect(f.store.run(id).context_json).toBe(snapshot);
+});
+
 it.each(['array','duplicates','object'] as const)('omits unused intermediate %s policies during intent without changing root/child grants',shape=>{
  const original=f.store.run(child).context_json,padding='界'.repeat(400000)+'\n';
  let snapshot=JSON.stringify({...JSON.parse(original),authorization_policy_ids:shape==='object'?{padding}:[padding]});
@@ -93,10 +138,16 @@ it.each(['array','duplicates','object'] as const)('omits unused %s policy bodies
   }
  }finally{read.mockRestore();}
  const before=effects();
- if(shape==='object')expect(()=>boundary.intent(intent(grandchild))).toThrow(TypeError);
- else rejects(()=>boundary.intent(intent(grandchild)),'FORBIDDEN');
+ rejects(()=>boundary.intent(intent(grandchild)),'CONTEXT_PREPARATION_LIMIT');
  expect(effects()).toEqual(before);expect(locks()).toEqual(held);
  for(const [id,snapshot] of snapshots)expect(f.store.run(id).context_json).toBe(snapshot);
+ // Below the preparation ceiling the original malformed/denied semantics remain.
+ for(const id of [root,child,grandchild]){
+  const small={...JSON.parse(snapshots.get(id)!),authorization_policy_ids:shape==='object'?{}:[]};
+  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',JSON.stringify(small),id);
+ }
+ if(shape==='object')expect(()=>boundary.intent(intent(grandchild))).toThrow(TypeError);
+ else rejects(()=>boundary.intent(intent(grandchild)),'FORBIDDEN');
 });
 
 it.each([

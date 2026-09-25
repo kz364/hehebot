@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** guarded intent reads now
+**Current checkpoint (2026-09-26, verified locally):** new effect action keys
+refuse authority context above 1MiB UTF-8 per run before JS hydration, including
+selected-field projections and full JS fallback. Existing keys/outcomes remain
+fully validated without this new ceiling. Red3/focused306/backend2322/typecheck/
+build and real workerd exact/one-over/replay evidence pass. Seven new Node cases
+cover root/selected/intermediate bodies; source bytes, locks and unknown effects
+are retained. SQL work, aggregate memory, existing-key hydration, storage and
+native recovery remain open. Full runtime/native service/browser/shutdown/desktop
+matrix not rerun; original intermittent failures and production gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** guarded intent reads now
 omit intermediate-ancestor policy bodies; root and selected-child grants retain
 their original checks. Oversized array/duplicate/object regressions fail before
 fix and pass afterward; focused299/backend2315/workerd/typecheck/build pass.
