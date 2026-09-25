@@ -20,6 +20,9 @@ export class RootChildEffects {
  private admitted(identity: Identity, rootId: string, rootAttempt: number, runId: string, attempt: number, effectActionKey?: string) {
   this.lifecycle.authorizeAttempt(identity, rootId, rootAttempt);
   type AuthorityRun = Pick<Run, 'id'|'current_attempt'|'role'|'parent_run_id'|'persona_id'|'routine_id'|'context_json'|'status'>;
+  // Transitions validate custody/scope, not policy membership. Intent retains
+  // policy reads even for existing keys; its authorization order is unchanged.
+  const authorityKeys = "'persona','routine','room_id','scope_key'"+(effectActionKey===undefined?'':",'authorization_policy_ids'");
   // Only a unique, unescaped string ID can replace a stored persona/routine
   // object. All other nested representations retain their original JSON.
   // SQLite paths can match NUL-suffixed keys; those must use JS fallback.
@@ -36,12 +39,12 @@ export class RootChildEffects {
    const run = this.store.db.all<AuthorityRun>(`SELECT id,current_attempt,role,parent_run_id,persona_id,routine_id,status,
     CASE WHEN instr(context_json,char(0))=0 AND json_type(context_json)='object'
      AND NOT EXISTS(SELECT 1 FROM json_each(context_json) WHERE instr(key,char(0))>0)
-     AND NOT EXISTS(SELECT 1 FROM json_each(context_json) WHERE key IN ('persona','routine','room_id','scope_key','authorization_policy_ids') GROUP BY key HAVING count(*)>1)
-     AND NOT EXISTS(SELECT 1 FROM json_each(context_json) f WHERE key IN ('persona','routine','room_id','scope_key','authorization_policy_ids')
+     AND NOT EXISTS(SELECT 1 FROM json_each(context_json) WHERE key IN (${authorityKeys}) GROUP BY key HAVING count(*)>1)
+     AND NOT EXISTS(SELECT 1 FROM json_each(context_json) f WHERE key IN (${authorityKeys})
       AND ((${fragment}) IS NULL OR instr((${fragment}),char(92))>0))
      AND NOT EXISTS(SELECT 1 FROM json_each(context_json) WHERE key='room_id' AND type IN ('integer','real'))
     THEN (SELECT '{'||coalesce(group_concat(json_quote(key)||':'||(${fragment})), '')||'}'
-     FROM json_each(context_json) f WHERE key IN ('persona','routine','room_id','scope_key','authorization_policy_ids'))
+     FROM json_each(context_json) f WHERE key IN (${authorityKeys}))
     ELSE context_json END AS context_json FROM runs WHERE id=?`, id)[0];
    requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404);
    return run;

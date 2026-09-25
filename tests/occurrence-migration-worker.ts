@@ -56,11 +56,12 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
    boundary.intent({identity,root_run_id:root,root_attempt:1,effect,resources:[]});
    const sources=[root,child.id].map(id=>({id,source:store.run(id).context_json}));
    let projected=true,unchanged=true;
-   for(const field of ['memories','persona','routine']){
+   for(const field of ['memories','persona','routine','policies']){
     const snapshots=sources.map(({id,source})=>{
      const parsed=JSON.parse(source),body={padding:'界'.repeat(400000)+'\n"\\\ud800'};
      if(field==='memories')parsed.memories=[{body}];
      else if(field==='persona')parsed.persona.body=body;
+     else if(field==='policies')parsed.authorization_policy_ids=[body.padding];
      else{parsed.routine={id:'routine-19',body};parsed.scope_key=`${persona}/routine/routine-19`;}
      const snapshot=JSON.stringify(parsed);
      db.exec('UPDATE runs SET context_json=?,routine_id=? WHERE id=?',snapshot,field==='routine'?'routine-19':null,id);

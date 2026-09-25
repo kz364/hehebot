@@ -2,7 +2,16 @@
 
 Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies, including one Worker-triggered staged wake, have canonical completion and full-reload persistence. Historical failed work remains recovery-required. Bounded policies expired and launchers stopped; this is not ongoing chat availability or production readiness. Production execution/native gates remain false.
 
-## Active follow-up (2026-09-25 Asia/Jakarta)
+## Active follow-up (2026-09-26 Asia/Jakarta)
+
+Outcome transitions now omit unused policy fields from guarded context projection;
+intent reads and checks retain prior ordering. Red3/focused296/backend2312/workerd/
+typecheck/build pass; source snapshots/locks and unknown→confirmed recording intact.
+Malformed/denied policies still reject fresh intents. NUL-key and JS fallbacks
+unchanged. Next remaining intent-policy/authority-field/fallback sizes and historical/
+storage/native recovery; no whole-request bound. No active checks/children/delivery;
+schedule read and enabled. Full runtime/native service/browser/shutdown/desktop
+matrix not rerun; original intermittent failures and production gates unchanged.
 
 Persona/routine projection now reduces unique unescaped string IDs without their
 retained bodies; other nested shapes preserve JSON. Additional adversarial checking

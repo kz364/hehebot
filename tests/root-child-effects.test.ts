@@ -48,6 +48,32 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it.each(['array','duplicates','object'] as const)('omits unused %s policy bodies from late outcomes without relaxing intent authority',shape=>{
+ const input=intent(grandchild);boundary.intent(input);
+ const padding='界'.repeat(400000)+'\n',snapshots=new Map<string,string>();
+ for(const id of [root,child,grandchild]){
+  let snapshot=JSON.stringify({...JSON.parse(f.store.run(id).context_json),authorization_policy_ids:shape==='object'?{padding}:[padding]});
+  if(shape==='duplicates')snapshot=snapshot.slice(0,-1)+',"authorization_policy_ids":[]}';
+  snapshots.set(id,snapshot);f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
+ }
+ const held=locks(),read=vi.spyOn(f.db,'all');
+ try{
+  boundary.transition(result(input,'outcome_unknown'));
+  boundary.transition(result(input,'confirmed',{evidence:'late-policy-independent-outcome'}));
+  const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]) as Array<{context_json?:string}>;
+  const bodies=rows.filter(row=>typeof row.context_json==='string');expect(bodies.length).toBeGreaterThan(0);
+  for(const row of bodies){
+   expect(Buffer.byteLength(row.context_json!)).toBeLessThan(8192);
+   expect(JSON.parse(row.context_json!)).not.toHaveProperty('authorization_policy_ids');
+  }
+ }finally{read.mockRestore();}
+ const before=effects();
+ if(shape==='object')expect(()=>boundary.intent(intent(grandchild))).toThrow(TypeError);
+ else rejects(()=>boundary.intent(intent(grandchild)),'FORBIDDEN');
+ expect(effects()).toEqual(before);expect(locks()).toEqual(held);
+ for(const [id,snapshot] of snapshots)expect(f.store.run(id).context_json).toBe(snapshot);
+});
+
 it.each([
  {field:'persona',value:`{"id":"foreign","id":"${bot}"}`,allowed:true},
  {field:'persona',value:`{"id":"${bot}","id":"foreign"}`,allowed:false},
@@ -139,7 +165,7 @@ it.each([false,true])('does not confuse NUL-suffixed room keys with authority (a
 it.each(['escape','duplicate','number','null','nul'] as const)('retains original authority representation for %s fallback',kind=>{
  const input=intent();boundary.intent(input);
  const original=f.store.run(child).context_json;
- const snapshot=kind==='escape'?JSON.stringify({...JSON.parse(original),authorization_policy_ids:[policy,'line\nbreak']}):
+ const snapshot=kind==='escape'?original.replace('/personal','\\u002fpersonal'):
   kind==='duplicate'?original.slice(0,-1)+',"room_id":null}':
   kind==='number'?JSON.stringify({...JSON.parse(original),room_id:0}):kind==='null'?'null':original+'\u0000ignored';
  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
@@ -291,7 +317,7 @@ it.each(['intent','replay','outcome'] as const)('omits ancestor checkpoints duri
  expect(locks()).toHaveLength(2);
 });
 
-it('reuses the selected child parse for policy checks and reconciliation without rewriting its snapshot', () => {
+it('reuses the selected child policy parse and omits unused policies during reconciliation', () => {
  const stored=f.store.run(child).context_json;
  const snapshot=stored.slice(0,-1)+`,"padding":"${'x'.repeat(1000000)}","authorization_policy_ids":[],"authorization_policy_ids":["${policy}"]}`;
  expect(Buffer.byteLength(snapshot)).toBeLessThan(1048576);
@@ -303,7 +329,7 @@ it('reuses the selected child parse for policy checks and reconciliation without
   expect(parse.mock.calls.filter(([text])=>text===snapshot)).toHaveLength(2);
   parse.mockClear();
   boundary.transition(result(input,'outcome_unknown'));
-  expect(parse.mock.calls.filter(([text])=>text===snapshot)).toHaveLength(1);
+  expect(parse.mock.calls.filter(([text])=>text===snapshot)).toHaveLength(0);
  }finally{parse.mockRestore();}
  expect(f.store.run(child).context_json).toBe(snapshot);
  expect(effects()).toEqual([expect.objectContaining({run_id:child,status:'outcome_unknown'})]);

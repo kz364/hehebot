@@ -4,6 +4,31 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Outcome-only policy omission (2026-09-26 Asia/Jakarta): guarded RootChildEffects
+transition reads select four custody/scope fields without authorization_policy_ids.
+Intent reads still select five fields and preserve prior policy validation order.
+Large arrays, duplicate policy keys and object-shaped legacy values no longer force
+policy hydration during outcomes. The fallback path still parses original context
+when scope/ID representation requires it; NUL-key guards are unchanged. New intent
+checks still reject missing grants or throw the original malformed-policy TypeError.
+Three oversized-policy regressions fail before fix; final focused296/backend2312/
+workerd/typecheck/dry-run build pass. Tests record unknown then confirmed outcomes,
+assert no policy fields in returned guarded context, and preserve snapshots/locks.
+Real workerd exercises >1MiB policy bodies alongside memory/persona/routine cases.
+Adjusted the parse-reuse fixture to require zero full-snapshot parses on outcomes;
+intent still requires one boundary parse plus independent EffectLedger validation.
+No fixed intent-policy/fallback/SQL-work/storage bound claimed. Full runtime/native
+service/browser/shutdown/desktop matrix not repeated; original intermittent failures
+and production gates remain unchanged.
+- .local/outcome-policy-red.log SHA256:
+  `d55e89e3023cdad09c205b6f6b4d7c6cf3d2a4c753ea791409c4dc7261a2eefb`
+- .local/outcome-policy-focused.log SHA256:
+  `3cd7af152e10ded2673b86ae67ec9f9342a2fcb38f2a6747a803288ed13eac55`
+- .local/outcome-policy-integrated.log SHA256:
+  `0e5e35c9acd023baae299a00902bd9c6a88794786e14bee29c233e887f898197`
+- .local/outcome-policy-workerd.log SHA256:
+  `526277a630563e08cd659b1211fb78425b5a5e1d6e850ebba361d6200099053e`
+
 Nested authority ID projection and NUL-key correction (2026-09-25): persona/routine
 objects with exactly one unescaped string ID return only that ID; all other nested
 shapes keep original JSON. Stored snapshots and independent EffectLedger checks are

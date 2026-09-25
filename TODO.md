@@ -1,6 +1,6 @@
 # Hehebot progress and TODO
 
-**Last reviewed: 2026-09-25 (Asia/Jakarta). Not operational; production gates remain false.**
+**Last reviewed: 2026-09-26 (Asia/Jakarta). Not operational; production gates remain false.**
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** unique unescaped string
+**Current checkpoint (2026-09-26, verified locally):** guarded outcome-transition
+reads omit unused authorization policy bodies; intent reads/checks remain unchanged.
+Large arrays, duplicate policy keys and object-shaped legacy values preserve late
+unknown/confirmed outcomes while fresh intents retain prior rejection behavior.
+Red3/focused296/backend2312/workerd/typecheck/build pass. Stored snapshots and locks
+remain intact. Remaining intent policy/selected-field/fallback sizes, SQL-work/
+storage/native recovery remain open; no whole-request bound. Full runtime/native
+service/browser/shutdown/desktop matrix not rerun. Local only; production gates
+and original intermittent failures unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** unique unescaped string
 persona/routine IDs now project without their retained bodies. Duplicate/missing/
 non-string IDs preserve original representation. Adversarial verification found
 SQLite path matching NUL-suffixed keys; top-level and nested guards now preserve
