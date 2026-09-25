@@ -4,6 +4,18 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Root attempt room checks now use runHasFalsyRoom, distinct from generation's
+strict-null predicate. Normal contexts return only a scalar; numbers, duplicate
+keys, non-objects and raw NUL retain JS fallback. Child inherited room is unused;
+native cloning remains unchanged. Old-read red1/text-length mutant2 discriminate
+hydration and NUL authority widening. Focused344/backend2094/HTTP31/workerd64 room
+cases/typecheck/build pass; hashes in IMPLEMENTATION.md. Prior full runtime/browser/
+native/shutdown/desktop matrix not rerun. No active checks/children/delivery;
+existing schedule enabled. Next snapshot representation before native-clone changes,
+remaining historical/SQL/storage/scan bounds, native restoration/recursive settlement.
+No total bound claimed and gates unchanged. This checkpoint is local only.
+
+Previous checkpoint:
 Bootstrap/warm/background strict-null room checks now project a scalar through
 Store.runHasNullRoom for zero/one decoded root key. Duplicates/non-objects/raw NUL
 retain JS fallback; no snapshot rewrite or native clone change. Node/workerd33

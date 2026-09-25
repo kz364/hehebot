@@ -5,6 +5,7 @@ import {PersonalControl} from '../src/worker/control-object';
 import {OwnerAlpha,parseOwnerAlpha,type OwnerAlphaPolicy} from '../src/core/owner-alpha';
 import {Store} from '../src/core/store';
 import {ROUTINE_MANAGE_POLICY} from '../src/core/agent-commands';
+import {runFalsyRoomCases} from './run-room-cases';
 
 vi.mock('cloudflare:workers',()=>({DurableObject:class{constructor(public ctx:unknown,public env:unknown){}}}));
 vi.mock('../DB/schema.sql',()=>({default:''}));
@@ -32,7 +33,7 @@ const custody=()=>JSON.parse(db.all<{value_json:string}>("SELECT value_json FROM
 const receipt=(parent:string)=>({parent_run_id:parent,parent_attempt:1,persona_id:bot,native_run_ref:randomUUID(),native_session_key:randomUUID(),title:'Observed child'});
 async function first(){const identity=await boot();await message();const claim=await runtime('claim',{identity});await runtime('submitted',{identity,run_id:claim.run.id,attempt:1,native_ref:'root'});return {identity,claim};}
 
-it('validates native child custody without hydrating child snapshots or parent checkpoints',async()=>{
+it('validates native child custody without hydrating child or root snapshots',async()=>{
  const {identity,claim}=await first(),child=await runtime('native-child',{identity,child:receipt(claim.run.id),started:true});
  db.exec("UPDATE runs SET context_json=json_set(context_json,'$.padding',?),checkpoint_json=?",
   '界'.repeat(400000),JSON.stringify({padding:'x'.repeat(1100000)}));
@@ -45,22 +46,20 @@ it('validates native child custody without hydrating child snapshots or parent c
   expect(selections.some(s=>s.id===claim.run.id)).toBe(true);
   for(const selection of selections)for(const row of selection.rows){
    expect(row).not.toHaveProperty('checkpoint_json');
-   if(selection.id===child.id)expect(row).not.toHaveProperty('context_json');
+   expect(row).not.toHaveProperty('context_json');
   }
  }finally{read.mockRestore();}
  expect(db.all('SELECT id,context_json,checkpoint_json FROM runs ORDER BY id')).toEqual(snapshots);
 });
 
-it.each([
- ['{"room_id":null,"room_id":"room-present"}',false],
- ['{"room_id":"room-present","room_id":null}',true],
- ['{"room_id":[]}',false],
- ['{"room_id":false}',true],
-])('preserves root room authority for native custody: %s',async(context,allowed)=>{
+it.each(runFalsyRoomCases.map((value,index)=>({...value,index})))('preserves root room authority for native custody: $index',async({context,allowed,error})=>{
  const {identity,claim}=await first(),child=await runtime('native-child',{identity,child:receipt(claim.run.id),started:true});
  db.exec('UPDATE runs SET context_json=? WHERE id=?',context,claim.run.id);
+ // A child's inherited room is not an additional authority source.
+ db.exec("UPDATE runs SET context_json='null' WHERE id=?",child.id);
  const alpha=new OwnerAlpha(new Store(db),policy,()=>new Date().toISOString());
- if(allowed)expect(()=>alpha.authorize(child.id,1)).not.toThrow();
+ if(error)expect(()=>alpha.authorize(child.id,1)).toThrowError(expect.objectContaining({name:error}));
+ else if(allowed)expect(()=>alpha.authorize(child.id,1)).not.toThrow();
  else expect(()=>alpha.authorize(child.id,1)).toThrow('Attempt is not owned');
 });
 

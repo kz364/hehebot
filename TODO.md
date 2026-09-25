@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** bootstrap/warm/background
+**Current checkpoint (2026-09-25, verified locally):** root attempt room authority
+projects falsiness without hydrating normal root contexts. This remains distinct
+from strict-null generation checks. Numeric/duplicate/non-object/raw-NUL cases use
+the original JS semantics; native child room context remains unused. Old read fails1,
+NUL text-length mutant fails2; focused344/backend2094/HTTP31/workerd64 room vectors/
+typecheck/build pass. No clone/storage/gate changes. Prior full runtime/browser/
+native/shutdown/desktop matrix not rerun. Next: snapshot representation before
+native-clone changes, remaining historical/SQL/storage/scan bounds and native
+restoration/recursive settlement. Local only; external blockers unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** bootstrap/warm/background
 generation strict-null room checks return a scalar for unambiguous object keys,
 without context/checkpoint hydration. Duplicate keys, non-object roots and raw
 NULs retain JS fallback and its exceptions; no snapshot rewriting or clone change.

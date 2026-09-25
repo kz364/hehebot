@@ -4,7 +4,7 @@ import {migrateApplication} from '../src/core/migrations';
 import {Store,type Database,type SqlValue} from '../src/core/store';
 import {legacyOccurrencesSql} from './legacy-occurrences';
 import {MemoryReadRetention} from '../src/core/memory-read-retention';
-import {runRoomCases} from './run-room-cases';
+import {runRoomCases,runFalsyRoomCases} from './run-room-cases';
 
 // Disposable Wrangler fixture only. No production ingress or storage is exposed.
 export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
@@ -28,17 +28,18 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
  }
  async fetch(request:Request){
   const db=this.db,path=new URL(request.url).pathname;
-  if(path==='/run-room'){
-   const results=runRoomCases.map(({context,allowed,error,fallback},index)=>{
+  if(path==='/run-room'||path==='/run-falsy-room'){
+   const falsy=path==='/run-falsy-room';
+   const results=(falsy?runFalsyRoomCases:runRoomCases).map(({context,allowed,error,fallback},index)=>{
     db.exec("UPDATE runs SET context_json=? WHERE id='run-59'",context);
     const returned:Array<Record<string,unknown>>=[];
     const store=new Store({...db,all:<T>(sql:string,...values:SqlValue[])=>{
      const rows=db.all<T>(sql,...values);returned.push(...rows as Array<Record<string,unknown>>);return rows;
     }});
     let actual:unknown;
-    try{actual=store.runHasNullRoom('run-59');}catch(caught){actual=(caught as Error).name;}
+    try{actual=falsy?store.runHasFalsyRoom('run-59'):store.runHasNullRoom('run-59');}catch(caught){actual=(caught as Error).name;}
     const bodies=returned.filter(row=>'context_json' in row);
-    return {index,matched:actual===(error??allowed),projection:JSON.stringify(returned[0])===JSON.stringify({room_is_null:fallback?null:allowed?1:0}),
+    return {index,matched:actual===(error??allowed),projection:JSON.stringify(returned[0])===JSON.stringify({[falsy?'room_is_falsy':'room_is_null']:fallback?null:allowed?1:0}),
      hydration:fallback?bodies.length===1&&bodies[0].context_json===context:bodies.length===0,
      unchanged:db.all<{context_json:string}>("SELECT context_json FROM runs WHERE id='run-59'")[0].context_json===context};
    });

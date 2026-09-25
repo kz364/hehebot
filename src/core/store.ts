@@ -92,5 +92,21 @@ export class Store {
   const context=this.db.all<{context_json:string}>('SELECT context_json FROM runs WHERE id=?',id)[0].context_json;
   return JSON.parse(context).room_id===null;
  }
+ runHasFalsyRoom(id:string):boolean {
+  // Attempt authority uses truthiness, unlike generation strict-null authority.
+  // Keep numeric conversion in JS (including underflow/negative zero), as well
+  // as duplicate-key, non-object and raw-NUL behavior. No SQL scan bound claimed.
+  const row=this.db.all<{room_is_falsy:number|null}>(`SELECT CASE
+   WHEN instr(context_json,char(0))=0 AND json_type(context_json)='object' THEN
+    (SELECT CASE WHEN count(*)>1 THEN NULL WHEN count(*)=0 THEN 1 ELSE max(CASE type
+      WHEN 'null' THEN 1 WHEN 'false' THEN 1 WHEN 'text' THEN length(CAST(value AS BLOB))=0
+      WHEN 'true' THEN 0 WHEN 'array' THEN 0 WHEN 'object' THEN 0 END) END
+     FROM json_each(context_json) WHERE key='room_id')
+   END AS room_is_falsy FROM runs WHERE id=?`,id)[0];
+  if(!row)throw new ControlError('NOT_FOUND','Run unavailable.',404);
+  if(row.room_is_falsy!==null)return row.room_is_falsy===1;
+  const context=this.db.all<{context_json:string}>('SELECT context_json FROM runs WHERE id=?',id)[0].context_json;
+  return !JSON.parse(context).room_id;
+ }
  run(id:string):Run { const run=this.db.all<Run>('SELECT * FROM runs WHERE id=?',id)[0]; if(!run) throw new ControlError('NOT_FOUND','Run unavailable.',404);return run; }
 }

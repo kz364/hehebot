@@ -4,6 +4,36 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Root attempt room projection (2026-09-25 Asia/Jakarta): validAttempt uses the
+separate runHasFalsyRoom predicate, not generation strict-null semantics. Unique
+non-numeric room fields return a scalar; numeric fields retain JS conversion,
+including negative zero, underflow and overflow. Duplicate keys, non-object roots
+and raw NULs also retain JS fallback/exceptions. Text emptiness uses byte length:
+SQLite text length stops at NUL, unlike JS truthiness. Root identity, manifest,
+deadline, receipt and parent-link predicates are unchanged. Native-child room
+context is never used; native cloning and stored context/checkpoints are unchanged.
+This is a returned-data improvement, not a SQL scan/storage or fallback bound.
+
+31 new Node/workerd vectors plus native-custody authorization tests distinguish
+false/empty/absent from strict-null, empty versus NUL text, object/array truthiness,
+duplicate/escaped keys, negative zero, both sides of underflow, overflow, exception
+behavior and >1MiB source preservation. Child context is deliberately null to catch
+accidental authority use. Existing large-root/child fixture now forbids both bodies.
+Old read fails1: `.local/root-room-red.log`, SHA256
+`1275ae3f31d140e80fff80d480a070956fce87dec2ba051dfc4c15977a1822fc`.
+Text-length mutant fails2 (including actual child authorization), restored before
+integrated checks: `.local/root-room-nul-mutant.log`, SHA256
+`163eab906cf31001f45cf0e8987b03843cb3315adbda3277e3a60e4ac26e6c90`.
+Focused344/typecheck/workerd64 room cases pass, PID1247066 exit0:
+`.local/root-room-focused.log`, SHA256
+`1eca53831b3107041eef6aa51861b692c311402f5ea71566835d7acf09c70376`.
+After mutant restoration, `npm test`2094, `npm run typecheck`, `npm run test:e2e`
+(HTTP31 and workerd), `npm run build` pass, PID1247640 exit0:
+`.local/root-room-integrated.log`, SHA256
+`2e788dca7decb07d21dede92665f68e144997b74d370200c8be688447fed7ef5`.
+Prior full runtime/browser/native/shutdown/desktop matrix not rerun for this
+localized predicate change. No push/deploy/live calls or production-gate changes.
+
 Strict-null generation room projection (2026-09-25 Asia/Jakarta): Store counts
 decoded root `room_id` keys with json_each and returns only a scalar for zero/one
 key. Bootstrap/warm/background metadata reads omit context. Duplicate room keys,

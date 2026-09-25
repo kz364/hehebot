@@ -364,14 +364,14 @@ export class OwnerAlpha {
   const row=this.store.db.all<{epoch:number;boot_id:string;deadline_at:string;started_at:string;native_run_ref:string|null;submission_key:string}>('SELECT epoch,boot_id,deadline_at,started_at,native_run_ref,submission_key FROM attempts WHERE run_id=? AND attempt=?',runId,attempt)[0];
   if(!run||!row||attempt!==1||run.current_attempt!==1||run.persona_id!==custody.policy.persona_id||row.epoch!==epoch||row.boot_id!==bootId)return false;
   if(custody.binding&&(runId!==custody.binding.run_id||run.command_id!==custody.binding.command_id||epoch!==custody.binding.epoch||bootId!==custody.binding.boot_id))return false;
-  // Only root admission checks consume room authority. Keep JavaScript's last-key
-  // JSON semantics; native children must not hydrate an unused inherited context.
-  const room=()=>JSON.parse(this.store.db.all<Pick<Run,'context_json'>>('SELECT context_json FROM runs WHERE id=?',runId)[0].context_json).room_id??null;
+  // Only roots consume room authority. Preserve JS truthiness/last-key semantics;
+  // native children must not inspect their unused inherited room context.
+  const roomAllowed=()=>this.store.runHasFalsyRoom(runId);
   const link=this.store.db.all<{parent_run_id:string;parent_attempt:number;native_run_ref:string;native_session_key:string}>('SELECT * FROM native_task_links WHERE run_id=?',runId)[0];
   if(custody.background){
    const m=custody.background.manifests.find(item=>item.run_id===runId);
    if(m)return !link&&row.submission_key===`${runId}:1`&&run.command_id===m.command_id&&epoch===m.epoch&&bootId===m.boot_id&&
-    this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,room(),m.event_sequence-1,custody.policy.persona_id)&&
+    roomAllowed()&&this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,null,m.event_sequence-1,custody.policy.persona_id)&&
     row.deadline_at===m.expires_at&&row.deadline_at<=custody.policy.expires_at&&
     Date.parse(row.deadline_at)<=Date.parse(m.issued_at)+custody.policy.max_task_seconds*1000&&Number.isFinite(Date.parse(row.started_at));
    // Observed native descendants of the role-background root inherit its frozen deadline.
@@ -387,12 +387,12 @@ export class OwnerAlpha {
   if(custody.warm){
    const m=custody.warm.manifests.find(item=>item.run_id===runId);
    return !!m&&!link&&row.submission_key===`${runId}:1`&&run.command_id===m.command_id&&epoch===m.epoch&&bootId===m.boot_id&&
-    this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,room(),m.event_sequence-1,custody.policy.persona_id)&&
+    roomAllowed()&&this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,null,m.event_sequence-1,custody.policy.persona_id)&&
     row.deadline_at===m.expires_at&&row.deadline_at<=custody.policy.expires_at&&
     Date.parse(row.deadline_at)<=Date.parse(m.issued_at)+custody.policy.max_task_seconds*1000&&Number.isFinite(Date.parse(row.started_at));
   }
   if(custody.admitted_run_ids.includes(runId))return run.role==='coordinator'&&run.parent_run_id===null&&!link&&row.submission_key===`${runId}:1`&&
-   this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,room(),custody.binding?custody.binding.event_sequence-1:cutoff,custody.policy.persona_id)&&
+   roomAllowed()&&this.directMessage(run.persona_id,run.command_id,run.routine_id,run.occurrence_id,null,custody.binding?custody.binding.event_sequence-1:cutoff,custody.policy.persona_id)&&
    Number.isFinite(Date.parse(row.started_at))&&Number.isFinite(Date.parse(row.deadline_at))&&row.deadline_at<=custody.policy.expires_at&&Date.parse(row.deadline_at)<=Date.parse(row.started_at)+custody.policy.max_task_seconds*1000;
   if(!custody.policy.background_first_root||!link||run.role!=='background'||link.parent_run_id!==custody.admitted_run_ids[0]||run.parent_run_id!==link.parent_run_id||link.parent_attempt!==1||!link.native_session_key||!link.native_run_ref||row.native_run_ref!==link.native_run_ref||row.submission_key!==`native:${link.native_run_ref}`)return false;
   if(!this.validAttempt(link.parent_run_id,1,custody,epoch,bootId))return false;

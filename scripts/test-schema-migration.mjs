@@ -68,6 +68,9 @@ try{
  const rooms=await get(base,'/run-room');assert.equal(rooms.length,33);
  for(const result of rooms)assert.deepEqual(result,{index:result.index,matched:true,projection:true,hydration:true,unchanged:true});
  console.log('PASS: real workerd strict-null room projection, duplicate/non-object/raw NUL fallback, escaped/NUL keys, >1MiB source preservation; 33 vectors. No SQL scan bound claimed.');
+ const falsyRooms=await get(base,'/run-falsy-room');assert.equal(falsyRooms.length,31);
+ for(const result of falsyRooms)assert.deepEqual(result,{index:result.index,matched:true,projection:true,hydration:true,unchanged:true});
+ console.log('PASS: real workerd falsy-room projection; 31 vectors including numeric JS fallback, NUL strings and strict-null distinctions.');
  console.log('PASS: real workerd returns an exact 131072-byte memory body, refuses one byte over before JS hydration, and preserves the oversized source.');
  console.log('PASS: real workerd memory retention starts from ledger keys with exact attempt lookups and indexed recursive parent lookups, retains numeric aliases and all 1001 attempts; no total cleanup-scan or storage bound claimed.');
  console.log('PASS: real local Worker v12→v15 startup migration; retained live occurrence/run/attempt, version-write and FK-check rollback, enforced references, exact fresh schema, idempotent rerun, persistent reopen and all three bounded memory-scope index plans without temporary sorting. No account/provider calls.');
