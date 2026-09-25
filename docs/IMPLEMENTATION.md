@@ -4,6 +4,32 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native representation decision (2026-09-25): direct source inspection traced all
+context writers to JSON.stringify or literal {}, but pinned export/import/backup
+preserve raw text and exact rows. Focused oracle consultation recommends retaining
+JS cloning, not adopting a copied provenance flag or an incomplete SQL guard.
+Executed orchestration regressions confirm two counterexamples: the canonical text
+`{"instruction\u0000suffix":"keep","instruction":"old"}` aliases SQLite's
+`$.instruction` to the wrong field; integer-key order and escaped string spelling
+remain different under SQL copying even without duplicates or unsafe numbers.
+Tests assert independently specified exact child bytes, unchanged parent bytes,
+idempotent replay and that candidate json_set output differs. Focused346/typecheck
+pass: `.local/native-representation-guard.log`, SHA256
+`fd28af3cc38edec81ba37bdf810a907b2f3d22b23231cf918b7efd485d424316`.
+No application change in this follow-up and no full matrix rerun.
+
+A future fast-path certificate must bind the current exact text to object-root
+JS-normalized representation AND compatible instruction keys (not just stringify
+provenance). Every context update must invalidate it before trusted same-transaction
+recertification. Verified backup/import artifacts retain exact rows; their copied
+certificate is not trusted for execution. A writable-database reopen/restore trust
+reset would be required before fast-path use, itself separate from the verified
+artifact and potentially database-wide work. This is a deferred design constraint,
+not an implemented marker/migration or a storage/SQL-work bound. Keep the genuine
+JS fallback and cross-persona composition; never reject already-observed children
+merely because the parent snapshot is large. Continue retention/snapshot read work
+instead of introducing an unmeasured representation migration.
+
 Root attempt room projection (2026-09-25 Asia/Jakarta): validAttempt uses the
 separate runHasFalsyRoom predicate, not generation strict-null semantics. Unique
 non-numeric room fields return a scalar; numeric fields retain JS conversion,

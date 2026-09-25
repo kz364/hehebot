@@ -84,6 +84,25 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(f.store.run(child.id)).toEqual(stored);
   });
 
+  it.each([
+    ['NUL-suffixed root key','{"instruction\\u0000suffix":"keep","instruction":"old"}',
+      '{"instruction\\u0000suffix":"keep","instruction":"new"}'],
+    ['nested key order and string escape','{"instruction":"old","extra":{"2":0,"1":0},"label":"\\u0061"}',
+      '{"instruction":"new","extra":{"1":0,"2":0},"label":"a"}'],
+  ])('preserves exact JS child representation for %s',(_label,source,expected)=>{
+    const p=parent(),input=receipt(p,'new');
+    f.db.exec('UPDATE runs SET context_json=? WHERE id=?',source,p);
+    const child=tasks.register(identity,input),stored=f.store.run(child.id);
+    expect(stored.context_json).toBe(expected);
+    expect(f.store.run(p).context_json).toBe(source);
+    expect(tasks.register(identity,input)).toEqual(child);
+    expect(f.store.run(child.id)).toEqual(stored);
+    // Even a stringify fixed point can alias $.instruction in SQLite; merely
+    // excluding duplicates/unsafe numbers is not a normalization invariant.
+    const sqlCopy=f.db.all<{copy:string}>("SELECT json_set(?,'$.instruction',json(?)) AS copy",source,JSON.stringify(input.title))[0].copy;
+    expect(sqlCopy).not.toBe(expected);
+  });
+
   it('records observed children idempotently and frees coordinator admission while a child remains active', () => {
     const p = parent(), input = receipt(p), child = tasks.register(identity, input);
     expect(child).toMatchObject({ role: 'background', parent_run_id: p, status: 'claimed', current_attempt: 1 });

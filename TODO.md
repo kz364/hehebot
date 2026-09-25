@@ -22,6 +22,15 @@ native/shutdown/desktop matrix not rerun. Next: snapshot representation before
 native-clone changes, remaining historical/SQL/storage/scan bounds and native
 restoration/recursive settlement. Local only; external blockers unchanged.
 
+**Representation decision (2026-09-25):** retain native JS cloning. Current writes
+serialize JSON, but imports preserve historical raw text; a provenance bit alone
+cannot certify restored context. Executed regressions show SQL instruction aliasing
+on NUL keys even for stringify-normalized input, plus nested key/escape differences.
+Exact child-byte and replay tests pass; focused346/typecheck. A safe marker requires
+write invalidation and a separate writable-restore trust reset. Do not introduce it
+as an unmeasured optimization. Next local priority: remaining retention/snapshot
+read work; SQL/native-clone limits remain open rather than silently weakened.
+
 **Previous checkpoint (2026-09-25, verified locally):** bootstrap/warm/background
 generation strict-null room checks return a scalar for unambiguous object keys,
 without context/checkpoint hydration. Duplicate keys, non-object roots and raw

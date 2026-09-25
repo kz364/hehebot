@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Representation follow-up: retain JS native cloning. Source inspection and focused
+oracle consultation reject a provenance-bit shortcut and incomplete SQL guard.
+Two executed exact-byte regressions prove NUL instruction-key aliasing and nested
+key/escape normalization differences; parent and replay custody stay unchanged.
+Focused346/typecheck pass; detailed evidence and future marker/restore requirements
+in IMPLEMENTATION.md. No marker, migration or application clone change. Next:
+remaining retention/snapshot read work, SQL/storage/scan bounds and native
+restoration/settlement; don't revisit the same naive SQL copy without new evidence.
+
 Root attempt room checks now use runHasFalsyRoom, distinct from generation's
 strict-null predicate. Normal contexts return only a scalar; numbers, duplicate
 keys, non-objects and raw NUL retain JS fallback. Child inherited room is unused;
