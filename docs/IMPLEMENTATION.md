@@ -4,6 +4,26 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stopped-runtime retry projection (2026-09-25 Asia/Jakarta): observeStopped now
+returns only id, role, current_attempt and error_code for recovery candidates.
+scheduleRetry preserves checkpoint_json inside SQLite with COALESCE instead of
+hydrating and rewriting its value through JavaScript. Retry eligibility, delay,
+effect/operation/question checks, attempt termination and retained locks are
+unchanged. This removes snapshot transfer, not SQL scans, row count or storage.
+Native-child registration and other historical reads remain separate work.
+Regression cases retain >1MiB contexts and NULL, empty-string or >1MiB Unicode
+checkpoints; inspect exact returned fields, stored snapshots, retry deadline and
+terminated attempt. Old query fails3: `.local/stopped-retry-projection-red.log`,
+SHA256 `2680ff4a7bd61e3f5dbcdae5f1b20b6ffde5dae9c0572010a18c069c659f8667`.
+Focused recovery/lifecycle81 and typecheck pass:
+`.local/stopped-retry-projection-focused.log`, SHA256
+`7d7e7e95a95352643241e9b9b2e83309cb053189748c54a35d08c3be2b4e9518`.
+Backend1977/HTTP31/workerd/typecheck/dry-build passed, PID1143296 exit0:
+`.local/stopped-retry-projection-integrated.log`, SHA256
+`7b0023c50f0a8b0f7cf14c7f026fd7a127f467949ecc64d2e45c8d3a213b22c0`.
+Prior runtime/browser/shutdown/desktop matrix not rerun for this SQL-only unit.
+No push/deploy, account calls or production gate changes.
+
 Queued historical snapshot read ceiling (2026-09-25 Asia/Jakarta): an engineering
 safety policy now limits context_json plus checkpoint_json returned by
 nextClaimableRun to 1048576 UTF-8 bytes. SQL CASE returns NULL bodies above the

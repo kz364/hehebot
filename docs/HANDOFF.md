@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Latest local unit: observeStopped selects only id/role/current_attempt/error_code
+for retry scheduling. scheduleRetry preserves checkpoints with SQL COALESCE;
+NULL alone receives the existing retry timestamp. Context/checkpoint bodies no
+longer cross this read boundary. Three old-query regressions fail; focused81 and
+backend1977/HTTP31/workerd/typecheck/build pass. Prior runtime/browser/shutdown/
+desktop matrix was not rerun for this SQL-only unit. No active checks/children/
+deliveries; schedule remains enabled. Continue other historical reads/cloning,
+storage/scan bounds and native recovery; catalog intermittency is still open.
+No new retry authority, native-child change or total-memory/scan/storage bound.
+
 Current local checkpoint: nextClaimableRun limits returned historical context
 and checkpoint bodies to 1048576 combined UTF-8 bytes. Above the limit, metadata
 remains visible with NULL bodies; prepare/claim park with CONTEXT_PREPARATION_LIMIT

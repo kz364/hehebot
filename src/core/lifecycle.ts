@@ -502,7 +502,7 @@ export class LifecycleCore {
    else this.store.db.exec("UPDATE lifecycle SET phase='STOP_COMMITTED',desired_state='STOP' WHERE singleton=1");
   });
  }
- private scheduleRetry(run:Run,reason:string):void {
+ private scheduleRetry(run:Pick<Run,'id'|'role'|'current_attempt'>,reason:string):void {
   if(this.core.ownerAlpha.policy)return;
   if(run.role==='background'||run.current_attempt>=3 || !['TEMPORARY_UNAVAILABLE','DEADLINE_EXCEEDED','STALE_EPOCH','CANCEL_UNCONFIRMED'].includes(reason))return;
   if(this.core.questions.list().some(question=>question.run_id===run.id))return;
@@ -511,7 +511,7 @@ export class LifecycleCore {
   if(this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled'",run.id).length)return;
   const due=new Date(this.core.options.now().getTime()+(run.current_attempt<=1?10000:60000)).toISOString();
   this.store.db.exec('INSERT INTO retry_queue(run_id,due_at,reason) VALUES(?,?,?) ON CONFLICT(run_id) DO NOTHING',run.id,due,reason);
-  this.store.db.exec("UPDATE runs SET status='waiting',error_code=?,checkpoint_json=?,updated_at=? WHERE id=?",reason,run.checkpoint_json??JSON.stringify({retry_at:due}),this.core.now(),run.id);
+  this.store.db.exec("UPDATE runs SET status='waiting',error_code=?,checkpoint_json=COALESCE(checkpoint_json,?),updated_at=? WHERE id=?",reason,JSON.stringify({retry_at:due}),this.core.now(),run.id);
  }
  retryDue():void {
   this.store.db.transaction(()=>{
@@ -566,7 +566,7 @@ export class LifecycleCore {
    this.store.db.exec("UPDATE attempts SET status='terminated',settled_at=? WHERE status IN ('claimed','running')",this.core.now());
    this.store.db.exec("UPDATE effects SET status='outcome_unknown',updated_at=? WHERE status IN ('intent','dispatched')",this.core.now());
    this.store.db.exec("UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'OUTCOME_UNKNOWN' END,updated_at=? WHERE status IN ('claimed','running','finishing','cancelling')",this.core.now());
-   for(const run of this.store.db.all<Run>("SELECT * FROM runs WHERE status='recovery_required'"))this.scheduleRetry(run,run.error_code??'OUTCOME_UNKNOWN');
+   for(const run of this.store.db.all<Pick<Run,'id'|'role'|'current_attempt'|'error_code'>>("SELECT id,role,current_attempt,error_code FROM runs WHERE status='recovery_required'"))this.scheduleRetry(run,run.error_code??'OUTCOME_UNKNOWN');
   });
  }
  private async requestWake(provider:RuntimeProvider,ref:RuntimeRef,state:Lifecycle):Promise<void> {

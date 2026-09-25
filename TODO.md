@@ -12,7 +12,19 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally with browser caveat):** queued admission
+**Current checkpoint (2026-09-25, verified locally):** provider-confirmed
+stop now selects retry-decision metadata rather than full historical snapshots.
+SQL preserves existing checkpoints and creates a retry timestamp only for NULL.
+Old-query regression fails3; focused recovery/lifecycle81 and typecheck pass.
+Backend1977/HTTP31/workerd/typecheck/build pass (PID1143296 exit0). Previous
+runtime/browser/shutdown/desktop matrix not rerun for this SQL-only unit.
+No active checks/children/deliveries; local only, production gates unchanged.
+Next: remaining historical reads/cloning and storage/scan bounds, then native
+restoration/recursive settlement. Catalog intermittency remains open.
+This removes body hydration,
+not scan/row-count/storage bounds. No new retry authority or native-child changes.
+
+**Previous checkpoint (2026-09-25, verified locally with browser caveat):** queued admission
 reads now enforce a 1 MiB combined UTF-8 ceiling for historical context/checkpoint
 bodies before returning them to JavaScript. Over-limit candidates remain visible
 as metadata and park with CONTEXT_PREPARATION_LIMIT before a new attempt; stored

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fixture, bot } from './helpers';
 import { LifecycleCore } from '../src/core/lifecycle';
 import { EffectLedger } from '../src/core/effects';
@@ -104,6 +104,24 @@ describe('bounded recovery',()=>{
   expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0);
   life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
   expect(f.store.run(runId).status).toBe('waiting');f.setNow('2026-09-10T08:02:11.000Z');life.retryDue();expect(f.store.run(runId).status).toBe('queued');
+ });
+ it.each([null,'',JSON.stringify({marker:'Retained checkpoint',padding:'界'.repeat(400000)})])('schedules stopped recovery without returning historical bodies (case %#)',checkpoint=>{
+  const {life,runId}=running();
+  const context=JSON.stringify({...JSON.parse(f.store.run(runId).context_json),padding:'x'.repeat(1100000)});
+  f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,runId);
+  f.setNow('2026-09-10T08:02:00.000Z');life.watchdog();
+  const read=vi.spyOn(f.db,'all');
+  try{
+   life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
+   const index=read.mock.calls.findIndex(([sql])=>sql.includes("FROM runs WHERE status='recovery_required'"));
+   expect(index).toBeGreaterThanOrEqual(0);
+   expect(read.mock.results[index].value).toEqual([{id:runId,role:'coordinator',current_attempt:1,error_code:'STALE_EPOCH'}]);
+  }finally{read.mockRestore();}
+  const due='2026-09-10T08:02:10.000Z';
+  expect(f.store.run(runId)).toMatchObject({status:'waiting',current_attempt:1,context_json:context,
+   checkpoint_json:checkpoint??JSON.stringify({retry_at:due}),error_code:'STALE_EPOCH'});
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual([{run_id:runId,due_at:due,reason:'STALE_EPOCH'}]);
+  expect(f.db.all('SELECT status FROM attempts WHERE run_id=?',runId)).toEqual([{status:'terminated'}]);
  });
  it('never retries an unknown external mutation after process termination',()=>{
   const {life,runId}=running();f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','dispatched','policy','digest',?)",randomUUID(),runId,randomUUID(),f.core.now());
