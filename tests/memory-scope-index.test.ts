@@ -130,3 +130,39 @@ it('does not adopt a conflicting memory index or advance the schema version',()=
   expect(f.db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='objects_memory_scope'")[0].sql).toBe('CREATE INDEX objects_memory_scope ON objects(id)');
  }finally{f.close();}
 });
+
+it('refuses a new memory index above 10000 entries without changing rows or schema, and admits exactly 10000',()=>{
+ const f=fixture();try{
+  f.db.exec('DROP INDEX objects_memory_scope');f.db.exec('UPDATE schema_versions SET version=13');
+  f.db.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<10001)
+   INSERT INTO objects(id,kind,revision,body_json,created_at,updated_at)
+   SELECT 'legacy-'||i,'memory',1,'{"scope":{"kind":"global","id":null},"text":"Keep"}','t0','t0' FROM n`);
+  const before=f.db.all('SELECT * FROM objects ORDER BY id');
+  expect(()=>migrateApplication(f.db,f.core.now())).toThrow(expect.objectContaining({code:'MIGRATION_WORK_LIMIT'}));
+  expect(f.db.all("SELECT name FROM sqlite_schema WHERE name='objects_memory_scope'")).toEqual([]);
+  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:13}]);
+  expect(f.db.all('SELECT * FROM objects ORDER BY id')).toEqual(before);
+  // A previously deleted memory consumes no new index entry; do not delete it.
+  f.db.exec("UPDATE objects SET deleted_at='t1' WHERE id='legacy-10001'");
+  migrateApplication(f.db,f.core.now());
+  expect(f.db.all("SELECT COUNT(*) AS n FROM objects WHERE kind='memory'")).toEqual([{n:10001}]);
+  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:15}]);
+ }finally{f.close();}
+});
+
+it('refuses one byte above 64 MiB of index JSON and admits the exact byte limit',()=>{
+ const f=fixture();try{
+  f.db.exec('DROP INDEX objects_memory_scope');f.db.exec('UPDATE schema_versions SET version=13');
+  const prefix='{"scope":{"kind":"global","id":null},"text":"',suffix='"}';
+  const body=prefix+'x'.repeat(67108864-Buffer.byteLength(prefix+suffix))+suffix;
+  f.db.exec("INSERT INTO objects(id,kind,revision,body_json,created_at,updated_at) VALUES('large','memory',1,?,'t0','t0')",body+' ');
+  expect(()=>migrateApplication(f.db,f.core.now())).toThrow(expect.objectContaining({code:'MIGRATION_WORK_LIMIT'}));
+  expect(f.db.all("SELECT body_json=? AS intact FROM objects WHERE id='large'",body+' ')).toEqual([{intact:1}]);
+  expect(f.db.all("SELECT name FROM sqlite_schema WHERE name='objects_memory_scope'")).toEqual([]);
+  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:13}]);
+  f.db.exec("UPDATE objects SET body_json=? WHERE id='large'",body);
+  migrateApplication(f.db,f.core.now());
+  expect(f.db.all("SELECT body_json=? AS intact FROM objects WHERE id='large'",body)).toEqual([{intact:1}]);
+  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:15}]);
+ }finally{f.close();}
+});

@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+New memory-scope index builds now require <=10000 active records and <=64 MiB
+raw JSON. Over-limit legacy v13 startup refuses MIGRATION_WORK_LIMIT before DDL;
+source rows/schema stay intact and need explicit reconciliation, never auto-pruning.
+Existing index validation unchanged. Mutant2/focused15/backend2104/HTTP31/typecheck/
+build pass; full runtime matrix not rerun. No active check/child/delivery; schedule
+enabled. Next remaining scan/metadata/storage and historical snapshot bounds;
+construction admission does not limit those. No live migration or gate changes.
+
 Limited memory reads now preflight selected aggregate raw bytes before loading
 bodies:131072 inclusive; over-limit refuses without truncation. Metadata merge
 retains indexed scope/order and ignores later unselected bodies. Raw whitespace/

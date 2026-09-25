@@ -4,6 +4,25 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Memory index construction admission (2026-09-25): a missing v14 memory-scope index
+requires at most10000 active memory rows and64 MiB raw memory JSON. Preflight returns
+only count/sum for up to10001 eligible rows. Over-limit MIGRATION_WORK_LIMIT503
+occurs before DDL and leaves v13/source rows intact. These are reversible engineering
+safety limits, not write/storage quotas. Existing indexes retain exact-SQL validation;
+no build budget is imposed on an already-created index. Operators encountering this
+gate must reconcile a legacy installation explicitly; never delete memory or bypass
+the gate automatically. No live migration was run.
+Exact10000/10001 and67108864/67108865-byte fixtures verify admission/refusal, exact
+source retention, schema non-advancement and deleted-memory exclusion. Raising both
+limits by one fails2. Focused15/typecheck/backend2104/build/local Worker HTTP31 pass.
+Evidence .local/memory-index-budget-mutant.log SHA256
+`8d20cf417361da973004c535af9ae932c5b0e4acf71009446adbddf0247149ce`;
+.local/memory-index-budget-integrated.log SHA256
+`c464dd6a2b07d2a6c945e215bcf157f1c402c8571ad7fde774d0f99b99197728`.
+Underlying table scans, preflight byte inspection, metadata/index-key size and later
+storage growth remain unbounded. Full runtime/browser/native/shutdown/desktop matrix
+not rerun for this migration gate; production flags and external state unchanged.
+
 Aggregate memory raw-body preflight (2026-09-25): limited scopedMemories reads
 at most three indexed metadata partitions, merges/slices in the original order,
 and refuses selected raw UTF-8 body totals above131072 before loading any body.

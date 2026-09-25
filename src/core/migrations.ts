@@ -114,6 +114,16 @@ export function migrateApplication(db:Database,now:string):void {
  if(version===12)version=13;
  if(version===13)db.transaction(()=>{
   const sql="CREATE INDEX objects_memory_scope ON objects(json_extract(body_json,'$.scope.kind'),json_extract(body_json,'$.scope.id'),created_at,id) WHERE kind='memory' AND deleted_at IS NULL";
+  if(!db.all("SELECT name FROM sqlite_schema WHERE name='objects_memory_scope'").length){
+   // Bound new index entries and JSON input, not the underlying table scan.
+   // Refuse before DDL; never prune owner data to make a migration fit.
+   const work=db.all<{rows:number;bytes:number}>(`SELECT COUNT(*) AS rows,COALESCE(SUM(bytes),0) AS bytes FROM (
+    SELECT length(CAST(body_json AS BLOB)) AS bytes FROM objects
+    WHERE kind='memory' AND deleted_at IS NULL LIMIT 10001
+   )`)[0];
+   requireThat(work.rows<=10000&&work.bytes<=67108864,'MIGRATION_WORK_LIMIT',
+    'Memory index construction exceeds 10000 active records or 64 MiB of raw JSON. Explicit reconciliation is required; no memory was deleted.',503);
+  }
   db.exec(sql.replace('CREATE INDEX','CREATE INDEX IF NOT EXISTS'));
   requireThat(db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='objects_memory_scope'")[0]?.sql===sql,
    'SCHEMA_MISMATCH','Memory scope index needs explicit reconciliation.',503);
