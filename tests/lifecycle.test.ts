@@ -458,6 +458,30 @@ describe('executor leases and attempts', () => {
       expect(()=>f.core.recoveryPage(bot,cursor)).toThrowError(expect.objectContaining({code:'INVALID_INPUT'}));
     for(const limit of [0,101,1.5,NaN])expect(()=>f.core.recoveryPage(bot,undefined,limit)).toThrow();
   });
+  it.each(['settled','live-attempt','unknown-effect'])('owner recovery reads no historical bodies: %s',kind=>{
+    const runId=claimed().run.id;
+    if(kind==='unknown-effect')unknownEffect(runId);
+    if(kind==='live-attempt')f.db.exec("UPDATE runs SET status='recovery_required' WHERE id=?",runId);
+    else{
+      f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
+      life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
+    }
+    const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+    f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,runId);
+    const before=f.store.run(runId),state=life.get(),read=vi.spyOn(f.db,'all');
+    try{
+      expect(f.accept({schema_version:1,type:'run.recover',payload:{run_id:runId,expected_attempt:1,release_resources:true}}))
+        .toMatchObject(kind==='settled'?{status:'applied'}:{status:'rejected',error:{code:kind==='live-attempt'?'CANCEL_UNCONFIRMED':'OUTCOME_UNKNOWN'}});
+      const reads=read.mock.calls.flatMap(([sql,id],i)=>sql.includes('FROM runs WHERE id=?')&&id===runId?[read.mock.results[i].value]:[]);
+      expect(reads.length).toBeGreaterThan(0);
+      for(const rows of reads)for(const row of rows){expect(row).not.toHaveProperty('context_json');expect(row).not.toHaveProperty('checkpoint_json');}
+    }finally{read.mockRestore();}
+    expect(f.store.run(runId)).toMatchObject({context_json:context,checkpoint_json:checkpoint,current_attempt:1});
+    if(kind==='settled')expect(f.store.run(runId)).toMatchObject({status:'failed',error_code:'EXECUTOR_STOPPED'});
+    else expect(f.store.run(runId)).toEqual(before);
+    expect(life.get()).toEqual(state);
+  });
+
   it('owner recovery closes stopped descendants bottom-up only after effect decisions and never retries them', () => {
     const root = claimed().run.id;
     life.submitted(identity,root,1,'recover-root');

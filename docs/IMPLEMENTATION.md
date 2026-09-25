@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner recovery metadata projection (2026-09-25): run.recover replaces Store.run's
+SELECT * with id/current_attempt/status/error_code/occurrence_id/persona_id. Existing
+NOT_FOUND and subsequent attempt/termination/question/operation/effect/descendant
+checks are unchanged. Resource release and follow-up flushing remain transactional.
+Three old-read regressions fail on returned context/checkpoint fields, including
+success and live-attempt/unknown-effect refusals. Multibyte >1MiB context and >1MiB
+checkpoint remain byte-identical; lifecycle state remains unchanged. Final139
+focused/backend2246/typecheck/dry-run build pass. No total storage/metadata/SQL scan
+bound claimed. Full runtime/browser/native/shutdown/desktop matrix not rerun.
+- .local/owner-recovery-projection-red.log SHA256:
+  `617574e1804bd350799450dc4beedcf57b411ee70fdbdf36cd75265c3ed07fa8`
+- .local/owner-recovery-projection-focused.log SHA256:
+  `f232df4a33a446bdd97eb264cbc8da9aa02edf9a39bff166e1f9afd432c7215d`
+- .local/owner-recovery-projection-backend.log SHA256:
+  `d641b8b300d2d46679a5f99d71560b50401387ee07c0ad96279fe2aa7f3a6bb4`
+
 Settled native-child retry coverage (2026-09-25): prior tests rejected unsettled
 children before reaching the explicit background-role restriction. New ordinary,
 context-overflow and memory-overflow vectors settle the child, then assert exact

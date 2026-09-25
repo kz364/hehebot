@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+run.recover now reads six metadata fields rather than full historical context and
+checkpoint. Error precedence, descendant/effect custody and resource release stay
+unchanged. Red3/focused139/backend2246/typecheck/build pass; source bodies preserved.
+Next remaining historical read boundaries, storage and native restoration/recursive
+settlement. No active checks/children/delivery; existing schedule enabled. Full
+runtime/browser/native/shutdown/desktop matrix not rerun for this projection unit.
+
 Settled native-child retry now has direct role-guard coverage, including both
 overflow markers. Role-guard omission fails3; restored production code unchanged.
 Final focused136/typecheck pass. Rejected command replay preserves attempts, timers,

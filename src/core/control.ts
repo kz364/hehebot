@@ -126,7 +126,8 @@ export class ControlCore {
     return new LifecycleCore(this.store,this).activateOwnerAlphaSuccessor(command,owner,commandId).owner_alpha_generation.transition_id;
    }
    case 'run.recover':{
-    const p=command.payload,run=this.store.run(p.run_id);
+    const p=command.payload,run=this.store.db.all<Pick<Run,'id'|'current_attempt'|'status'|'error_code'|'occurrence_id'|'persona_id'>>('SELECT id,current_attempt,status,error_code,occurrence_id,persona_id FROM runs WHERE id=?',p.run_id)[0];
+    if(!run)throw new ControlError('NOT_FOUND','Run unavailable.',404);
     requireThat(run.current_attempt===p.expected_attempt&&run.status==='recovery_required','REVISION_CONFLICT','Select the current recovery-required attempt.');
     const attempt=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,p.expected_attempt)[0];
     requireThat(attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before closing recovery.');
