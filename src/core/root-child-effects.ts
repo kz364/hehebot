@@ -19,12 +19,18 @@ export class RootChildEffects {
 
  private admitted(identity: Identity, rootId: string, rootAttempt: number, runId: string, attempt: number) {
   this.lifecycle.authorizeAttempt(identity, rootId, rootAttempt);
-  const root = this.store.run(rootId), child = this.store.run(runId);
+  type AuthorityRun = Pick<Run, 'id'|'current_attempt'|'role'|'parent_run_id'|'persona_id'|'routine_id'|'context_json'|'status'>;
+  const readRun = (id: string): AuthorityRun => {
+   const run = this.store.db.all<AuthorityRun>('SELECT id,current_attempt,role,parent_run_id,persona_id,routine_id,context_json,status FROM runs WHERE id=?', id)[0];
+   requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404);
+   return run;
+  };
+  const root = readRun(rootId), child = readRun(runId);
   requireThat(Number.isSafeInteger(rootAttempt) && rootAttempt > 0 && root.current_attempt === rootAttempt &&
    Number.isSafeInteger(attempt) && attempt > 0 && child.current_attempt === attempt, 'STALE_EPOCH', 'The selected attempt changed.');
   requireThat(root.role === 'coordinator' && root.parent_run_id === null && child.id !== root.id, 'FORBIDDEN', 'Select a descendant of the coordinator root.', 403);
   const rootContext = JSON.parse(root.context_json) as ContextSnapshot;
-  const lineage: Run[] = [], seen = new Set<string>();
+  const lineage: AuthorityRun[] = [], seen = new Set<string>();
   let childContext!: ContextSnapshot;
   let current = child;
   while (true) {
@@ -44,7 +50,7 @@ export class RootChildEffects {
    requireThat(current.role === 'background' && link && link.parent_run_id === current.parent_run_id, 'FORBIDDEN', 'Native descendant mapping is unavailable.', 403);
    const native = this.store.db.all<{ native_run_ref: string | null }>('SELECT native_run_ref FROM attempts WHERE run_id=? AND attempt=?', current.id, current.current_attempt)[0];
    requireThat(native?.native_run_ref === link.native_run_ref, 'FORBIDDEN', 'Native descendant attempt does not match its receipt.', 403);
-   const parent = this.store.run(link.parent_run_id);
+   const parent = readRun(link.parent_run_id);
    requireThat(parent.current_attempt === link.parent_attempt, 'STALE_EPOCH', 'Native ancestry belongs to an older parent attempt.');
    current = parent;
   }

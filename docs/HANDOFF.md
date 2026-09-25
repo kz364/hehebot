@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+RootChildEffects now omits checkpoints throughout ancestry; ResourceLedger acquire
+projects status/current_attempt. Grandchild intent/replay/outcome regression red3,
+focused251/backend2267/typecheck/build pass. Partial-fix two failures exposed lock
+admission hydration; assertion type error also corrected, logs retained. Context
+parsing and ancestry depth still unbounded; next authority-context representation
+without blocking late outcomes or changing JS semantics. No active checks/children/
+delivery; schedule enabled. Full runtime/browser/native/shutdown/desktop matrix
+not rerun for this projection unit; original intermittent failures unresolved.
+
 EffectLedger intent context hydration caps at1MiB raw UTF-8 and excludes checkpoints.
 Overflow refuses both new intent and replay lookup; source context/effects stay
 unchanged. Exact-limit and duplicate-key semantics covered. Red4/focused248/

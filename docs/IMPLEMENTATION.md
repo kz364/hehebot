@@ -4,6 +4,25 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Root-child checkpoint projections (2026-09-25): admitted ancestry loads only its
+eight required fields; ResourceLedger acquire loads status/current_attempt only.
+No parsing, predicate, traversal or outcome transition order changed. Root/parent/
+grandchild checkpoints larger than1MiB stay stored but absent from SQL results
+during intent, replay and unknown-outcome recording. Initial red3; partial fix left
+two failures exposing the lock-admission read. Focused251 passed after that fix;
+typecheck exposed an unknown-row assertion type error, corrected without weakening
+the assertion. Final backend2267/typecheck/dry-run build pass. Full runtime/browser/
+native/shutdown/desktop matrix not rerun. Context parsing/ancestry depth and storage
+are not bounded by this projection; late outcomes still use original JS authority.
+- .local/child-checkpoint-red.log SHA256:
+  `95c393510bae838ccfe07543ac9a717a6a4d99ab2c1cb0c1abbbe3c3dcc3165a`
+- .local/child-checkpoint-focused.log SHA256:
+  `18522ef7b2534500e9409144cd0e1c388587715c51f67cf2678c14fe7e865466`
+- .local/child-checkpoint-focused-final.log SHA256 (includes assertion type error):
+  `22e446e6b473a315a0669ec8e151d6a9b515fcb78d1dd8d641022d616850b58b`
+- .local/child-checkpoint-integrated.log SHA256:
+  `ff3331e1ac24cc54eaf46b1dab22646da7e10e496217a82d9af5706d1a141b93`
+
 Effect intent context read boundary (2026-09-25): SQL CASE hydrates context only
 at <=1048576 raw UTF-8 bytes and omits checkpoints. Missing/inactive run checks
 precede overflow refusal; under-limit JS parsing, last-key grants, identity and

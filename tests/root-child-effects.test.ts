@@ -48,6 +48,23 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it.each(['intent','replay','outcome'] as const)('omits ancestor checkpoints during child effect %s',mode=>{
+ const input=intent(grandchild);
+ if(mode!=='intent')boundary.intent(input);
+ const checkpoint=JSON.stringify({padding:'界'.repeat(400000)});
+ for(const id of [root,child,grandchild])f.db.exec('UPDATE runs SET checkpoint_json=? WHERE id=?',checkpoint,id);
+ const read=vi.spyOn(f.db,'all');
+ try{
+  if(mode==='outcome')boundary.transition(result(input,'outcome_unknown'));
+  else expect(boundary.intent(input)).toEqual({id:input.effect.id,status:'intent'});
+  const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]);
+  expect(rows.some(row=>Object.prototype.hasOwnProperty.call(row,'checkpoint_json'))).toBe(false);
+ }finally{read.mockRestore();}
+ for(const id of [root,child,grandchild])expect(f.store.run(id).checkpoint_json).toBe(checkpoint);
+ expect(effects()).toEqual([expect.objectContaining({id:input.effect.id,run_id:grandchild,status:mode==='outcome'?'outcome_unknown':'intent'})]);
+ expect(locks()).toHaveLength(2);
+});
+
 it('reuses the selected child parse for policy checks and reconciliation without rewriting its snapshot', () => {
  const stored=f.store.run(child).context_json;
  const snapshot=stored.slice(0,-1)+`,"padding":"${'x'.repeat(1000000)}","authorization_policy_ids":[],"authorization_policy_ids":["${policy}"]}`;

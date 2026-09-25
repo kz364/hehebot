@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** EffectLedger intent hydration
+**Current checkpoint (2026-09-25, verified locally):** RootChildEffects ancestry
+reads omit checkpoints; ResourceLedger lock admission reads only status/attempt.
+Grandchild intent/replay/unknown-outcome vectors preserve checkpoints and locks.
+Red3/focused251/backend2267/typecheck/build pass. Intermediate two remaining read
+failures and test assertion type error retained and corrected. Context parsing,
+ancestry depth, storage/SQL-work and native recovery remain unbounded/open; next
+separate authority projection from historical context without blocking late outcomes.
+Full runtime/browser/native/shutdown/desktop matrix not rerun for this projection
+unit. Local only; production gates and original intermittent failures unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** EffectLedger intent hydration
 caps historical context at1048576 raw UTF-8 bytes, excluding checkpoints. New and
 replayed intents above limit refuse CONTEXT_PREPARATION_LIMIT without changing
 snapshots/effects. JS last-key authority semantics remain; existing effect outcomes
