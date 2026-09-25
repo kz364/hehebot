@@ -12,7 +12,28 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** cancellation-grace
+**Current checkpoint (2026-09-25, verified locally with browser caveat):** queued admission
+reads now enforce a 1 MiB combined UTF-8 ceiling for historical context/checkpoint
+bodies before returning them to JavaScript. Over-limit candidates remain visible
+as metadata and park with CONTEXT_PREPARATION_LIMIT before a new attempt; stored
+data is retained. Runtime preparation accepts the blocked result without counting
+or submitting inference. Focused108/typecheck pass, including exact/one-over byte
+boundaries, post-count revalidation and existing skill/room authority tests.
+Full verifier passed backend1974/runtime682 then failed on a stdio-fixture ESRCH
+exit race. Narrow fixture correction passes. Resumed checks passed HTTP31/workerd
+then stopped at the intermittent catalog scroll assertion (10 versus 0). Diagnostic
+sampling observed zero over30 frames and passed; cause remains unproven and no
+portal/fixture change remains. Remaining browser/native/shutdown/strict-launcher/
+service/build stages and desktop16 passed (PID1109360 exit0); final typecheck clean.
+Failed logs retained; evidence is segmented, not a clean original invocation.
+This is an engineering read-work ceiling, not a model token budget or bound on
+new context construction, active/native-child snapshots, metadata, SQL or storage.
+Local checkpoint only; production gates unchanged. No active checks/children/
+deliveries. Next: remaining historical reads/cloning and storage/scan bounds,
+then native restoration/recursive settlement; investigate catalog intermittency
+separately rather than weakening its assertion.
+
+**Previous checkpoint (2026-09-25, verified locally):** cancellation-grace
 watchdog reads now return run IDs only instead of full historical context and
 checkpoint snapshots. Focused89/typecheck pass; the old query fails the new
 returned-column regression. Exact grace boundaries, reasons, effects, locks and

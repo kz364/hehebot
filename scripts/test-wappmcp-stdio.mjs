@@ -11,13 +11,13 @@ import { FileJournal } from '../runtime/file-journal.mjs';
 import { readJournaledWappMcp } from '../runtime/wappmcp-operations.mjs';
 
 const script = fileURLToPath(import.meta.url);
-async function processIdentity(pid) {
+export async function processIdentity(pid, read = readFile) {
   assert.ok(Number.isSafeInteger(pid) && pid > 0);
   try {
-    const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
+    const stat = await read(`/proc/${pid}/stat`, 'utf8');
     const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
     return { pid, start: fields[19], state: fields[0] };
-  } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  } catch (error) { if (error.code === 'ENOENT' || error.code === 'ESRCH') return null; throw error; }
 }
 const active = (current, original) => current?.start === original.start && !['Z', 'X'].includes(current.state);
 async function until(check) {

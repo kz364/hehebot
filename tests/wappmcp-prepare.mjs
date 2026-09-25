@@ -5,8 +5,23 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, readFile, writeFile, readdir, stat, symlink, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
+import { processIdentity } from '../scripts/test-wappmcp-stdio.mjs';
 
 const exec = promisify(execFile), script = resolve('scripts/verify-wappmcp.mjs');
+test('process identity distinguishes exit races from unreadable evidence', async () => {
+  for (const code of ['ENOENT', 'ESRCH', 'EACCES', 'EIO']) {
+    const error = Object.assign(new Error(code), { code });
+    const read = async (path, encoding) => {
+      assert.equal(path, '/proc/123/stat'); assert.equal(encoding, 'utf8'); throw error;
+    };
+    if (['ENOENT', 'ESRCH'].includes(code)) assert.equal(await processIdentity(123, read), null);
+    else await assert.rejects(processIdentity(123, read), value => value === error);
+  }
+  const own = await processIdentity(process.pid);
+  assert.equal(own.pid, process.pid); assert.match(own.start, /^\d+$/);
+  assert.ok(!['Z', 'X'].includes(own.state));
+});
+
 async function fixture(t) {
   // Inside Git deliberately: patch application must not discover the parent repo.
   const root = await mkdtemp(resolve('.local/wapp-prepare-test-'));

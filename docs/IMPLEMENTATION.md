@@ -4,6 +4,51 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Queued historical snapshot read ceiling (2026-09-25 Asia/Jakarta): an engineering
+safety policy now limits context_json plus checkpoint_json returned by
+nextClaimableRun to 1048576 UTF-8 bytes. SQL CASE returns NULL bodies above the
+combined limit, retaining candidate metadata rather than silently skipping work.
+Preparation and claim park that candidate with CONTEXT_PREPARATION_LIMIT, retain
+the stored bodies, and start no new attempt. Runtime recognizes this blocked
+preparation without invoking the counter, claiming or submitting inference.
+This can refuse otherwise schema-valid large contexts; it is not a model token
+budget. Native-child registration is unchanged. SQLite still inspects stored
+values, and metadata, new context construction, active/alpha snapshot reads,
+native-child cloning, total storage and index construction remain outside the cap.
+
+Exact/one-byte-over cases cover context-only, checkpoint-dominant and split bodies
+with multibyte padding; tests inspect DB-returned values before the caller and
+retain oversized stored data. Claim revalidates after counting. Existing explicit
+skill revision/body and room-scope tests pass. Original query fails3, log
+`.local/historical-snapshot-red.log`, SHA256
+`1f84e27f03476c50181e806897b5336729440ddcf1615dd2b7f6c556e8a4497f`.
+Focused108/typecheck passes, log `.local/historical-snapshot-focused-v2.log`, SHA256
+`1e5cad0e78b77f585ad1dc8b6c7bd1e2793041d085db4d0a759fcce6b09a895c`.
+Full verifier passed backend1974/runtime682, then failed on ESRCH reading a
+departed synthetic process's /proc stat in the wappmcp stdio fixture. Original log
+`.local/historical-snapshot-combined.log`, SHA256
+`bc06fa6c1578fa1068d19c98be36e65eb5c260857dd55dbf4f975e15e481cdfa`.
+The fixture now handles ESRCH alongside ENOENT; permission/I/O errors still throw,
+and PID/start-time checks are unchanged. Deterministic red/green evidence is in
+`.local/stdio-exit-race-{red,green}.log`. No upstream dependency/patch changed.
+Verification resumed at verify-wappmcp through the remaining stages and desktop
+as PID1106939 in `.local/historical-snapshot-remaining.log`; the corrected real
+stdio fixture passes. HTTP31/workerd and token-usage browser passed, then the
+catalog assertion failed at scrollTop10 versus0. Diagnostic run sampled zero
+over30 frames and passed (`.local/historical-snapshot-scroll-diagnostic.log`);
+cause remains unproven. Temporary instrumentation was removed without changing
+the assertion or portal. Remaining browser/native/shutdown/strict-launcher/service/
+build stages and desktop16 passed, PID1109360 exit0,
+`.local/historical-snapshot-final-tail.log`, SHA256
+`139fed468070215aa33f1745a3719e14dfb8dd354bcb0c2b60a901f6e4cee89b`.
+Final typecheck clean; host fixture paths absent. Resumed failure log SHA256
+`e69ac882784c4d4773a54ace6d8aa9459be569f695924a2e2c2f540fe41cfb41`;
+scroll diagnostic SHA256
+`3d2cb0ad5c6c8681c3fb9166f7f5e35d649f07958acc486673f9ec89d59dd93c`.
+This is segmented evidence, not a clean original run; the intermittent catalog
+failure remains unresolved. No active check, child or unintegrated delivery.
+No production configuration or external action changed.
+
 Cancellation-grace projection (2026-09-25 Asia/Jakarta): the watchdog now selects
 only run IDs for escalation, avoiding unnecessary historical context_json and
 checkpoint_json transfer to JavaScript. No predicate or transition changed.

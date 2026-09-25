@@ -16,6 +16,8 @@ export type Lifecycle={singleton:number;provider_ref_json:string;boot_id:string|
 export type Identity={epoch:number;boot_id:string};
 export type CoordinatorOutcome='completed'|'failed'|'interrupted';
 export type HeartbeatOperation=Operation & {run_id:string;attempt:number};
+// NULL context marks a refused historical read, never a partial execution context.
+type PendingRun=Run|(Omit<Run,'context_json'>&{context_json:null});
 function operationTime(value:string):string {
  const instant=Date.parse(value);
  requireThat(Number.isFinite(instant),'INVALID_INPUT','Invalid operation timestamp.',422);
@@ -186,7 +188,7 @@ export class LifecycleCore {
   if(this.core.questions.list().length)return true;
   return this.store.db.all("SELECT resource_id FROM resource_locks LIMIT 1").length>0 || this.store.db.all(`SELECT r.id FROM runs r WHERE r.status IN ('claimed','running','finishing','cancelling','recovery_required') OR (r.status='queued' AND (${budget.sql})) LIMIT 1`,...budget.bindings).length>0 || this.store.db.all("SELECT id FROM operations WHERE status!='settled' LIMIT 1").length>0 || this.store.db.all("SELECT e.id FROM effects e JOIN runs r ON r.id=e.run_id WHERE e.status IN ('intent','dispatched') OR (e.status='outcome_unknown' AND r.status IN ('claimed','running','finishing','cancelling')) LIMIT 1").length>0;
  }
- nextClaimableRun():Run|undefined {
+ nextClaimableRun():PendingRun|undefined {
   return this.store.db.transaction(()=>{
    if(this.core.ownerAlpha.policy&&!this.core.ownerAlpha.available())return undefined;
    const cutoff=new Date(this.core.options.now().getTime()-90*86400000).toISOString(),budget=this.core.budget.admissionPredicate();
@@ -194,7 +196,13 @@ export class LifecycleCore {
    const questions=[...new Set(this.core.questions.list().map(question=>question.run_id))];
    const alpha=this.core.ownerAlpha.policy;
    const assigned=this.core.bootstrap.assignedManifest();
-   return this.store.db.all<Run>(`SELECT r.* FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) AND (${nativeDescendantsSettledSql}) ${questions.length?`AND r.id NOT IN (${questions.map(()=>'?').join(',')})`:''}
+   // One MiB combined UTF-8 historical bodies per candidate. SQLite still
+   // inspects stored values; this bounds returned bytes, not SQL work/storage.
+   const snapshotFits='length(CAST(r.context_json AS BLOB))+COALESCE(length(CAST(r.checkpoint_json AS BLOB)),0)<=1048576';
+   return this.store.db.all<PendingRun>(`SELECT r.id,r.command_id,r.occurrence_id,r.persona_id,r.routine_id,r.status,r.current_attempt,r.error_code,r.created_at,r.updated_at,r.role,r.parent_run_id,r.title,
+    CASE WHEN ${snapshotFits} THEN r.context_json END AS context_json,
+    CASE WHEN ${snapshotFits} THEN r.checkpoint_json END AS checkpoint_json
+    FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.role='coordinator' AND r.status='queued' AND (r.current_attempt>0 OR COALESCE(c.accepted_at,r.created_at)>?) AND (${budget.sql}) AND (${nativeDescendantsSettledSql}) ${questions.length?`AND r.id NOT IN (${questions.map(()=>'?').join(',')})`:''}
     AND (r.current_attempt>0 OR json_type(r.context_json,'$.skill_invocation') IS NULL OR r.created_at>?)
     ${assigned?'AND r.id=?':''}
     ${alpha?`AND r.current_attempt=0 AND r.persona_id=? AND r.routine_id IS NULL AND r.occurrence_id IS NULL AND json_extract(r.context_json,'$.room_id') IS NULL AND c.type='message.send' AND c.owner_id NOT GLOB 'runtime:*' AND c.owner_id NOT GLOB 'trigger:*' AND json_extract(c.payload_json,'$.conversation_id')=r.persona_id AND EXISTS(SELECT 1 FROM events ev WHERE ev.id=r.command_id AND ev.type='message.user' AND ev.actor_id=c.owner_id AND ev.sequence>?)`:''}
@@ -266,6 +274,10 @@ export class LifecycleCore {
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled&&!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Memory preparation requires ordinary execution admission.');
    const run=this.nextClaimableRun();if(!run)return null;
+   if(run.context_json===null){
+    this.blockMemoryPreparation(run,'CONTEXT_PREPARATION_LIMIT');
+    return {blocked:true as const,run_id:run.id,reason:'CONTEXT_PREPARATION_LIMIT'};
+   }
    try {
     const model=Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
     return prepareMemory(this.store,run,model!,this.core.now(),memoryReadPersonas).preparation;
@@ -276,10 +288,12 @@ export class LifecycleCore {
    }
   });
  }
- private blockMemoryPreparation(run:Run,reason:string):void {
+ private blockMemoryPreparation(run:Pick<Run,'id'|'persona_id'|'command_id'>,reason:string):void {
   this.store.db.exec("UPDATE runs SET status='waiting',error_code=?,updated_at=? WHERE id=?",reason,this.core.now(),run.id);
   this.store.event(this.core.options.uuid(),run.persona_id,'run.waiting','system',run.command_id,
-   {run_id:run.id,reason,message:'Memory preparation blocked before execution. No memory was truncated and no attempt was started.'},this.core.now());
+   {run_id:run.id,reason,message:reason==='CONTEXT_PREPARATION_LIMIT'?
+    'Historical context and checkpoint exceed the combined read limit. Stored data was retained and no attempt was started.':
+    'Memory preparation blocked before execution. No memory was truncated and no attempt was started.'},this.core.now());
  }
  claim(identity:Identity,personaModels?:Record<string,string>,memoryBudget?:MemoryBudgetReceipt,memoryReadPersonas:string[]=[]):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
   return this.store.db.transaction(()=>{
@@ -305,6 +319,7 @@ export class LifecycleCore {
    )`,...(current?[current.epoch,current.boot_id]:[]))[0].count;
    if(unresolved>=32)return null;
    const run=this.nextClaimableRun();if(!run)return null;
+   if(run.context_json===null){this.blockMemoryPreparation(run,'CONTEXT_PREPARATION_LIMIT');return null;}
    let prepared:ReturnType<typeof prepareMemory>|undefined;
    if(memoryBudget){
     requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Staged alpha does not permit generic memory preparation.');

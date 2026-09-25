@@ -26,6 +26,68 @@ function setup(){
  return {...f,life,identity,add,enqueue,models,prepare,receipt};
 }
 
+it.each(['context','checkpoint','combined'])('bounds historical %s bytes before preparation and claim without truncation',kind=>{
+ for(const excess of [0,1])for(const path of ['prepare','claim']){
+  const f=setup();try{
+   const id=f.enqueue('Original instruction with room authority');
+   const original=JSON.parse(f.store.run(id).context_json);
+   const sized=(value:object,bytes:number)=>{
+    const base=JSON.stringify({...value,padding:''}),remaining=bytes-Buffer.byteLength(base);
+    const text=JSON.stringify({...value,padding:'界'.repeat(Math.floor(remaining/3))+'x'.repeat(remaining%3)});
+    expect(Buffer.byteLength(text)).toBe(bytes);return text;
+   };
+   const base=JSON.stringify(original),contextBytes=kind==='context'?1048576+excess:kind==='combined'?524288:Buffer.byteLength(base);
+   const context=kind==='checkpoint'?base:sized(original,contextBytes);
+   const checkpoint=kind==='context'?null:sized({marker:'Preserved checkpoint'},1048576+excess-contextBytes);
+   f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,id);
+   const read=vi.spyOn(f.db,'all');
+   let candidate:ReturnType<typeof f.life.nextClaimableRun>;
+   try{
+    candidate=f.life.nextClaimableRun()!;
+    const index=read.mock.calls.findIndex(([sql])=>sql.includes('FROM runs r LEFT JOIN commands'));
+    expect(index).toBeGreaterThanOrEqual(0);
+    const row=(read.mock.results[index].value as {context_json:string|null;checkpoint_json:string|null}[])[0];
+    expect(row.context_json===null).toBe(excess===1);
+    expect(row.checkpoint_json===null).toBe(excess===1||checkpoint===null);
+   }finally{read.mockRestore();}
+   expect(candidate).toBeDefined();
+   candidate=candidate!;
+   expect(candidate.id).toBe(id);
+   expect(candidate.context_json).toBe(excess?null:context);
+   expect(candidate.checkpoint_json).toBe(excess?null:checkpoint);
+   if(path==='prepare'){
+    const prepared=f.life.prepareMemory(f.identity,f.models);
+    if(excess)expect(prepared).toEqual({blocked:true,run_id:id,reason:'CONTEXT_PREPARATION_LIMIT'});
+    else expect(prepared).toMatchObject({run_id:id,attempt:1,selected_model:'gpt-5.4'});
+   }else{
+    const claimed=f.life.claim(f.identity);
+    if(excess)expect(claimed).toBeNull();
+    else{
+     expect(JSON.parse(claimed!.run.context_json)).toMatchObject({instruction:original.instruction,room_id:original.room_id});
+     expect(claimed!.run.checkpoint_json).toBe(checkpoint);
+    }
+   }
+   if(excess){
+    expect(f.store.run(id)).toMatchObject({status:'waiting',error_code:'CONTEXT_PREPARATION_LIMIT',context_json:context,checkpoint_json:checkpoint,current_attempt:0});
+    expect(f.db.all('SELECT * FROM attempts')).toEqual([]);
+    expect(f.life.nextClaimableRun()).toBeUndefined();
+    expect(f.db.all<{payload_json:string}>("SELECT payload_json FROM events WHERE type='run.waiting'").map(row=>JSON.parse(row.payload_json).reason)).toEqual(['CONTEXT_PREPARATION_LIMIT']);
+   }
+  }finally{f.close();}
+ }
+});
+
+it('rechecks historical bytes after counting and parks rather than consuming a prepared receipt',()=>{
+ const f=setup();try{
+  const id=f.enqueue(),prepared=f.prepare(),context=f.store.run(id).context_json;
+  const oversized=JSON.stringify({...JSON.parse(context),padding:'x'.repeat(1048576)});
+  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',oversized,id);
+  expect(f.life.claim(f.identity,f.models,f.receipt(prepared))).toBeNull();
+  expect(f.store.run(id)).toMatchObject({status:'waiting',error_code:'CONTEXT_PREPARATION_LIMIT',context_json:oversized,current_attempt:0});
+  expect(f.db.all('SELECT * FROM attempts')).toEqual([]);
+ }finally{f.close();}
+});
+
 it('orders complete memory buckets by distinct lexical overlap then ID, not age or repetition',()=>{
  const f=setup();try{
   const ids=['00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002',

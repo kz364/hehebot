@@ -4,7 +4,27 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
-Current unit verified: cancellation-grace watchdog selection returns IDs only,
+Current local checkpoint: nextClaimableRun limits returned historical context
+and checkpoint bodies to 1048576 combined UTF-8 bytes. Above the limit, metadata
+remains visible with NULL bodies; prepare/claim park with CONTEXT_PREPARATION_LIMIT
+without truncating stored data or starting an attempt. Runtime handles that blocked
+result without counting/claiming. Red3 and focused108/typecheck pass; full verifier
+PID1100458 passed backend1974/runtime682 then failed in stdio fixture cleanup on
+ESRCH. Narrow fixture correction has deterministic red/green coverage; no upstream
+patch changed. PID1106939 passed corrected stdio/HTTP31/workerd, then failed the
+intermittent catalog scroll assertion (10 versus0). Diagnostic run passed with
+zero over30 frames; cause remains unproven. Temporary instrumentation removed,
+no portal/fixture diff. Remaining browser/native/shutdown/strict-launcher/service/
+build stages and desktop16 passed, PID1109360 exit0, in
+`.local/historical-snapshot-final-tail.log`. Final typecheck clean. Preserve both failed logs and
+`.local/historical-snapshot-scroll-diagnostic.log`; evidence is segmented.
+No active check/child/delivery or external action; host fixture paths absent.
+Existing schedule enabled. This read ceiling is not a model token/SQL budget.
+Continue remaining historical reads/cloning and storage/scan bounds, then native
+restoration/recursive settlement. Catalog intermittency remains a separate open
+verification issue; do not weaken its assertion or claim a clean combined run.
+
+Previous unit verified: cancellation-grace watchdog selection returns IDs only,
 not historical context/checkpoint bodies. No predicate or transition changed.
 Old-query regression fails; focused89/typecheck and backend1969/HTTP31/workerd/
 typecheck/build pass. Evidence hashes are in IMPLEMENTATION.md. No runtime/UI
@@ -30,12 +50,12 @@ delivery or host fixture residue. Local only; no push/deploy or external gate
 change. Existing schedule enabled.
 
 Historical snapshot investigation remains unfinished: NativeTaskLedger still
-parses/clones parent.context_json; queued claim/preparation also hydrate the old
-snapshot although they rebuild memories. Claims must preserve instruction, room
-and exact explicitly invoked skill revision/body. Alpha authorization has separate
-snapshot reads. No total-context byte cap or metadata-only response contract has
-been chosen. Preserve already-observed native custody when adding limits; do not
-equate this cancellation fix with a hydration, SQL work or storage bound.
+parses/clones parent.context_json. Queued claim/preparation now have a historical
+body-read ceiling, but newly rebuilt context and active/alpha authorization reads
+remain separate unbounded paths. Claims preserve instruction, room and exact
+explicitly invoked skill revision/body; overflow refuses instead of truncating.
+Preserve already-observed native custody when adding further limits. Metadata,
+SQL work, total storage and index construction remain outside this read ceiling.
 
 Previous unit verified: limited scoped-memory SQL reads refuse raw bodies over
 131072 UTF-8 bytes before returning them to JavaScript. Source remains intact;
