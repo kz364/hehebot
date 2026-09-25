@@ -4,6 +4,24 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Cancellation-grace projection (2026-09-25 Asia/Jakarta): the watchdog now selects
+only run IDs for escalation, avoiding unnecessary historical context_json and
+checkpoint_json transfer to JavaScript. No predicate or transition changed.
+The regression retains >1MiB context/checkpoint values and tests both sides of the
+30-second boundary, reason precedence, effect uncertainty, confirmed effects,
+unchanged snapshots/attempts/child links/locks and continued sleep refusal.
+It fails against SELECT r.*: `.local/watchdog-projection-red-v2.log`, SHA256
+`ebf1fad4920ffa2bc4e8ca98bb59fb8d82337afb555a3462c23e9b9fa1e96b24`.
+An earlier fixture error (acquiring a lock after cancellation) remains in
+`.local/watchdog-projection-red.log`; setup now acquires it before cancellation.
+Focused89/typecheck passes; `npm test && npm run test:e2e && npm run build`
+passes backend1969/HTTP31/workerd/typecheck/dry-build. Integrated log
+`.local/watchdog-projection-integrated.log`, SHA256
+`b88c97a2d252ec9dd3da147420f1a8200eead10fe74de09927a4494262f7cdcb`.
+The prior full runtime/browser/shutdown/desktop matrix was not repeated for this
+projection-only change. This bounds neither selected row count nor SQLite work,
+storage, or other snapshot reads/clones. No runtime/UI or production gate change.
+
 Observed-child memory overflow custody (2026-09-25 Asia/Jakarta): authorized
 cross-persona registration previously rolled back when target context preparation
 exceeded the record/byte work limits. It now preserves the exact native receipt,

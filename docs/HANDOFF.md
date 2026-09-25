@@ -4,7 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
-Current unit verified: authorized cross-persona native-child registration
+Current unit verified: cancellation-grace watchdog selection returns IDs only,
+not historical context/checkpoint bodies. No predicate or transition changed.
+Old-query regression fails; focused89/typecheck and backend1969/HTTP31/workerd/
+typecheck/build pass. Evidence hashes are in IMPLEMENTATION.md. No runtime/UI
+change; prior runtime/browser/shutdown/desktop matrix not repeated. No active
+checks/children/deliveries. Continue historical snapshot bounds and remaining
+scans/storage, preserving exact child custody and explicit skill/room authority.
+This projection is not a row-count, SQL-work, storage or total snapshot bound.
+Local only, external gates unchanged; existing schedule enabled.
+
+Previous unit verified: authorized cross-persona native-child registration
 now retains observed custody on MEMORY_PREPARATION_LIMIT instead of rolling back.
 The child is cancelling with an unsettled attempt; its empty-memory placeholder
 refuses child-scoped effect intents, not proof of per-child native authentication

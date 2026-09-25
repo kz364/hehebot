@@ -525,7 +525,7 @@ export class LifecycleCore {
    for(const id of new Set([...overdue,...ops].map(x=>x.run_id)))this.store.db.exec("UPDATE runs SET status='cancelling',error_code='DEADLINE_EXCEEDED',updated_at=? WHERE id=? AND status IN ('claimed','running','finishing')",now,id);
    this.core.questions.expireCallbacks();
    const cancelledBefore=new Date(this.core.options.now().getTime()-30000).toISOString();
-   const unsettled=this.store.db.all<Run>(`SELECT r.* FROM runs r WHERE r.status='cancelling' AND r.updated_at<=? ${current?'AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?)':''}`,cancelledBefore,...(current?[current.epoch,current.boot_id]:[]));
+   const unsettled=this.store.db.all<{id:string}>(`SELECT r.id FROM runs r WHERE r.status='cancelling' AND r.updated_at<=? ${current?'AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?)':''}`,cancelledBefore,...(current?[current.epoch,current.boot_id]:[]));
    if(unsettled.length){
     for(const run of unsettled)this.store.db.exec("UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'CANCEL_UNCONFIRMED' END,updated_at=? WHERE id=?",now,run.id);
     // An unconfirmed task cancellation cannot terminate unrelated native work.

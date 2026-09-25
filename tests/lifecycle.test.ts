@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LifecycleCore, type Identity, type HeartbeatOperation } from '../src/core/lifecycle';
 import { NativeTaskLedger } from '../src/core/native-tasks';
 import { ResourceLedger } from '../src/core/resources';
@@ -569,5 +569,48 @@ describe('drain, stop and takeover races', () => {
     expect(life.get().phase).toBe('RECOVERY_REQUIRED');
     expect(f.store.run(claim.run.id).status).toBe('recovery_required');
     expect(f.db.all('SELECT status FROM effects')[0]).toEqual({ status: 'outcome_unknown' });
+  });
+
+  it('escalates exact cancellation deadlines without returning historical snapshots to JavaScript', () => {
+    const root = claimed().run, tasks = new NativeTaskLedger(f.store, f.core, life);
+    const children = Array.from({ length: 3 }, () => tasks.register(identity, { parent_run_id: root.id,
+      parent_attempt: 1, persona_id: bot, native_run_ref: randomUUID(), native_session_key: randomUUID(), title: 'Observed child' }));
+    const runs = [root, ...children], reasons = ['OWNER_CANCELLED', 'CONTEXT_INVALIDATED', 'MEMORY_PREPARATION_LIMIT', 'OWNER_CANCELLED'];
+    const context = JSON.stringify({ ...JSON.parse(root.context_json), historical: '界'.repeat(350000) });
+    const checkpoint = JSON.stringify({ historical: 'x'.repeat(1048576) });
+    new ResourceLedger(f.store, () => f.core.now()).acquire(root.id, 1, ['browser:held']);
+    runs.forEach((run, i) => {
+      f.db.exec("UPDATE runs SET status='cancelling',error_code=?,context_json=?,checkpoint_json=?,updated_at=? WHERE id=?",
+        reasons[i], context, checkpoint, i === 3 ? '2026-09-10T00:00:00.001Z' : f.core.now(), run.id);
+      unknownEffect(run.id);
+    });
+    f.db.exec("UPDATE effects SET status=CASE WHEN run_id=? THEN 'confirmed' ELSE 'dispatched' END", children[0].id);
+    const attempts = f.db.all('SELECT * FROM attempts ORDER BY run_id'), links = f.db.all('SELECT * FROM native_task_links ORDER BY run_id');
+    const locks = f.db.all('SELECT * FROM resource_locks');
+    f.setNow('2026-09-10T00:00:30.000Z');
+    const read = vi.spyOn(f.db, 'all');
+    try {
+      life.watchdog();
+      const index = read.mock.calls.findIndex(([sql]) => sql.includes("FROM runs r WHERE r.status='cancelling'"));
+      expect(index).toBeGreaterThanOrEqual(0);
+      const rows = read.mock.results[index].value as Record<string, unknown>[];
+      expect(rows.map(row => Object.keys(row))).toEqual([['id'], ['id'], ['id']]);
+      expect(rows.map(row => row.id).sort()).toEqual(runs.slice(0, 3).map(run => run.id).sort());
+    } finally { read.mockRestore(); }
+    runs.forEach((run, i) => {
+      expect(f.store.run(run.id)).toMatchObject({ context_json: context, checkpoint_json: checkpoint,
+        status: i === 3 ? 'cancelling' : 'recovery_required', error_code: i === 2 ? 'CANCEL_UNCONFIRMED' : reasons[i] });
+      expect(f.db.all('SELECT status FROM effects WHERE run_id=?', run.id)).toEqual([
+        { status: i === 1 ? 'confirmed' : i === 3 ? 'dispatched' : 'outcome_unknown' },
+      ]);
+    });
+    expect(f.db.all('SELECT * FROM attempts ORDER BY run_id')).toEqual(attempts);
+    expect(f.db.all('SELECT * FROM native_task_links ORDER BY run_id')).toEqual(links);
+    expect(f.db.all('SELECT * FROM resource_locks')).toEqual(locks);
+    expect(life.get().phase).toBe('READY');
+    expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
+    f.setNow('2026-09-10T00:00:30.001Z'); life.watchdog();
+    expect(f.store.run(children[2].id)).toMatchObject({ status: 'recovery_required', error_code: 'OWNER_CANCELLED' });
+    expect(f.db.all('SELECT status FROM effects WHERE run_id=?', children[2].id)).toEqual([{ status: 'outcome_unknown' }]);
   });
 });

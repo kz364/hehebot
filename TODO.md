@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** observed authorized
+**Current checkpoint (2026-09-25, verified locally):** cancellation-grace
+watchdog reads now return run IDs only instead of full historical context and
+checkpoint snapshots. Focused89/typecheck pass; the old query fails the new
+returned-column regression. Exact grace boundaries, reasons, effects, locks and
+child custody are preserved. Backend1969/HTTP31/workerd/typecheck/build pass.
+The prior runtime/browser/shutdown/desktop matrix was not rerun for this projection.
+No active checks/children/deliveries. Local only; external gates unchanged. This removes
+one unnecessary snapshot read, not a total snapshot, row-count or SQL-work bound.
+No runtime/UI change; broader historical snapshot bounds remain next.
+
+**Previous checkpoint (2026-09-25, verified locally):** observed authorized
 cross-persona children now retain their exact receipt when target memory preparation
 overflows. They enter cancelling, not waiting or running with omitted constraints;
 attempts remain unsettled, replay cannot revive them, and late descendants inherit
