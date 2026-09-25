@@ -4,6 +4,12 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Queued-context expiry now reuses one parsed snapshot; duplicate-key >1MiB fixture
+preserves JS last-key semantics. Corrected duplicate-parse mutant fails1; retention/
+skills20 and typecheck pass. Initial ineligible fixture failures retained/disclosed
+in IMPLEMENTATION.md. No full matrix rerun for this parse-only change. Remaining
+context-body/scan/storage bounds and native restoration/settlement stay open.
+
 Follow-up retention reads now omit historical context/checkpoint bodies during
 expiry notification and settled-ancestor dispatch. Old reads fail2; focused31,
 backend2096/typecheck/build pass. Existing recursive settlement predicates, title,

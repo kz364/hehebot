@@ -12,7 +12,13 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** follow-up expiry and settled
+**Current checkpoint (2026-09-25, verified locally):** queued-context expiry reuses
+its parsed snapshot rather than parsing large historical text twice. A >1MiB
+duplicate-key fixture pins exact last-key JS output; duplicate-parse mutant fails1,
+focused retention/skills20 and typecheck pass. No full matrix rerun for this local
+parse reuse. Context sizes, SQL scans/storage and native restoration remain open.
+
+**Previous checkpoint (2026-09-25, verified locally):** follow-up expiry and settled
 ancestor dispatch no longer hydrate historical context/checkpoint bodies. Exact
 persona/task/title, expiry cutoff, recursive settlement and sibling isolation remain
 unchanged. Old reads fail2; focused31/backend2096/typecheck/build pass. The prior

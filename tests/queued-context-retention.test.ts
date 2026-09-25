@@ -8,6 +8,19 @@ beforeEach(() => { f = fixture(true); });
 afterEach(() => f.close());
 const enqueue = () => f.core.enqueue(bot,'Original instruction 19',null,null,null);
 
+it('parses a large historical queued snapshot once and retains last-key JavaScript values', () => {
+ const id=enqueue();
+ const snapshot=`{"persona":{},"memories":[],"padding":"${'x'.repeat(1100000)}","instruction":"first","instruction":"last","room_id":"first-room","room_id":null}`;
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
+ f.setNow('2026-10-10T00:00:00.000Z');
+ const parse=vi.spyOn(JSON,'parse');
+ try{
+  expect(f.core.expireQueuedContexts()).toBe(1);
+  expect(parse.mock.calls.filter(([text])=>text===snapshot)).toHaveLength(1);
+ }finally{parse.mockRestore();}
+ expect(f.store.run(id).context_json).toBe('{"schema_version":1,"instruction":"last","room_id":null}');
+});
+
 it('drops unclaimed derived context at 30 days without renewing its age or changing custody', () => {
  const id = enqueue(); f.db.exec("UPDATE runs SET updated_at='2026-10-09T12:00:00.000Z',checkpoint_json=? WHERE id=?", JSON.stringify({padding:'x'.repeat(1100000)}),id);
  const run = f.store.run(id), state = f.db.all('SELECT * FROM lifecycle'), sequence = f.store.sequence();

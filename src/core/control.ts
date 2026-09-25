@@ -430,7 +430,8 @@ export class ControlCore {
    const now=this.now();
    const due=this.store.db.all<Pick<Run,'id'|'context_json'|'occurrence_id'|'persona_id'|'command_id'>&{instruction_created_at:string}>(`SELECT r.id,r.context_json,r.occurrence_id,r.persona_id,r.command_id,COALESCE(c.accepted_at,r.created_at) AS instruction_created_at FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.current_attempt=0 AND r.status IN ('queued','waiting') AND (${queuedContextDueSql})<=? ORDER BY (${queuedContextDueSql}),r.id LIMIT 100`,now);
    for(const run of due){
-    const invocation=(JSON.parse(run.context_json) as ContextSnapshot).skill_invocation;
+    const context=JSON.parse(run.context_json) as ContextSnapshot;
+    const invocation=context.skill_invocation;
     if(Date.parse(run.instruction_created_at)+90*86400000<=Date.parse(now)||invocation){
      // A selected skill body cannot be rebuilt from today's enablements after
      // its unstarted snapshot expires. Require a new explicit owner request.
@@ -438,7 +439,7 @@ export class ControlCore {
      if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='skipped' WHERE id=? AND status='queued'",run.occurrence_id);
      this.store.event(this.options.uuid(),run.persona_id,'run.input_expired','system:expiry',run.command_id,{run_id:run.id,reason:'MESSAGE_EXPIRED',requires_fresh_request:true,...(invocation?{skill_invocation:invocation}:{})},now);
     }else{
-     const {instruction,room_id}=JSON.parse(run.context_json) as ContextSnapshot;
+     const {instruction,room_id}=context;
      // Not an admitted authorization snapshot. Claim rebuilds all derived fields.
      this.store.db.exec('UPDATE runs SET context_json=? WHERE id=?',JSON.stringify({schema_version:1,instruction,room_id}),run.id);
     }

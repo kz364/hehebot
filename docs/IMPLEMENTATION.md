@@ -4,6 +4,15 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Queued snapshot parse reuse (2026-09-25): expireQueuedContexts retains its first
+JSON.parse result for instruction/room projection. A >1MiB historical fixture with
+duplicate instruction/room keys asserts one parse and exact last-key JS output.
+Initial fixture lacked persona and was not due; those failures are retained in
+.local/queued-parse-{red,final}.log, not counted as regression evidence. Corrected
+duplicate-parse mutant fails1 in .local/queued-parse-mutant.log (observed2 versus
+expected1 parses). Final retention/skills20 and typecheck pass. No SQL, authority,
+clone or storage-bound change; full matrix not rerun for this parse-only change.
+
 Follow-up retention projections (2026-09-25): expiry reads only persona_id from
 the target run; dispatch reads id/persona_id/title from settled ancestors. Missing
 run errors, recursive settlement predicates, cutoff and ordering are unchanged.
