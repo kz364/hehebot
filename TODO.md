@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** initial/incremental state
+**Current checkpoint (2026-09-25, verified locally):** retryDue reads only run ID
+and status, preserving missing-run failure, admission pause, cancellation and
+question fences. Large stored snapshots and prior attempt remain unchanged.
+Old-query regressions fail2; focused128/backend1983/HTTP31/workerd/typecheck/build
+pass. Prior runtime/browser/shutdown/desktop matrix not rerun. No active checks/
+children/deliveries; local only. Next: historical cloning, especially observed
+native-child custody, plus SQL/storage/scan bounds and restoration/settlement.
+Catalog intermittency remains unresolved; production gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** initial/incremental state
 selects recent run metadata without historical snapshot bodies. Newest100 ordering,
 public fields, recovery decisions and all-run summary counts remain unchanged.
 Old-query regression fails; corrected focused117/typecheck and backend1981/HTTP31/

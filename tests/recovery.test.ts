@@ -12,6 +12,24 @@ function running(){
  return {life,identity,runId:claim.run.id};
 }
 describe('bounded recovery',()=>{
+ it.each([false,true])('reads only retry metadata with execution enabled=%s',enabled=>{
+  const {life,identity,runId}=running();
+  life.complete(identity,runId,1,{status:'failed',text:'Transient',error_code:'TEMPORARY_UNAVAILABLE'});
+  const context=JSON.stringify({...JSON.parse(f.store.run(runId).context_json),padding:'界'.repeat(400000)});
+  const checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+  f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,runId);
+  f.core.options.executionEnabled=enabled;f.setNow('2026-09-10T08:00:10.000Z');
+  const read=vi.spyOn(f.db,'all');
+  try{
+   life.retryDue();
+   const index=read.mock.calls.findIndex(([sql])=>sql.includes('FROM runs WHERE id=?'));
+   expect(index).toBeGreaterThanOrEqual(0);
+   expect(read.mock.results[index].value).toEqual([{id:runId,status:'waiting'}]);
+  }finally{read.mockRestore();}
+  expect(f.store.run(runId)).toMatchObject({status:enabled?'queued':'waiting',current_attempt:1,context_json:context,checkpoint_json:checkpoint});
+  expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(enabled?0:1);
+  expect(f.db.all('SELECT status FROM attempts WHERE run_id=?',runId)).toEqual([{status:'failed'}]);
+ });
  it.each([false,true])('retains a due retry while admission is disabled without reviving cancelled work: cancel=%s',cancel=>{
   const {life,identity,runId}=running();
   life.complete(identity,runId,1,{status:'failed',text:'Transient fixture',error_code:'TEMPORARY_UNAVAILABLE'});

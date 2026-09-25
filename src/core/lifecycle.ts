@@ -516,7 +516,8 @@ export class LifecycleCore {
  retryDue():void {
   this.store.db.transaction(()=>{
    for(const retry of this.store.db.all<{run_id:string}>('SELECT run_id FROM retry_queue WHERE due_at<=?',this.core.now())){
-    const run=this.store.run(retry.run_id);
+    const run=this.store.db.all<Pick<Run,'id'|'status'>>('SELECT id,status FROM runs WHERE id=?',retry.run_id)[0];
+    requireThat(run,'NOT_FOUND','Run unavailable.',404);
     if(run.status==='waiting'&&this.core.questions.list().some(question=>question.run_id===run.id)){
      this.store.db.exec("UPDATE runs SET status='recovery_required',error_code='NATIVE_QUESTION_UNRESOLVED',updated_at=? WHERE id=?",this.core.now(),run.id);
     }else if(run.status==='waiting'){

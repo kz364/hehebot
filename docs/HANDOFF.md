@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Latest retryDue projection reads id/status only and preserves the old NOT_FOUND
+error. Admission-disabled timers, cancellation and unresolved-question handling
+remain unchanged. Red2/focused128/backend1983/HTTP31/workerd/typecheck/build pass;
+prior runtime/browser/shutdown/desktop matrix not rerun. No active checks/children/
+deliveries, schedule enabled. Next inspect native-tasks parent context parsing:
+bound work without losing an already-observed child's custody or exact authority.
+Other historical reads, SQL/storage/scan bounds and native restoration/settlement
+remain open; catalog intermittency unresolved. No push/deploy or gate changes.
+
 Latest state projection selects recent run metadata only. Both initial and
 incremental state preserve newest100 ordering, exact metadata, recovery and
 all-run counts; >1MiB stored bodies remain unchanged. Old-query regression fails;

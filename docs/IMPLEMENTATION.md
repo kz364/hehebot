@@ -4,6 +4,19 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Due-retry projection (2026-09-25 Asia/Jakarta): retryDue selects id/status rather
+than Store.run's full historical bodies. The missing-row NOT_FOUND/404 contract
+is retained. Admission pause, question/cancellation fences and queue transitions
+are unchanged. Two regressions inspect returned fields with >1MiB context and
+checkpoint, enabled/disabled admission, timer custody and unchanged prior attempt.
+Old read fails2, `.local/retry-due-projection-red.log`, SHA256
+`7a075c93be494af02bf1438f183adb4f7bdee1cd5915b5cd04cfe9394aaaea70`.
+Final focused128/backend1983/HTTP31/workerd/typecheck/build pass, PID1157282 exit0,
+`.local/retry-due-projection-final.log`, SHA256
+`3aaa68fc32e68eaa8c0801263893cf08b735b2dbe281a21b351c4806d5bc304b`.
+Prior runtime/browser/shutdown/desktop matrix not rerun for this SQL-only unit.
+No SQL-scan/row-count/storage bound, native-child change or external action.
+
 State run projection (2026-09-25 Asia/Jakarta): state selects public run metadata
 without returning context/checkpoint bodies from SQLite. Initial and incremental
 responses retain newest100 ordering, exact fields, recovery decisions and global
