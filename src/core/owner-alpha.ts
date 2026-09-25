@@ -347,9 +347,10 @@ export class OwnerAlpha {
   if(this.policy?.background_first_root)rootId=custody.admitted_run_ids[0];
   else if(custody.background)rootId=custody.background.manifests.find(m=>m.role==='background')?.run_id;
   if(!rootId)return;
-  const root=this.store.run(rootId);
+  const root=this.store.db.all<Pick<Run,'status'|'error_code'>>('SELECT status,error_code FROM runs WHERE id=?',rootId)[0];
+  requireThat(root,'NOT_FOUND','Run unavailable.',404);
   if(!['cancelling','cancelled','recovery_required'].includes(root.status))return;
-  for(const child of this.store.db.all<Run>('SELECT * FROM runs WHERE parent_run_id=?',rootId)){
+  for(const child of this.store.db.all<Pick<Run,'id'|'status'|'error_code'|'updated_at'>>('SELECT id,status,error_code,updated_at FROM runs WHERE parent_run_id=?',rootId)){
    const attempt=this.store.db.all<{epoch:number;boot_id:string}>('SELECT epoch,boot_id FROM attempts WHERE run_id=? AND attempt=1',child.id)[0];
    requireThat(!!attempt&&this.validAttempt(child.id,1,custody,attempt.epoch,attempt.boot_id),'STALE_EPOCH','Owner-alpha child custody is inconsistent.');
    if(!['claimed','running','finishing','cancelling','recovery_required'].includes(child.status))continue;

@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** alpha validAttempt selects
+**Current checkpoint (2026-09-25, verified locally):** alpha cancellation propagation
+selects root status/reason and child id/status/reason/timestamp without outer
+snapshot hydration. Custody validation and cancellation grace remain unchanged.
+Old-query regression fails; alpha/orchestration237 and backend1987/HTTP31/workerd/
+typecheck/build pass. Prior runtime/browser/shutdown/desktop matrix not rerun.
+Indirect validAttempt context reads remain; this is not bounded registration.
+Next: preserve JavaScript room semantics while addressing those reads before
+parent cloning/metadata response adoption. No active checks/children/delivery;
+local only, gates unchanged. Catalog intermittency still open.
+
+**Previous checkpoint (2026-09-25, verified locally):** alpha validAttempt selects
 six identity/deadline/receipt fields, excluding retained result bodies. Validation
 predicates are unchanged. Old-query regression fails; alpha/orchestration236 and
 backend1986/HTTP31/workerd/typecheck/build pass. Prior runtime/browser/shutdown/

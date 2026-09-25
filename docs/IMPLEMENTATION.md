@@ -4,6 +4,25 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Alpha cancellation projection prerequisite (2026-09-25 Asia/Jakarta): propagation
+reads root status/error_code and child id/status/error_code/updated_at. Existing
+validAttempt checks, cancellation reasons and grace timestamp remain unchanged.
+Worker heartbeat regression pads contexts with 400000 Unicode characters and
+checkpoints with 1100000 ASCII characters, checks actual child-return columns,
+root/child cancellation, stable timestamp after ten seconds and unchanged snapshots.
+Old query fails: `.local/alpha-cancel-projection-red.log`, SHA256
+`a0098cf5f99a5dec99b7b771525b1836d64e14a3aa7aab8a61dd7755096d6fb3`.
+`npx vitest run tests/owner-alpha*.test.ts tests/orchestration.test.ts` passes237;
+`npm run typecheck`, `npm test` (1987), `npm run test:e2e` (HTTP31/workerd),
+`npm run build` pass, PID1169078 exit0. Final log
+`.local/alpha-cancel-projection-final.log`, SHA256
+`cde6682ef844806e5346dfa81c9617be0e10f6d1fcba4567bfb1abe9ab4dff9c`.
+Prior runtime/browser/shutdown/desktop matrix not rerun. Indirect validAttempt
+contexts still hydrate; no total registration/SQL/storage bound is claimed.
+Room projection probe found duplicate room_id keys differ between JavaScript
+JSON.parse (last key) and SQLite json_extract (first); no room parsing changed.
+Evidence: `.local/alpha-room-json-semantics.log`. Gates remain unchanged.
+
 Alpha attempt projection prerequisite (2026-09-25 Asia/Jakarta): validAttempt
 selects epoch, boot_id, deadline_at, started_at, native_run_ref and submission_key
 instead of the entire attempt including result_json. No predicate changed. The

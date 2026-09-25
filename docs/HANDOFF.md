@@ -4,6 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Latest prerequisite: alpha propagation uses root status/error_code and child
+id/status/error_code/updated_at projections. Custody checks, reason precedence
+and original cancellation grace timestamp stay intact; snapshots are preserved.
+Old-query regression fails; focused237/backend1987/HTTP31/workerd/typecheck/build
+pass. Prior runtime/browser/shutdown/desktop matrix not rerun. No active checks/
+children/delivery; schedule enabled. Indirect validAttempt run contexts remain.
+Do not replace JSON.parse room checks with json_extract without handling duplicate
+keys: the former selects the last room_id and SQLite selects the first. Probe
+`.local/alpha-room-json-semantics.log` demonstrates null versus room-present.
+Continue exact-authority read handling before SQL-copy/metadata-response adoption.
+
 Latest prerequisite: alpha validAttempt reads six used attempt fields without
 retained result_json. All validation predicates unchanged. Worker-route regression
 with >1MiB result fails against old SELECT*; alpha/orchestration236 and backend1986/

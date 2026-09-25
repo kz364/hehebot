@@ -32,6 +32,29 @@ const custody=()=>JSON.parse(db.all<{value_json:string}>("SELECT value_json FROM
 const receipt=(parent:string)=>({parent_run_id:parent,parent_attempt:1,persona_id:bot,native_run_ref:randomUUID(),native_session_key:randomUUID(),title:'Observed child'});
 async function first(){const identity=await boot();await message();const claim=await runtime('claim',{identity});await runtime('submitted',{identity,run_id:claim.run.id,attempt:1,native_ref:'root'});return {identity,claim};}
 
+it('propagates root cancellation with metadata-only child selection',async()=>{
+ const {identity,claim}=await first(),child=await runtime('native-child',{identity,child:receipt(claim.run.id),started:true});
+ db.exec("UPDATE runs SET context_json=json_set(context_json,'$.padding',?),checkpoint_json=?",
+  '界'.repeat(400000),JSON.stringify({padding:'x'.repeat(1100000)}));
+ const snapshots=db.all('SELECT id,context_json,checkpoint_json FROM runs ORDER BY id');
+ db.exec("UPDATE runs SET status='cancelling',error_code='OWNER_CANCELLED' WHERE id=?",claim.run.id);
+ const read=vi.spyOn(db,'all');
+ try{
+  expect(await runtime('heartbeat',{identity,operations:[]})).toMatchObject({cancellations:expect.arrayContaining([claim.run.id,child.id])});
+  const selections=read.mock.calls.flatMap(([sql],i)=>sql.includes('FROM runs WHERE parent_run_id=?')?[read.mock.results[i].value]:[]);
+  expect(selections.length).toBeGreaterThan(0);
+  for(const rows of selections)for(const row of rows){
+   expect(Object.keys(row).sort()).toEqual(['error_code','id','status','updated_at']);
+   expect(row.id).toBe(child.id);
+  }
+ }finally{read.mockRestore();}
+ const cancelled=db.all('SELECT status,error_code,updated_at FROM runs WHERE id=?',child.id);
+ expect(cancelled).toEqual([{status:'cancelling',error_code:'OWNER_CANCELLED',updated_at:new Date().toISOString()}]);
+ vi.setSystemTime(new Date('2026-09-10T00:00:10.000Z'));await runtime('heartbeat',{identity,operations:[]});
+ expect(db.all('SELECT status,error_code,updated_at FROM runs WHERE id=?',child.id)).toEqual(cancelled);
+ expect(db.all('SELECT id,context_json,checkpoint_json FROM runs ORDER BY id')).toEqual(snapshots);
+});
+
 it('accepts only literal true and preserves absent serialization and immutable policy',async()=>{
  const {background_first_root:_,...old}=policy;
  expect(JSON.stringify(parseOwnerAlpha(JSON.stringify(old),base))).toBe(JSON.stringify(old));
