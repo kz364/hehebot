@@ -68,7 +68,7 @@ export class RootChildEffects {
     'INVALID_INPUT', 'Invalid connector request digest.', 422);
    const canonical = [...resources].sort();
    const requestDigest = admitted.custody + digest([effect.request_digest, canonical]);
-   const existing = this.store.db.all<EffectRow>('SELECT * FROM effects WHERE action_key=?', effect.action_key)[0];
+   const existing = this.store.db.all<EffectRow>('SELECT id,run_id,action_key,classification,status,authorization_ref,request_digest,provider_idempotency_key FROM effects WHERE action_key=?', effect.action_key)[0];
    if (existing) {
     requireThat(existing.request_digest === requestDigest && existing.run_id === effect.run_id && existing.classification === effect.classification &&
      existing.authorization_ref === effect.authorization_ref && existing.provider_idempotency_key === effect.provider_idempotency_key,

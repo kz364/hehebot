@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Root-child replay receipt projection (2026-09-25): intent lookup selects only the
+EffectRow identity/status fields, excluding receipt_json. Two grandchild vectors
+retain >1MiB UTF-8 unknown receipt evidence after deadline expiry: exact replay
+returns outcome_unknown, changed request digest refuses IDEMPOTENCY_CONFLICT.
+Neither loads receipt bodies or changes effects/locks. Old read fails2; focused253/
+backend2269/typecheck/dry-run build pass. No context parsing, ancestry depth, SQL-work
+or storage bound claimed. Full runtime/browser/native/shutdown/desktop matrix not
+repeated; production gates and original intermittent failures unchanged.
+- .local/child-receipt-red.log SHA256:
+  `64973e380e0a83f903d40479389da2c7b6722fbc97a1aa7512ba61b3e267075f`
+- .local/child-receipt-focused.log SHA256:
+  `171562a14c41d390b462b5facdb4d29ab64ce9531f686bc86d912520e811cd13`
+- .local/child-receipt-integrated.log SHA256:
+  `157ce6b36048f63aaf0449294411d5136d99ff1b586ea6602131a139bf9b0056`
+
 Root-child checkpoint projections (2026-09-25): admitted ancestry loads only its
 eight required fields; ResourceLedger acquire loads status/current_attempt only.
 No parsing, predicate, traversal or outcome transition order changed. Root/parent/

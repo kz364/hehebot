@@ -48,6 +48,22 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it.each([false,true])('omits retained receipt during expired child replay (conflict=%s)',conflict=>{
+ const input=intent(grandchild);boundary.intent(input);
+ const receipt={evidence:'界'.repeat(400000)};
+ boundary.transition(result(input,'outcome_unknown',receipt));
+ f.db.exec('UPDATE attempts SET deadline_at=?',f.core.now());
+ const before=effects(),held=locks(),read=vi.spyOn(f.db,'all');
+ try{
+  const replay={...input,effect:{...input.effect,request_digest:conflict?'different-request':input.effect.request_digest}};
+  if(conflict)rejects(()=>boundary.intent(replay),'IDEMPOTENCY_CONFLICT');
+  else expect(boundary.intent(replay)).toEqual({id:input.effect.id,status:'outcome_unknown'});
+  const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]);
+  expect(rows.some(row=>Object.prototype.hasOwnProperty.call(row,'receipt_json'))).toBe(false);
+ }finally{read.mockRestore();}
+ expect(effects()).toEqual(before);expect(locks()).toEqual(held);
+});
+
 it.each(['intent','replay','outcome'] as const)('omits ancestor checkpoints during child effect %s',mode=>{
  const input=intent(grandchild);
  if(mode!=='intent')boundary.intent(input);

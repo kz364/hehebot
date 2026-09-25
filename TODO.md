@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** RootChildEffects ancestry
+**Current checkpoint (2026-09-25, verified locally):** RootChildEffects replay lookup
+omits retained destination receipts. Oversized unknown receipts remain stored;
+exact expired replay succeeds while changed digest still conflicts before deadline
+checks. Red2/focused253/backend2269/typecheck/build pass. Context parsing/ancestry
+depth, historical/storage/SQL-work and native recovery remain open. Next authority
+context representation without changing JS semantics or blocking late outcomes.
+Full runtime/browser/native/shutdown/desktop matrix not rerun for this projection
+unit. Local only; production gates and original intermittent failures unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** RootChildEffects ancestry
 reads omit checkpoints; ResourceLedger lock admission reads only status/attempt.
 Grandchild intent/replay/unknown-outcome vectors preserve checkpoints and locks.
 Red3/focused251/backend2267/typecheck/build pass. Intermediate two remaining read

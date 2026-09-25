@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+RootChildEffects replay lookup now excludes destination receipt bodies. Oversized
+unknown receipts stay intact; exact replay after expiry succeeds, changed digest
+still conflicts. Red2/focused253/backend2269/typecheck/build pass. Next remaining
+authority-context representation/ancestry bounds, preserving JS semantics and late
+outcome custody. No active checks/children/delivery; existing schedule read/enabled.
+Full runtime/browser/native/shutdown/desktop matrix not rerun for this projection
+unit; original intermittent failures and production gates unchanged.
+
 RootChildEffects now omits checkpoints throughout ancestry; ResourceLedger acquire
 projects status/current_attempt. Grandchild intent/replay/outcome regression red3,
 focused251/backend2267/typecheck/build pass. Partial-fix two failures exposed lock
