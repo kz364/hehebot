@@ -211,6 +211,11 @@ try {
     });
     launcher.stderr.resume();
     const [code, signal] = await once(launcher, 'exit'); exitAt = Date.now();
+    // The monitor actively acquires these locks. Join its final probe before
+    // returning to the manager's one-shot dual-lock retirement inspection;
+    // otherwise the test itself can make that inspection fail with exit 73.
+    stopMonitoring = true; await monitor; if (monitorError) throw monitorError;
+    report.lockMonitorJoinedBeforeRetirement = true;
     launcherResult = { code, signal }; return launcherResult;
   };
   listener = createHostedOwnerWakeService({ configPath, wakeTokenFile: paths.wake, port: 8080 }, {
@@ -274,6 +279,7 @@ try {
   assert.deepEqual(journal.ownerAlphaGeneration, { epoch: 2, boot_id: generation.value.boot_id, transition_id: generation.value.transition_id });
   report.expiryAt = expiryAt; report.exitAt = exitAt; report.firstFreeAt = firstFreeAt;
   report.wakeResult = wakeResult; report.retirementReported = wakeResult === 'RETIREMENT_REPORTED';
+  assert.equal(report.lockMonitorJoinedBeforeRetirement, true);
   assert.equal(wakeResult, 'RETIREMENT_REPORTED', 'retirement refused; preserve exact timing rather than weakening the boundary');
   const retired = rows.find(row => row.key === 'owner_alpha_retirement:2'); assert.ok(retired);
   assert.equal(retired.value.execution_lock_free, true); assert.equal(retired.value.session_lock_free, true);

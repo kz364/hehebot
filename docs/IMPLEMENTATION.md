@@ -4,6 +4,36 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Assignment snapshot projections (2026-09-25): bootstrap/warm/background
+assignNewMessage reads metadata, then reuses runHasFalsyRoom in the original
+short-circuit position. Checkpoints never hydrate; unambiguous context returns
+only a scalar. Duplicate/numeric/non-object/raw-NUL JSON retains the established
+JS fallback and exact historical bytes. No new refusal or SQL-scan bound.
+Shared31 falsy-room vectors across all three paths plus metadata-precedence tests
+pass; focused278/backend2213/runtime682/HTTP31/workerd/typecheck pass.
+Full verifier attempted, with segmented completion rather than a clean invocation:
+- Original log .local/assignment-projection-combined.log (SHA256
+  `7cdd58e00f6cba0b2e190f641b1ff8851fb04da4488aec86c36f1a57d039575f`)
+  failed alpha review click11. Screenshot showed no modal obstruction. Diagnostic
+  pointer/mouse/click tracing passed all review actions; instrumentation removed.
+  Cause remains unproven, not a claimed portal fix. Diagnostic log SHA256
+  `38331802e44f408b2a8279294e71f6d1d2a19dfbed03f25b7dd0a83d9b8beb50`.
+- Resumed .local/assignment-projection-remaining.log passed native/background/
+  warm/shutdown but failed strict launcher retirement. SHA256
+  `2a48a2a6fb6243073e7a0c54585db187bb685a04dc5013e61290eaa72e17bfbf`.
+  Its lock monitor actively acquires the same locks as manager inspection; the
+  fixture now stops/joins that monitor after launcher exit before returning to
+  the manager. Runtime checks and exact expiry are unchanged. This eliminates
+  a concrete contention race; original failure lacks proof of that exact cause.
+  Corrected strict launcher passes, unknown-root custody and no-replay retained:
+  .local/assignment-launcher-joined-monitor.log SHA256
+  `089965917a28bf7b65946b34206d564e27e20b7dc936b6c1f1aa72942b288376`.
+- Remaining service variants/build and desktop16 pass; log
+  .local/assignment-service-tail.log SHA256
+  `fcc83c9a0b9a22a2cd81356b2b098688bbb64d7218b025fa5812655bf9690ec9`.
+No active check/child/delivery or host floor/Tasks fixture residue. Existing desktop
+advisories remain; no push/deploy/live account calls or gate changes.
+
 Explicit retry read boundary (2026-09-25): run.retry projects metadata and never
 loads checkpoint_json. Started attempts do not load context; unstarted attempts
 load at most1048576 raw UTF-8 bytes for the existing skill-expiry check. Over-limit

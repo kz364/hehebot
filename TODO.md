@@ -12,7 +12,19 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** explicit retry omits checkpoints
+**Current checkpoint (2026-09-25, verified locally in segments):** bootstrap/warm/
+background assignment uses metadata plus the existing JS-compatible falsy-room
+predicate. Normal snapshots/checkpoints are not hydrated; ambiguous JSON retains
+the JS fallback. Focused278/backend2213/runtime682/HTTP31/workerd/native/shutdown/
+service/typecheck/build and desktop16 pass. Original combined run failed at alpha
+review click11; pointer-instrumented diagnostic passed, cause unresolved. Resumed
+launcher check failed retirement; the fixture's active lock monitor could compete
+with manager inspection. Joining it after launcher exit fixes that race; corrected
+strict launcher passes without changing production timing or settlement rules.
+Original failures retained; not a clean single full run. Remaining historical
+fallback/cloning/storage/native recovery and external acceptance stay open.
+
+**Previous checkpoint (2026-09-25, verified locally):** explicit retry omits checkpoints
 and started context bodies. Unstarted context reads cap at1048576 UTF-8 bytes;
 overflow refuses without run/timer/lifecycle changes, preserving earlier rejection
 precedence and stored snapshots. Exact/one-over multibyte cases pass; character-count

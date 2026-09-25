@@ -4,6 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Assignment paths now read metadata plus existing falsy-room projection; historical
+JS fallback/order preserved. Focused278/backend2213/runtime682/HTTP31/workerd and
+native/shutdown/service/build/desktop16 pass in segments. Original full run failed
+alpha review click11; diagnostic passed, cause unresolved, instrumentation removed.
+Resumed strict launcher failed retirement; its lock monitor could compete with the
+one-shot proof inspection. Fixture now joins that monitor after launcher exit;
+corrected strict launcher passes without production changes or weaker boundaries.
+Exact original cause remains unproven. Logs/hashes in IMPLEMENTATION. No active
+checks/children/delivery or host fixture residue; schedule enabled. Continue actual
+historical fallback/cloning/storage bounds and native restoration/settlement.
+
 Explicit retry now avoids checkpoint and started-context hydration; unstarted
 context reads cap at1048576 UTF-8 bytes. Refusal preserves snapshots and lifecycle;
 started runs retain existing custody checks and later claim-time gating. Focused94/

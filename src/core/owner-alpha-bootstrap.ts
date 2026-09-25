@@ -4,6 +4,7 @@ import type {ControlCore} from './control';
 import {LifecycleCore} from './lifecycle';
 import type {OwnerAlphaSuccessor,TextOnlyProfile} from './owner-alpha';
 import type {Store} from './store';
+import type {Run} from './types';
 
 export type OwnerAlphaUnusedRecovery={kind:'unused-before-staging-v1';installation_id:string;owner_binding_sha256:string;
  predecessor:Pick<OwnerAlphaManifest,'manifest_sha256'|'epoch'|'boot_id'|'transition_id'|'session_id'|'run_id'>;
@@ -225,8 +226,10 @@ export class OwnerAlphaBootstrap {
  /** Only invoked within accept's transaction before its new command becomes applied. */
  assignNewMessage(owner:string,commandId:string,runId:string):void {
   const c=this.config;if(!c||owner!==c.owner_id||this.core.now()>=c.expires_at)return;
-  const db=this.core.store.db,run=this.core.store.run(runId),now=this.core.now();
-  if(run.persona_id!==c.persona_id||run.current_attempt!==0||run.command_id!==commandId||run.role!=='coordinator'||run.parent_run_id||run.routine_id||run.occurrence_id||JSON.parse(run.context_json).room_id)return;
+  const db=this.core.store.db,now=this.core.now();
+  const run=db.all<Omit<Run,'context_json'|'checkpoint_json'>>('SELECT id,command_id,occurrence_id,persona_id,routine_id,status,current_attempt,error_code,created_at,updated_at,role,parent_run_id,title FROM runs WHERE id=?',runId)[0];
+  if(!run)throw new ControlError('NOT_FOUND','Run unavailable.',404);
+  if(run.persona_id!==c.persona_id||run.current_attempt!==0||run.command_id!==commandId||run.role!=='coordinator'||run.parent_run_id||run.routine_id||run.occurrence_id||!this.core.store.runHasFalsyRoom(runId))return;
   if(this.core.budget.blocks(run))return;
   const command=db.all<{body_hash:string;type:string;status:string;accepted_at:string;owner_id:string}>('SELECT * FROM commands WHERE id=?',commandId)[0];
   const event=db.all<{sequence:number}>("SELECT sequence FROM events WHERE id=? AND type='message.user' AND actor_id=? AND conversation_id=?",commandId,owner,c.persona_id)[0];

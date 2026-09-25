@@ -449,8 +449,10 @@ export class OwnerAlphaWarm {
  assignNewMessage(owner:string,commandId:string,runId:string):void{
   const c=this.config;
   if(!c||owner!==c.owner_id)return;
-  const db=this.core.store.db,run=this.core.store.run(runId),now=this.core.now();
-  if(run.persona_id!==c.persona_id||run.current_attempt!==0||run.command_id!==commandId||run.role!=='coordinator'||run.parent_run_id||run.routine_id||run.occurrence_id||(JSON.parse(run.context_json) as {room_id?:string|null}).room_id)return;
+  const db=this.core.store.db,now=this.core.now();
+  const run=db.all<Pick<Run,'persona_id'|'current_attempt'|'command_id'|'role'|'parent_run_id'|'routine_id'|'occurrence_id'>>('SELECT persona_id,current_attempt,command_id,role,parent_run_id,routine_id,occurrence_id FROM runs WHERE id=?',runId)[0];
+  if(!run)throw new ControlError('NOT_FOUND','Run unavailable.',404);
+  if(run.persona_id!==c.persona_id||run.current_attempt!==0||run.command_id!==commandId||run.role!=='coordinator'||run.parent_run_id||run.routine_id||run.occurrence_id||!this.core.store.runHasFalsyRoom(runId))return;
   const command=db.all<{body_hash:string;type:string;status:string;accepted_at:string;owner_id:string}>('SELECT * FROM commands WHERE id=?',commandId)[0];
   const event=db.all<{sequence:number}>("SELECT sequence FROM events WHERE id=? AND type='message.user' AND actor_id=? AND conversation_id=?",commandId,owner,c.persona_id)[0];
   requireThat(command&&command.type==='message.send'&&command.status==='accepted'&&command.accepted_at<=now&&command.owner_id===owner&&hex64.test(command.body_hash)&&
