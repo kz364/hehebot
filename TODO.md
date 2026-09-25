@@ -12,7 +12,18 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** delegated memory overflow
+**Current checkpoint (2026-09-25, verified locally):** new descendants of legacy
+partial snapshots now receive a persistent non-authorizing marker when the parent's
+MEMORY_PREPARATION_LIMIT error survives. Historical parent bytes remain unchanged;
+descendant completion cannot erase the inherited refusal. Cancelling/recovery
+regressions fail2 before fix; focused114/backend2234/typecheck/dry-run build pass.
+Cleared/overwritten legacy errors remain ambiguous: empty memory is not proof of
+overflow, so no shape-based migration. Next inspect recoverable refusal provenance,
+remaining historical/storage bounds and native restoration. Full runtime/browser/
+native/shutdown/desktop matrix not rerun for this localized predicate change.
+Local only; production gates and unresolved intermittent failures unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** delegated memory overflow
 now stores a persistent non-authorizing marker, not a partial persona snapshot.
 Late descendants remain cancelling after terminal results clear the parent's error;
 receipts/ancestry and source memory remain intact. Restore accepts either exact

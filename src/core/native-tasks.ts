@@ -59,7 +59,9 @@ export class NativeTaskLedger {
    const raw=this.store.db.all<{context_json:string|null}>('SELECT CASE WHEN length(CAST(context_json AS BLOB))<=1048576 THEN context_json END AS context_json FROM runs WHERE id=?',parent.id)[0].context_json;
    const oldContext=raw===null?null:JSON.parse(raw) as ContextSnapshot&{native_child_context_unavailable?:string};
    const inheritedReason=oldContext?.native_child_context_unavailable;
-   let unavailableReason=raw===null?'CONTEXT_PREPARATION_LIMIT':inheritedReason==='CONTEXT_PREPARATION_LIMIT'||inheritedReason==='MEMORY_PREPARATION_LIMIT'?inheritedReason:null;
+   // Legacy partial snapshots have no marker. A surviving refusal is evidence;
+   // an empty memory array alone is also valid and cannot identify lost history.
+   let unavailableReason=raw===null?'CONTEXT_PREPARATION_LIMIT':inheritedReason==='CONTEXT_PREPARATION_LIMIT'||inheritedReason==='MEMORY_PREPARATION_LIMIT'?inheritedReason:parent.error_code==='MEMORY_PREPARATION_LIMIT'?'MEMORY_PREPARATION_LIMIT':null;
    // Custody only, not a partial admitted snapshot. Raw copying could expose
    // the wrong duplicate-key room/scope through SQLite's first-key semantics.
    // Keep the source on the parent and no context authority on this child.

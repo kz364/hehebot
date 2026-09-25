@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Legacy parent errors now seed the persistent no-authority marker on new descendants
+when MEMORY_PREPARATION_LIMIT survives. Parent snapshots remain unchanged. Two
+cancelling/recovery regressions fail before fix; focused114/backend2234/typecheck/
+dry-run build pass. Already cleared/overwritten refusal history remains ambiguous;
+do not infer overflow from empty memory or migrate by snapshot shape. Next inspect
+recoverable refusal provenance and remaining historical/storage/native recovery.
+No active checks/children/delivery. Existing schedule enabled; full runtime/browser/
+native/shutdown/desktop matrix not rerun for this predicate-only unit.
+
 Delegated memory overflow late-descendant bug fixed for new registrations: after
 parent completion clears error, descendants still inherit a custody-only marker
 and remain cancelling. Original regression fails1; focused89/backend2232/runtime682/

@@ -4,6 +4,25 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Legacy memory refusal inheritance (2026-09-25): registration now recognizes a
+surviving parent MEMORY_PREPARATION_LIMIT error as evidence of unavailable context,
+even without the new marker. New descendants receive the custody-only marker; the
+historical parent is not rewritten. Cancelling/recovery_required regressions fail2
+before the fix and prove propagation beyond descendant completion afterward.
+Empty memory alone is valid and cannot classify a legacy snapshot. Already cleared
+or overwritten errors remain unresolved; this is not a historical-data migration.
+Focused114/backend2234/typecheck/dry-run build pass. Full runtime/browser/native/
+shutdown/desktop matrix not repeated. No production gates or external state changed.
+Logs and SHA256:
+- .local/legacy-memory-red.log:
+  `25935acd65de2ee4a2abb614c442d7b35c66402ae8f9cddae9cd61b7ef3bff13`
+- .local/legacy-memory-focused.log:
+  `09d90ed62f93a9e866254b47f922830807ae4d5a62d45ac893141355c7139ccd`
+- .local/legacy-memory-backend.log:
+  `eff925c531b91f433f3aa212a9f4f706a6d6c888dc86a0ea812b3d69bc74645d`
+- .local/legacy-memory-build.log:
+  `388f9f44273256542f39eb150a6b5ee45ed0975ae44b3fbf641c064e259f7435`
+
 Delegated memory overflow follow-up (2026-09-25): a real regression demonstrated
 that completing the old partial-snapshot child cleared its error and allowed a late
 descendant to become running without required memory. New overflows now retain the

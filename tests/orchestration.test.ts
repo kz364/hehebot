@@ -347,6 +347,24 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(life.heartbeat(identity, []).cancellations).not.toContain(child.id);
   });
 
+  it.each(['cancelling','recovery_required'])('preserves known legacy memory refusal through descendant settlement (%s)',status=>{
+    const p=parent();f.core.options.delegations={[bot]:[otherBot]};
+    const child=tasks.register(identity,{...receipt(p),persona_id:otherBot},true);
+    // Old versions retained a complete-looking snapshot with memory omitted.
+    // Only the surviving refusal is evidence; an empty memory array is not.
+    f.db.exec('UPDATE runs SET status=?,error_code=? WHERE id=?',status,'MEMORY_PREPARATION_LIMIT',child.id);
+    const historical=f.store.run(child.id);
+    const nested=tasks.register(identity,{...receipt(child.id),persona_id:otherBot},true);
+    expect(nested).toMatchObject({status:'cancelling',error_code:'MEMORY_PREPARATION_LIMIT'});
+    expect(JSON.parse(f.store.run(nested.id).context_json)).toMatchObject({
+      native_child_context_unavailable:'MEMORY_PREPARATION_LIMIT',persona:{id:null},memories:[],skills:[],authorization_policy_ids:[]});
+    expect(f.store.run(child.id)).toEqual(historical);
+    finish(nested.id);
+    const late=tasks.register(identity,{...receipt(nested.id),persona_id:otherBot},true);
+    expect(late).toMatchObject({status:'cancelling',error_code:'MEMORY_PREPARATION_LIMIT'});
+    expect(life.heartbeat(identity,[]).cancellations).toContain(late.id);
+  });
+
   it('keeps late descendants non-authorizing after delegated memory overflow settles',()=>{
     const p=parent();f.core.options.delegations={[bot]:[otherBot]};
     const memory=randomUUID();
