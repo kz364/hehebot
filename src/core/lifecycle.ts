@@ -536,6 +536,18 @@ export class LifecycleCore {
    }
   });
  }
+ private retainNativeMemoryRefusals(runId?:string,identity?:Identity):void {
+  // Called inside the recovery transaction, before replacing its error code.
+  // SQL copies only exact attempt identity and a constant reason, never context.
+  this.store.db.exec(`INSERT INTO runtime_metadata(key,value_json)
+   SELECT 'native_context_unavailable:'||r.id||':'||r.current_attempt,? FROM runs r
+   JOIN native_task_links n ON n.run_id=r.id AND n.parent_run_id=r.parent_run_id
+   JOIN attempts a ON a.run_id=r.id AND a.attempt=r.current_attempt AND a.native_run_ref=n.native_run_ref
+   WHERE r.role='background' AND r.error_code='MEMORY_PREPARATION_LIMIT'
+    AND r.status IN ('claimed','running','finishing','cancelling')
+    ${runId?'AND r.id=?':''} ${identity?'AND a.epoch=? AND a.boot_id=?':''}
+   ON CONFLICT(key) DO NOTHING`,JSON.stringify('MEMORY_PREPARATION_LIMIT'),...(runId?[runId]:[]),...(identity?[identity.epoch,identity.boot_id]:[]));
+ }
  watchdog():void {
   this.store.db.transaction(()=>{
    const now=this.core.now(),state=this.get();
@@ -549,11 +561,15 @@ export class LifecycleCore {
    const cancelledBefore=new Date(this.core.options.now().getTime()-30000).toISOString();
    const unsettled=this.store.db.all<{id:string}>(`SELECT r.id FROM runs r WHERE r.status='cancelling' AND r.updated_at<=? ${current?'AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?)':''}`,cancelledBefore,...(current?[current.epoch,current.boot_id]:[]));
    if(unsettled.length){
-    for(const run of unsettled)this.store.db.exec("UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'CANCEL_UNCONFIRMED' END,updated_at=? WHERE id=?",now,run.id);
+    for(const run of unsettled){
+     this.retainNativeMemoryRefusals(run.id);
+     this.store.db.exec("UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'CANCEL_UNCONFIRMED' END,updated_at=? WHERE id=?",now,run.id);
+    }
     // An unconfirmed task cancellation cannot terminate unrelated native work.
     for(const run of unsettled)this.store.db.exec("UPDATE effects SET status='outcome_unknown',updated_at=? WHERE run_id=? AND status IN ('intent','dispatched')",now,run.id);
    }
    if(state.lease_until&&state.lease_until<=now&&['READY','DRAINING','BOOTING','START_REQUESTED'].includes(state.phase)){
+    this.retainNativeMemoryRefusals(undefined,current??undefined);
     this.store.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',desired_state='STOP' WHERE singleton=1");
     this.store.db.exec(`UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'STALE_EPOCH' END,updated_at=? WHERE status IN ('claimed','running','finishing','cancelling') ${current?'AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=runs.id AND a.attempt=runs.current_attempt AND a.epoch=? AND a.boot_id=?)':''}`,now,...(current?[current.epoch,current.boot_id]:[]));
     this.store.db.exec(`UPDATE effects SET status='outcome_unknown',updated_at=? WHERE status IN ('intent','dispatched') ${current?'AND EXISTS(SELECT 1 FROM runs r JOIN attempts a ON a.run_id=r.id AND a.attempt=r.current_attempt WHERE r.id=effects.run_id AND a.epoch=? AND a.boot_id=?)':''}`,now,...(current?[current.epoch,current.boot_id]:[]));
@@ -572,6 +588,7 @@ export class LifecycleCore {
    this.store.db.exec("DELETE FROM resource_locks WHERE NOT EXISTS(SELECT 1 FROM effects e WHERE e.run_id=resource_locks.run_id AND e.status IN ('intent','dispatched','outcome_unknown'))");
    this.store.db.exec("UPDATE attempts SET status='terminated',settled_at=? WHERE status IN ('claimed','running')",this.core.now());
    this.store.db.exec("UPDATE effects SET status='outcome_unknown',updated_at=? WHERE status IN ('intent','dispatched')",this.core.now());
+   this.retainNativeMemoryRefusals();
    this.store.db.exec("UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'OUTCOME_UNKNOWN' END,updated_at=? WHERE status IN ('claimed','running','finishing','cancelling')",this.core.now());
    for(const run of this.store.db.all<Pick<Run,'id'|'role'|'current_attempt'|'error_code'>>("SELECT id,role,current_attempt,error_code FROM runs WHERE status='recovery_required'"))this.scheduleRetry(run,run.error_code??'OUTCOME_UNKNOWN');
   });

@@ -347,6 +347,33 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(life.heartbeat(identity, []).cancellations).not.toContain(child.id);
   });
 
+  it.each(['cancel-timeout','lease-expiry','provider-stop'])('preserves legacy memory refusal before %s overwrites the error',mode=>{
+    const p=parent();f.core.options.delegations={[bot]:[otherBot]};
+    const child=tasks.register(identity,{...receipt(p),persona_id:otherBot},true);
+    const original=f.store.run(child.id).context_json;
+    f.db.exec("UPDATE runs SET status='cancelling',error_code='MEMORY_PREPARATION_LIMIT' WHERE id=?",child.id);
+    const key=`native_context_unavailable:${child.id}:1`;
+    life.watchdog();
+    expect(f.db.all('SELECT key FROM runtime_metadata WHERE key=?',key)).toEqual([]);
+    if(mode==='provider-stop'){
+      f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
+      life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
+    }else{
+      if(mode==='lease-expiry')f.db.exec("UPDATE lifecycle SET lease_until='2026-09-10T00:00:10.000Z'");
+      f.setNow(mode==='lease-expiry'?'2026-09-10T00:00:11.000Z':'2026-09-10T00:00:31.000Z');
+      life.watchdog();
+    }
+    expect(f.store.run(child.id)).toMatchObject({status:'recovery_required',context_json:original,
+      error_code:mode==='provider-stop'?'OUTCOME_UNKNOWN':mode==='lease-expiry'?'STALE_EPOCH':'CANCEL_UNCONFIRMED'});
+    expect(f.db.all('SELECT value_json FROM runtime_metadata WHERE key=?',key)).toEqual([{value_json:JSON.stringify('MEMORY_PREPARATION_LIMIT')}]);
+    expect(f.db.all('SELECT key FROM runtime_metadata WHERE key=?',`native_context_unavailable:${p}:1`)).toEqual([]);
+    if(mode==='cancel-timeout'){
+      finish(child.id);
+      const late=tasks.register(identity,{...receipt(child.id),persona_id:otherBot},true);
+      expect(late).toMatchObject({status:'cancelling',error_code:'MEMORY_PREPARATION_LIMIT'});
+    }
+  });
+
   it('retains exact legacy refusal provenance before completion clears the last error',()=>{
     const p=parent();f.core.options.delegations={[bot]:[otherBot]};
     const child=tasks.register(identity,{...receipt(p),persona_id:otherBot},true);

@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Recovery transitions now retain known native memory refusal before cancellation
+timeout, lease expiry or provider-stop error replacement. Exact attempt/reference
+joins; lease generation fence retained. Recovery errors, effects and snapshots stay
+unchanged. Red3/focused120/backend2240/runtime682/native child service/backup drill/
+typecheck/build pass. Next remaining historical/storage bounds and native restoration/
+recursive settlement. Already lost historical errors cannot be inferred from empty
+memory. No active checks/children/delivery; schedule enabled. Prior browser/timed-
+shutdown/desktop matrix not rerun; original intermittent failures remain unresolved.
+
 Known native memory refusal now survives completion error clearing in exact
 run/attempt runtime_metadata. No historical snapshot/result rewrite; failed locked
 completion writes none. Late children inherit refusal; wrong attempt ignored.

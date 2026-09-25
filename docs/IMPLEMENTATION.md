@@ -4,6 +4,26 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Refusal provenance during recovery (2026-09-25): cancellation timeout, lease expiry
+and confirmed provider stop now copy a still-known native memory refusal into exact
+run/current-attempt metadata before replacing errors. SQL joins native parent and
+attempt/reference identity and copies no snapshot. Cancellation targets selected
+run IDs; lease expiry keeps its generation epoch/boot fence. Existing recovery error
+codes, effect uncertainty and provider-stop authority checks are unchanged.
+Regressions fail3 before fix; final focused120/backend2240/runtime682/native child
+service/encrypted backup drill/typecheck/dry-run build pass. Tests distinguish early
+watchdog from due transition, preserve source snapshots and verify timeout plus
+completion cannot revive a late descendant. Already lost history is not recovered.
+Browser/timed-shutdown/desktop matrix not rerun; original intermittent failures stay
+unresolved. No external state or production-gate change.
+Logs and SHA256:
+- .local/refusal-recovery-red.log:
+  `52f226d61985d73b18e6861431fb839ca40f87f6f10088334fa7f5744ccf1d23`
+- .local/refusal-recovery-focused.log:
+  `5236a335d2ce8134fb5e9a84087f516c7bcfc9bad5fc6c8bafa881fdbd72f750`
+- .local/refusal-recovery-integrated.log:
+  `7be8c4d4fef6b4837fd67865b2e26158aedb6aea23801652b2e82a3c6937b75d`
+
 Refusal provenance at completion (2026-09-25): task.registered records cancellation
 status but not reason; completion receipts contain submitted results, not prior
 errors. There is no supported reconstruction from an empty memory array. Before
