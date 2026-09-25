@@ -81,7 +81,7 @@ it.each(['acknowledged', 'reply-lost'] as const)(
       expect(row.attemptId).not.toBe(row.nativeRunId);
       expect(JSON.parse(submissions[0].message).memories.map((m: MemoryPut) => m.id).sort())
         .toEqual([first.id, second.id, permanent.id].sort());
-      expect(JSON.parse(other.context_json).memories.map((m: MemoryPut) => m.id)).toEqual([otherMemory.id]);
+      expect(JSON.parse(f.store.run(other.id).context_json).memories.map((m: MemoryPut) => m.id)).toEqual([otherMemory.id]);
 
       const resources = new ResourceLedger(f.store, () => f.core.now());
       const effects = new EffectLedger(f.store, () => f.core.now());

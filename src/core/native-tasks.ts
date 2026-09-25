@@ -4,6 +4,7 @@ import { ControlError, requireThat } from './errors';
 import type {ContextSnapshot,Run} from './types';
 import type {Identity,LifecycleCore} from './lifecycle';
 export type NativeChildReceipt={parent_run_id:string;parent_attempt:number;persona_id:string;native_run_ref:string;native_session_key:string;title:string};
+export type NativeChildRegistration=Omit<Run,'context_json'|'checkpoint_json'>;
 // Correlated to runs alias r. Recheck at admission: a late native observation
 // can arrive after an owner queues retry but before the next attempt is claimed.
 export const nativeDescendantsSettledSql = `NOT EXISTS(
@@ -21,7 +22,12 @@ export const nativeDescendantsSettledSql = `NOT EXISTS(
  * CodexTaskControl maps exact observed thread/turn ancestry into these records. */
 export class NativeTaskLedger {
  constructor(private store:Store,private core:ControlCore,private lifecycle:LifecycleCore){}
- private acknowledgeStart(identity:Identity,input:NativeChildReceipt,run:Run):Run {
+ private registration(runId:string):NativeChildRegistration {
+  const run=this.store.db.all<NativeChildRegistration>('SELECT id,command_id,occurrence_id,persona_id,routine_id,status,current_attempt,error_code,created_at,updated_at,role,parent_run_id,title FROM runs WHERE id=?',runId)[0];
+  requireThat(run,'NOT_FOUND','Run unavailable.',404);
+  return run;
+ }
+ private acknowledgeStart(identity:Identity,input:NativeChildReceipt,run:NativeChildRegistration):NativeChildRegistration {
   requireThat(run.current_attempt===1,'STALE_EPOCH','Native child attempt has changed.');
   this.lifecycle.authorizeAttempt(identity,run.id,1);
   const attempt=this.store.db.all<{native_run_ref:string}>('SELECT native_run_ref FROM attempts WHERE run_id=? AND attempt=1',run.id)[0];
@@ -29,9 +35,9 @@ export class NativeTaskLedger {
   // A repeated observation is not new inference and must never undo cancellation,
   // recovery, waiting or terminal state. It only acknowledges a claimed start.
   if(run.status==='claimed')this.lifecycle.submitted(identity,run.id,1,input.native_run_ref);
-  return this.store.run(run.id);
+  return this.registration(run.id);
  }
- register(identity:Identity,input:NativeChildReceipt,started=false):Run {
+ register(identity:Identity,input:NativeChildReceipt,started=false):NativeChildRegistration {
   if(this.core.ownerAlpha.policy&&!this.core.ownerAlpha.policy.background_first_root){
    // Stage B background generations admit native descendants for the role-
    // `background` root only (§8); every other generation stays child-free.
@@ -49,7 +55,7 @@ export class NativeTaskLedger {
     WHERE n.native_session_key=? AND (n.parent_run_id!=? OR n.parent_attempt!=? OR r.persona_id!=?) LIMIT 1`,input.native_session_key,parent.id,input.parent_attempt,input.persona_id);
    requireThat(!conflictingThread.length,'IDEMPOTENCY_CONFLICT','Native child thread custody was reused.');
    const existing=this.store.db.all<{run_id:string;parent_run_id:string;parent_attempt:number;native_session_key:string}>('SELECT * FROM native_task_links WHERE native_run_ref=?',input.native_run_ref)[0];
-   if(existing){requireThat(existing.parent_run_id===parent.id&&existing.parent_attempt===input.parent_attempt&&existing.native_session_key===input.native_session_key&&this.store.run(existing.run_id).persona_id===input.persona_id,'IDEMPOTENCY_CONFLICT','Native child identity was reused.');this.core.ownerAlpha.authorize(existing.run_id,1);const run=this.store.run(existing.run_id);return started?this.acknowledgeStart(identity,input,run):run;}
+   if(existing){requireThat(existing.parent_run_id===parent.id&&existing.parent_attempt===input.parent_attempt&&existing.native_session_key===input.native_session_key&&this.registration(existing.run_id).persona_id===input.persona_id,'IDEMPOTENCY_CONFLICT','Native child identity was reused.');this.core.ownerAlpha.authorize(existing.run_id,1);const run=this.registration(existing.run_id);return started?this.acknowledgeStart(identity,input,run):run;}
    const oldContext=JSON.parse(parent.context_json) as ContextSnapshot;
    let context:ContextSnapshot,memoryBlocked=false;
    try{context=input.persona_id===parent.persona_id?{...oldContext,instruction:input.title}:this.core.context(input.persona_id,input.title,null,oldContext.room_id);}
@@ -71,7 +77,7 @@ export class NativeTaskLedger {
    this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,native_run_ref,epoch,boot_id,status,deadline_at,started_at,captured_routine_revision) VALUES(?,1,?,?,?,?,?,?,?,?)",id,`native:${input.native_run_ref}`,input.native_run_ref,identity.epoch,identity.boot_id,'claimed',deadline,now,input.persona_id===parent.persona_id?parentAttempt.captured_routine_revision:null);
    this.store.db.exec('INSERT INTO native_task_links(run_id,parent_run_id,parent_attempt,native_run_ref,native_session_key) VALUES(?,?,?,?,?)',id,parent.id,input.parent_attempt,input.native_run_ref,input.native_session_key);
    this.store.event(this.core.options.uuid(),input.persona_id,'task.registered','native',parent.command_id,{run_id:id,parent_run_id:parent.id,title:input.title,status:cancellation?'cancelling':'claimed'},now);
-   const run=this.store.run(id);return started?this.acknowledgeStart(identity,input,run):run;
+   const run=this.registration(id);return started?this.acknowledgeStart(identity,input,run):run;
   });
  }
 }

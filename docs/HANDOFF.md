@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Native registration now returns NativeChildRegistration (Run without context_json/
+checkpoint_json) for new, repeated and started receipts. All other metadata stays;
+runtime consumes identity/status only. Stored snapshot assertions now read storage
+directly and retain exact before/after comparisons. Red2/focused267/backend1994/
+runtime682/HTTP31/workerd/native-child service/typecheck/build pass. Browser/
+shutdown/desktop matrix not rerun; catalog intermittency unresolved. Parent context
+still hydrates even on duplicate receipts: defer that until new composition next.
+Root/generation room checks still parse full contexts; no total bound claimed.
+
 Latest prerequisite: validAttempt uses seven run metadata fields and lazily reads
 root context only for room checks. Native child snapshots and parent checkpoints
 are no longer hydrated by this helper; final parent comparison selects command/

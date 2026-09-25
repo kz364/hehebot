@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** alpha validAttempt reads
+**Current checkpoint (2026-09-25, verified locally):** native child registration
+returns metadata on new, duplicate and started observations without hydrating child
+snapshots for its response. Stored snapshot/custody/recovery assertions remain.
+Red2/focused267/backend1994/runtime682/HTTP31/workerd/native-child service/typecheck/
+build pass. Browser/shutdown/desktop matrix not rerun; catalog issue remains open.
+Parent registration reads/cloning and root/generation authority context reads are
+still unbounded. Next: defer parent context hydration until new child composition.
+Local only; no production gates or external state changed.
+
+**Previous checkpoint (2026-09-25, verified locally):** alpha validAttempt reads
 native-child metadata without child contexts/checkpoints; root room checks still
 use JavaScript parsing, preserving duplicate-key and truthiness behavior. Parent
 receipt comparison reads command/routine only. Old-query regression fails;

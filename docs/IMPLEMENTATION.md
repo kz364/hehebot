@@ -4,6 +4,26 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native registration response adoption (2026-09-25 Asia/Jakarta): returns all Run
+metadata except context_json/checkpoint_json, selecting those fields directly on
+new, duplicate and started paths. Stored snapshots remain available to authority
+and recovery code. Runtime consumes id/parent/persona/attempt/role/status only.
+Two new regressions inspect actual child read results and responses with a large
+inherited Unicode context and >1MiB retained checkpoint, checking stable replay
+and byte-for-byte storage preservation. Existing snapshot tests read stored runs
+instead of the response; exact unaffected-task comparisons remain intact.
+Old paths fail2, `.local/native-response-red.log`, SHA256
+`09800dfc994acec76ef60217e7214ca719ccf2c9186fa302b5e69daa60d90fbf`.
+Focused267/backend1994/runtime682/HTTP31/workerd/typecheck/build pass, plus
+`bash scripts/test-codex-service.sh --child` (real pinned Codex, loopback model,
+child interruption/custody, no account/provider calls). PID1179883 exit0,
+`.local/native-response-final.log`, SHA256
+`65eae65a989b53dd583663ba635078ed6661497e6e04763afa7506c689a5ed97`.
+Intermediate test/typecheck failures exposed old full-response assertions and a
+test variable inference mistake; retained logs document correction, not green runs.
+Browser/shutdown/desktop matrix not rerun. Parent reads/cloning and root/generation
+authority contexts still unbounded. This is not total registration acceptance.
+
 Alpha child-context prerequisite (2026-09-25 Asia/Jakarta): validAttempt selects
 seven run metadata fields, reads context lazily only for root room checks, and
 uses command/routine metadata for the final legacy parent receipt comparison.

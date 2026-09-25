@@ -30,6 +30,7 @@ function child(id: string) {
 
 it('releases only the root inference lane while child, unknown operations, effects, locks and deadlines remain unchanged', () => {
   const id = root(), descendant = child(id), next = message(otherBot);
+  const oldChild = f.store.run(descendant.id);
   life.heartbeat(identity, [{ id: 'unknown-root-op', run_id: id, attempt: 1, kind: 'tool', status: 'unknown', started_at: f.core.now(), last_progress_at: f.core.now(), deadline_at: '2026-09-10T00:13:00.000Z' }]);
   new ResourceLedger(f.store, () => f.core.now()).acquire(descendant.id, 1, ['calendar:child:43']);
   f.db.exec("INSERT INTO effects VALUES('effect-73',?,'action-29','mutation','outcome_unknown','policy-17','digest-91',NULL,NULL,?)", id, f.core.now());
@@ -45,7 +46,7 @@ it('releases only the root inference lane while child, unknown operations, effec
   const count = changes(); release(id); expect(changes()).toBe(count);
   expect(() => life.complete(identity, id, 1, { status: 'completed', text: 'Not settled' })).toThrowError(expect.objectContaining({ code: 'CANCEL_UNCONFIRMED' }));
   expect(life.claim(identity)?.run.id).toBe(next);
-  expect(f.store.run(id)).toEqual(oldRoot); expect(f.store.run(descendant.id)).toEqual(descendant);
+  expect(f.store.run(id)).toEqual(oldRoot); expect(f.store.run(descendant.id)).toEqual(oldChild);
   expect(tables.slice(0, 6).map(table => f.db.all(`SELECT * FROM ${table}`))).toEqual(before.slice(0, 6));
   f.setNow('2026-09-10T00:01:01.000Z');
   expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));

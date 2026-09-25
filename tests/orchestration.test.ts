@@ -29,6 +29,36 @@ function receipt(parentId: string, title = 'Task A'): NativeChildReceipt {
 function finish(id: string) { life.complete(identity, id, 1, { status: 'completed', text: 'Synthetic settled result' }); }
 
 describe('O01–O08 local orchestration metadata boundaries', () => {
+  it.each([false, true])('returns metadata without hydrating child snapshots on new/replayed observations (started=%s)', started => {
+    const p = parent(), input = receipt(p);
+    f.db.exec("UPDATE runs SET context_json=json_set(context_json,'$.padding',?) WHERE id=?", '界'.repeat(400000), p);
+    const read = vi.spyOn(f.db, 'all');
+    try {
+      const child = tasks.register(identity, input, started);
+      expect(child).not.toHaveProperty('context_json');
+      expect(child).not.toHaveProperty('checkpoint_json');
+      expect(child).toMatchObject({parent_run_id:p,persona_id:bot,role:'background',current_attempt:1,status:started?'running':'claimed'});
+      const childReads = read.mock.calls.flatMap(([sql,id],i) => sql.includes('FROM runs WHERE id=?') && id === child.id ? [read.mock.results[i].value] : []);
+      expect(childReads.length).toBeGreaterThan(0);
+      for (const rows of childReads) for (const row of rows) {
+        expect(row).not.toHaveProperty('context_json');
+        expect(row).not.toHaveProperty('checkpoint_json');
+      }
+      read.mockClear();
+      f.db.exec('UPDATE runs SET checkpoint_json=? WHERE id=?', JSON.stringify({padding:'x'.repeat(1100000)}), child.id);
+      const retained = f.store.run(child.id); read.mockClear();
+      expect(tasks.register(identity, input, started)).toEqual(child);
+      for (let i=0;i<read.mock.calls.length;i++) {
+        const [sql,id]=read.mock.calls[i];
+        if (sql.includes('FROM runs WHERE id=?') && id===child.id) for (const row of read.mock.results[i].value) {
+          expect(row).not.toHaveProperty('context_json');
+          expect(row).not.toHaveProperty('checkpoint_json');
+        }
+      }
+      expect(f.store.run(child.id)).toEqual(retained);
+    } finally { read.mockRestore(); }
+  });
+
   it('records observed children idempotently and frees coordinator admission while a child remains active', () => {
     const p = parent(), input = receipt(p), child = tasks.register(identity, input);
     expect(child).toMatchObject({ role: 'background', parent_run_id: p, status: 'claimed', current_attempt: 1 });
@@ -37,18 +67,22 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     const next = message('What is the status?'); expect(life.claim(identity)).toBeNull();
     finish(p);
     expect(life.claim(identity)?.run.id).toBe(next);
-    expect(f.store.run(child.id)).toEqual(child);
+    const {context_json,checkpoint_json,...metadata}=f.store.run(child.id);
+    expect(metadata).toEqual(child);
+    expect(JSON.parse(context_json).instruction).toBe(input.title);
+    expect(checkpoint_json).toBeNull();
     expect(f.db.all('SELECT * FROM native_task_links')).toHaveLength(1);
   });
 
   it('preserves two child inputs and identities when an ambiguous ordinary message arrives', () => {
     const p = parent(), a = tasks.register(identity, receipt(p)), b = tasks.register(identity, receipt(p, 'Task B'));
+    const beforeA=f.store.run(a.id),beforeB=f.store.run(b.id);
     const links = f.db.all('SELECT * FROM native_task_links ORDER BY run_id');
     finish(p);
     const request = message('Change the time');
     const coordinator = life.claim(identity)!.run;
     expect(coordinator.id).toBe(request); expect(coordinator.role).toBe('coordinator');
-    expect(f.store.run(a.id)).toEqual(a); expect(f.store.run(b.id)).toEqual(b);
+    expect(f.store.run(a.id)).toEqual(beforeA); expect(f.store.run(b.id)).toEqual(beforeB);
     expect(f.db.all('SELECT * FROM native_task_links ORDER BY run_id')).toEqual(links);
     expect(f.db.all('SELECT * FROM task_followups')).toHaveLength(0);
     // Whether a native model asks for clarification remains a live gate.
@@ -56,11 +90,12 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
 
   it('keeps targeted followup pending until settlement and emits one separate coordinator continuation', () => {
     const p = parent(), a = tasks.register(identity, receipt(p)), b = tasks.register(identity, receipt(p, 'Task B'));
+    const beforeA=f.store.run(a.id),beforeB=f.store.run(b.id);
     finish(p);
     const accepted = f.accept({ schema_version: 1, type: 'run.followup', payload: { run_id: a.id, text: 'Move this appointment to 10:00' } });
     expect(accepted.status).toBe('applied'); f.core.flushFollowups(a.id);
     expect(f.db.all('SELECT status FROM task_followups')).toEqual([{ status: 'pending' }]);
-    expect(life.claim(identity)).toBeNull(); expect(f.store.run(a.id)).toEqual(a);
+    expect(life.claim(identity)).toBeNull(); expect(f.store.run(a.id)).toEqual(beforeA);
     finish(a.id); f.core.flushFollowups(a.id);
     const rows = f.db.all<{ status: string; coordinator_run_id: string }>('SELECT status,coordinator_run_id FROM task_followups');
     expect(rows).toHaveLength(1); expect(rows[0].status).toBe('coordinator_queued');
@@ -68,11 +103,12 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(next.id).toBe(rows[0].coordinator_run_id); expect(next.role).toBe('coordinator');
     expect(JSON.parse(next.context_json).instruction).toContain(a.id);
     expect(JSON.parse(next.context_json).instruction).toContain('Move this appointment to 10:00');
-    expect(f.store.run(b.id)).toEqual(b);
+    expect(f.store.run(b.id)).toEqual(beforeB);
   });
 
   it.each([false,true])('terminal owner cancellation releases a waiting-task followup only after descendants settle: nested=%s', nested => {
     const p=parent(),a=tasks.register(identity,receipt(p)),b=tasks.register(identity,receipt(p,'Unrelated sibling'));
+    const beforeB=f.store.run(b.id);
     const grandchild=nested?tasks.register(identity,receipt(a.id,'Nested work')):null;
     finish(p);
     life.complete(identity,a.id,1,{status:'waiting',text:'Checkpointed fixture',checkpoint:{fixture:'restartable'}});
@@ -96,12 +132,13 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(f.accept(command,key)).toEqual(accepted);
     f.core.flushFollowups(a.id);
     expect(f.db.all('SELECT id FROM runs WHERE command_id=?',followup.id)).toHaveLength(1);
-    expect(f.store.run(b.id)).toEqual(b);
+    expect(f.store.run(b.id)).toEqual(beforeB);
     expect(f.db.all('SELECT status FROM attempts WHERE run_id=?',a.id)).toEqual([{status:'waiting'}]);
   });
 
   it('defers a task followup through its live grandchild, then queues it once without waiting for an unrelated sibling', () => {
     const p=parent(),a=tasks.register(identity,receipt(p)),b=tasks.register(identity,receipt(p,'Unrelated sibling'));
+    const beforeB=f.store.run(b.id);
     const grandchild=tasks.register(identity,receipt(a.id,'Nested work'));
     const accepted=f.accept({schema_version:1,type:'run.followup',payload:{run_id:a.id,text:'Use the reconciled result from A only'}});
     finish(p);finish(a.id);
@@ -113,28 +150,30 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(queued.coordinator_run_id).toBeTruthy();
     expect(JSON.parse(f.store.run(queued.coordinator_run_id).context_json).instruction).toContain(a.id);
     expect(f.db.all('SELECT id FROM runs')).toHaveLength(5);
-    expect(f.store.run(b.id)).toEqual(b);
+    expect(f.store.run(b.id)).toEqual(beforeB);
   });
   it('cancels only B while A and its currently claimed coordinator remain unchanged', () => {
     const p = parent(), a = tasks.register(identity, receipt(p)), b = tasks.register(identity, receipt(p, 'Task B'));
+    const beforeA=f.store.run(a.id);
     const beforeParent = f.store.run(p);
     expect(f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: b.id, reason: 'Owner selected B' } }).status).toBe('applied');
     expect(f.store.run(b.id).status).toBe('cancelling');
-    expect(f.store.run(a.id)).toEqual(a); expect(f.store.run(p)).toEqual(beforeParent);
+    expect(f.store.run(a.id)).toEqual(beforeA); expect(f.store.run(p)).toEqual(beforeParent);
     expect(life.heartbeat(identity, []).cancellations).toEqual([b.id]);
   });
 
   it('keeps task A and coordinator alive when task B ignores cancellation', () => {
     const p = parent(), a = tasks.register(identity, receipt(p)), b = tasks.register(identity, receipt(p, 'Task B'));
+    const beforeA=f.store.run(a.id);
     resources.acquire(b.id, 1, ['browser:tab:b']);
     f.accept({schema_version:1,type:'run.cancel',payload:{run_id:b.id,reason:'Stop B'}});
     f.setNow('2026-09-10T00:00:31.000Z');life.watchdog();
-    expect(life.get().phase).toBe('READY');expect(f.store.run(a.id)).toEqual(a);
+    expect(life.get().phase).toBe('READY');expect(f.store.run(a.id)).toEqual(beforeA);
     expect(f.store.run(b.id).status).toBe('recovery_required');
     expect(life.heartbeat(identity,[]).cancellations).toContain(b.id);
     expect(f.accept({schema_version:1,type:'run.retry',payload:{run_id:b.id,expected_attempt:1}}).error?.code).toBe('CANCEL_UNCONFIRMED');
     resources.release(b.id,1,['browser:tab:b']);life.complete(identity,b.id,1,{status:'cancelled',text:''});
-    expect(f.store.run(a.id)).toEqual(a);expect(f.store.run(p).status).toBe('claimed');
+    expect(f.store.run(a.id)).toEqual(beforeA);expect(f.store.run(p).status).toBe('claimed');
   });
 
   it('rolls back a contended resource set and admits unrelated chat without releasing the owner lock', () => {
@@ -151,10 +190,11 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
 
   it('reconstructs task and pending-followup metadata through fresh service objects over the same database', () => {
     const p = parent(), input = receipt(p), child = tasks.register(identity, input);
+    const beforeChild=f.store.run(child.id);
     f.accept({ schema_version: 1, type: 'run.followup', payload: { run_id: child.id, text: 'Use the second date' } });
     const store = new Store(f.db), core = new ControlCore(store, f.core.options), restartedLife = new LifecycleCore(store, core);
     expect(new NativeTaskLedger(store, core, restartedLife).register(identity, input).id).toBe(child.id);
-    expect(store.run(child.id)).toEqual(child);
+    expect(store.run(child.id)).toEqual(beforeChild);
     restartedLife.complete(identity, child.id, 1, { status: 'completed', text: 'Recovered result' });
     expect(f.db.all("SELECT * FROM task_followups WHERE status='coordinator_queued'")).toHaveLength(1);
     expect(f.db.all('SELECT * FROM native_task_links')).toHaveLength(1);
@@ -184,7 +224,7 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
       text: `Constraint ${id}: do not send.`, explicit_constraint: true, expires_at: null }, 0, 'owner', f.core.now());
     const child = tasks.register(identity, { ...receipt(p), persona_id: otherBot }, true);
     expect(child).toMatchObject({ status: 'running', error_code: null });
-    const memories = JSON.parse(child.context_json).memories;
+    const memories = JSON.parse(f.store.run(child.id).context_json).memories;
     expect(memories.map((m: { id: string }) => m.id).sort()).toEqual(ids.sort());
     expect(memories.every((m: { body: { explicit_constraint: boolean; text: string } }) => m.body.explicit_constraint && m.body.text.endsWith('do not send.'))).toBe(true);
     expect(life.heartbeat(identity, []).cancellations).not.toContain(child.id);
@@ -202,7 +242,7 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     const input = { ...receipt(p), persona_id: otherBot };
     const child = tasks.register(identity, input, true);
     expect(child).toMatchObject({ parent_run_id: p, persona_id: otherBot, status: 'cancelling', error_code: 'MEMORY_PREPARATION_LIMIT', current_attempt: 1 });
-    expect(JSON.parse(child.context_json)).toMatchObject({ persona: { id: otherBot }, memories: [], instruction: input.title });
+    expect(JSON.parse(f.store.run(child.id).context_json)).toMatchObject({ persona: { id: otherBot }, memories: [], instruction: input.title });
     expect(f.db.all('SELECT parent_run_id,parent_attempt,native_run_ref,native_session_key FROM native_task_links WHERE run_id=?', child.id))
       .toEqual([{ parent_run_id: p, parent_attempt: 1, native_run_ref: input.native_run_ref, native_session_key: input.native_session_key }]);
     expect(f.db.all('SELECT status,settled_at,native_run_ref,epoch,boot_id FROM attempts WHERE run_id=?', child.id))
@@ -255,7 +295,7 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     const input = receipt(child.id, 'Nested native work');
     const grandchild = tasks.register(identity, input);
     expect(grandchild).toMatchObject({ parent_run_id: child.id, persona_id: bot, role: 'background', status: 'claimed' });
-    expect(JSON.parse(grandchild.context_json)).toEqual({ ...JSON.parse(child.context_json), instruction: input.title });
+    expect(JSON.parse(f.store.run(grandchild.id).context_json)).toEqual({ ...JSON.parse(f.store.run(child.id).context_json), instruction: input.title });
     expect(tasks.register(identity, input).id).toBe(grandchild.id);
     f.core.options.delegations = { [bot]: [otherBot] };
     expect(() => tasks.register(identity, { ...receipt(child.id), persona_id: otherBot })).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
