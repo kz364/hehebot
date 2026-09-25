@@ -618,7 +618,7 @@ export class ControlCore {
   const now=this.now();
   if(after!==undefined){const first=this.store.db.all<{seq:number}>('SELECT MIN(sequence) AS seq FROM events')[0].seq;if(after<this.store.retentionFloor(now)||first&&after<first-1)throw new ControlError('HISTORY_GAP','Fetch a new snapshot.');}
   const page=after===undefined?[]:this.store.events(after,limit,now);
-  const runs=this.store.db.all<Run>('SELECT * FROM runs ORDER BY created_at DESC LIMIT 100');
+  const runs=this.store.db.all<Omit<Run,'context_json'|'checkpoint_json'>>('SELECT id,command_id,occurrence_id,persona_id,routine_id,status,current_attempt,error_code,created_at,updated_at,role,parent_run_id,title FROM runs ORDER BY created_at DESC LIMIT 100');
   const steering=new TaskSteering(this.store,()=>now);
   const previews=new OutputPreviews(this.store,()=>now);
   const usage=new TokenUsageSnapshots(this.store,()=>now);
@@ -650,7 +650,7 @@ export class ControlCore {
    output_previews:runs.flatMap(run=>{const value=previews.read(run.id,run.current_attempt,!!this.ownerAlpha.policy);return value?[value]:[];}),
    token_usage_snapshots:runs.flatMap(run=>{const value=usage.read(run.id,run.current_attempt);return value?[value]:[];}),
    recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run,questions)),
-   runs:runs.map(({context_json,checkpoint_json,...rest})=>rest),
+   runs,
    summary:{...alphaSummary,...(bootstrap&&!warmActive&&!backgroundActive?{owner_alpha_bootstrap:bootstrap}:{}),...(warm&&!backgroundActive?{owner_alpha_warm:warm}:{}),...(background?{owner_alpha_background:background}:{}),phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},
    timeline:after===undefined?this.store.latestEvents(now):undefined};
  }

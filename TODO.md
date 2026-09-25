@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** persona/room/routine task
+**Current checkpoint (2026-09-25, verified locally):** initial/incremental state
+selects recent run metadata without historical snapshot bodies. Newest100 ordering,
+public fields, recovery decisions and all-run summary counts remain unchanged.
+Old-query regression fails; corrected focused117/typecheck and backend1981/HTTP31/
+workerd/typecheck/build pass. Initial fixture count error retained in evidence.
+Prior runtime/browser/shutdown/desktop matrix not rerun. No active checks/children/
+deliveries; local only. Other historical reads/cloning, SQL/storage/scan bounds and
+native restoration/settlement remain next. Catalog intermittency is unresolved.
+
+**Previous checkpoint (2026-09-25, verified locally):** persona/room/routine task
 pages now select metadata without historical context/checkpoint bodies. Counts,
 cursor lookahead, unfinished-only conversation scope, attempt/delivery metadata
 and recovery decisions are preserved. Old-query regressions fail3; focused107/

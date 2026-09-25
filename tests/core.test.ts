@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fixture, bot, otherBot, routine } from './helpers';
 import type { Command, MemoryPut, RoomPut } from '../src/core/types';
 let f: ReturnType<typeof fixture>;
@@ -18,6 +18,32 @@ function memory(scope: MemoryPut['scope'], text = 'Synthetic memory') {
   return payload;
 }
 describe('durable control transactions', () => {
+  it('projects recent run metadata without hydrating snapshots for initial or incremental state',()=>{
+    const ids=Array.from({length:101},(_,i)=>{
+      f.setNow(new Date(Date.parse('2026-09-10T00:00:00.000Z')+i*1000).toISOString());
+      return f.core.enqueue(bot,'Private instruction',null,null,null);
+    });
+    f.db.exec("UPDATE runs SET context_json=json_set(context_json,'$.padding',?),checkpoint_json=?,status='recovery_required' WHERE id=?",
+      '界'.repeat(400000),JSON.stringify({private_checkpoint:'x'.repeat(1100000)}),ids[100]);
+    const before=f.db.all('SELECT * FROM runs ORDER BY id');
+    const expected=ids.slice(1).reverse().map(id=>{
+      const {context_json,checkpoint_json,...metadata}=f.store.run(id);return metadata;
+    });
+    for(const after of [undefined,f.store.sequence()]){
+      const read=vi.spyOn(f.db,'all');
+      try{
+        const state=f.core.state(after);
+        const index=read.mock.calls.findIndex(([sql])=>sql.includes('FROM runs ORDER BY created_at DESC LIMIT 100'));
+        expect(index).toBeGreaterThanOrEqual(0);
+        expect(read.mock.results[index].value).toEqual(expected);
+        expect(state.runs).toEqual(expected);
+        expect(state.recovery).toMatchObject([{run_id:ids[100],attempt:0,can_recover:false}]);
+        // This fixture disables execution: the other 100 runs remain waiting.
+        expect(state.summary).toMatchObject({queued_runs:0,blocked_runs:101});
+      }finally{read.mockRestore();}
+    }
+    expect(f.db.all('SELECT * FROM runs ORDER BY id')).toEqual(before);
+  });
   it('creates an independent minimal role profile without copying source work, memory or authority',()=>{
     const run=f.accept(message()).resource_id!,r=routine();f.accept({schema_version:1,type:'routine.put',payload:r});memory({kind:'persona',id:bot},'Source-private preference');
     const tables=['runs','attempts','effects','resource_locks','lifecycle','schedule_state','skill_enablements','task_followups','runtime_metadata'],before=tables.map(table=>f.db.all(`SELECT * FROM ${table}`));

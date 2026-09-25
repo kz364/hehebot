@@ -4,6 +4,24 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+State run projection (2026-09-25 Asia/Jakarta): state selects public run metadata
+without returning context/checkpoint bodies from SQLite. Initial and incremental
+responses retain newest100 ordering, exact fields, recovery decisions and global
+summary counts. A101-run regression has asymmetric timestamps and >1MiB context/
+checkpoint values, inspects DB-returned metadata and verifies stored rows unchanged.
+Old query fails, `.local/state-run-projection-red.log`, SHA256
+`fe6c0c6ee15585b9d69faab132448c9be0c297b97d1ee83413d474c0aa9753bf`.
+Initial focused run caught a fixture expectation error: execution-disabled runs
+are waiting, not queued. Corrected expected counts without application changes;
+retained `.local/state-run-projection-focused.log`, SHA256
+`d2dbf2c8354fc8fd21ef2b606c39a18c170109fa9941406ee49d22605aad38f8`.
+Final focused117/backend1981/HTTP31/workerd/typecheck/build pass, PID1153703 exit0,
+`.local/state-run-projection-final.log`, SHA256
+`4183be24fa5e63d379a9161865cc36db0e53a0a270e8d4c97d294e2ce548f31e`.
+Prior runtime/browser/shutdown/desktop matrix not rerun for this SQL-only unit.
+Other state object/proposal/monitoring reads remain outside this projection;
+no total-memory, SQL-work or storage bound. No native-child, external or gate change.
+
 Task-page projection (2026-09-25 Asia/Jakarta): scopedTaskPage now selects run
 metadata plus joined request_status instead of full historical bodies. Counts,
 scope predicates, keyset ordering/lookahead, attempt/delivery/recovery lookups

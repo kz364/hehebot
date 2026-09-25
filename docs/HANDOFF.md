@@ -4,6 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Latest state projection selects recent run metadata only. Both initial and
+incremental state preserve newest100 ordering, exact metadata, recovery and
+all-run counts; >1MiB stored bodies remain unchanged. Old-query regression fails;
+an initial disabled-execution fixture count expectation was corrected, not the
+application. Final focused117/backend1981/HTTP31/workerd/typecheck/build pass.
+Prior runtime/browser/shutdown/desktop matrix not rerun. No active checks/children/
+deliveries; schedule enabled. Other state object/proposal/monitoring reads remain
+outside this projection, as do historical cloning and SQL/storage/scan bounds.
+Continue those boundaries and native restoration/settlement; catalog intermittency
+remains open. No external action or gate change.
+
 Latest task-page projection selects run metadata plus request_status, not context/
 checkpoint bodies. Persona, room and routine regressions fail on the old query;
 focused107/typecheck and backend1980/HTTP31/workerd/typecheck/build pass. Counts,
