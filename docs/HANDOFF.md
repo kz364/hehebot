@@ -4,6 +4,12 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+effect.reconcile projects run id/current_attempt and audit persona only; no context/
+checkpoint hydration. Receipt/digest checks unchanged. Red3/focused142/backend2249/
+typecheck/build pass. Next effect-receipt parsing and remaining historical/storage/
+native recovery bounds. No active checks/children/delivery; schedule enabled. Full
+runtime/browser/native/shutdown/desktop matrix not rerun for this projection unit.
+
 run.recover now reads six metadata fields rather than full historical context and
 checkpoint. Error precedence, descendant/effect custody and resource release stay
 unchanged. Red3/focused139/backend2246/typecheck/build pass; source bodies preserved.

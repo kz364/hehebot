@@ -146,7 +146,8 @@ export class ControlCore {
    }
    case 'effect.reconcile':{
     const p=command.payload,id=new EffectLedger(this.store,()=>this.now()).reconcileStopped(owner,commandId,p);
-    this.store.event(this.options.uuid(),this.store.run(p.run_id).persona_id,'effect.owner_reconciled',owner,commandId,
+    const run=this.store.db.all<Pick<Run,'persona_id'>>('SELECT persona_id FROM runs WHERE id=?',p.run_id)[0];
+    this.store.event(this.options.uuid(),run.persona_id,'effect.owner_reconciled',owner,commandId,
      {run_id:p.run_id,effect_id:id,attempt:p.expected_attempt,outcome:p.outcome},now);return id;
    }
    case 'question.answer':return this.questions.answer(owner,commandId,command.payload);

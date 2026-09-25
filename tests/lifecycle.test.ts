@@ -403,6 +403,31 @@ describe('executor leases and attempts', () => {
     resources.release(runId, 1, ['calendar:remote']); resources.acquire(next, 1, ['calendar:remote']);
     expect(f.db.all('SELECT run_id FROM resource_locks')).toEqual([{run_id:next}]);
   });
+  it.each(['confirmed','failed','wrong-digest'])('reconciles stopped effects without historical run bodies: %s',outcome=>{
+    const runId=claimed().run.id;unknownEffect(runId);
+    f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
+    life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
+    f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',JSON.stringify({padding:'界'.repeat(400000)}),JSON.stringify({padding:'x'.repeat(1100000)}),runId);
+    const run=f.store.run(runId),effect=f.db.all<{id:string}>('SELECT * FROM effects WHERE run_id=?',runId)[0],state=life.get();
+    const command={schema_version:1 as const,type:'effect.reconcile' as const,payload:{run_id:runId,expected_attempt:1,effect_id:effect.id,
+      expected_request_digest:outcome==='wrong-digest'?'wrong':'synthetic-digest',outcome:outcome==='failed'?'failed' as const:'confirmed' as const,evidence_ref:'manual:review-91'}};
+    const read=vi.spyOn(f.db,'all');
+    try{
+      expect(f.accept(command)).toMatchObject(outcome==='wrong-digest'?{status:'rejected',error:{code:'REVISION_CONFLICT'}}:{status:'applied'});
+      const reads=read.mock.calls.flatMap(([sql,id],i)=>sql.includes('FROM runs WHERE id=?')&&id===runId?[read.mock.results[i].value]:[]);
+      expect(reads.length).toBeGreaterThan(0);
+      for(const rows of reads)for(const row of rows){expect(row).not.toHaveProperty('context_json');expect(row).not.toHaveProperty('checkpoint_json');}
+    }finally{read.mockRestore();}
+    expect(f.store.run(runId)).toEqual(run);expect(life.get()).toEqual(state);
+    const after=f.db.all<{status:string;receipt_json:string}>('SELECT * FROM effects WHERE id=?',effect.id)[0];
+    if(outcome==='wrong-digest')expect(after).toEqual(effect);
+    else{
+      expect(after.status).toBe(outcome);
+      expect(JSON.parse(after.receipt_json)).toMatchObject({kind:'owner_reconciliation',owner_id:'owner',evidence_ref:'manual:review-91',attempt:1});
+      expect(f.db.all<{conversation_id:string}>("SELECT conversation_id FROM events WHERE type='effect.owner_reconciled'")).toEqual([{conversation_id:bot}]);
+    }
+  });
+
   it('bounds recovery effect metadata without exposing provider keys or enabling decisions before termination', () => {
     const root=claimed().run.id;
     for(let i=0;i<21;i++)unknownEffect(root);

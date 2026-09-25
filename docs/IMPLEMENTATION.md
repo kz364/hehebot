@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stopped effect reconciliation projection (2026-09-25): attempt validation reads only
+run id/current_attempt; audit publication reads only persona_id. Same transaction,
+NOT_FOUND, termination, operation, exact digest and outcome checks remain. Three
+old-read regressions fail; confirmed/failed receipts, persona event and wrong-digest
+refusal pass with >1MiB historical context/checkpoint retained unchanged. Final
+focused142/backend2249/typecheck/dry-run build pass. Effect receipt parsing and
+other storage/scan limits are not bounded by this change. Full runtime/browser/
+native/shutdown/desktop matrix not rerun. No external action or gate change.
+- .local/reconcile-projection-red.log SHA256:
+  `9d8645d40e6634c7fa0615143d2c10d597a0ce2a6c5822da3448c921bbe53721`
+- .local/reconcile-projection-focused.log SHA256:
+  `9c6a3df969808cc9e971cd3a808a050101dabbe340a68838647690188009557e`
+- .local/reconcile-projection-backend.log SHA256:
+  `13214b4cf1292daa72c7ddfa4f3ed7921a4980e30dc0903bbf39815eab011942`
+
 Owner recovery metadata projection (2026-09-25): run.recover replaces Store.run's
 SELECT * with id/current_attempt/status/error_code/occurrence_id/persona_id. Existing
 NOT_FOUND and subsequent attempt/termination/question/operation/effect/descendant

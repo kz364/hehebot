@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** run.recover reads only six
+**Current checkpoint (2026-09-25, verified locally):** effect.reconcile no longer
+hydrates run context/checkpoint during attempt validation or audit publication.
+Confirmed/failed receipts and persona-scoped events stay exact; wrong digest leaves
+unknown effects unchanged. Red3/focused142/backend2249/typecheck/build pass. Effect
+receipt parsing, other historical reads and total storage remain unbounded. Full
+runtime/browser/native/shutdown/desktop matrix not rerun for this projection unit.
+Local only; production gates and original unresolved failures unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** run.recover reads only six
 metadata fields, never historical context/checkpoint bodies. Successful recovery,
 live-attempt refusal and unknown-effect refusal preserve source bytes and existing
 decision order. Red3/focused139/backend2246/typecheck/dry-run build pass. No bound

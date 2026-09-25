@@ -6,7 +6,8 @@ export class EffectLedger {
  constructor(private store:Store,private now:()=>string){}
  reconcileStopped(owner:string,commandId:string,input:PayloadMap['effect.reconcile']):string {
   return this.store.db.transaction(()=>{
-   const run=this.store.run(input.run_id);
+   const run=this.store.db.all<{id:string;current_attempt:number}>('SELECT id,current_attempt FROM runs WHERE id=?',input.run_id)[0];
+   requireThat(run,'NOT_FOUND','Run unavailable.',404);
    requireThat(run.current_attempt===input.expected_attempt,'REVISION_CONFLICT','The attempt has changed.');
    const attempt=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,input.expected_attempt)[0];
    requireThat(attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before an owner effect decision.');
