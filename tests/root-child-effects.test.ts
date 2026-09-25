@@ -48,6 +48,54 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it.each(['room_id','scope_key','persona'] as const)('keeps last-key %s authority for admission and late outcomes',field=>{
+ const input=intent();boundary.intent(input);
+ const original=f.store.run(child).context_json;
+ const good=field==='room_id'?'null':field==='scope_key'?JSON.stringify(`${bot}/personal`):`{"id":"${otherBot}","id":"${bot}"}`;
+ const bad=field==='room_id'?'"foreign"':field==='scope_key'?'"foreign"':`{"id":"${bot}","id":"${otherBot}"}`;
+ for(const allowed of [false,true]){
+  const snapshot=original.slice(0,-1)+`,"${field}":${allowed?bad:good},"${field}":${allowed?good:bad}}`;
+  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
+  const fresh=intent();fresh.resources=[];fresh.effect.classification='read_only';
+  if(allowed){
+   expect(boundary.intent(fresh).status).toBe('intent');
+   boundary.transition(result(input,'outcome_unknown'));
+  }else{
+   const before=effects(),held=locks();
+   rejects(()=>boundary.intent(fresh),'FORBIDDEN');
+   rejects(()=>boundary.transition(result(input,'outcome_unknown')),'FORBIDDEN');
+   expect(effects()).toEqual(before);expect(locks()).toEqual(held);
+  }
+  expect(f.store.run(child).context_json).toBe(snapshot);
+ }
+});
+
+it.each([
+ {rootRoom:'{}',childRoom:'{}',scope:'room/[object Object]',allowed:false},
+ {rootRoom:'[]',childRoom:'[]',scope:'room/',allowed:false},
+ {rootRoom:'false',childRoom:'0',scope:'personal',allowed:false},
+ {rootRoom:'-0',childRoom:'0',scope:'personal',allowed:true},
+ {rootRoom:'1e999',childRoom:'1e999',scope:'room/Infinity',allowed:true},
+])('preserves JS room equality/coercion ($rootRoom vs $childRoom)',({rootRoom,childRoom,scope,allowed})=>{
+ const input=intent();boundary.intent(input);
+ for(const [id,room] of [[root,rootRoom],[child,childRoom]]){
+  const original=f.store.run(id).context_json;
+  const snapshot=original.slice(0,-1)+`,"room_id":${room},"scope_key":${JSON.stringify(`${bot}/${scope}`)}}`;
+  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
+ }
+ const fresh=intent();fresh.resources=[];fresh.effect.classification='read_only';
+ const before=effects(),held=locks();
+ if(allowed){
+  expect(boundary.intent(fresh).status).toBe('intent');
+  boundary.transition(result(input,'outcome_unknown'));
+ }else{
+  rejects(()=>boundary.intent(fresh),'FORBIDDEN');
+  rejects(()=>boundary.transition(result(input,'outcome_unknown')),'FORBIDDEN');
+  expect(effects()).toEqual(before);
+ }
+ expect(locks()).toEqual(held);
+});
+
 it('bounds new intent ancestry at 64 runs without blocking deeper existing outcomes',()=>{
  let parent=root,first='';
  for(let depth=2;depth<=64;depth++){parent=spawn(parent);if(depth===2)first=parent;}

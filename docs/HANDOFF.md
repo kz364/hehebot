@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Authority representation regression checkpoint is test-only. Last-key room/scope/
+nested persona, object identity, false/0, -0/0 and 1e999 behavior covered for new
+admission and late outcomes. Value-equality mutant fails2, SQL first-key mutant
+fails2; both reverted, production diff empty. Final focused262/typecheck pass. Next
+guarded authority representation must preserve those semantics; no new parsing or
+storage bound yet. No active checks/children/delivery; existing schedule enabled.
+Full matrix not rerun for this unit; original intermittent failures remain open.
+
 New effect action keys now refuse ancestry beyond64 runs including root, before
 effect/lock writes. Existing keys and transitions retain full historical traversal
 and authority checks. Native registration unchanged. Red1/focused254/backend2270/

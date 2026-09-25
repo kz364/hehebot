@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** new RootChildEffects action
+**Current checkpoint (2026-09-25, verified locally):** authority representation
+regressions cover last-key room/scope/nested-persona admission and late outcomes,
+object identity, false versus0, negative zero and overflowing JSON numbers. Value-
+equality mutant fails2; SQLite first-key mutant fails2; restored focused262/typecheck
+pass. Production unchanged. Future projections must retain JS types/last-key/object
+identity behavior or fallback. No new context/storage bound claimed. Next guarded
+authority representation, remaining historical/storage/native recovery. Full matrix
+not rerun for this test-only unit; production gates/intermittent failures unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** new RootChildEffects action
 keys refuse ancestry beyond64 runs (root included) with ANCESTRY_PREPARATION_LIMIT,
 before effect/lock writes. Existing keys and outcome transitions still validate
 the complete historical ancestry. Red1/focused254/backend2270/native child-effects

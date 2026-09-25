@@ -4,6 +4,24 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Authority representation regressions (2026-09-25, test-only): admission and late
+outcomes obey last duplicate room/scope/persona keys, including nested persona ids.
+Separately parsed equal-looking object/array room values refuse (JS identity);
+false versus0 refuses, -0 versus0 admits, and 1e999 in both rooms admits with the
+historical room/Infinity scope. Rejected operations retain effect/lock state and
+duplicate-key snapshots remain unchanged. These are compatibility facts, not new
+recommended snapshot shapes. Blind SQL extraction or value equality is unsafe.
+Temporary JSON.stringify room comparison fails2; temporary SQLite room/scope
+json_extract overlay fails2. Both mutations fully reverted (production diff empty).
+Final four-file focused262/typecheck pass. Full backend/runtime/browser/native/
+shutdown/desktop matrix not repeated for tests only; no new resource bound claimed.
+- .local/child-authority-mutant.log SHA256:
+  `f0d76ec36906ea3c2d5f4b0207c7c5eecb12bbcc6f4342a0b546a23631101782`
+- .local/child-authority-first-key-mutant.log SHA256:
+  `6cb3d04ee8708f9ba78c4f2494cf227aa85420a6959989dfcdd9b63e68243a22`
+- .local/child-authority-final.log SHA256:
+  `b6c3674569c011ede07b2dbf2a2a7e8421ce8692927be51afe00a59aa76ddcc3`
+
 New effect ancestry admission limit (2026-09-25): previously unseen action keys
 require at most64 runs including the coordinator root. After64 validated lineage
 entries, before reading another parent, new keys refuse ANCESTRY_PREPARATION_LIMIT.
