@@ -117,7 +117,7 @@ export class OwnerAlpha {
    const command=this.store.db.all<{payload_json:string;body_hash:string;type:string;owner_id:string;status:string;resource_id:string;accepted_at:string}>('SELECT payload_json,body_hash,type,owner_id,status,resource_id,accepted_at FROM commands WHERE id=?',generation.activation_command_id)[0];
    if('kind' in generation.authority&&generation.authority.kind!=='owner-message-warm-generation'&&generation.authority.kind!=='owner-message-background-generation'){
     const m=generation.authority.manifest;
-    const run=this.store.db.all<Run>('SELECT * FROM runs WHERE id=?',m.run_id)[0];
+    const run=this.store.db.all<Pick<Run,'command_id'|'persona_id'|'role'|'parent_run_id'|'routine_id'|'occurrence_id'|'context_json'>>('SELECT command_id,persona_id,role,parent_run_id,routine_id,occurrence_id,context_json FROM runs WHERE id=?',m.run_id)[0];
     const policyRow=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_bootstrap_policy:${m.policy_revision}`)[0];
     const config=policyRow?JSON.parse(policyRow.value_json) as OwnerAlphaBootstrapConfig:undefined;
     const reservation=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',`owner_alpha_reservation:${generation.epoch}`)[0];

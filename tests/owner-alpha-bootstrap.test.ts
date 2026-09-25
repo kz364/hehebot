@@ -3,7 +3,7 @@ import {DatabaseSync,backup} from 'node:sqlite';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {expect,it} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import {fixture,bot,otherBot} from './helpers';
 import {ControlCore} from '../src/core/control';
 import {LifecycleCore} from '../src/core/lifecycle';
@@ -46,6 +46,38 @@ function complete(f:ReturnType<typeof setup>){
  f.setNow(manifest.expires_at);f.lifecycle.watchdog();
  return {...identity,session_id:manifest.session_id,transition_id:manifest.transition_id,observed_at:manifest.expires_at,direct_child_stopped:true,execution_lock_free:true,session_lock_free:true,source:'manager-test'} as const;
 }
+
+it('validates bootstrap generation authority without returning retained checkpoints',()=>{
+ const f=setup();try{
+  f.retire();const receipt=f.send();
+  const original=f.store.run(receipt.resource_id!);
+  const context=JSON.stringify({...JSON.parse(original.context_json),padding:'界'.repeat(400000)});
+  const checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+  f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,original.id);
+  const read=vi.spyOn(f.db,'all');
+  try{
+   expect(f.core.ownerAlpha.activeGeneration()?.epoch).toBe(2);
+   const rows=read.mock.calls.flatMap(([sql,id],i)=>sql.includes('FROM runs WHERE id=?')&&id===original.id?read.mock.results[i].value:[]);
+   expect(rows.length).toBeGreaterThan(0);
+   for(const row of rows)expect(Object.keys(row).sort()).toEqual(['command_id','context_json','occurrence_id','parent_run_id','persona_id','role','routine_id']);
+  }finally{read.mockRestore();}
+  expect(f.store.run(original.id)).toEqual({...original,context_json:context,checkpoint_json:checkpoint});
+ }finally{f.close();}
+});
+
+it.each([
+ ['{"room_id":null,"room_id":"foreign-room"}',false],
+ ['{"room_id":"foreign-room","room_id":null}',true],
+ ['{"room_id":false}',false],
+ ['{}',false],
+])('preserves strict bootstrap room authority: %s',(context,allowed)=>{
+ const f=setup();try{
+  f.retire();const receipt=f.send();
+  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',context,receipt.resource_id!);
+  if(allowed)expect(f.core.ownerAlpha.activeGeneration()?.epoch).toBe(2);
+  else expect(()=>f.core.ownerAlpha.activeGeneration()).toThrow('Message-bound generation differs');
+ }finally{f.close();}
+});
 
 it('assigns only the exact fresh message, preserves old custody and reconstructs fixed expiry/reservation',()=>{
  const f=setup();try{

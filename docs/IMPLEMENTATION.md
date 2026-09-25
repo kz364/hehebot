@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Bootstrap generation projection (2026-09-25 Asia/Jakarta): OwnerAlpha.generations
+selects seven consumed run fields instead of SELECT*, excluding checkpoint_json.
+No admission predicates changed; strict room_id===null remains JS-parsed. Tests
+pad context with400000 Unicode characters and checkpoint with1100000 ASCII chars,
+inspect actual query result columns and preserve the whole stored record. Room
+tests distinguish duplicate-key orders and reject false/absent rather than treating
+all falsy values as null. Old query fails1, `.local/bootstrap-generation-read-red.log`,
+SHA256 `4d5f2c61c2de1864e5c4aaec91fa27d11873ad9ee4f8c91ae020ccaa4a230565`.
+`npx vitest run tests/owner-alpha*.test.ts tests/orchestration.test.ts` passes251;
+typecheck/backend2001/HTTP31/workerd/build pass. PID1233354 exits0; log
+`.local/bootstrap-generation-read-final.log`, SHA256
+`7ea62fc4581e8e7df1abc0fdcab5dd04c04ea17674ea8f42870aed6125be9aac`.
+Prior full runtime/browser/native/shutdown/desktop matrix not rerun for this
+projection. Warm/background SELECT* and unbounded context parsing/cloning remain.
+No SQL-work/storage bound, production-gate change or external action claimed.
+
 Integrated native-registration checkpoint (2026-09-25 Asia/Jakarta): complete
 `bash scripts/verify-codex.sh` on local1487769 exits0 (PID1192490), ending with
 `{"status":"passed","scope":"credential-free Codex and control contracts","assistantOperational":false,"productionAdmission":false,"modelJudgmentVerified":false}`.

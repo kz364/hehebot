@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Latest bootstrap-generation projection selects command/persona/role/parent/routine/
+occurrence/context only, excluding unused checkpoints. Strict room_id===null stays
+in JavaScript. Regression with >1MiB context/checkpoint verifies actual columns and
+unchanged storage; duplicate-key orders, false and absent room cases pin authority.
+Old query fails1; focused251/backend2001/HTTP31/workerd/typecheck/build pass. Prior
+full runtime/browser/native/shutdown/desktop matrix was not rerun for this SQL-only
+unit. Warm/background generation validators still SELECT*; narrow those next while
+retaining exact semantics. Context parsing/cloning itself remains unbounded.
+
 Parent registration now selects metadata and defers context read until a genuinely
 new child. Ordinary replay reads no parent/child snapshots; alpha authority may
 still read root/generation context. Red2/focused269/backend1996/HTTP31/workerd/
