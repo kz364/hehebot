@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ControlCore } from '../src/core/control';
 import { Store } from '../src/core/store';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { NativeTaskLedger, type NativeChildReceipt } from '../src/core/native-tasks';
 import { ResourceLedger } from '../src/core/resources';
+import { EffectLedger } from '../src/core/effects';
+import { ControlError } from '../src/core/errors';
 import { fixture, bot, otherBot } from './helpers';
 
 // Local metadata/lifecycle acceptance only. No native turns, latency, connectors or OAuth exercised.
@@ -173,6 +175,79 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(() => tasks.register(identity, { ...input, native_session_key: 'different' })).toThrowError(expect.objectContaining({ code: 'IDEMPOTENCY_CONFLICT' }));
     expect(() => tasks.register(identity, { ...receipt(p), persona_id: otherBot })).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
     expect(f.db.all('SELECT * FROM native_task_links')).toHaveLength(1);
+  });
+
+  it('keeps all target constraints and starts a delegated child at the record limit', () => {
+    const p = parent(); f.core.options.delegations = { [bot]: [otherBot] };
+    const ids = Array.from({ length: 64 }, () => randomUUID());
+    for (const id of ids) f.store.put(id, 'memory', { scope: { kind: 'persona', id: otherBot },
+      text: `Constraint ${id}: do not send.`, explicit_constraint: true, expires_at: null }, 0, 'owner', f.core.now());
+    const child = tasks.register(identity, { ...receipt(p), persona_id: otherBot }, true);
+    expect(child).toMatchObject({ status: 'running', error_code: null });
+    const memories = JSON.parse(child.context_json).memories;
+    expect(memories.map((m: { id: string }) => m.id).sort()).toEqual(ids.sort());
+    expect(memories.every((m: { body: { explicit_constraint: boolean; text: string } }) => m.body.explicit_constraint && m.body.text.endsWith('do not send.'))).toBe(true);
+    expect(life.heartbeat(identity, []).cancellations).not.toContain(child.id);
+  });
+
+  it.each(['record-count', 'legacy-body'])('retains observed delegated custody when memory preparation exceeds %s', kind => {
+    const p = parent(), originalParent = f.store.run(p);
+    f.core.options.delegations = { [bot]: [otherBot] };
+    for (let i = 0; i < (kind === 'record-count' ? 65 : 1); i++) {
+      f.store.put(randomUUID(), 'memory', { scope: { kind: 'persona', id: otherBot },
+        text: kind === 'legacy-body' ? '界'.repeat(50000) : `Constraint ${i}: never send without approval.`,
+        explicit_constraint: true, expires_at: null }, 0, 'owner', f.core.now());
+    }
+    const sources = f.db.all("SELECT * FROM objects WHERE kind='memory' ORDER BY id");
+    const input = { ...receipt(p), persona_id: otherBot };
+    const child = tasks.register(identity, input, true);
+    expect(child).toMatchObject({ parent_run_id: p, persona_id: otherBot, status: 'cancelling', error_code: 'MEMORY_PREPARATION_LIMIT', current_attempt: 1 });
+    expect(JSON.parse(child.context_json)).toMatchObject({ persona: { id: otherBot }, memories: [], instruction: input.title });
+    expect(f.db.all('SELECT parent_run_id,parent_attempt,native_run_ref,native_session_key FROM native_task_links WHERE run_id=?', child.id))
+      .toEqual([{ parent_run_id: p, parent_attempt: 1, native_run_ref: input.native_run_ref, native_session_key: input.native_session_key }]);
+    expect(f.db.all('SELECT status,settled_at,native_run_ref,epoch,boot_id FROM attempts WHERE run_id=?', child.id))
+      .toEqual([{ status: 'claimed', settled_at: null, native_run_ref: input.native_run_ref, epoch: identity.epoch, boot_id: identity.boot_id }]);
+    expect(f.store.run(p)).toEqual(originalParent);
+    expect(f.db.all("SELECT * FROM objects WHERE kind='memory' ORDER BY id")).toEqual(sources);
+    expect(life.heartbeat(identity, []).cancellations).toContain(child.id);
+    expect(() => new EffectLedger(f.store, () => f.core.now()).intent({ id: randomUUID(), run_id: child.id, attempt: 1,
+      action_key: randomUUID(), classification: 'read_only', authorization_ref: '', request_digest: 'test', provider_idempotency_key: null }))
+      .toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
+    // Lost acknowledgements and removal of the overflow never restart inference.
+    f.db.exec("UPDATE objects SET deleted_at=? WHERE kind='memory'", f.core.now());
+    expect(tasks.register(identity, input, true)).toEqual(child);
+    const nested = tasks.register(identity, { ...receipt(child.id), persona_id: otherBot }, true);
+    expect(nested).toMatchObject({ status: 'cancelling', error_code: 'MEMORY_PREPARATION_LIMIT', parent_run_id: child.id });
+    finish(p);
+    expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
+    f.setNow('2026-09-10T00:00:31.000Z'); life.watchdog();
+    expect(f.store.run(child.id)).toMatchObject({ status: 'recovery_required', error_code: 'CANCEL_UNCONFIRMED' });
+    expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: child.id, expected_attempt: 1 } }).error?.code).toBe('CANCEL_UNCONFIRMED');
+    expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
+    expect(f.db.all('SELECT status,settled_at FROM attempts WHERE run_id=?', child.id)).toEqual([{ status: 'claimed', settled_at: null }]);
+    life.complete(identity, child.id, 1, { status: 'cancelled', text: '' });
+    expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
+    life.complete(identity, nested.id, 1, { status: 'cancelled', text: '' });
+    life.heartbeat(identity, []); f.setNow('2026-09-10T00:02:00.000Z');
+    expect(life.prepareSleep(identity).stop_token).toBeTruthy();
+  });
+
+  it.each(['OWNER_CANCELLED', 'DEADLINE_EXCEEDED'])('keeps %s ahead of a delegated memory limit', reason => {
+    const p = parent(); f.core.options.delegations = { [bot]: [otherBot] };
+    f.store.put(randomUUID(), 'memory', { scope: { kind: 'persona', id: otherBot }, text: 'x'.repeat(140000), expires_at: null }, 0, 'owner', f.core.now());
+    if (reason === 'OWNER_CANCELLED') f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: p, reason: 'Stop' } });
+    else f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?', f.core.now(), p);
+    expect(tasks.register(identity, { ...receipt(p), persona_id: otherBot }, true)).toMatchObject({ status: 'cancelling', error_code: reason });
+  });
+
+  it('does not turn an authorization failure into a delegated cancellation receipt', () => {
+    const p = parent(); f.core.options.delegations = { [bot]: [otherBot] };
+    const context = vi.spyOn(f.core, 'context').mockImplementation(() => { throw new ControlError('FORBIDDEN', 'Target context is not authorized.'); });
+    try {
+      expect(() => tasks.register(identity, { ...receipt(p), persona_id: otherBot }, true)).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
+      expect(f.db.all('SELECT * FROM native_task_links')).toHaveLength(0);
+      expect(f.db.all('SELECT id FROM runs')).toEqual([{ id: p }]);
+    } finally { context.mockRestore(); }
   });
 
   it('registers same-task descendants under background parents without widening persona authority', () => {

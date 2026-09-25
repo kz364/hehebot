@@ -12,7 +12,22 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** limited scoped
+**Current checkpoint (2026-09-25, verified locally):** observed authorized
+cross-persona children now retain their exact receipt when target memory preparation
+overflows. They enter cancelling, not waiting or running with omitted constraints;
+attempts remain unsettled, replay cannot revive them, and late descendants inherit
+cancellation. Normal 64-record admission preserves every constraint. Full verifier
+passes backend1968/runtime682 and all HTTP/browser/native/shutdown/strict-launcher/
+service/typecheck/build stages; reference desktop16 also passes. One complete run,
+log `.local/native-memory-custody-combined.log`; evidence hash in IMPLEMENTATION.md.
+Initial regression failures and two fixture corrections are retained. No active
+check/child/delivery or host fixture residue. This fixes receipt loss discovered
+during the historical snapshot investigation; it does not bound old context_json
+hydration/cloning or establish per-child native caller authentication. Next:
+historical snapshot bounds and remaining scans/storage, then native restoration/
+settlement. Local only; no push/deploy or external gate changes.
+
+**Previous checkpoint (2026-09-25, verified locally):** limited scoped
 memory reads now refuse stored bodies over 131072 UTF-8 bytes before returning
 them to JavaScript. Source is retained; no truncation or inferred settlement.
 Initial focused42/workerd/typecheck pass; a character-count mutant fails both

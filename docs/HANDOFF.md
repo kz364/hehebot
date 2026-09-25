@@ -4,7 +4,30 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
-Current unit verified: limited scoped-memory SQL reads refuse raw bodies over
+Current unit verified: authorized cross-persona native-child registration
+now retains observed custody on MEMORY_PREPARATION_LIMIT instead of rolling back.
+The child is cancelling with an unsettled attempt; its empty-memory placeholder
+refuses child-scoped effect intents, not proof of per-child native authentication
+or physical termination. Existing owner/deadline reasons prevail. Replay, source
+cleanup and late descendants cannot revive it; watchdog escalation does not prove
+settlement. Focused69/typecheck passed, then a 64-record normal-boundary test was
+added. Full verifier plus desktop PID1054490 exited0 in one complete invocation:
+backend1968/runtime682, HTTP31, all browser/native/shutdown/strict-launcher/service/
+typecheck/build and desktop16 pass. Log `.local/native-memory-custody-combined.log`,
+SHA256 cdc57279bfe06a36b64f1c576e70f15e5705fe2bb03d6fce8acf20b8038be529.
+Initial red4 and two fixture-error logs are retained. No active check, worker,
+delivery or host fixture residue. Local only; no push/deploy or external gate
+change. Existing schedule enabled.
+
+Historical snapshot investigation remains unfinished: NativeTaskLedger still
+parses/clones parent.context_json; queued claim/preparation also hydrate the old
+snapshot although they rebuild memories. Claims must preserve instruction, room
+and exact explicitly invoked skill revision/body. Alpha authorization has separate
+snapshot reads. No total-context byte cap or metadata-only response contract has
+been chosen. Preserve already-observed native custody when adding limits; do not
+equate this cancellation fix with a hydration, SQL work or storage bound.
+
+Previous unit verified: limited scoped-memory SQL reads refuse raw bodies over
 131072 UTF-8 bytes before returning them to JavaScript. Source remains intact;
 oversized expired rows also consume read work until cleanup. Indexed ordering,
 scope and complete-or-refuse semantics remain. Initial focused42/workerd/typecheck

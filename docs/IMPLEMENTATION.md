@@ -4,6 +4,39 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Observed-child memory overflow custody (2026-09-25 Asia/Jakarta): authorized
+cross-persona registration previously rolled back when target context preparation
+exceeded the record/byte work limits. It now preserves the exact native receipt,
+parent/attempt identity and inherited deadline in cancelling state. Its empty-memory
+placeholder is not an executable context and refuses child-scoped new effect
+intents; this does not establish per-child native caller authentication or physical
+termination. Original source memories and
+parent context are unchanged. This is not truncation of an executing context.
+Existing cancellation/deadline reasons retain precedence. Replay cannot revive
+the child after source cleanup, and later same-persona descendants inherit its
+cancellation. Attempts remain unsettled through watchdog escalation; child and
+grandchild settlement are both required before sleep. Authorization and other
+errors still reject normally. Historical context_json hydration/cloning remains
+unbounded; this is a prerequisite custody fix, not snapshot-size acceptance.
+
+Regression run failed four cases on the original rollback path, log
+`.local/native-memory-custody-red.log`, SHA256
+`e2b44738d983fdfa7f9072f2cfad9a324d56d7065fdbd1a010851cf37dd665a3`.
+Two subsequent failed fixture logs are retained: the test originally used hard
+deletion despite revision foreign keys, then attempted to retry a completed root
+instead of the recovery-required child. Corrected focused69/typecheck passes in
+`.local/native-memory-custody-focused-v3.log`, SHA256
+`67d0c6ee4b34414f94e1b94876ab40371cf2eb56a52e8808c8c9d5a112caa3af`.
+A normal 64-record boundary case was then added to distinguish cancellation from
+unconditional refusal/omission. `bash scripts/verify-codex.sh` followed by
+`npm ci --prefix desktop --no-audit --no-fund && npm test --prefix desktop` exited0
+in one complete invocation: backend1968/runtime682, HTTP31, all browser/native/
+shutdown/strict-launcher/service checks, typecheck/dry-build and desktop16 pass.
+Log `.local/native-memory-custody-combined.log`, SHA256
+`cdc57279bfe06a36b64f1c576e70f15e5705fe2bb03d6fce8acf20b8038be529`.
+Host fixture paths /etc/codex and /.sprite are absent afterward. No active check,
+child or unintegrated delivery; no push/deploy, live account call or gate change.
+
 Scoped memory body read-work guard (2026-09-25 Asia/Jakarta): limited reads now
 return NULL instead of body bytes when stored JSON exceeds 131072 UTF-8 bytes,
 then refuse with MEMORY_PREPARATION_LIMIT if that row belongs to the merged
