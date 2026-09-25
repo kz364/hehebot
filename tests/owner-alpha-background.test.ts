@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {TestDatabase,bot,otherBot} from './helpers';
 import {PersonalControl} from '../src/worker/control-object';
-import {parseOwnerAlpha,type OwnerAlphaPolicy} from '../src/core/owner-alpha';
+import {OwnerAlpha,parseOwnerAlpha,type OwnerAlphaPolicy} from '../src/core/owner-alpha';
 import {Store} from '../src/core/store';
 import {ROUTINE_MANAGE_POLICY} from '../src/core/agent-commands';
 
@@ -31,6 +31,38 @@ async function boot(){const identity=await runtime('boot',{boot_id:randomUUID()}
 const custody=()=>JSON.parse(db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key='owner_alpha'")[0].value_json);
 const receipt=(parent:string)=>({parent_run_id:parent,parent_attempt:1,persona_id:bot,native_run_ref:randomUUID(),native_session_key:randomUUID(),title:'Observed child'});
 async function first(){const identity=await boot();await message();const claim=await runtime('claim',{identity});await runtime('submitted',{identity,run_id:claim.run.id,attempt:1,native_ref:'root'});return {identity,claim};}
+
+it('validates native child custody without hydrating child snapshots or parent checkpoints',async()=>{
+ const {identity,claim}=await first(),child=await runtime('native-child',{identity,child:receipt(claim.run.id),started:true});
+ db.exec("UPDATE runs SET context_json=json_set(context_json,'$.padding',?),checkpoint_json=?",
+  '界'.repeat(400000),JSON.stringify({padding:'x'.repeat(1100000)}));
+ const snapshots=db.all('SELECT id,context_json,checkpoint_json FROM runs ORDER BY id');
+ const alpha=new OwnerAlpha(new Store(db),policy,()=>new Date().toISOString()),read=vi.spyOn(db,'all');
+ try{
+  expect(()=>alpha.authorize(child.id,1)).not.toThrow();
+  const selections=read.mock.calls.flatMap(([sql,id],i)=>sql.includes('FROM runs WHERE id=?')?[{id,rows:read.mock.results[i].value}]:[]);
+  expect(selections.some(s=>s.id===child.id)).toBe(true);
+  expect(selections.some(s=>s.id===claim.run.id)).toBe(true);
+  for(const selection of selections)for(const row of selection.rows){
+   expect(row).not.toHaveProperty('checkpoint_json');
+   if(selection.id===child.id)expect(row).not.toHaveProperty('context_json');
+  }
+ }finally{read.mockRestore();}
+ expect(db.all('SELECT id,context_json,checkpoint_json FROM runs ORDER BY id')).toEqual(snapshots);
+});
+
+it.each([
+ ['{"room_id":null,"room_id":"room-present"}',false],
+ ['{"room_id":"room-present","room_id":null}',true],
+ ['{"room_id":[]}',false],
+ ['{"room_id":false}',true],
+])('preserves root room authority for native custody: %s',async(context,allowed)=>{
+ const {identity,claim}=await first(),child=await runtime('native-child',{identity,child:receipt(claim.run.id),started:true});
+ db.exec('UPDATE runs SET context_json=? WHERE id=?',context,claim.run.id);
+ const alpha=new OwnerAlpha(new Store(db),policy,()=>new Date().toISOString());
+ if(allowed)expect(()=>alpha.authorize(child.id,1)).not.toThrow();
+ else expect(()=>alpha.authorize(child.id,1)).toThrow('Attempt is not owned');
+});
 
 it('propagates root cancellation with metadata-only child selection',async()=>{
  const {identity,claim}=await first(),child=await runtime('native-child',{identity,child:receipt(claim.run.id),started:true});

@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Latest prerequisite: validAttempt uses seven run metadata fields and lazily reads
+root context only for room checks. Native child snapshots and parent checkpoints
+are no longer hydrated by this helper; final parent comparison selects command/
+routine. Duplicate root room keys in both orders and array/false truthiness are
+tested; no SQL room projection adopted. Old query fails new read regression;
+focused242/backend1992/HTTP31/workerd/typecheck/build pass. Prior runtime/browser/
+shutdown/desktop matrix not rerun. Root/generation context reads still unbounded.
+Continue metadata-only registration responses then parent context handling.
+
 Latest prerequisite: alpha propagation uses root status/error_code and child
 id/status/error_code/updated_at projections. Custody checks, reason precedence
 and original cancellation grace timestamp stay intact; snapshots are preserved.

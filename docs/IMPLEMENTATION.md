@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Alpha child-context prerequisite (2026-09-25 Asia/Jakarta): validAttempt selects
+seven run metadata fields, reads context lazily only for root room checks, and
+uses command/routine metadata for the final legacy parent receipt comparison.
+No predicates changed. Regression pads root/child snapshots, inspects actual
+authorization query results for absent checkpoints/child context, and confirms
+stored snapshots unchanged. Duplicate room keys in both orders, array and false
+values preserve existing JavaScript semantics rather than SQL extraction.
+Old query fails1: `.local/alpha-child-context-red.log`, SHA256
+`f0deca3a010e866f83d32f7bd43e3fe12eb12c165ecbc9632acbe0b478efdf34`.
+Focused alpha/orchestration242, backend1992, HTTP31/workerd/typecheck/build pass,
+PID1172675 exit0, `.local/alpha-child-context-final.log`, SHA256
+`4e67632849d4e4bfe09e37a764bc903b06ff4e1956ef2fe2ca78cd60754a2a07`.
+Prior runtime/browser/shutdown/desktop matrix not rerun. Root/generation contexts,
+registration parent cloning and response reads remain; no total bound claimed.
+
 Alpha cancellation projection prerequisite (2026-09-25 Asia/Jakarta): propagation
 reads root status/error_code and child id/status/error_code/updated_at. Existing
 validAttempt checks, cancellation reasons and grace timestamp remain unchanged.

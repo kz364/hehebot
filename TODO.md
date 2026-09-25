@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** alpha cancellation propagation
+**Current checkpoint (2026-09-25, verified locally):** alpha validAttempt reads
+native-child metadata without child contexts/checkpoints; root room checks still
+use JavaScript parsing, preserving duplicate-key and truthiness behavior. Parent
+receipt comparison reads command/routine only. Old-query regression fails;
+focused242/backend1992/HTTP31/workerd/typecheck/build pass. Prior runtime/browser/
+shutdown/desktop matrix not rerun. Root/generation contexts and native registration
+cloning/responses remain unbounded. Next: metadata-only registration responses,
+then parent context handling with exact authority. Local only; gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** alpha cancellation propagation
 selects root status/reason and child id/status/reason/timestamp without outer
 snapshot hydration. Custody validation and cancellation grace remain unchanged.
 Old-query regression fails; alpha/orchestration237 and backend1987/HTTP31/workerd/
