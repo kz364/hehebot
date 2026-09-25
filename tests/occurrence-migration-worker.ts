@@ -102,7 +102,7 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
     let code:unknown=null;
     try{observed.scopedMemories('persona-31',null,65);}catch(error){if(error&&typeof error==='object'&&'code' in error)code=error.code;else throw error;}
     results.push({unit,exact:exact.length===2&&exact[0].body.text===first.text&&exact[1].body.text===second.text.slice(0,-1),
-     code,noBodies:returned.every(row=>!('body_json' in row)),metadataRows:returned.length,
+     code,noBodies:returned.every(row=>!('body_json' in row)),metadataRows:returned.filter(row=>'id' in row).length,
      rawBytes:bytes(first)+bytes(second),unchanged:store.get(b).body.text===second.text});
     db.exec("UPDATE objects SET deleted_at='fixture-retired' WHERE id IN (?,?)",a,b);
    }

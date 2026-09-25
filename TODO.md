@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** new memory-scope index builds
+**Current checkpoint (2026-09-25, verified locally):** limited memory reads preflight
+candidate metadata strings at131072 aggregate UTF-8 bytes before hydration. This
+counts all bounded candidates needed for JS merging, not only final selected rows;
+oversized later candidate metadata may refuse, without dropping constraints.
+Multibyte ID/created_at/updated_at exact/one-over cases, focused53/backend2110/
+typecheck/build and real workerd query plans/regressions pass. Total storage,
+historical snapshots, SQL byte inspection and native recovery remain open; full
+runtime matrix not rerun. Local only; gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** new memory-scope index builds
 refuse above10000 active memories or64 MiB raw JSON before DDL, preserving source
 rows/schema version. Follow-up also caps the table at100000 objects and aggregate
 ID/created_at key bytes at4 MiB. Exact/one-over multibyte cases and rollback pass;

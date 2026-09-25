@@ -32,7 +32,8 @@ export type MemoryBudgetReceipt = Omit<MemoryPreparation,'global'|'scoped'> & {
 const lexicalTerms=(text:string)=>new Set(text.normalize('NFC').toLowerCase().match(/[\p{L}\p{M}\p{N}]+/gu)??[]);
 
 /** Complete-or-refuse first stage: never return a partial set as a complete one.
- * Store merges at most three indexed 65-row metadata reads, then loads selected
+ * Store preflights candidate metadata strings within 131072 UTF-8 bytes,
+ * merges at most three indexed 65-row metadata reads, then loads selected
  * bodies only within a 131072-byte aggregate raw-body budget. These limits
  * bound returned records and counting input, not storage size or index creation.
  * Expired records count against the read-work cap until retention removes them.

@@ -29,6 +29,17 @@ export class Store {
   const body=limit===undefined?'body_json':'length(CAST(body_json AS BLOB)) AS body_bytes';
   const scopes:Array<[string,string|null]>=[['global',null],['persona',personaId]];
   if(routineId)scopes.push(['routine',routineId]);
+  if(limit!==undefined){
+   // Candidate keys are needed for the existing JS merge, even if not selected.
+   // Inspect byte counts only before hydrating legacy IDs and timestamps.
+   const metadataBytes=scopes.reduce((total,[kind,id])=>total+this.db.all<{bytes:number}>(`SELECT COALESCE(SUM(bytes),0) AS bytes FROM (
+    SELECT length(CAST(id AS BLOB))+length(CAST(kind AS BLOB))+length(CAST(created_at AS BLOB))+length(CAST(updated_at AS BLOB)) AS bytes
+    FROM objects WHERE kind='memory' AND deleted_at IS NULL
+    AND json_extract(body_json,'$.scope.kind')=? AND json_extract(body_json,'$.scope.id') IS ?
+    ORDER BY created_at,id LIMIT ?
+   )`,kind,id,limit)[0].bytes,0);
+   if(metadataBytes>131072)throw new ControlError('MEMORY_PREPARATION_LIMIT','Memory candidate metadata exceeds the read-work limit. No memory was truncated.');
+  }
   const rows=scopes.flatMap(([kind,id])=>this.db.all<Omit<ObjectRow,'body_json'>&{body_json?:string;body_bytes?:number}>(`SELECT id,kind,revision,${body},deleted_at,created_at,updated_at FROM objects WHERE kind='memory' AND deleted_at IS NULL
    AND json_extract(body_json,'$.scope.kind')=? AND json_extract(body_json,'$.scope.id') IS ?
    ORDER BY created_at,id LIMIT ?`,kind,id,limit??-1));

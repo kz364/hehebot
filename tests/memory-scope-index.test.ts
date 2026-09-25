@@ -15,7 +15,7 @@ it.each(['x','界','🧭'])('bounds legacy body bytes before returning them to J
   body.text+='x';f.store.put('legacy-memory','memory',body,1,'owner',f.core.now());
   const read=vi.spyOn(f.db,'all');
   expect(()=>f.store.scopedMemories(bot,null,65)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
-  const returned=read.mock.results.flatMap(result=>result.value);read.mockRestore();
+  const returned=read.mock.results.flatMap(result=>result.value).filter(row=>'id' in row);read.mockRestore();
   expect(returned).toHaveLength(1);expect(returned[0].body_json).toBeUndefined();
   expect(returned[0].body_bytes).toBe(131073);
   expect(()=>f.core.context(bot,'Keep every constraint.',null,null)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
@@ -71,9 +71,9 @@ it.each([null,'routine-17'])('bounds each indexed scope read before merging (rou
   expect(rows.map(row=>row.id)).toEqual(expected.slice(0,65).map(row=>row.id));
   expect(rows[0].body.expires_at).toBe('2020-01-01T00:00:00.000Z');
   const partitions=routine?3:2;
-  expect(calls).toHaveLength(partitions+65);
-  for(const [i,[sql,...values]] of calls.slice(0,partitions).entries()){
-   expect(results[i].type).toBe('return');expect(results[i].value).toHaveLength(65);
+  expect(calls).toHaveLength(partitions*2+65);
+  for(const [i,[sql,...values]] of calls.slice(0,partitions*2).entries()){
+   expect(results[i].type).toBe('return');expect(results[i].value).toHaveLength(i<partitions?1:65);
    expect(results[i].value.every((row:Record<string,unknown>)=>!('body_json' in row))).toBe(true);
    const plan=f.db.all<{detail:string}>(`EXPLAIN QUERY PLAN ${sql}`,...values).map(row=>row.detail).join('\n');
    expect(plan).toContain('SEARCH objects USING INDEX objects_memory_scope');
@@ -95,10 +95,34 @@ it.each(['x','界','🧭'])('refuses aggregate raw bytes before loading either s
   const read=vi.spyOn(f.db,'all');
   try{
    expect(()=>f.store.scopedMemories(bot,null,65)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
-   expect(read.mock.calls).toHaveLength(2);
+   expect(read.mock.calls).toHaveLength(4);
    expect(read.mock.results.flatMap(result=>result.value).every(row=>!('body_json' in row))).toBe(true);
   }finally{read.mockRestore();}
   expect(f.store.scopedMemories(bot,null).map(row=>row.body)).toEqual([first,second]);
+ }finally{f.close();}
+});
+
+it.each(['id','created_at','updated_at'])('bounds aggregate candidate metadata before hydrating legacy %s',field=>{
+ const f=fixture();try{
+  const first={id:'a',kind:'memory',created_at:'t0',updated_at:'t0'};
+  const second={id:'b',kind:'memory',created_at:'t1',updated_at:'t1'};
+  const base=Object.values(first).concat(Object.values(second)).reduce((sum,value)=>sum+Buffer.byteLength(value),0);
+  const size=131072-base+Buffer.byteLength(second[field as keyof typeof second]);
+  const value='界'.repeat(Math.floor(size/3))+'x'.repeat(size%3);
+  second[field as keyof typeof second]=value;
+  for(const [metadata,scope] of [[first,{kind:'global',id:null}],[second,{kind:'persona',id:bot}]] as const)
+   f.db.exec('INSERT INTO objects(id,kind,revision,body_json,created_at,updated_at) VALUES(?,?,1,?,?,?)',metadata.id,metadata.kind,JSON.stringify({scope,text:'Keep constraint.',expires_at:null}),metadata.created_at,metadata.updated_at);
+  expect(f.store.scopedMemories(bot,null,65)).toHaveLength(2);
+  f.db.exec(`UPDATE objects SET ${field}=? WHERE id=?`,value+'x',second.id);
+  const read=vi.spyOn(f.db,'all');
+  try{
+   expect(()=>f.store.scopedMemories(bot,null,65)).toThrow(expect.objectContaining({code:'MEMORY_PREPARATION_LIMIT'}));
+   const rows=read.mock.results.flatMap(result=>result.value);
+   expect(rows).toHaveLength(2);
+   expect(rows.every(row=>Object.keys(row).join()==='bytes')).toBe(true);
+   expect(rows.reduce((sum,row)=>sum+row.bytes,0)).toBe(131073);
+  }finally{read.mockRestore();}
+  expect(f.store.scopedMemories(bot,null).some(row=>row[field as 'id'|'created_at'|'updated_at']===value+'x')).toBe(true);
  }finally{f.close();}
 });
 

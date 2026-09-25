@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Limited memory candidate metadata now has a131072-byte UTF-8 preflight before
+hydration. All bounded candidates count, even later unselected rows needed for JS
+merge ordering; oversized metadata refuses without source edits. Unlimited reads
+unchanged. Focused53/backend2110/typecheck/build/workerd plans and regressions pass;
+full runtime matrix not rerun. No active checks/children/delivery; schedule enabled.
+Next total storage/historical snapshots and native recovery, not further claims
+that read budgets limit SQL byte inspection or all database growth.
+
 Real-workerd verification follow-up passes: aggregate128KiB memory raw-body reads
 (ASCII/BMP/astral),4MiB index key and100000 total-object construction gates, exact
 and one-over, source/schema preservation. Existing schema rollback/reopen and64

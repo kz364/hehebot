@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Candidate metadata hydration budget (2026-09-25): limited scopedMemories executes
+up to three indexed scalar SUM preflights over the same bounded candidate ranges.
+Combined id/kind/created_at/updated_at raw UTF-8 must fit131072 before any candidate
+strings hydrate. Deleted_at is NULL by predicate; revisions/body lengths are scalar.
+All candidate keys needed for JS merging count, including later unselected rows;
+this is deliberately distinct from the selected-body budget. Oversized candidate
+metadata refuses preparation without truncation/source edits. Unlimited reads stay
+unchanged. No SQL byte-inspection or database storage bound is claimed.
+Exact/one-over multibyte ID/created_at/updated_at regressions assert only scalar
+counts returned on refusal and exact legacy values retained. Focused53/typecheck,
+backend2110/build and real workerd schema/query-plan/body/index/room regressions
+pass. Both preflight and metadata queries use indexed searches without temporary
+sorts. Log .local/metadata-bound-integrated.log SHA256
+`d64eb67672b2a5c8c7b8d532fa53c2fb68aa91ce8a1744e3b41b6e447fb9e3d7`.
+Full runtime/browser/native/shutdown/desktop matrix not rerun; no external changes.
+
 Real workerd memory-bound follow-through (2026-09-25): extended the disposable
 Durable Object fixture and existing test-schema-migration runner. Aggregate raw
 body128KiB boundaries execute in ASCII/BMP/astral compositions across two scopes;

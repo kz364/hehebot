@@ -45,7 +45,7 @@ try{
  assert.deepEqual(await get(base,'/rerun'),after);
  const invalid=await get(base,'/invalid-reference');assert.equal(invalid.rejected,true);assert.deepEqual({...invalid,rejected:false},after);
  await stop();base=await start('migrate');assert.deepEqual(await get(base),after);
- const plans=await get(base,'/memory-plan');assert.equal(plans.length,3);
+ const plans=await get(base,'/memory-plan');assert.equal(plans.length,6);
  for(const plan of plans){
   const details=plan.map(row=>row.detail).join('\n');
   assert.match(details,/SEARCH objects USING INDEX objects_memory_scope/);
