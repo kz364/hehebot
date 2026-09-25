@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** effect.reconcile no longer
+**Current checkpoint (2026-09-25, verified locally):** reconciliation receipt hydration
+caps at1048576 raw UTF-8 bytes. Larger receipts refuse RECEIPT_PREPARATION_LIMIT
+without changing evidence/outcome, including fresh commands matching prior owner
+decisions. Saved command-key replay remains intact; digest rejection stays earlier.
+Exact/one-over multibyte vectors: red2/focused147/backend2254/typecheck/build pass.
+Next remaining historical/storage/native recovery bounds; SQL byte inspection itself
+and total storage remain unbounded. Full runtime/browser/native/shutdown/desktop
+matrix not rerun for this local read boundary; production gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** effect.reconcile no longer
 hydrates run context/checkpoint during attempt validation or audit publication.
 Confirmed/failed receipts and persona-scoped events stay exact; wrong digest leaves
 unknown effects unchanged. Red3/focused142/backend2249/typecheck/build pass. Effect

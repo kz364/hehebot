@@ -403,6 +403,42 @@ describe('executor leases and attempts', () => {
     resources.release(runId, 1, ['calendar:remote']); resources.acquire(next, 1, ['calendar:remote']);
     expect(f.db.all('SELECT run_id FROM resource_locks')).toEqual([{run_id:next}]);
   });
+  it.each([1048576,1048577].flatMap(bytes=>['outcome_unknown','confirmed'].map(status=>({bytes,status}))))('bounds reconciliation receipt bytes at $bytes for $status',({bytes,status})=>{
+    const runId=claimed().run.id;unknownEffect(runId);
+    f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
+    life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
+    const id=f.db.all<{id:string}>('SELECT id FROM effects WHERE run_id=?',runId)[0].id;
+    const base=JSON.stringify({kind:'owner_reconciliation',owner_id:'owner',evidence_ref:'manual:limit-17',padding:'界'.repeat(340000)});
+    const receipt=base+' '.repeat(bytes-Buffer.byteLength(base));
+    expect(receipt.length).toBeLessThan(1048576);
+    f.db.exec('UPDATE effects SET status=?,receipt_json=? WHERE id=?',status,receipt,id);
+    const before=f.db.all('SELECT * FROM effects WHERE id=?',id),read=vi.spyOn(f.db,'all');
+    try{
+      const result=f.accept({schema_version:1,type:'effect.reconcile',payload:{run_id:runId,expected_attempt:1,effect_id:id,expected_request_digest:'synthetic-digest',outcome:'confirmed',evidence_ref:'manual:limit-17'}});
+      expect(result).toMatchObject(bytes===1048576?{status:'applied'}:{status:'rejected',error:{code:'RECEIPT_PREPARATION_LIMIT'}});
+      const reads=read.mock.calls.flatMap(([sql,effectId],i)=>sql.includes('FROM effects WHERE id=?')&&effectId===id?[read.mock.results[i].value]:[]);
+      expect(reads.length).toBeGreaterThan(0);
+      if(bytes>1048576)for(const rows of reads)for(const row of rows)expect(row.receipt_json).not.toBe(receipt);
+    }finally{read.mockRestore();}
+    if(bytes>1048576||status==='confirmed')expect(f.db.all('SELECT * FROM effects WHERE id=?',id)).toEqual(before);
+    else expect(f.db.all<{receipt_json:string}>('SELECT receipt_json FROM effects WHERE id=?',id)[0].receipt_json).not.toBe(receipt);
+  });
+
+  it('keeps saved command replay and digest precedence when an effect receipt later exceeds the limit',()=>{
+    const runId=claimed().run.id;unknownEffect(runId);
+    f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
+    life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
+    const id=f.db.all<{id:string}>('SELECT id FROM effects WHERE run_id=?',runId)[0].id;
+    const command={schema_version:1 as const,type:'effect.reconcile' as const,payload:{run_id:runId,expected_attempt:1,effect_id:id,expected_request_digest:'synthetic-digest',outcome:'confirmed' as const,evidence_ref:'manual:replay-71'}},key=randomUUID();
+    const accepted=f.accept(command,key);expect(accepted.status).toBe('applied');
+    f.db.exec('UPDATE effects SET receipt_json=? WHERE id=?',JSON.stringify({padding:'界'.repeat(400000)}),id);
+    const before=f.db.all('SELECT * FROM effects WHERE id=?',id);
+    expect(f.accept(command,key)).toEqual(accepted);
+    expect(f.accept({...command,payload:{...command.payload,expected_request_digest:'wrong'}})).toMatchObject({status:'rejected',error:{code:'REVISION_CONFLICT'}});
+    expect(f.accept(command)).toMatchObject({status:'rejected',error:{code:'RECEIPT_PREPARATION_LIMIT'}});
+    expect(f.db.all('SELECT * FROM effects WHERE id=?',id)).toEqual(before);
+  });
+
   it.each(['confirmed','failed','wrong-digest'])('reconciles stopped effects without historical run bodies: %s',outcome=>{
     const runId=claimed().run.id;unknownEffect(runId);
     f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");

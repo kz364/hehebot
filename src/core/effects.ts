@@ -12,9 +12,12 @@ export class EffectLedger {
    const attempt=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,input.expected_attempt)[0];
    requireThat(attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before an owner effect decision.');
    requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length,'CANCEL_UNCONFIRMED','The old execution has not settled.');
-   const effect=this.store.db.all<{run_id:string;request_digest:string;status:string;receipt_json:string|null}>('SELECT run_id,request_digest,status,receipt_json FROM effects WHERE id=?',input.effect_id)[0];
+   const effect=this.store.db.all<{run_id:string;request_digest:string;status:string;receipt_json:string|null;receipt_too_large:number|null}>(`SELECT run_id,request_digest,status,
+    length(CAST(receipt_json AS BLOB))>1048576 AS receipt_too_large,
+    CASE WHEN length(CAST(receipt_json AS BLOB))<=1048576 THEN receipt_json END AS receipt_json FROM effects WHERE id=?`,input.effect_id)[0];
    requireThat(effect?.run_id===run.id,'NOT_FOUND','Effect unavailable.',404);
    requireThat(effect.request_digest===input.expected_request_digest,'REVISION_CONFLICT','Review the exact effect before recording its outcome.');
+   requireThat(!effect.receipt_too_large,'RECEIPT_PREPARATION_LIMIT','Historical effect receipt exceeds the reconciliation read limit. Stored evidence and outcome were retained.');
    const previous=effect.receipt_json?JSON.parse(effect.receipt_json):null;
    if(effect.status===input.outcome&&previous?.kind==='owner_reconciliation'&&previous.owner_id===owner&&previous.evidence_ref===input.evidence_ref)return input.effect_id;
    requireThat(effect.status==='outcome_unknown','REVISION_CONFLICT','Only an unresolved stopped effect accepts an owner decision.');

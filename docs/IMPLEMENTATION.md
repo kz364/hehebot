@@ -4,6 +4,24 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Reconciliation receipt read limit (2026-09-25): SQL CASE returns receipt_json only
+at <=1048576 raw UTF-8 bytes, with an overflow flag distinct from stored NULL.
+After existing identity/termination/operation/digest checks, overflow refuses with
+RECEIPT_PREPARATION_LIMIT and leaves evidence/outcome unchanged. No truncated JSON
+or guessed replay match. At/below limit normal JS parsing, including duplicate-key
+semantics, remains unchanged. Above limit even a fresh command matching a previous
+owner decision refuses; exact command-key replay still returns its saved response.
+Multibyte exact/one-over vectors cover unknown and confirmed effects; old behavior
+fails2. Wrong digest remains earlier than overflow. Focused147/backend2254/typecheck/
+dry-run build pass. No SQL inspection/total-storage bound claimed. Full runtime/
+browser/native/shutdown/desktop matrix not repeated; gates unchanged.
+- .local/receipt-bound-red.log SHA256:
+  `dc7c21c527930b956f4baeb5254fb584caa712d1f3d6fa0769432326607c909e`
+- .local/receipt-bound-focused.log SHA256:
+  `4239b61815fd88ba36af51d8540132aa5c345fc5ab216684ad4dd0d3b9fd815b`
+- .local/receipt-bound-backend.log SHA256:
+  `1fa5b3c06a911dda1a3d6b8a08bb0064684f18c2c664aa8d5b8a985258f5d2df`
+
 Stopped effect reconciliation projection (2026-09-25): attempt validation reads only
 run id/current_attempt; audit publication reads only persona_id. Same transaction,
 NOT_FOUND, termination, operation, exact digest and outcome checks remain. Three
