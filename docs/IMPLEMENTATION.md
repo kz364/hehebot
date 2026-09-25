@@ -4,6 +4,35 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Guarded authority JSON projection (2026-09-25): RootChildEffects readRun returns
+persona/routine/room_id/scope_key/authorization_policy_ids fragments on the safe
+object path. It retains nested JSON rather than converting to SQL scalar values.
+Duplicate selected keys, any backslash escape, numeric rooms, non-object roots and
+raw NULs use unchanged original JSON. This conservative guard preserves last-key,
+missing-field, object identity, number/coercion and parse-error behavior; stored
+snapshots are never rewritten. Irrelevant fields disappear only from read results.
+No fixed bound claimed for large authority fields, fallback bodies or SQLite work.
+Initial oversized-body regressions fail2. Focused269/typecheck/backend2285/native
+child-effects service/dry-run build pass; real workerd projection and all existing
+migration/index/room regressions pass. Node fixtures cover guarded fallbacks and
+object-valued rooms without duplicate top-level keys; >1MiB irrelevant-memory
+fixtures return <8KiB context results, including late unknown outcomes. Workerd
+fixture initially failed before reaching projection because the migration's live
+coordinator correctly blocked a new claim. It now explicitly settles only that
+disposable old run/attempt after earlier migration assertions; rerun passes. Failed
+log retained. Full runtime/browser/shutdown/desktop matrix not repeated; original
+intermittent failures and production flags unchanged.
+- .local/authority-projection-red.log SHA256:
+  `f47b94c29b899ec39e2d95f925061ff4a3e5255a7b70d604462d2e6303f85a64`
+- .local/authority-projection-focused-final.log SHA256:
+  `71844fa25a0b5549f27e05ad830d00941abbead236879cc8523842fbd9500402`
+- .local/authority-projection-workerd.log SHA256 (initial fixture failure):
+  `591eaa318ce4e5e54e535b98f55ebc6d95676d59f180d20b2d6f9ef0833babe6`
+- .local/authority-projection-workerd-final.log SHA256:
+  `31e20a3f2ab8e18c6b71b8dc26fe979349478be166e32b8ac6af583f762d001a`
+- .local/authority-projection-integrated.log SHA256:
+  `c57c4e63490216bba3192d156283ff9f76a6c74c3e2d7fd2edd1d4bda6d30588`
+
 Authority representation regressions (2026-09-25, test-only): admission and late
 outcomes obey last duplicate room/scope/persona keys, including nested persona ids.
 Separately parsed equal-looking object/array room values refuse (JS identity);

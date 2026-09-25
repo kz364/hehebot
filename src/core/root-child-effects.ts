@@ -21,7 +21,16 @@ export class RootChildEffects {
   this.lifecycle.authorizeAttempt(identity, rootId, rootAttempt);
   type AuthorityRun = Pick<Run, 'id'|'current_attempt'|'role'|'parent_run_id'|'persona_id'|'routine_id'|'context_json'|'status'>;
   const readRun = (id: string): AuthorityRun => {
-   const run = this.store.db.all<AuthorityRun>('SELECT id,current_attempt,role,parent_run_id,persona_id,routine_id,context_json,status FROM runs WHERE id=?', id)[0];
+   // Keep JSON fragments, not SQL scalar conversions. Ambiguous keys, escapes,
+   // numeric rooms and non-objects retain the original JS representation. This
+   // removes irrelevant bodies on the fast path, not SQLite's JSON scan work.
+   const run = this.store.db.all<AuthorityRun>(`SELECT id,current_attempt,role,parent_run_id,persona_id,routine_id,status,
+    CASE WHEN instr(context_json,char(0))=0 AND instr(context_json,char(92))=0 AND json_type(context_json)='object'
+     AND NOT EXISTS(SELECT 1 FROM json_each(context_json) WHERE key IN ('persona','routine','room_id','scope_key','authorization_policy_ids') GROUP BY key HAVING count(*)>1)
+     AND NOT EXISTS(SELECT 1 FROM json_each(context_json) WHERE key='room_id' AND type IN ('integer','real'))
+    THEN (SELECT '{'||coalesce(group_concat(json_quote(key)||':'||(context_json -> ('$.'||key))), '')||'}'
+     FROM json_each(context_json) WHERE key IN ('persona','routine','room_id','scope_key','authorization_policy_ids'))
+    ELSE context_json END AS context_json FROM runs WHERE id=?`, id)[0];
    requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404);
    return run;
   };

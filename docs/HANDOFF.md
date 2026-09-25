@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Guarded RootChildEffects context projection now strips irrelevant bodies from read
+results, not storage. Five authority fields retain JSON fragments; duplicate keys,
+escapes, numeric rooms, non-objects/raw NUL use original JS fallback. Red2/focused269/
+backend2285/workerd/native child-effects service/typecheck/build pass. Workerd's
+initial live-fixture-root claim failure retained; disposable fixture settlement
+fix passes. Next remaining authority-field/fallback size, historical/storage and
+native recovery bounds; SQLite scans remain unbounded. No active checks/children/
+delivery; schedule enabled. Full runtime/browser/shutdown/desktop matrix not rerun;
+production flags and original intermittent failures unchanged.
+
 Authority representation regression checkpoint is test-only. Last-key room/scope/
 nested persona, object identity, false/0, -0/0 and 1e999 behavior covered for new
 admission and late outcomes. Value-equality mutant fails2, SQL first-key mutant

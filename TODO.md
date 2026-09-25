@@ -12,7 +12,19 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** authority representation
+**Current checkpoint (2026-09-25, verified locally):** RootChildEffects guarded
+projection returns only five authority fields as JSON fragments, leaving original
+snapshots untouched. Duplicate authority keys, escapes, numeric rooms, non-objects
+and raw NUL retain original JS fallback. Red2/focused269/backend2285/real workerd/
+native child-effects service/typecheck/build pass. >1MiB irrelevant memory fixtures
+return <8KiB context results and retain late outcome custody. Initial workerd fixture
+blocked on its retained live coordinator; settled only that disposable fixture and
+reran successfully, original failure retained. Authority-field/fallback size, SQL
+scan work, storage and native recovery remain open. Next remaining historical
+representation/storage bounds. Full runtime/browser/shutdown/desktop matrix not
+rerun; production gates and original intermittent failures unchanged. Local only.
+
+**Previous checkpoint (2026-09-25, verified locally):** authority representation
 regressions cover last-key room/scope/nested-persona admission and late outcomes,
 object identity, false versus0, negative zero and overflowing JSON numbers. Value-
 equality mutant fails2; SQLite first-key mutant fails2; restored focused262/typecheck

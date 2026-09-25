@@ -5,6 +5,11 @@ import {Store,type Database,type SqlValue} from '../src/core/store';
 import {legacyOccurrencesSql} from './legacy-occurrences';
 import {MemoryReadRetention} from '../src/core/memory-read-retention';
 import {runRoomCases,runFalsyRoomCases} from './run-room-cases';
+import {ControlCore,DEFAULT_BOTS} from '../src/core/control';
+import {LifecycleCore} from '../src/core/lifecycle';
+import {NativeTaskLedger} from '../src/core/native-tasks';
+import {RootChildEffects} from '../src/core/root-child-effects';
+import {createHash} from 'node:crypto';
 
 // Disposable Wrangler fixture only. No production ingress or storage is exposed.
 export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
@@ -28,6 +33,38 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
  }
  async fetch(request:Request){
   const db=this.db,path=new URL(request.url).pathname;
+  if(path==='/child-authority'){
+   const store=new Store(db),now='2026-09-10T00:00:00.000Z',persona=DEFAULT_BOTS[0].id;
+   // The earlier migration assertions deliberately retain a live coordinator.
+   // Settle that disposable fixture before admitting this independent scenario.
+   db.exec("UPDATE runs SET status='failed' WHERE id='run-59'");
+   db.exec("UPDATE attempts SET status='terminated',settled_at=? WHERE run_id='run-59'",now);
+   const core=new ControlCore(store,{executionEnabled:true,actionPolicyIds:[],toolPolicyIds:[],now:()=>new Date(now),uuid:()=>crypto.randomUUID()});
+   store.put(persona,'persona',{...DEFAULT_BOTS[0],expected_revision:0,tool_policy_ids:[],archived:false},0,'fixture',now);
+   db.exec("INSERT INTO lifecycle(singleton,provider_ref_json,phase,desired_state,epoch,lease_until) VALUES(1,'{}','BOOTING','RUN',7,'2026-09-10T00:02:00.000Z')");
+   const life=new LifecycleCore(store,core),identity=life.registerBoot(crypto.randomUUID());life.ready(identity);
+   const command={schema_version:1 as const,type:'message.send' as const,payload:{conversation_id:persona,text:'Authority SQL fixture'}};
+   const root=core.accept('owner',crypto.randomUUID(),createHash('sha256').update(JSON.stringify(command)).digest('hex'),command).resource_id!;
+   if(life.claim(identity)?.run.id!==root)throw Error('Expected fixture root');
+   life.submitted(identity,root,1,'authority-root');
+   const child=new NativeTaskLedger(store,core,life).register(identity,{parent_run_id:root,parent_attempt:1,persona_id:persona,native_run_ref:'authority-child',native_session_key:'synthetic:authority-child',title:'Authority SQL child'});
+   life.submitted(identity,child.id,1,'authority-child');
+   const returned:Array<{context_json?:string}>=[];
+   const observed=new Store({...db,all:<T>(sql:string,...values:SqlValue[])=>{const rows=db.all<T>(sql,...values);returned.push(...rows as Array<{context_json?:string}>);return rows;}});
+   const boundary=new RootChildEffects(observed,core,life);
+   const effect={id:crypto.randomUUID(),run_id:child.id,attempt:1,action_key:crypto.randomUUID(),classification:'read_only' as const,authorization_ref:'',request_digest:'authority-request',provider_idempotency_key:null};
+   boundary.intent({identity,root_run_id:root,root_attempt:1,effect,resources:[]});
+   const snapshots=[root,child.id].map(id=>{
+    const snapshot=JSON.stringify({...JSON.parse(store.run(id).context_json),memories:[{body:'界'.repeat(400000)}]});
+    db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);return {id,snapshot};
+   });
+   returned.length=0;
+   boundary.transition({identity,root_run_id:root,root_attempt:1,run_id:child.id,attempt:1,effect_id:effect.id,status:'outcome_unknown',receipt:null});
+   const bodies=returned.filter(row=>typeof row.context_json==='string');
+   return Response.json({projected:bodies.length>0&&bodies.every(row=>new TextEncoder().encode(row.context_json).length<8192),
+    unchanged:snapshots.every(({id,snapshot})=>store.run(id).context_json===snapshot),
+    status:db.all<{status:string}>('SELECT status FROM effects WHERE id=?',effect.id)[0].status});
+  }
   if(path==='/run-room'||path==='/run-falsy-room'){
    const falsy=path==='/run-falsy-room';
    const results=(falsy?runFalsyRoomCases:runRoomCases).map(({context,allowed,error,fallback},index)=>{

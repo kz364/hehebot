@@ -48,6 +48,48 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it.each(['escape','duplicate','number','null','nul'] as const)('retains original authority representation for %s fallback',kind=>{
+ const input=intent();boundary.intent(input);
+ const original=f.store.run(child).context_json;
+ const snapshot=kind==='escape'?JSON.stringify({...JSON.parse(original),instruction:'line\nbreak'}):
+  kind==='duplicate'?original.slice(0,-1)+',"room_id":null}':
+  kind==='number'?JSON.stringify({...JSON.parse(original),room_id:0}):kind==='null'?'null':original+'\u0000ignored';
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
+ const read=vi.spyOn(f.db,'all');
+ try{
+  if(kind==='number')rejects(()=>boundary.transition(result(input,'outcome_unknown')),'FORBIDDEN');
+  else if(kind==='null'||kind==='nul')expect(()=>boundary.transition(result(input,'outcome_unknown'))).toThrow(kind==='null'?TypeError:SyntaxError);
+  else boundary.transition(result(input,'outcome_unknown'));
+  const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]) as Array<{context_json?:string}>;
+  expect(rows.some(row=>row.context_json===snapshot)).toBe(true);
+ }finally{read.mockRestore();}
+ expect(f.store.run(child).context_json).toBe(snapshot);
+ expect(effects()).toEqual([expect.objectContaining({id:input.effect.id,status:kind==='escape'||kind==='duplicate'?'outcome_unknown':'intent'})]);
+});
+
+it.each(['intent','outcome'] as const)('projects irrelevant context bodies during child %s',mode=>{
+ const input=intent(grandchild);
+ if(mode==='outcome')boundary.intent(input);
+ const snapshots=new Map<string,string>();
+ for(const id of mode==='intent'?[root,child]:[root,child,grandchild]){
+  const snapshot=JSON.stringify({...JSON.parse(f.store.run(id).context_json),memories:[{body:'界'.repeat(400000)}]});
+  expect(snapshot).not.toContain('\\');
+  snapshots.set(id,snapshot);f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
+ }
+ const read=vi.spyOn(f.db,'all');
+ try{
+  if(mode==='intent')expect(boundary.intent(input).status).toBe('intent');
+  else boundary.transition(result(input,'outcome_unknown'));
+  const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]) as Array<{context_json?:string}>;
+  const contexts=rows.filter(row=>typeof row.context_json==='string');
+  expect(contexts.length).toBeGreaterThan(0);
+  for(const row of contexts)expect(Buffer.byteLength(row.context_json!)).toBeLessThan(8192);
+ }finally{read.mockRestore();}
+ for(const [id,snapshot] of snapshots)expect(f.store.run(id).context_json).toBe(snapshot);
+ expect(effects()).toEqual([expect.objectContaining({id:input.effect.id,status:mode==='intent'?'intent':'outcome_unknown'})]);
+ expect(locks()).toHaveLength(2);
+});
+
 it.each(['room_id','scope_key','persona'] as const)('keeps last-key %s authority for admission and late outcomes',field=>{
  const input=intent();boundary.intent(input);
  const original=f.store.run(child).context_json;
@@ -79,7 +121,8 @@ it.each([
 ])('preserves JS room equality/coercion ($rootRoom vs $childRoom)',({rootRoom,childRoom,scope,allowed})=>{
  const input=intent();boundary.intent(input);
  for(const [id,room] of [[root,rootRoom],[child,childRoom]]){
-  const original=f.store.run(id).context_json;
+  const fields=JSON.parse(f.store.run(id).context_json);delete fields.room_id;delete fields.scope_key;
+  const original=JSON.stringify(fields);
   const snapshot=original.slice(0,-1)+`,"room_id":${room},"scope_key":${JSON.stringify(`${bot}/${scope}`)}}`;
   f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
  }
