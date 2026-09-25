@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { LifecycleCore } from '../src/core/lifecycle';
 import { FakeProvider } from '../src/providers';
 import { fixture, bot, routine } from './helpers';
@@ -9,11 +9,18 @@ afterEach(() => f.close());
 const enqueue = () => f.core.enqueue(bot,'Original instruction 19',null,null,null);
 
 it('drops unclaimed derived context at 30 days without renewing its age or changing custody', () => {
- const id = enqueue(); f.db.exec("UPDATE runs SET updated_at='2026-10-09T12:00:00.000Z' WHERE id=?", id);
+ const id = enqueue(); f.db.exec("UPDATE runs SET updated_at='2026-10-09T12:00:00.000Z',checkpoint_json=? WHERE id=?", JSON.stringify({padding:'x'.repeat(1100000)}),id);
  const run = f.store.run(id), state = f.db.all('SELECT * FROM lifecycle'), sequence = f.store.sequence();
  expect(f.core.nextQueuedContextExpiry()).toBe('2026-10-10T00:00:00.000Z');
  f.setNow('2026-10-09T23:59:59.999Z'); expect(f.core.expireQueuedContexts()).toBe(0);
- f.setNow('2026-10-10T00:00:00.000Z'); expect(f.core.expireQueuedContexts()).toBe(1);
+ f.setNow('2026-10-10T00:00:00.000Z');
+ const read=vi.spyOn(f.db,'all');
+ try{
+  expect(f.core.expireQueuedContexts()).toBe(1);
+  const rows=read.mock.calls.flatMap(([sql],i)=>sql.includes('FROM runs r LEFT JOIN commands')?read.mock.results[i].value:[]);
+  expect(rows).toHaveLength(1);
+  expect(Object.keys(rows[0]).sort()).toEqual(['command_id','context_json','id','instruction_created_at','occurrence_id','persona_id']);
+ }finally{read.mockRestore();}
  expect(f.store.run(id)).toEqual({...run,context_json:JSON.stringify({schema_version:1,instruction:'Original instruction 19',room_id:null})});
  expect(f.db.all('SELECT * FROM lifecycle')).toEqual(state); expect(f.store.sequence()).toBe(sequence);
  expect(f.core.expireQueuedContexts()).toBe(0); expect(f.core.nextQueuedContextExpiry()).toBe('2026-12-09T00:00:00.000Z');

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { bot, otherBot, fixture } from './helpers';
 import { LifecycleCore } from '../src/core/lifecycle';
 import { NativeTaskLedger } from '../src/core/native-tasks';
@@ -42,7 +42,9 @@ it.each([false, true])('explicit delete with transcript request=%s erases both r
     const sibling = remember(f, 'Synthetic survivor-83');
     const revised = { ...target, expected_revision: 1, text: 'Synthetic sensitive revised-29' };
     expect(f.accept({ schema_version: 1, type: 'memory.put', payload: revised }).status).toBe('applied');
-    const run = enqueue(f), beforeRun = f.store.run(run);
+    const run = enqueue(f);
+    f.db.exec('UPDATE runs SET checkpoint_json=? WHERE id=?',JSON.stringify({padding:'x'.repeat(1100000)}),run);
+    const beforeRun = f.store.run(run);
     expect(beforeRun.status).toBe(purge ? 'queued' : 'waiting');
     expect(JSON.parse(beforeRun.context_json).memories).toHaveLength(2);
     const originalPut = f.db.all<{ id: string; idempotency_key: ReturnType<typeof randomUUID> }>(
@@ -53,7 +55,14 @@ it.each([false, true])('explicit delete with transcript request=%s erases both r
     const lifecycle = f.db.all('SELECT * FROM lifecycle');
     const command = deletion(target, 2, purge), key = randomUUID();
     f.setNow('2026-09-10T00:00:07.000Z');
-    const receipt = f.accept(command, key);
+    const read=vi.spyOn(f.db,'all');
+    let receipt:ReturnType<typeof f.accept>;
+    try{
+      receipt=f.accept(command,key);
+      const rows=read.mock.calls.flatMap(([sql],i)=>sql.includes("FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')")?read.mock.results[i].value:[]);
+      expect(rows).toHaveLength(1);
+      expect(Object.keys(rows[0]).sort()).toEqual(['context_json','id','status','updated_at']);
+    }finally{read.mockRestore();}
     expect(receipt).toMatchObject({ status: 'applied', resource_id: target.id });
     expect(f.db.all('SELECT body_json,revision,deleted_at FROM objects WHERE id=?', target.id)).toEqual([
       { body_json: '{}', revision: 3, deleted_at: f.core.now() },

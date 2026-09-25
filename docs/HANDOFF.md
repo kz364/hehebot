@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Retention follow-up: memory purge and queued-context expiry now omit checkpoints
+and unused metadata from run reads. Old queries fail3; large checkpoint retention,
+exact purge/replay/expiry, grace and skill regressions pass. Focused54/backend2096/
+HTTP31/workerd/typecheck/build pass; prior full runtime/browser/native/shutdown/
+desktop matrix not rerun. No active checks/children/delivery; existing schedule
+enabled. Next retention context-body/scan bounds and native restoration/settlement.
+Do not mistake selected-column reduction for bounded contexts, scans or storage.
+
 Representation follow-up: retain JS native cloning. Source inspection and focused
 oracle consultation reject a provenance-bit shortcut and incomplete SQL guard.
 Two executed exact-byte regressions prove NUL instruction-key aliasing and nested

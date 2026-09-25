@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** root attempt room authority
+**Current checkpoint (2026-09-25, verified locally):** memory purge and queued
+context expiry select only consumed fields, excluding retained checkpoints.
+Old queries fail3; >1MiB checkpoint preservation and exact purge/expiry behavior
+pass. Focused54/backend2096/HTTP31/workerd/typecheck/build pass. Context bodies,
+scan counts and storage remain unbounded; native JS cloning retained per the
+representation decision below. Prior full runtime/browser/native/shutdown/desktop
+matrix not rerun. Next: remaining retention body/scan bounds and native restoration/
+recursive settlement. Local only; production gates and external blockers unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** root attempt room authority
 projects falsiness without hydrating normal root contexts. This remains distinct
 from strict-null generation checks. Numeric/duplicate/non-object/raw-NUL cases use
 the original JS semantics; native child room context remains unused. Old read fails1,

@@ -391,7 +391,7 @@ export class ControlCore {
   this.store.db.exec("UPDATE objects SET body_json='{}',deleted_at=?,updated_at=?,revision=revision+1 WHERE id IN (SELECT value FROM json_each(?))",now,now,keys);
   this.store.db.exec("UPDATE object_revisions SET body_json='{}' WHERE object_id IN (SELECT value FROM json_each(?))",keys);
   this.store.db.exec("UPDATE commands SET payload_json='{}' WHERE type='memory.put' AND json_extract(payload_json,'$.id') IN (SELECT value FROM json_each(?))",keys);
-  const runs=this.store.db.all<Run>("SELECT * FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')");
+  const runs=this.store.db.all<Pick<Run,'id'|'status'|'context_json'|'updated_at'>>("SELECT id,status,context_json,updated_at FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')");
   for(const run of runs){const context=JSON.parse(run.context_json) as ContextSnapshot;if(context.memories?.some(x=>selected.has(x.id))){
    // Purging more context must not restart an existing cancellation grace.
    this.store.db.exec("UPDATE runs SET status=?,error_code='CONTEXT_INVALIDATED',context_json=?,updated_at=? WHERE id=?",run.status==='recovery_required'?'recovery_required':['claimed','running','finishing','cancelling'].includes(run.status)?'cancelling':'cancelled',JSON.stringify({...context,memories:context.memories.filter(x=>!selected.has(x.id))}),run.status==='cancelling'?run.updated_at:now,run.id);
@@ -428,7 +428,7 @@ export class ControlCore {
  expireQueuedContexts():number {
   return this.store.db.transaction(()=>{
    const now=this.now();
-   const due=this.store.db.all<Run&{instruction_created_at:string}>(`SELECT r.*,COALESCE(c.accepted_at,r.created_at) AS instruction_created_at FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.current_attempt=0 AND r.status IN ('queued','waiting') AND (${queuedContextDueSql})<=? ORDER BY (${queuedContextDueSql}),r.id LIMIT 100`,now);
+   const due=this.store.db.all<Pick<Run,'id'|'context_json'|'occurrence_id'|'persona_id'|'command_id'>&{instruction_created_at:string}>(`SELECT r.id,r.context_json,r.occurrence_id,r.persona_id,r.command_id,COALESCE(c.accepted_at,r.created_at) AS instruction_created_at FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE r.current_attempt=0 AND r.status IN ('queued','waiting') AND (${queuedContextDueSql})<=? ORDER BY (${queuedContextDueSql}),r.id LIMIT 100`,now);
    for(const run of due){
     const invocation=(JSON.parse(run.context_json) as ContextSnapshot).skill_invocation;
     if(Date.parse(run.instruction_created_at)+90*86400000<=Date.parse(now)||invocation){

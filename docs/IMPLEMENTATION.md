@@ -4,6 +4,20 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Retention run projections (2026-09-25): memory purge reads id/status/context/updated
+time; queued expiry reads id/context/occurrence/persona/command/instruction age.
+Neither loads retained checkpoints or unrelated metadata. Existing purge/replay
+and 30-day expiry fixtures now retain >1MiB checkpoints and assert actual returned
+columns plus exact final runs. No purge/cancellation-grace/expiry/skill behavior
+changed. Source bodies still hydrate; neither scanning nor total storage is bounded.
+Old-query regressions fail3: `.local/retention-projection-red.log`, SHA256
+`f05952ba6018e81ba8b08210b6f255c6fa695d935ce2b82cdd15e9fd73b6af83`.
+Focused54/typecheck/backend2096/HTTP31/workerd/build pass, PID1252535 exit0:
+`.local/retention-projection-final.log`, SHA256
+`5d95a1fbada0081ab225ce5a1879b807ec70488b6e3aee59a7582668cf4a49d8`.
+Prior full runtime/browser/native/shutdown/desktop matrix not rerun for these two
+SQL projections. No native-clone, migration, production-gate or external changes.
+
 Native representation decision (2026-09-25): direct source inspection traced all
 context writers to JSON.stringify or literal {}, but pinned export/import/backup
 preserve raw text and exact rows. Focused oracle consultation recommends retaining
