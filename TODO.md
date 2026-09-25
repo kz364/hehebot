@@ -12,7 +12,18 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** new effect action keys
+**Current checkpoint (2026-09-26, verified locally):** new action keys now have
+a 4MiB aggregate UTF-8 authority-body read budget in RootChildEffects, retaining
+the 1MiB per-read ceiling. Repeated root reads count; overflow returns no body
+and refuses without truncation. Existing keys/outcomes retain full validation
+without this new budget. Red2/focused308/backend2324/workerd/typecheck/build pass;
+Node and real workerd exact/one-over cases preserve snapshots/locks/replay/outcomes.
+Not a SQL-work, heap or whole-request bound; independent EffectLedger reads remain
+separate. Existing-key hydration, SQL/storage and native recovery remain next.
+Full runtime/native service/browser/shutdown/desktop matrix not rerun; original
+intermittency and production gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** new effect action keys
 refuse authority context above 1MiB UTF-8 per run before JS hydration, including
 selected-field projections and full JS fallback. Existing keys/outcomes remain
 fully validated without this new ceiling. Red3/focused306/backend2322/typecheck/

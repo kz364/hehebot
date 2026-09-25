@@ -4,6 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+RootChildEffects now caps aggregate returned authority JSON at 4194304 UTF-8 bytes
+for unseen action keys, including repeated root reads. SQL applies the lesser of
+remaining budget and the 1MiB per-read ceiling before returning a body. Existing
+keys/outcomes remain exempt from these preparation ceilings, not authority checks.
+Red2/focused308/backend2324/typecheck/build and real workerd exact/one-over/replay
+pass. No source rewrite, lock loss or effect replay. Next existing-key hydration,
+SQL/storage and native recovery; not a heap or whole-request bound (EffectLedger
+still validates independently). No active checks/children/delivery; schedule enabled.
+Full runtime/native service/browser/shutdown/desktop matrix not rerun; original
+intermittency and external gates unchanged.
+
 New effect action keys now have a 1048576-byte per-run authority-context hydration
 ceiling after guarded projection or original JS fallback. SQL returns NULL on
 overflow, then explicit CONTEXT_PREPARATION_LIMIT at the parse boundary; attempt/

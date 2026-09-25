@@ -103,7 +103,34 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
    const replay=boundary.intent({identity,root_run_id:root,root_attempt:1,effect,resources:[]});
    boundary.transition({identity,root_run_id:root,root_attempt:1,run_id:child.id,attempt:1,effect_id:effect.id,status:'outcome_unknown',receipt:null});
    unchanged&&=store.run(root).context_json===over;
-   return Response.json({projected,unchanged,nulKeys,bounded:bounded&&replay.status==='outcome_unknown',
+   for(const {id,source} of sources)db.exec('UPDATE runs SET context_json=? WHERE id=?',source,id);
+   const native=new NativeTaskLedger(store,core,life),descendants=[child.id];
+   for(const ref of ['authority-grandchild','authority-leaf']){
+    const run=native.register(identity,{parent_run_id:descendants.at(-1)!,parent_attempt:1,persona_id:persona,native_run_ref:ref,native_session_key:`synthetic:${ref}`,title:ref});
+    life.submitted(identity,run.id,1,ref);descendants.push(run.id);
+   }
+   const aggregateSources=new Map<string,string>();
+   for(const [id,size] of [[root,1048576],[child.id,1048576],[descendants[1],1046528],[descendants[2],2048]] as const){
+    const source=store.run(id).context_json;
+    const empty=source.slice(0,-1)+`,"scope_key":${JSON.stringify(JSON.parse(source).scope_key)},"padding":""}`;
+    const bytes=size-new TextEncoder().encode(empty).length;
+    const snapshot=empty.slice(0,-2)+'界'.repeat(Math.floor(bytes/3))+'x'.repeat(bytes%3)+'"}';
+    aggregateSources.set(id,snapshot);db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
+   }
+   const aggregateEffect={...effect,id:crypto.randomUUID(),action_key:crypto.randomUUID(),run_id:descendants[2]};
+   const aggregateIntent={identity,root_run_id:root,root_attempt:1,effect:aggregateEffect,resources:[]};
+   const aggregateExact=boundary.intent(aggregateIntent).status==='intent';
+   const aggregateOver=aggregateSources.get(descendants[1])!.slice(0,-2)+'x"}';
+   aggregateSources.set(descendants[1],aggregateOver);db.exec('UPDATE runs SET context_json=? WHERE id=?',aggregateOver,descendants[1]);
+   returned.length=0;let aggregateRefused=false;
+   try{boundary.intent({...aggregateIntent,effect:{...aggregateEffect,id:crypto.randomUUID(),action_key:crypto.randomUUID()}});}
+   catch(error){if(error&&typeof error==='object'&&'code' in error&&error.code==='CONTEXT_PREPARATION_LIMIT')aggregateRefused=true;else throw error;}
+   const aggregateBytes=returned.reduce((bytes,row)=>bytes+(typeof row.context_json==='string'?new TextEncoder().encode(row.context_json).length:0),0);
+   const aggregate=aggregateExact&&aggregateRefused&&aggregateBytes===3145729&&returned.some(row=>row.context_json===null);
+   const aggregateReplay=boundary.intent(aggregateIntent).id===aggregateEffect.id;
+   boundary.transition({identity,root_run_id:root,root_attempt:1,run_id:descendants[2],attempt:1,effect_id:aggregateEffect.id,status:'outcome_unknown',receipt:null});
+   unchanged&&=[...aggregateSources].every(([id,snapshot])=>store.run(id).context_json===snapshot);
+   return Response.json({projected,unchanged,nulKeys,bounded:bounded&&replay.status==='outcome_unknown',aggregate:aggregate&&aggregateReplay,
     status:db.all<{status:string}>('SELECT status FROM effects WHERE id=?',effect.id)[0].status});
   }
   if(path==='/run-room'||path==='/run-falsy-room'){

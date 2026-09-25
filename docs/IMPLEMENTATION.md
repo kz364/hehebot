@@ -4,6 +4,27 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Aggregate authority read budget (2026-09-26 Asia/Jakarta): unseen action keys now
+receive at most 4194304 UTF-8 bytes across RootChildEffects authority reads. Each
+query returns byte metadata and applies min(1048576, remaining) before returning
+the body; returned bodies debit the request-local budget. Repeated root reads count.
+Existing keys and outcomes remain exempt from the new budget while retaining
+authorization/digest checks. Independent EffectLedger validation is unchanged;
+this does not bound total request bytes, JS heap, SQLite work or existing-key reads.
+ASCII/BMP Node regressions fail before implementation, then pass exact4MiB and
+one-byte-over cases with all individual bodies within1MiB. Refusal returns3145729
+bytes before the final root body is withheld. Snapshots/effects/locks survive;
+existing intent replay, conflict detection, unknown and confirmed outcomes pass.
+Real workerd repeats multibyte aggregate boundary and replay/outcome/source checks.
+Final focused308/backend2324/typecheck/workerd/dry-run build pass;1468805 exited0.
+Full runtime/native service/browser/shutdown/desktop matrix not rerun; original
+intermittency and production gates unchanged. Next existing-key/SQL/storage/native
+recovery work; this ceiling is not full product acceptance.
+- .local/authority-aggregate-red.log SHA256: `4c44f362bd668ac840caf1a17c3b4d058ef05c8cff73e5f8f55022865606b636`
+- .local/authority-aggregate-focused.log SHA256: `e873ff0be7f1c5ef012b5f768368d17063c09e04240c7858e075a685eef217f2`
+- .local/authority-aggregate-integrated.log SHA256: `f829a8da50cb51b1fcf27090b13387e2045375b7d28630ddc32ce5f178880219`
+- .local/authority-aggregate-workerd.log SHA256: `de2b91330510c412881409b37d9356716a006024fb70a2c957e55c30a7079e02`
+
 New-action authority read ceiling (2026-09-26 Asia/Jakarta): RootChildEffects
 returns at most 1048576 UTF-8 bytes of authority context per run for unseen action
 keys, covering both guarded projections and full JS fallback. An outer SQL CASE

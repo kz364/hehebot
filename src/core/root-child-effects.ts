@@ -23,6 +23,9 @@ export class RootChildEffects {
   // Existing keys still undergo full identity validation below. Never apply a
   // new-admission preparation ceiling to retained effect custody or outcomes.
   const existingCustody = effectActionKey===undefined || this.store.db.all('SELECT id FROM effects WHERE action_key=? LIMIT 1',effectActionKey).length>0;
+  // Counts returned authority JSON bytes, including repeated root reads. This
+  // is not a SQLite-work or JS heap bound; EffectLedger validates independently.
+  let remainingAuthorityBytes = 4194304;
   // Only a unique, unescaped string ID can replace a stored persona/routine
   // object. All other nested representations retain their original JSON.
   // SQLite paths can match NUL-suffixed keys; those must use JS fallback.
@@ -40,8 +43,9 @@ export class RootChildEffects {
    // Keep JSON fragments, not SQL scalar conversions. Ambiguous keys/authority escapes,
    // numeric rooms and non-objects retain the original JS representation. This
    // removes irrelevant bodies on the fast path, not SQLite's JSON scan work.
-   const run = this.store.db.all<AuthorityRun>(`SELECT id,current_attempt,role,parent_run_id,persona_id,routine_id,status,
-    CASE WHEN ? OR length(CAST(context_json AS BLOB))<=1048576 THEN context_json END AS context_json
+   const run = this.store.db.all<AuthorityRun & {authority_bytes:number}>(`SELECT id,current_attempt,role,parent_run_id,persona_id,routine_id,status,
+    length(CAST(context_json AS BLOB)) AS authority_bytes,
+    CASE WHEN ? OR length(CAST(context_json AS BLOB))<=? THEN context_json END AS context_json
     FROM (SELECT id,current_attempt,role,parent_run_id,persona_id,routine_id,status,
     CASE WHEN instr(context_json,char(0))=0 AND json_type(context_json)='object'
      AND NOT EXISTS(SELECT 1 FROM json_each(context_json) WHERE instr(key,char(0))>0)
@@ -51,15 +55,16 @@ export class RootChildEffects {
      AND NOT EXISTS(SELECT 1 FROM json_each(context_json) WHERE key='room_id' AND type IN ('integer','real'))
     THEN (SELECT '{'||coalesce(group_concat(json_quote(key)||':'||(${fragment})), '')||'}'
      FROM json_each(context_json) f WHERE key IN (${authorityKeys}))
-    ELSE context_json END AS context_json FROM runs WHERE id=?)`, existingCustody?1:0,id)[0];
+    ELSE context_json END AS context_json FROM runs WHERE id=?)`, existingCustody?1:0,Math.min(1048576,remainingAuthorityBytes),id)[0];
    requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404);
+   if(!existingCustody&&run.context_json!==null)remainingAuthorityBytes-=run.authority_bytes;
    return run;
   };
   const root = readRun(rootId), child = readRun(runId);
   requireThat(Number.isSafeInteger(rootAttempt) && rootAttempt > 0 && root.current_attempt === rootAttempt &&
    Number.isSafeInteger(attempt) && attempt > 0 && child.current_attempt === attempt, 'STALE_EPOCH', 'The selected attempt changed.');
   requireThat(root.role === 'coordinator' && root.parent_run_id === null && child.id !== root.id, 'FORBIDDEN', 'Select a descendant of the coordinator root.', 403);
-  requireThat(root.context_json!==null,'CONTEXT_PREPARATION_LIMIT','New effects require authority context of at most 1MiB per run. Stored context and effects were retained.');
+  requireThat(root.context_json!==null,'CONTEXT_PREPARATION_LIMIT','New effects require authority context of at most 1MiB per run and 4MiB across authority reads. Stored context and effects were retained.');
   const rootContext = JSON.parse(root.context_json) as ContextSnapshot;
   const lineage: AuthorityRun[] = [], seen = new Set<string>();
   let childContext!: ContextSnapshot;
@@ -68,7 +73,7 @@ export class RootChildEffects {
    requireThat(!seen.has(current.id), 'FORBIDDEN', 'Native ancestry contains a cycle.', 403);
    seen.add(current.id); lineage.push(current);
    this.lifecycle.authorizeAttempt(identity, current.id, current.current_attempt);
-   requireThat(current.context_json!==null,'CONTEXT_PREPARATION_LIMIT','New effects require authority context of at most 1MiB per run. Stored context and effects were retained.');
+   requireThat(current.context_json!==null,'CONTEXT_PREPARATION_LIMIT','New effects require authority context of at most 1MiB per run and 4MiB across authority reads. Stored context and effects were retained.');
    const context = JSON.parse(current.context_json) as ContextSnapshot;
    if (current.id === child.id) childContext = context;
    const scope = `${current.persona_id}/${current.routine_id ? `routine/${current.routine_id}` : context.room_id ? `room/${context.room_id}` : 'personal'}`;
