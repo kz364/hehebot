@@ -347,6 +347,29 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(life.heartbeat(identity, []).cancellations).not.toContain(child.id);
   });
 
+  it('retains exact legacy refusal provenance before completion clears the last error',()=>{
+    const p=parent();f.core.options.delegations={[bot]:[otherBot]};
+    const child=tasks.register(identity,{...receipt(p),persona_id:otherBot},true);
+    const original=f.store.run(child.id).context_json;
+    resources.acquire(child.id,1,['legacy-refusal-resource']);
+    f.db.exec("UPDATE runs SET status='cancelling',error_code='MEMORY_PREPARATION_LIMIT' WHERE id=?",child.id);
+    expect(()=>finish(child.id)).toThrowError(expect.objectContaining({code:'RESOURCE_BUSY'}));
+    expect(f.db.all('SELECT key FROM runtime_metadata WHERE key=?',`native_context_unavailable:${child.id}:1`)).toEqual([]);
+    resources.release(child.id,1,['legacy-refusal-resource']);
+    finish(child.id);
+    expect(f.store.run(child.id)).toMatchObject({status:'completed',error_code:null,context_json:original});
+    expect(f.db.all('SELECT value_json FROM runtime_metadata WHERE key=?',`native_context_unavailable:${child.id}:1`))
+      .toEqual([{value_json:JSON.stringify('MEMORY_PREPARATION_LIMIT')}]);
+    finish(child.id); // Exact replay keeps the result receipt unchanged.
+    const nested=tasks.register(identity,{...receipt(child.id),persona_id:otherBot},true);
+    expect(nested).toMatchObject({status:'cancelling',error_code:'MEMORY_PREPARATION_LIMIT'});
+    expect(JSON.parse(f.store.run(nested.id).context_json).persona.id).toBeNull();
+    const other=tasks.register(identity,{...receipt(p),persona_id:otherBot},true);
+    f.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',`native_context_unavailable:${other.id}:2`,JSON.stringify('MEMORY_PREPARATION_LIMIT'));
+    finish(other.id);
+    expect(tasks.register(identity,{...receipt(other.id),persona_id:otherBot},true).status).toBe('running');
+  });
+
   it.each(['cancelling','recovery_required'])('preserves known legacy memory refusal through descendant settlement (%s)',status=>{
     const p=parent();f.core.options.delegations={[bot]:[otherBot]};
     const child=tasks.register(identity,{...receipt(p),persona_id:otherBot},true);

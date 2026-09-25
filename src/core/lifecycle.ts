@@ -472,6 +472,10 @@ export class LifecycleCore {
    if(proof)this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',proofKey,proof);
    if(backgroundSettling)this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',backgroundProofKey,
     JSON.stringify({thread_id:backgroundReceipt!.thread_id,turn_id:backgroundReceipt!.turn_id,output_sha256:backgroundReceipt!.output_sha256}));
+   // Preserve known legacy refusal before the result clears mutable run errors.
+   // This is attempt-scoped evidence, not a rewrite of its historical snapshot.
+   if(run.role==='background'&&run.error_code==='MEMORY_PREPARATION_LIMIT'&&this.store.db.all('SELECT run_id FROM native_task_links WHERE run_id=? AND parent_run_id=?',runId,run.parent_run_id).length)
+    this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?) ON CONFLICT(key) DO NOTHING',`native_context_unavailable:${runId}:${attempt}`,JSON.stringify('MEMORY_PREPARATION_LIMIT'));
    this.store.db.exec('UPDATE attempts SET status=?,settled_at=?,result_json=? WHERE run_id=? AND attempt=?',result.status,now,JSON.stringify(result),runId,attempt);
    this.store.db.exec('UPDATE runs SET status=?,error_code=?,checkpoint_json=?,updated_at=? WHERE id=?',result.status,result.error_code??null,result.checkpoint?JSON.stringify(result.checkpoint):null,now,runId);
    this.store.db.exec("INSERT INTO outbox(id,run_id,destination,payload_json,status,created_at,updated_at) VALUES(?,?,'portal',?,'delivered',?,?) ON CONFLICT(run_id,destination) DO UPDATE SET payload_json=excluded.payload_json,status='delivered',updated_at=excluded.updated_at",this.core.options.uuid(),runId,JSON.stringify(result),now,now);

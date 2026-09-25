@@ -4,6 +4,29 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Refusal provenance at completion (2026-09-25): task.registered records cancellation
+status but not reason; completion receipts contain submitted results, not prior
+errors. There is no supported reconstruction from an empty memory array. Before
+completion clears a still-known native MEMORY_PREPARATION_LIMIT, retain the exact
+run/attempt reason in runtime_metadata. This transaction leaves historical context
+and result receipt unchanged. Resource/operation/effect settlement gates run first;
+failed completion writes no refusal receipt. Replay remains exact. Native registration
+reads only the exact parent attempt key; another attempt's evidence is ignored.
+Restore inspection counts retained evidence as NATIVE_CONTEXT_UNAVAILABLE, unions
+snapshot markers to avoid double counting, and does not exempt identity mismatches.
+Original regression fails1; final focused117, backend2237, runtime682, native child
+service, encrypted backup drill, typecheck and dry-run build pass. Full backend ran
+before the final extra lock-refusal assertions; focused117 reran afterward. Browser/
+timed-shutdown/desktop matrix not repeated. Already lost provenance is not restored;
+watchdog/provider-stop error overwrites still need preservation. No external actions.
+Logs and SHA256:
+- .local/refusal-provenance-red.log:
+  `670ce2aeceb907a266d0d2ab8d15f0f0c966d2b2ebc4f4866c084e1453115351`
+- .local/refusal-provenance-backend.log:
+  `565fdb86e23a108a21ab7a53563e6820181a9ef0d13f7d7a4ef1b8e57f7e147e`
+- .local/refusal-provenance-final.log:
+  `06838a185fd93060df516e7b5f56e33a98b66f71824c0b8bb638f95737ee9ef3`
+
 Legacy memory refusal inheritance (2026-09-25): registration now recognizes a
 surviving parent MEMORY_PREPARATION_LIMIT error as evidence of unavailable context,
 even without the new marker. New descendants receive the custody-only marker; the

@@ -57,6 +57,17 @@ it.each(['CONTEXT_PREPARATION_LIMIT','MEMORY_PREPARATION_LIMIT'].flatMap(reason=
   expect(cli.stdout+cli.stderr).not.toContain(canary);expect(await fingerprint()).toEqual(before);
 });
 
+it.each([false,true])('retains attempt-scoped refusal as a restore blocker without double counting (marker=%s)',async marker=>{
+  if(marker)db.prepare('UPDATE runs SET context_json=? WHERE id=?').run(JSON.stringify(unavailableContext),'child-73');
+  db.prepare('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)').run('native_context_unavailable:child-73:1',JSON.stringify('MEMORY_PREPARATION_LIMIT'));
+  // Another attempt's record must not classify the current sibling snapshot.
+  db.prepare('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)').run('native_context_unavailable:sibling-89:2',JSON.stringify('MEMORY_PREPARATION_LIMIT'));
+  const report=await inspect();
+  expect(report.inconsistencies).toEqual({});
+  expect(report.blockers.NATIVE_CONTEXT_UNAVAILABLE).toBe(1);
+  expect(report.coordinated_restore_ready).toBe(false);
+});
+
 it.each(['grant','extra-field','duplicate-key','unknown-reason','running','coordinator','missing-link'])('does not exempt a forged unavailable-context marker: %s',async kind=>{
   let context=JSON.stringify({...unavailableContext,...(kind==='grant'?{authorization_policy_ids:['forged-grant']}:{}),...(kind==='extra-field'?{extra:true}:{}),...(kind==='unknown-reason'?{native_child_context_unavailable:'UNKNOWN'}:{})});
   if(kind==='duplicate-key')context=context.slice(0,-1)+',"persona":{"id":null}}';

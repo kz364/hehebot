@@ -63,7 +63,12 @@ export async function inspectControlRestore(directory) {
             memories:[],skills:[],context_events:[],authorization_policy_ids:[]});
       }).map(row => row.id);
       const unavailableIds = JSON.stringify(unavailable);
-      if (unavailable.length) blockers.NATIVE_CONTEXT_UNAVAILABLE = unavailable.length;
+      count(blockers, 'NATIVE_CONTEXT_UNAVAILABLE', `SELECT value FROM json_each(?) UNION
+        SELECT r.id FROM runs r JOIN runtime_metadata m ON m.key='native_context_unavailable:'||r.id||':'||r.current_attempt
+        WHERE m.value_json=? AND r.role='background' AND EXISTS
+          (SELECT 1 FROM native_task_links n JOIN attempts a ON a.run_id=n.run_id AND a.attempt=r.current_attempt
+           WHERE n.run_id=r.id AND n.parent_run_id=r.parent_run_id AND a.native_run_ref=n.native_run_ref)`,
+        unavailableIds, JSON.stringify('MEMORY_PREPARATION_LIMIT'));
       // Context JSON is SQLite-valid already, but may carry contradictory typed identity fields.
       count(issues, 'CONTEXT_IDENTITY_MISMATCH', `SELECT r.id FROM runs r WHERE r.id NOT IN (SELECT value FROM json_each(?)) AND (json_type(context_json)!='object' OR
         (json_type(context_json,'$.persona') IS NOT NULL AND json_type(context_json,'$.persona')!='object') OR

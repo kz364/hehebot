@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Known native memory refusal now survives completion error clearing in exact
+run/attempt runtime_metadata. No historical snapshot/result rewrite; failed locked
+completion writes none. Late children inherit refusal; wrong attempt ignored.
+Restore reports deduplicated blocker, never authority. Red1/focused117/backend2237/
+runtime682/native child service/backup drill/typecheck/build pass. Next preserve
+known legacy refusal across watchdog/provider-stop overwrites, which still lose
+the error; already lost history remains unrecoverable from snapshot shape alone.
+No active checks/children/delivery; existing schedule enabled. Prior browser/timed-
+shutdown/desktop matrix not rerun. Original intermittent failures remain unresolved.
+
 Legacy parent errors now seed the persistent no-authority marker on new descendants
 when MEMORY_PREPARATION_LIMIT survives. Parent snapshots remain unchanged. Two
 cancelling/recovery regressions fail before fix; focused114/backend2234/typecheck/

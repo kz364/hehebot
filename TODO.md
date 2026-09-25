@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** new descendants of legacy
+**Current checkpoint (2026-09-25, verified locally):** completion preserves known
+native memory refusal in exact run/attempt metadata before clearing the error.
+Snapshot and result receipt remain unchanged; late children inherit refusal, wrong-
+attempt metadata is ignored, and restore reports a deduplicated blocker. Red1,
+focused117/backend2237/runtime682/native child service/backup drill/typecheck/build
+pass. Already lost history is not recovered. Next preserve still-known legacy
+refusal across watchdog/provider-stop overwrites, then historical/storage/native
+recovery work. Browser/timed-shutdown/desktop matrix not rerun; original intermittent
+failures remain unresolved. Local only; production gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** new descendants of legacy
 partial snapshots now receive a persistent non-authorizing marker when the parent's
 MEMORY_PREPARATION_LIMIT error survives. Historical parent bytes remain unchanged;
 descendant completion cannot erase the inherited refusal. Cancelling/recovery
