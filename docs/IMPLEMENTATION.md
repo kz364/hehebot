@@ -4,6 +4,20 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Index scan/key follow-up (2026-09-25): new builds first count at most100001 total
+object rows and refuse above100000 before inspecting active memory JSON. This
+bounds rows visited by subsequent scans, not disk bytes/CPU time. Aggregate active
+memory id/created_at UTF-8 input must also fit4 MiB; extracted scope keys remain
+within the separate64 MiB JSON input bound. Existing-index handling is unchanged.
+Exact/one-over100000 rows and4 MiB key tests include foreign persona rows and
+multibyte IDs/timestamps, source preservation and no DDL/version advancement.
+Initial fixture reset collided with schema_versions PK; retained in
+.local/index-scan-focused.log, not application regression evidence. Corrected
+focused18/typecheck/backend2107/build/HTTP31 pass; .local/index-scan-integrated.log
+SHA256 `4b0a9edcf8b21821736b13a429997643e9b644bc64f8396a9d81c67e88ca4715`.
+Full runtime matrix not rerun. Preflight byte inspection, ongoing storage growth,
+metadata hydration and historical run snapshots remain open; no live migration.
+
 Memory index construction admission (2026-09-25): a missing v14 memory-scope index
 requires at most10000 active memory rows and64 MiB raw memory JSON. Preflight returns
 only count/sum for up to10001 eligible rows. Over-limit MIGRATION_WORK_LIMIT503

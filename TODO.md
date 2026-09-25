@@ -14,11 +14,12 @@ still require their applicable approval. Completed fixtures are not live accepta
 
 **Current checkpoint (2026-09-25, verified locally):** new memory-scope index builds
 refuse above10000 active memories or64 MiB raw JSON before DDL, preserving source
-rows/schema version. Exact/one-over tests and rollback pass; mutant2/focused15/
-backend2104/HTTP31/typecheck/build pass. Engineering construction limits are not
+rows/schema version. Follow-up also caps the table at100000 objects and aggregate
+ID/created_at key bytes at4 MiB. Exact/one-over multibyte cases and rollback pass;
+focused18/backend2107/HTTP31/typecheck/build pass. Engineering limits are not
 storage quotas; over-limit legacy v13 startup needs explicit reconciliation.
-Underlying scans, metadata/index-key sizes, total storage and historical snapshots
-remain open. Full runtime matrix not rerun; local only, gates unchanged.
+Preflight byte inspection, ongoing metadata hydration, total storage and historical
+snapshots remain open. Full runtime matrix not rerun; local only, gates unchanged.
 
 **Previous checkpoint (2026-09-25, verified locally):** limited memory reads preflight
 merged selected raw-body UTF-8 sizes and refuse totals over131072 before hydrating
