@@ -50,7 +50,8 @@ afterEach(() => f.close());
 
 it('reuses the selected child parse for policy checks and reconciliation without rewriting its snapshot', () => {
  const stored=f.store.run(child).context_json;
- const snapshot=stored.slice(0,-1)+`,"padding":"${'x'.repeat(1100000)}","authorization_policy_ids":[],"authorization_policy_ids":["${policy}"]}`;
+ const snapshot=stored.slice(0,-1)+`,"padding":"${'x'.repeat(1000000)}","authorization_policy_ids":[],"authorization_policy_ids":["${policy}"]}`;
+ expect(Buffer.byteLength(snapshot)).toBeLessThan(1048576);
  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
  const input=intent(),parse=vi.spyOn(JSON,'parse');
  try{
@@ -64,6 +65,20 @@ it('reuses the selected child parse for policy checks and reconciliation without
  expect(f.store.run(child).context_json).toBe(snapshot);
  expect(effects()).toEqual([expect.objectContaining({run_id:child,status:'outcome_unknown'})]);
  expect(locks()).toHaveLength(2);
+});
+
+it('refuses oversized new child intent without losing existing effect outcome custody',()=>{
+ const existing=intent();boundary.intent(existing);
+ const stored=f.store.run(child).context_json;
+ const snapshot=stored.slice(0,-1)+`,"padding":"${'界'.repeat(400000)}"}`;
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
+ const pending=intent();pending.resources=['calendar:new'];
+ const held=locks(),before=effects();
+ rejects(()=>boundary.intent(pending),'CONTEXT_PREPARATION_LIMIT');
+ expect(locks()).toEqual(held);expect(effects()).toEqual(before);
+ boundary.transition(result(existing,'outcome_unknown'));
+ expect(effects()).toEqual([expect.objectContaining({id:existing.effect.id,status:'outcome_unknown'})]);
+ expect(locks()).toEqual(held);expect(f.store.run(child).context_json).toBe(snapshot);
 });
 
 it('checks child attempt custody before parsing a null historical context', () => {

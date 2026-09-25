@@ -4,6 +4,17 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+EffectLedger intent context hydration caps at1MiB raw UTF-8 and excludes checkpoints.
+Overflow refuses both new intent and replay lookup; source context/effects stay
+unchanged. Exact-limit and duplicate-key semantics covered. Red4/focused248/
+backend2264/native child-effects service/typecheck/build pass; initial focused
+failure retained and split into under-limit parse reuse plus overflow custody tests.
+Earlier RootChildEffects parsing remains unbounded; address that boundary next
+without preventing existing outcome transitions. Remaining historical/storage/
+SQL-work/native restoration and recursive settlement remain open. No active checks/
+children/delivery; schedule enabled. Full runtime/browser/shutdown/desktop matrix
+not repeated; original intermittent failures unresolved. Local only, gates false.
+
 Effect dispatch and replay lookup omit historical run bodies and destination
 receipts respectively. Deadline/identity/unknown outcome semantics unchanged. Red3/
 focused313/backend2257/typecheck/build pass. Intent authority still parses full

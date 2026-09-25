@@ -12,7 +12,19 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** effect dispatch validates run
+**Current checkpoint (2026-09-25, verified locally):** EffectLedger intent hydration
+caps historical context at1048576 raw UTF-8 bytes, excluding checkpoints. New and
+replayed intents above limit refuse CONTEXT_PREPARATION_LIMIT without changing
+snapshots/effects. JS last-key authority semantics remain; existing effect outcomes
+can still settle. Red4/focused248/backend2264/native child-effects service/typecheck/
+build pass. Initial focused failure retained: the old oversized parse-reuse success
+fixture now tests below the cap, with separate overflow rollback/outcome coverage.
+Earlier RootChildEffects parsing remains unbounded; next address that boundary
+without blocking outcome custody. Historical/storage/SQL-work/native recovery and
+external acceptance remain open. Full runtime/browser/shutdown/desktop matrix not
+rerun. Local only; production gates and original intermittent failures unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** effect dispatch validates run
 metadata without context/checkpoint hydration; repeated intent lookup excludes
 destination receipts. Exact identity conflicts, deadlines and unknown outcome replay
 unchanged. Red3/focused313/backend2257/typecheck/build pass. Intent authority still

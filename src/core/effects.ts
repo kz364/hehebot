@@ -26,8 +26,11 @@ export class EffectLedger {
   });
  }
  intent(input:EffectIntent):{id:string;status:string}{return this.store.db.transaction(()=>{
-  const run=this.store.run(input.run_id);
+  const run=this.store.db.all<{id:string;current_attempt:number;status:string;context_json:string|null}>(`SELECT id,current_attempt,status,
+   CASE WHEN length(CAST(context_json AS BLOB))<=1048576 THEN context_json END AS context_json FROM runs WHERE id=?`,input.run_id)[0];
+  requireThat(run,'NOT_FOUND','Run unavailable.',404);
   requireThat(run.current_attempt===input.attempt&&run.status==='running','REVISION_CONFLICT','Effect is not associated with a running attempt.');
+  requireThat(run.context_json!==null,'CONTEXT_PREPARATION_LIMIT','Historical context exceeds the effect authorization read limit. Stored context and effects were retained.');
   const context=JSON.parse(run.context_json) as ContextSnapshot;
   if(input.classification!=='read_only')requireThat(context.authorization_policy_ids.includes(input.authorization_ref),'FORBIDDEN','This effect is not authorized by the run policy.',403);
   if(input.classification==='idempotent')requireThat(input.provider_idempotency_key,'INVALID_INPUT','Idempotent effects require a provider key.',422);

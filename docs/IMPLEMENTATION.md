@@ -4,6 +4,28 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Effect intent context read boundary (2026-09-25): SQL CASE hydrates context only
+at <=1048576 raw UTF-8 bytes and omits checkpoints. Missing/inactive run checks
+precede overflow refusal; under-limit JS parsing, last-key grants, identity and
+deadline ordering remain unchanged. Above-limit fresh and repeated intents refuse
+CONTEXT_PREPARATION_LIMIT without rewriting stored evidence. Earlier RootChildEffects
+parsing remains unbounded: this is a ledger hydration limit, not a whole-request or
+SQL-work/storage bound. Integration confirms new lock rollback on refusal and an
+existing effect's transition to outcome_unknown remains available.
+Initial red4; initial focused run failed the old 1.1MB parse-reuse success fixture.
+That fixture now explicitly fits below the cap; separate oversized integration
+coverage asserts refusal and retained outcome custody. Final focused248/typecheck,
+backend2264/native child-effects service/dry-run build pass. Full runtime/browser/
+shutdown/desktop matrix not repeated; original intermittent failures stay open.
+- .local/intent-context-red.log SHA256:
+  `77134895180505a72ea332872b268773a284ceb7140fdd8c4d77a0a646f91b2c`
+- .local/intent-context-focused.log SHA256:
+  `d3f5c88b81622903fd3e01c5c729d58acce550ee1dd1888332d4052751727c48`
+- .local/intent-context-focused-final.log SHA256:
+  `2d84826bbae3755345c4c3db305a5a519538ad58b38d7f576aaf0d451dfe0abd`
+- .local/intent-context-integrated.log SHA256:
+  `903fd4bb45ffe7bc5210514c925d15d72c228a4833e62f74f1f3dd724fa2f8d1`
+
 Effect dispatch/idempotency projections (2026-09-25): dispatch reads only run status
 and current_attempt; repeated intent lookup selects its seven identity/status fields
 without destination receipt. No authority predicate changed: intent still parses

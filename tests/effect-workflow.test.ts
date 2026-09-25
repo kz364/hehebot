@@ -38,6 +38,34 @@ function intent(run_id: string): EffectIntent {
     authorization_ref: policy, request_digest: 'sha256:mail-17-INBOX', provider_idempotency_key: 'destination-mail-17' };
 }
 
+it.each([1048576,1048577].flatMap(bytes=>[false,true].map(replay=>({bytes,replay}))))('bounds intent context at $bytes UTF-8 bytes (replay=$replay)',({bytes,replay})=>{
+  const run=activeRoutine(),input=intent(run);
+  if(replay){effects.intent(input);effects.transition(input.id,run,'outcome_unknown',null);}
+  const base=JSON.stringify({...JSON.parse(f.store.run(run).context_json),padding:'界'.repeat(330000)});
+  const context=base+' '.repeat(bytes-Buffer.byteLength(base)),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+  expect(context.length).toBeLessThan(1048576);
+  f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,run);
+  const before=f.db.all('SELECT * FROM effects'),read=vi.spyOn(f.db,'all');
+  try{
+    if(bytes>1048576)expect(()=>effects.intent(input)).toThrowError(expect.objectContaining({code:'CONTEXT_PREPARATION_LIMIT'}));
+    else expect(effects.intent(input)).toEqual({id:input.id,status:replay?'outcome_unknown':'intent'});
+    const rows=read.mock.results[0].value;
+    expect(rows[0]).not.toHaveProperty('checkpoint_json');
+    expect(rows[0].context_json).toBe(bytes>1048576?null:context);
+  }finally{read.mockRestore();}
+  expect(f.store.run(run)).toMatchObject({context_json:context,checkpoint_json:checkpoint});
+  if(bytes>1048576||replay)expect(f.db.all('SELECT * FROM effects')).toEqual(before);
+});
+
+it.each([true,false])('keeps JavaScript last-key grant semantics before intent replay (grant=%s)',granted=>{
+  const run=activeRoutine(),input=intent(run);effects.intent(input);
+  const context=`{"authorization_policy_ids":${JSON.stringify(granted?[]:[policy])},"authorization_policy_ids":${JSON.stringify(granted?[policy]:[])}}`;
+  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',context,run);
+  f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?',f.core.now(),run);
+  if(granted)expect(effects.intent(input)).toEqual({id:input.id,status:'intent'});
+  else expect(()=>effects.intent(input)).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
+});
+
 it.each([false,true])('dispatch validation omits historical run bodies (expired=%s)',expired=>{
   const run=activeRoutine(),input=intent(run);effects.intent(input);
   f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',JSON.stringify({padding:'界'.repeat(400000)}),JSON.stringify({padding:'x'.repeat(1100000)}),run);
