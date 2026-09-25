@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { NativeTaskLedger } from '../src/core/native-tasks';
 import { ResourceLedger } from '../src/core/resources';
@@ -47,6 +47,31 @@ beforeEach(() => {
  boundary = new RootChildEffects(f.store, f.core, life);
 });
 afterEach(() => f.close());
+
+it('reuses the selected child parse for policy checks and reconciliation without rewriting its snapshot', () => {
+ const stored=f.store.run(child).context_json;
+ const snapshot=stored.slice(0,-1)+`,"padding":"${'x'.repeat(1100000)}","authorization_policy_ids":[],"authorization_policy_ids":["${policy}"]}`;
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
+ const input=intent(),parse=vi.spyOn(JSON,'parse');
+ try{
+  expect(boundary.intent(input)).toEqual({id:input.effect.id,status:'intent'});
+  // One boundary parse plus the independent EffectLedger authorization parse.
+  expect(parse.mock.calls.filter(([text])=>text===snapshot)).toHaveLength(2);
+  parse.mockClear();
+  boundary.transition(result(input,'outcome_unknown'));
+  expect(parse.mock.calls.filter(([text])=>text===snapshot)).toHaveLength(1);
+ }finally{parse.mockRestore();}
+ expect(f.store.run(child).context_json).toBe(snapshot);
+ expect(effects()).toEqual([expect.objectContaining({run_id:child,status:'outcome_unknown'})]);
+ expect(locks()).toHaveLength(2);
+});
+
+it('checks child attempt custody before parsing a null historical context', () => {
+ f.db.exec("UPDATE runs SET context_json='null' WHERE id=?",child);
+ f.db.exec('UPDATE attempts SET boot_id=? WHERE run_id=?',randomUUID(),child);
+ rejects(()=>boundary.intent(intent()),'STALE_EPOCH');
+ expect(effects()).toEqual([]); expect(locks()).toEqual([]);
+});
 
 it('records child-owned intent and canonical locks after root completion; envelope binds original custody and request', () => {
  life.complete(identity, root, 1, { status: 'completed', text: 'Root result is not descendant settlement' });

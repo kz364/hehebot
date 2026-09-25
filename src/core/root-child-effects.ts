@@ -25,12 +25,14 @@ export class RootChildEffects {
   requireThat(root.role === 'coordinator' && root.parent_run_id === null && child.id !== root.id, 'FORBIDDEN', 'Select a descendant of the coordinator root.', 403);
   const rootContext = JSON.parse(root.context_json) as ContextSnapshot;
   const lineage: Run[] = [], seen = new Set<string>();
+  let childContext!: ContextSnapshot;
   let current = child;
   while (true) {
    requireThat(!seen.has(current.id), 'FORBIDDEN', 'Native ancestry contains a cycle.', 403);
    seen.add(current.id); lineage.push(current);
    this.lifecycle.authorizeAttempt(identity, current.id, current.current_attempt);
    const context = JSON.parse(current.context_json) as ContextSnapshot;
+   if (current.id === child.id) childContext = context;
    const scope = `${current.persona_id}/${current.routine_id ? `routine/${current.routine_id}` : context.room_id ? `room/${context.room_id}` : 'personal'}`;
    requireThat(current.persona_id === root.persona_id && context.persona?.id === current.persona_id &&
     current.routine_id === root.routine_id && (context.routine?.id ?? null) === current.routine_id &&
@@ -47,7 +49,7 @@ export class RootChildEffects {
    current = parent;
   }
   const custody = `root-child-v1:${digest([identity.epoch, identity.boot_id, root.id, rootAttempt, child.id, attempt])}:`;
-  return { root, child, rootContext, childContext: JSON.parse(child.context_json) as ContextSnapshot, lineage, custody };
+  return { root, child, rootContext, childContext, lineage, custody };
  }
 
  intent(input: RootChildEffectIntent): { id: string; status: string } {

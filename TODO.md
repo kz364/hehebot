@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** queued-context expiry reuses
+**Current checkpoint (2026-09-25, verified locally):** root-child effect admission
+reuses the selected child's lineage parse without moving attempt checks or removing
+independent EffectLedger authorization. Duplicate-key >1MiB snapshot and stale-boot
+precedence regressions pass; duplicate-parse mutant fails1, focused46/backend2099/
+typecheck/build pass. Full runtime/browser/native/shutdown/desktop not rerun for
+this parse-only unit. Context sizes, SQL/storage bounds and native recovery remain
+open; local only and gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** queued-context expiry reuses
 its parsed snapshot rather than parsing large historical text twice. A >1MiB
 duplicate-key fixture pins exact last-key JS output; duplicate-parse mutant fails1,
 focused retention/skills20 and typecheck pass. No full matrix rerun for this local

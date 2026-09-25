@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Selected-child parse reuse (2026-09-25): RootChildEffects.admitted retains the
+selected child's first lineage parse for later policy checks. Attempt authorization
+still precedes parsing; root parsing and the separate EffectLedger authorization
+parse remain unchanged. >1MiB duplicate-policy-key fixture asserts exact stored
+bytes, intent/reconciliation parse counts and retained unknown-effect locks. Stale
+child boot with null context still returns STALE_EPOCH before context access.
+Initial test omitted the independent ledger parse (retained child-parse-red.log);
+corrected duplicate-parse mutant fails1. Focused46/typecheck/backend2099/build pass.
+Evidence .local/child-parse-mutant.log SHA256
+`60e50d9cd518846d80b22e8d3a3dc144f6a47ed4771c16d8f59b0ea7032d705d`;
+.local/child-parse-integrated.log SHA256
+`f81f16b34749da2f52142c50e8ccf48de93fbf8e8b89f716931e8dcf407cc9c0`.
+Full runtime/browser/native/shutdown/desktop not rerun for this parse-only unit.
+No SQL/storage bound, snapshot rewrite, replay permission or production gate change.
+
 Queued snapshot parse reuse (2026-09-25): expireQueuedContexts retains its first
 JSON.parse result for instruction/room projection. A >1MiB historical fixture with
 duplicate instruction/room keys asserts one parse and exact last-key JS output.

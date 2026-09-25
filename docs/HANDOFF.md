@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Root-child admission now reuses the selected child's lineage parse. Root parsing,
+authorization order and independent EffectLedger validation remain unchanged.
+Duplicate-parse mutant fails1; focused46/backend2099/typecheck/build pass, including
+stale-boot precedence, duplicate-key snapshot preservation and unknown-effect locks.
+Full matrix not rerun for this parse-only unit. No active checks/children/delivery;
+schedule enabled. Next: actual context-body/scan/storage bounds and native recovery,
+not claims that parse reuse establishes those bounds. Gates unchanged, local only.
+
 Queued-context expiry now reuses one parsed snapshot; duplicate-key >1MiB fixture
 preserves JS last-key semantics. Corrected duplicate-parse mutant fails1; retention/
 skills20 and typecheck pass. Initial ineligible fixture failures retained/disclosed
