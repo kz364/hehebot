@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** reconciliation receipt hydration
+**Current checkpoint (2026-09-25, verified locally):** effect dispatch validates run
+metadata without context/checkpoint hydration; repeated intent lookup excludes
+destination receipts. Exact identity conflicts, deadlines and unknown outcome replay
+unchanged. Red3/focused313/backend2257/typecheck/build pass. Intent authority still
+parses full context; remaining historical/storage/native recovery bounds stay open.
+Full runtime/browser/native/shutdown/desktop matrix not rerun for this projection
+unit. Local only; production gates and original intermittent failures unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** reconciliation receipt hydration
 caps at1048576 raw UTF-8 bytes. Larger receipts refuse RECEIPT_PREPARATION_LIMIT
 without changing evidence/outcome, including fresh commands matching prior owner
 decisions. Saved command-key replay remains intact; digest rejection stays earlier.

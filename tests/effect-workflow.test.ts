@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ControlCore, parseCommand } from '../src/core/control';
 import { Store } from '../src/core/store';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
@@ -37,6 +37,38 @@ function intent(run_id: string): EffectIntent {
   return { id: randomUUID(), run_id, attempt: 1, action_key: 'synthetic:mail-17:restore', classification: 'idempotent',
     authorization_ref: policy, request_digest: 'sha256:mail-17-INBOX', provider_idempotency_key: 'destination-mail-17' };
 }
+
+it.each([false,true])('dispatch validation omits historical run bodies (expired=%s)',expired=>{
+  const run=activeRoutine(),input=intent(run);effects.intent(input);
+  f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',JSON.stringify({padding:'界'.repeat(400000)}),JSON.stringify({padding:'x'.repeat(1100000)}),run);
+  if(expired)f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?',f.core.now(),run);
+  const before=f.store.run(run),read=vi.spyOn(f.db,'all');
+  try{
+    if(expired)expect(()=>effects.transition(input.id,run,'dispatched',null)).toThrowError(expect.objectContaining({code:'DEADLINE_EXCEEDED'}));
+    else effects.transition(input.id,run,'dispatched',null);
+    const reads=read.mock.calls.flatMap(([sql,id],i)=>sql.includes('FROM runs WHERE id=?')&&id===run?[read.mock.results[i].value]:[]);
+    expect(reads.length).toBeGreaterThan(0);
+    for(const rows of reads)for(const row of rows){expect(row).not.toHaveProperty('context_json');expect(row).not.toHaveProperty('checkpoint_json');}
+  }finally{read.mockRestore();}
+  expect(f.store.run(run)).toEqual(before);
+  expect(f.db.all('SELECT status FROM effects WHERE id=?',input.id)).toEqual([{status:expired?'intent':'dispatched'}]);
+});
+
+it('intent replay checks identity without hydrating a retained destination receipt',()=>{
+  const run=activeRoutine(),input=intent(run);effects.intent(input);
+  const receipt=JSON.stringify({padding:'界'.repeat(400000)});
+  f.db.exec("UPDATE effects SET status='outcome_unknown',receipt_json=? WHERE id=?",receipt,input.id);
+  f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?',f.core.now(),run);
+  const before=f.db.all('SELECT * FROM effects WHERE id=?',input.id),read=vi.spyOn(f.db,'all');
+  try{
+    expect(effects.intent(input)).toEqual({id:input.id,status:'outcome_unknown'});
+    expect(()=>effects.intent({...input,request_digest:'different'})).toThrowError(expect.objectContaining({code:'IDEMPOTENCY_CONFLICT'}));
+    const reads=read.mock.calls.flatMap(([sql],i)=>sql.includes('FROM effects WHERE action_key=?')?[read.mock.results[i].value]:[]);
+    expect(reads).toHaveLength(2);
+    for(const rows of reads)for(const row of rows)expect(row).not.toHaveProperty('receipt_json');
+  }finally{read.mockRestore();}
+  expect(f.db.all('SELECT * FROM effects WHERE id=?',input.id)).toEqual(before);
+});
 
 it('owner cancellation blocks first dispatch but not late receipts from an already dispatched action', () => {
   const run = activeRoutine(), pending = intent(run);

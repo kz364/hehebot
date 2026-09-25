@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Effect dispatch and replay lookup omit historical run bodies and destination
+receipts respectively. Deadline/identity/unknown outcome semantics unchanged. Red3/
+focused313/backend2257/typecheck/build pass. Intent authority still parses full
+context; next remaining historical/storage/native recovery bounds. No active checks/
+children/delivery; schedule enabled. Full runtime/browser/native/shutdown/desktop
+matrix not rerun for this projection unit; production gates unchanged.
+
 Effect reconciliation caps receipt hydration at1MiB raw UTF-8; larger evidence stays
 stored and refuses RECEIPT_PREPARATION_LIMIT. Fresh semantic replay above limit also
 refuses; saved command-key replay unaffected. Digest precedence unchanged. Red2/

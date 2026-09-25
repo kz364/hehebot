@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Effect dispatch/idempotency projections (2026-09-25): dispatch reads only run status
+and current_attempt; repeated intent lookup selects its seven identity/status fields
+without destination receipt. No authority predicate changed: intent still parses
+full context before replay lookup, all six identity comparisons remain, deadline
+blocks new dispatch while exact unknown-outcome lookup can replay after expiry.
+Old reads fail3; focused313/backend2257/typecheck/dry-run build pass. Tests preserve
+oversized run bodies and retained unknown receipt and distinguish identity conflict
+from expiry. Full runtime/browser/native/shutdown/desktop matrix not repeated.
+- .local/effect-metadata-red.log SHA256:
+  `fce2b3d54186ee57dc11e36063265dbe5ee0906ffd2b27bb55b5a9cf2071cd7f`
+- .local/effect-metadata-focused.log SHA256:
+  `36be5bbc50c763e6bac602bc6bbcbf8fe1d4f17d658921706abe5154b6506fce`
+- .local/effect-metadata-backend.log SHA256:
+  `ac23b716b066447061ef5ad80fb88ba798139d6e2dc83483a8acff79ef1c162d`
+
 Reconciliation receipt read limit (2026-09-25): SQL CASE returns receipt_json only
 at <=1048576 raw UTF-8 bytes, with an overflow flag distinct from stored NULL.
 After existing identity/termination/operation/digest checks, overflow refuses with
