@@ -12,7 +12,18 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** RootChildEffects guarded
+**Current checkpoint (2026-09-25, verified locally):** authority projection now
+ignores escapes in irrelevant fields instead of hydrating the whole snapshot.
+Escaped selected fragments or missing extraction results retain JS fallback;
+escaped keys/duplicate-key order covered. Red2/focused277/backend2293/workerd/
+typecheck/build pass, including >1MiB memory with newline/quote/backslash/lone
+surrogate content and unchanged late outcome custody. Authority-field/fallback
+size, SQL scan/storage and native recovery remain open. Next remaining historical
+representation bounds; no fixed whole-request bound. Full runtime/native service/
+browser/shutdown/desktop matrix not rerun; original intermittent failures and
+production gates unchanged. Local only.
+
+**Previous checkpoint (2026-09-25, verified locally):** RootChildEffects guarded
 projection returns only five authority fields as JSON fragments, leaving original
 snapshots untouched. Duplicate authority keys, escapes, numeric rooms, non-objects
 and raw NUL retain original JS fallback. Red2/focused269/backend2285/real workerd/

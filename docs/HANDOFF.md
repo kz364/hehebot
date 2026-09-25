@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Escape guard now checks only selected authority fragments (and extraction presence),
+not irrelevant body escapes. Red2/focused277/backend2293/workerd/typecheck/build pass.
+Node/workerd escaped >1MiB memory remains stored but excluded from authority reads;
+late outcomes and escaped-key last-wins behavior retained. Next remaining selected-
+field/fallback sizes and historical/storage/native recovery bounds. No active checks/
+children/delivery; schedule enabled. Full runtime/native service/browser/shutdown/
+desktop matrix not rerun for this unit; original intermittent failures unresolved.
+
 Guarded RootChildEffects context projection now strips irrelevant bodies from read
 results, not storage. Five authority fields retain JSON fragments; duplicate keys,
 escapes, numeric rooms, non-objects/raw NUL use original JS fallback. Red2/focused269/

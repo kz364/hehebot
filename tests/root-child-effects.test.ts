@@ -48,10 +48,31 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it.each(['room_id','scope_key','persona','authorization_policy_ids'])('preserves escaped authority key %s',key=>{
+ const input=intent();boundary.intent(input);
+ const snapshot=f.store.run(child).context_json.replace(`"${key}":`,`"\\u${key.charCodeAt(0).toString(16).padStart(4,'0')}${key.slice(1)}":`);
+ expect(snapshot).toContain('\\u');
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
+ expect(boundary.intent(input)).toEqual({id:input.effect.id,status:'intent'});
+ boundary.transition(result(input,'outcome_unknown'));
+ expect(f.store.run(child).context_json).toBe(snapshot);
+});
+
+it.each([false,true])('keeps last-key authority with escaped duplicate room key (allowed=%s)',allowed=>{
+ const input=intent();boundary.intent(input);
+ const original=JSON.stringify({...JSON.parse(f.store.run(child).context_json),room_id:allowed?'foreign':null});
+ const snapshot=original.replace('"room_id":','"\\u0072oom_id":').slice(0,-1)+`,"room_id":${allowed?'null':'"foreign"'}}`;
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
+ if(allowed)boundary.transition(result(input,'outcome_unknown'));
+ else rejects(()=>boundary.transition(result(input,'outcome_unknown')),'FORBIDDEN');
+ expect(effects()).toEqual([expect.objectContaining({id:input.effect.id,status:allowed?'outcome_unknown':'intent'})]);
+ expect(f.store.run(child).context_json).toBe(snapshot);
+});
+
 it.each(['escape','duplicate','number','null','nul'] as const)('retains original authority representation for %s fallback',kind=>{
  const input=intent();boundary.intent(input);
  const original=f.store.run(child).context_json;
- const snapshot=kind==='escape'?JSON.stringify({...JSON.parse(original),instruction:'line\nbreak'}):
+ const snapshot=kind==='escape'?JSON.stringify({...JSON.parse(original),authorization_policy_ids:[policy,'line\nbreak']}):
   kind==='duplicate'?original.slice(0,-1)+',"room_id":null}':
   kind==='number'?JSON.stringify({...JSON.parse(original),room_id:0}):kind==='null'?'null':original+'\u0000ignored';
  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,child);
@@ -67,13 +88,13 @@ it.each(['escape','duplicate','number','null','nul'] as const)('retains original
  expect(effects()).toEqual([expect.objectContaining({id:input.effect.id,status:kind==='escape'||kind==='duplicate'?'outcome_unknown':'intent'})]);
 });
 
-it.each(['intent','outcome'] as const)('projects irrelevant context bodies during child %s',mode=>{
+it.each(['intent','outcome'].flatMap(mode=>[false,true].map(escaped=>({mode,escaped}))))('projects irrelevant context bodies during child $mode (escaped=$escaped)',({mode,escaped})=>{
  const input=intent(grandchild);
  if(mode==='outcome')boundary.intent(input);
  const snapshots=new Map<string,string>();
  for(const id of mode==='intent'?[root,child]:[root,child,grandchild]){
-  const snapshot=JSON.stringify({...JSON.parse(f.store.run(id).context_json),memories:[{body:'界'.repeat(400000)}]});
-  expect(snapshot).not.toContain('\\');
+  const snapshot=JSON.stringify({...JSON.parse(f.store.run(id).context_json),memories:[{body:'界'.repeat(400000)+(escaped?'\n"\\\ud800':'')}]});
+  expect(snapshot.includes('\\')).toBe(escaped);
   snapshots.set(id,snapshot);f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
  }
  const read=vi.spyOn(f.db,'all');

@@ -55,7 +55,7 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
    const effect={id:crypto.randomUUID(),run_id:child.id,attempt:1,action_key:crypto.randomUUID(),classification:'read_only' as const,authorization_ref:'',request_digest:'authority-request',provider_idempotency_key:null};
    boundary.intent({identity,root_run_id:root,root_attempt:1,effect,resources:[]});
    const snapshots=[root,child.id].map(id=>{
-    const snapshot=JSON.stringify({...JSON.parse(store.run(id).context_json),memories:[{body:'界'.repeat(400000)}]});
+    const snapshot=JSON.stringify({...JSON.parse(store.run(id).context_json),memories:[{body:'界'.repeat(400000)+'\n"\\\ud800'}]});
     db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);return {id,snapshot};
    });
    returned.length=0;

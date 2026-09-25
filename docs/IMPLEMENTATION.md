@@ -4,6 +4,27 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Authority escape guard narrowing (2026-09-25): inspect only selected JSON fragments
+for backslashes, falling back if a selected key cannot be extracted. Escapes in
+discarded memory/instruction content no longer force whole-snapshot hydration.
+Selected escaped values, duplicate authority keys, numeric rooms, non-objects and
+raw NUL keep fallback; no authority predicate/order or source storage changed.
+Two escaped-memory hydration tests fail before fix. Final focused277/backend2293/
+typecheck/dry-run build and real workerd migration/authority regressions pass.
+Fixtures cover >1MiB memory with escaped newline, quote, backslash and lone surrogate,
+both new admission and late outcome; four escaped authority-key aliases and both
+duplicate room-key orders preserve JS behavior. No fixed authority-field/fallback
+size or SQL-work/storage bound claimed. Prior full runtime/native service/browser/
+shutdown/desktop matrix not repeated; original intermittent failures remain open.
+- .local/authority-escape-red.log SHA256:
+  `b554ca1b94773a2c28370e3d942a7f147377498e9ce9b11ff5dcecf2b55e70bb`
+- .local/authority-escape-focused.log SHA256:
+  `d60952dc0328be1bad75dd78e1dc8da054dabafe2a4fa3ecd94b6390dfecc960`
+- .local/authority-escape-workerd.log SHA256:
+  `31e20a3f2ab8e18c6b71b8dc26fe979349478be166e32b8ac6af583f762d001a`
+- .local/authority-escape-integrated.log SHA256:
+  `27b14bafe7e3e8af250d72ec777a79622deada8f3f0749c867b94ef65adf9a55`
+
 Guarded authority JSON projection (2026-09-25): RootChildEffects readRun returns
 persona/routine/room_id/scope_key/authorization_policy_ids fragments on the safe
 object path. It retains nested JSON rather than converting to SQL scalar values.
