@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Delegated memory overflow late-descendant bug fixed for new registrations: after
+parent completion clears error, descendants still inherit a custody-only marker
+and remain cancelling. Original regression fails1; focused89/backend2232/runtime682/
+native child service/typecheck/build/encrypted backup drill pass. Both known overflow
+reasons restore as blockers; unknown markers remain inconsistent. No active checks
+or deliveries. Next inspect historical partial overflow snapshots (not rewritten by
+this fix), then remaining historical/storage/native recovery. Prior browser/timed-
+shutdown/desktop matrix not repeated; original intermittency remains unresolved.
+
 Native child clone preparation caps raw inherited context at1MiB. Oversized source
 remains on parent; child receipt/attempt/link survives as cancelling with no-context-
 authority marker. Normal JS clone unchanged. Marker propagates after terminal error

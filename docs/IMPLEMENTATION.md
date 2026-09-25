@@ -4,6 +4,26 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Delegated memory overflow follow-up (2026-09-25): a real regression demonstrated
+that completing the old partial-snapshot child cleared its error and allowed a late
+descendant to become running without required memory. New overflows now retain the
+same custody-only shape with MEMORY_PREPARATION_LIMIT; both known reasons propagate
+after error clearing. Existing revocation/deadline precedence and ordinary cloning
+remain unchanged. Source memory and settled parent are preserved. Restore inspection
+recognizes both exact markers as blockers, rejects unknown reasons and preserves
+all forged-marker checks. Older partial snapshots are not migrated or repaired.
+Verification: focused89/typecheck; backend2232/runtime682/native service --child,
+encrypted backup drill and dry-run build pass. Prior browser/timed-shutdown/desktop
+matrix not repeated; original catalog/alpha intermittency remains unresolved.
+Logs and SHA256:
+- .local/delegated-memory-red.log (original regression fails1):
+  `7139d449b2557fed49ea4594bf472c32057847defcea084fc6aaeccbc253025d`
+- .local/delegated-memory-focused.log:
+  `b47685a07e6d9b3597e7291dbc7316d10014aa62eafd8374c5bbe661890a6e61`
+- .local/delegated-memory-integrated.log:
+  `5c130aec117b5e9ed5b427ce3c1b8d7d717e1edf3fbb221baf820e04e24fca30`
+Local only. No provider/account calls or production-gate changes.
+
 Native inherited-context preparation limit (2026-09-25): new native registrations
 project context only when raw UTF-8 <=1048576 bytes, after existing authority and
 receipt/conflict checks. Ordinary <=limit JSON.parse/spread/stringify stays exact.

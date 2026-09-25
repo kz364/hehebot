@@ -45,8 +45,8 @@ it('accepts settled nested historical lineage across a newer root attempt withou
   expect((await readdir(snapshot)).length).toBe(2);
 });
 
-it.each(['cancelling','completed'])('preserves native unavailable-context %s as a blocker, not corruption',async status=>{
-  db.prepare('UPDATE runs SET context_json=?,status=? WHERE id=?').run(JSON.stringify(unavailableContext),status,'child-73');
+it.each(['CONTEXT_PREPARATION_LIMIT','MEMORY_PREPARATION_LIMIT'].flatMap(reason=>['cancelling','completed'].map(status=>({reason,status}))))('preserves native unavailable-context $reason/$status as a blocker, not corruption',async ({reason,status})=>{
+  db.prepare('UPDATE runs SET context_json=?,status=? WHERE id=?').run(JSON.stringify({...unavailableContext,native_child_context_unavailable:reason}),status,'child-73');
   const report=await inspect();
   expect(report.semantic_status).toBe('no_detected_inconsistency');expect(report.inconsistencies).toEqual({});
   expect(report.blockers.NATIVE_CONTEXT_UNAVAILABLE).toBe(1);
@@ -57,8 +57,8 @@ it.each(['cancelling','completed'])('preserves native unavailable-context %s as 
   expect(cli.stdout+cli.stderr).not.toContain(canary);expect(await fingerprint()).toEqual(before);
 });
 
-it.each(['grant','extra-field','duplicate-key','running','coordinator','missing-link'])('does not exempt a forged unavailable-context marker: %s',async kind=>{
-  let context=JSON.stringify({...unavailableContext,...(kind==='grant'?{authorization_policy_ids:['forged-grant']}:{}),...(kind==='extra-field'?{extra:true}:{})});
+it.each(['grant','extra-field','duplicate-key','unknown-reason','running','coordinator','missing-link'])('does not exempt a forged unavailable-context marker: %s',async kind=>{
+  let context=JSON.stringify({...unavailableContext,...(kind==='grant'?{authorization_policy_ids:['forged-grant']}:{}),...(kind==='extra-field'?{extra:true}:{}),...(kind==='unknown-reason'?{native_child_context_unavailable:'UNKNOWN'}:{})});
   if(kind==='duplicate-key')context=context.slice(0,-1)+',"persona":{"id":null}}';
   db.prepare('UPDATE runs SET context_json=? WHERE id=?').run(context,'child-73');
   if(kind==='running')db.exec("UPDATE runs SET status='running' WHERE id='child-73'");

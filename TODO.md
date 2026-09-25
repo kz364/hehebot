@@ -12,7 +12,18 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally):** native-child clone preparation
+**Current checkpoint (2026-09-25, verified locally):** delegated memory overflow
+now stores a persistent non-authorizing marker, not a partial persona snapshot.
+Late descendants remain cancelling after terminal results clear the parent's error;
+receipts/ancestry and source memory remain intact. Restore accepts either exact
+known overflow marker only as a blocker. Real regression failed before the fix;
+focused89/backend2232/runtime682/native child service/typecheck/build/encrypted
+backup drill pass. Older stored partial snapshots are not rewritten. Next inspect
+historical overflow recovery and remaining historical/storage bounds. Prior browser/
+timed-shutdown/desktop matrix not rerun; original intermittency remains unresolved.
+Local only; production gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally):** native-child clone preparation
 loads at most1048576 raw UTF-8 bytes. Overflow retains observed receipt/attempt/
 ancestry as cancelling with a non-authorizing marker; original parent bytes remain.
 Normal JS cloning unchanged. Overflow has persona recovery visibility but no

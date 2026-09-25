@@ -347,6 +347,24 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(life.heartbeat(identity, []).cancellations).not.toContain(child.id);
   });
 
+  it('keeps late descendants non-authorizing after delegated memory overflow settles',()=>{
+    const p=parent();f.core.options.delegations={[bot]:[otherBot]};
+    const memory=randomUUID();
+    f.store.put(memory,'memory',{scope:{kind:'persona',id:otherBot},text:'界'.repeat(50000),explicit_constraint:true,expires_at:null},0,'owner',f.core.now());
+    const input={...receipt(p),persona_id:otherBot},child=tasks.register(identity,input,true);
+    expect(child).toMatchObject({status:'cancelling',error_code:'MEMORY_PREPARATION_LIMIT'});
+    finish(child.id);expect(f.store.run(child.id)).toMatchObject({status:'completed',error_code:null});
+    const settled=f.store.run(child.id);
+    const nested=tasks.register(identity,{...receipt(child.id,'Late delegated descendant'),persona_id:otherBot},true);
+    expect(nested).toMatchObject({status:'cancelling',error_code:'MEMORY_PREPARATION_LIMIT'});
+    for(const id of [child.id,nested.id])expect(JSON.parse(f.store.run(id).context_json)).toMatchObject({
+      native_child_context_unavailable:'MEMORY_PREPARATION_LIMIT',persona:{id:null},scope_key:null,authorization_policy_ids:[],memories:[]});
+    expect(f.store.run(child.id)).toEqual(settled);
+    expect(f.store.get(memory,'memory').body.text).toBe('界'.repeat(50000));
+    expect(life.heartbeat(identity,[]).cancellations).toContain(nested.id);
+    expect(()=>resources.acquire(nested.id,1,['late-memory-resource'])).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+  });
+
   it.each(['record-count', 'legacy-body'])('retains observed delegated custody when memory preparation exceeds %s', kind => {
     const p = parent(), originalParent = f.store.run(p);
     f.core.options.delegations = { [bot]: [otherBot] };
@@ -359,7 +377,7 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     const input = { ...receipt(p), persona_id: otherBot };
     const child = tasks.register(identity, input, true);
     expect(child).toMatchObject({ parent_run_id: p, persona_id: otherBot, status: 'cancelling', error_code: 'MEMORY_PREPARATION_LIMIT', current_attempt: 1 });
-    expect(JSON.parse(f.store.run(child.id).context_json)).toMatchObject({ persona: { id: otherBot }, memories: [], instruction: input.title });
+    expect(JSON.parse(f.store.run(child.id).context_json)).toMatchObject({ native_child_context_unavailable: 'MEMORY_PREPARATION_LIMIT', persona: { id: null }, memories: [], instruction: input.title });
     expect(f.db.all('SELECT parent_run_id,parent_attempt,native_run_ref,native_session_key FROM native_task_links WHERE run_id=?', child.id))
       .toEqual([{ parent_run_id: p, parent_attempt: 1, native_run_ref: input.native_run_ref, native_session_key: input.native_session_key }]);
     expect(f.db.all('SELECT status,settled_at,native_run_ref,epoch,boot_id FROM attempts WHERE run_id=?', child.id))

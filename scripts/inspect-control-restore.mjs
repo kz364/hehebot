@@ -52,12 +52,13 @@ export async function inspectControlRestore(directory) {
       const unavailable = db.prepare(`SELECT r.id,r.context_json FROM runs r WHERE r.role='background' AND r.current_attempt=1
         AND r.status IN ('cancelling','recovery_required','waiting','completed','failed','cancelled')
         AND length(CAST(r.context_json AS BLOB))<=4096
-        AND json_extract(r.context_json,'$.native_child_context_unavailable')='CONTEXT_PREPARATION_LIMIT'
+        AND json_extract(r.context_json,'$.native_child_context_unavailable') IN ('CONTEXT_PREPARATION_LIMIT','MEMORY_PREPARATION_LIMIT')
         AND EXISTS(SELECT 1 FROM native_task_links n JOIN attempts a ON a.run_id=n.run_id AND a.attempt=1
           WHERE n.run_id=r.id AND n.parent_run_id=r.parent_run_id AND a.native_run_ref=n.native_run_ref)`).all().filter(row => {
         const context = JSON.parse(row.context_json);
         return typeof context.instruction === 'string' && context.instruction.length > 0 && context.instruction.length <= 200 &&
-          row.context_json === JSON.stringify({schema_version:1,native_child_context_unavailable:'CONTEXT_PREPARATION_LIMIT',
+          ['CONTEXT_PREPARATION_LIMIT','MEMORY_PREPARATION_LIMIT'].includes(context.native_child_context_unavailable) &&
+          row.context_json === JSON.stringify({schema_version:1,native_child_context_unavailable:context.native_child_context_unavailable,
             instruction:context.instruction,persona:{id:null},routine:null,room_id:null,scope_key:null,
             memories:[],skills:[],context_events:[],authorization_policy_ids:[]});
       }).map(row => row.id);
