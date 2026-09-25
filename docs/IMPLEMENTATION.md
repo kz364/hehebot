@@ -4,6 +4,23 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Integrated native-registration checkpoint (2026-09-25 Asia/Jakarta): complete
+`bash scripts/verify-codex.sh` on local1487769 exits0 (PID1192490), ending with
+`{"status":"passed","scope":"credential-free Codex and control contracts","assistantOperational":false,"productionAdmission":false,"modelJudgmentVerified":false}`.
+Backend1996/runtime682, backup/restore, license/preparation, Worker/HTTP31, portal
+browser, native recovery/tools, warm/background manager and timed auto-stop,
+strict launcher, service modes and final dry-run build all pass in one run.
+Evidence `.local/native-registration-combined.log`, SHA256
+`b960a732f7bb677486e1480a74e409755d573c49e9d2879a53f6254edce16288`.
+Connector catalog passes unchanged in this run; this does not resolve the earlier
+intermittency or rewrite the earlier segmented verifier result. Independent
+`npm ci --prefix desktop && npm test --prefix desktop` exits0,16/16 tests
+(PID1192617). Install reports14 advisories (13 high,1 critical); dependency versions
+were not changed. Generated types/contracts left the tracked worktree unchanged.
+No live account/provider/model calls, push, deploy or production-gate changes.
+Snapshot cloning/root-generation read bounds, native restoration/recursive
+settlement and broader TODO/external acceptance remain incomplete.
+
 Native parent deferred read (2026-09-25 Asia/Jakarta): registration reads parent
 metadata, fetching context only after duplicate receipt handling. The clone itself
 is unchanged. Extended actual-row regression proves no parent checkpoint on new

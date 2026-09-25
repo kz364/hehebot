@@ -7,9 +7,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 Parent registration now selects metadata and defers context read until a genuinely
 new child. Ordinary replay reads no parent/child snapshots; alpha authority may
 still read root/generation context. Red2/focused269/backend1996/HTTP31/workerd/
-typecheck/build pass. Runtime682/native-child service passed on preceding response
-commit, not rerun after this two-line production change. Browser/shutdown/desktop
-matrix not rerun. Keep JS clone: executed duplicate-key probe and focused oracle
+typecheck/build pass. Full combined verifier now passes on local1487769, including
+runtime682, browser, native, shutdown, launcher and service matrix; desktop16 passes.
+Log `.local/native-registration-combined.log`, SHA256
+`b960a732f7bb677486e1480a74e409755d573c49e9d2879a53f6254edce16288`.
+Catalog passed unchanged; intermittent cause remains unresolved. Desktop install
+reported14 advisories (13 high,1 critical), no dependency edits. No active checks/
+children/deliveries; schedule enabled; no push/deploy or gate changes.
+Keep JS clone: executed duplicate-key probe and focused oracle
 decision reject naive json_set/raw copying. SQL consumers extract first keys while
 JS takes last; current cloning normalizes unknown fields too. Tests pin duplicate
 instruction/room/scope/grants, nested unknown fields, overflow number normalization,

@@ -15,9 +15,12 @@ still require their applicable approval. Completed fixtures are not live accepta
 **Current checkpoint (2026-09-25, verified locally):** native registration parent
 reads use metadata; context is fetched only for new child composition. Ordinary
 duplicate receipts read neither parent nor child snapshots. Alpha root/generation
-authority checks still read context separately. Red2/focused269/backend1996/HTTP31/
-workerd/typecheck/build pass. Runtime682/native-child service passed immediately
-before this localized read change, not rerun after it. New child JS cloning stays:
+authority checks still read context separately. Red2/focused269 pass. The complete
+`bash scripts/verify-codex.sh` passes on local1487769: backend1996/runtime682,
+Worker/HTTP31, browser, native, shutdown, launcher, service and build. Desktop16
+also passes. Catalog passed unchanged, but prior intermittency is not resolved.
+Desktop install reports14 advisories (13 high,1 critical); no dependency edits.
+New child JS cloning stays:
 SQL json_set/raw copy changes duplicate-key instruction/scope/authority semantics.
 Next: establish a snapshot representation invariant before SQL-copy adoption;
 continue remaining root/generation read bounds and native restoration/settlement.
