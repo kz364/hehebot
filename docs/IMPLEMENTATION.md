@@ -4,6 +4,25 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Complete authority checkpoint verification (2026-09-26 Asia/Jakarta): on exact
+local3815bc3, `bash scripts/verify-codex.sh` passed in one uninterrupted invocation,
+PID1472439 exit0. Backend2324/runtime682/HTTP31, actual workerd1MiB/4MiB authority
+boundaries, encrypted backup/restore drill, connector compatibility, browser/native,
+warm/background normal and pending-maintenance automatic-stop, strict launcher,
+all service modes and dry-run build passed. Final machine-readable result reports
+status=passed with assistantOperational/productionAdmission/modelJudgmentVerified
+all false. Strict launcher2126 lock probes, private mount/network namespaces and
+non-root execution; its report explicitly does not prove production configuration,
+containment, settlement or safe resume. Desktop `npm ci --prefix desktop && npm test
+--prefix desktop` independently passed16 tests (1472561 exit0); installation still
+reports14 advisories (13 high,1 critical), versions unchanged. No source changes,
+no remaining workerd process, /etc/codex and /.sprite absent afterward. Earlier
+catalog/alpha intermittent failures did not reproduce; cause remains unresolved.
+This closes the recent checkpoint's full-matrix verification gap, not remaining
+existing-key/SQL/storage/native recovery or live/external product acceptance.
+- .local/authority-combined-verification.log SHA256: `8b62ad21ad36ea2f077643f2866f0b0c38af75b72cd61dba458e7fd1fd4ca53b`
+- .local/authority-desktop-verification.log SHA256: `479f873bf6656dda119512800a7fe8f32128d5a47c2663962be277693d0454cd`
+
 Aggregate authority read budget (2026-09-26 Asia/Jakarta): unseen action keys now
 receive at most 4194304 UTF-8 bytes across RootChildEffects authority reads. Each
 query returns byte metadata and applies min(1048576, remaining) before returning

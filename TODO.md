@@ -12,7 +12,18 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** new action keys now have
+**Current checkpoint (2026-09-26, verified locally):** complete credential-free
+verifier on local3815bc3 passed in one invocation (1472439 exit0): backend2324,
+runtime682, HTTP31, encrypted backup drill, workerd aggregate authority boundaries,
+browser/native/warm+background timed shutdown/strict launcher/service/build stages.
+Reference desktop16 separately passes; install still reports14 advisories
+(13 high,1 critical), versions unchanged. No source changes or host fixture residue.
+Prior catalog/alpha intermittency did not reproduce; its cause remains unresolved.
+Next existing-key hydration, SQL/storage bounds and native restoration/settlement;
+broader acceptance and external gates remain open. Local only; no publication or
+production-gate changes.
+
+**Previous checkpoint (2026-09-26, verified locally):** new action keys now have
 a 4MiB aggregate UTF-8 authority-body read budget in RootChildEffects, retaining
 the 1MiB per-read ceiling. Repeated root reads count; overflow returns no body
 and refuses without truncation. Existing keys/outcomes retain full validation

@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Full integrated verification of local3815bc3 passed in one uninterrupted invocation:
+1472439 exit0, backend2324/runtime682/HTTP31, workerd, encrypted backup drill,
+browser/native/shutdown/strict launcher/service/build. Desktop1472561 exit0,16 tests;
+install reports14 advisories (13 high,1 critical), dependency versions unchanged.
+Strict launcher2126 lock probes; /etc/codex and /.sprite absent afterward, no workerd
+residue. No source changes. Earlier catalog/alpha intermittency did not reproduce,
+but is not resolved. No active checks/children/delivery; schedule read and enabled.
+Next existing-key hydration, SQL/storage bounds and native restoration/settlement;
+all broader product and external gates remain open. Local only, no push/deploy.
+
 RootChildEffects now caps aggregate returned authority JSON at 4194304 UTF-8 bytes
 for unseen action keys, including repeated root reads. SQL applies the lesser of
 remaining budget and the 1MiB per-read ceiling before returning a body. Existing
