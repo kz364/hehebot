@@ -402,11 +402,29 @@ describe('executor leases and attempts', () => {
     f.store.put(room,'room',{name:'Recovery room',member_ids:[bot],default_responder_id:bot},0,'owner',f.core.now());
     const old=Array.from({length:23},()=>f.core.enqueue(bot,'private-recovery-context',null,null,null)).sort();
     for(const id of old)f.db.exec("UPDATE runs SET status='recovery_required',context_json=json_set(context_json,'$.room_id',?) WHERE id=?",room,id);
+    f.db.exec("UPDATE runs SET context_json=json_set(context_json,'$.padding',?),checkpoint_json=? WHERE id=?",
+      '界'.repeat(400000),JSON.stringify({private_checkpoint:'x'.repeat(1100000)}),old[0]);
     f.setNow('2026-09-10T00:01:00.000Z');
     for(let i=0;i<137;i++)f.core.enqueue(bot,'newer task',null,null,null);
     expect(f.core.state().recovery).toEqual([]);
-    const before=f.db.all('SELECT * FROM runs ORDER BY id'),first=f.core.recoveryPage(bot);
+    const before=f.db.all('SELECT * FROM runs ORDER BY id');
+    const read=vi.spyOn(f.db,'all');
+    let first:ReturnType<typeof f.core.recoveryPage>;
+    try{
+      first=f.core.recoveryPage(bot);
+      f.core.recoveryPage(room,undefined,100);
+      const pages=read.mock.calls.flatMap(([sql],index)=>sql.includes("FROM runs WHERE status='recovery_required'")?[read.mock.results[index].value]:[]);
+      expect(pages).toHaveLength(2);
+      expect(pages.map(rows=>rows.length)).toEqual([21,23]);
+      for(const rows of pages)for(const row of rows){
+        expect(Object.keys(row)).not.toContain('context_json');
+        expect(Object.keys(row)).not.toContain('checkpoint_json');
+      }
+    }finally{read.mockRestore();}
     expect(first.runs.map(run=>run.id)).toEqual(old.slice(0,20));
+    expect(first.runs).toEqual(old.slice(0,20).map(id=>{
+      const {context_json,checkpoint_json,...metadata}=f.store.run(id);return metadata;
+    }));
     expect(first.next_cursor).toBe(old[19]);
     expect(first.recovery).toHaveLength(20);
     expect(JSON.stringify(first)).not.toContain('private-recovery-context');

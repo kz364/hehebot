@@ -4,6 +4,25 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Recovery-page projection (2026-09-25 Asia/Jakarta): recoveryPage now selects its
+13 public metadata fields rather than reading and discarding context_json and
+checkpoint_json. recoveryMetadata requires only id/current_attempt; its custody
+queries are unchanged. Persona/room scope, cursor ordering/lookahead, response
+metadata and stored snapshots remain exact. Room scope still inspects context
+within SQLite; no SQL-work, total-memory or storage bound is claimed.
+The existing pagination regression now checks DB-returned columns for both scopes
+with >1MiB Unicode context and >1MiB checkpoint, exact public metadata, retained
+snapshots, deleted cursor and invalid input behavior. Old query fails:
+`.local/recovery-page-projection-red.log`, SHA256
+`6b0d27afb1dca231dbe66ace28e49ed6d53ab3ba5883ae217c3a138cd5f51669`.
+Focused142/typecheck pass, `.local/recovery-page-projection-focused.log`, SHA256
+`71a5f7d305100b582e866edbd968f52e23e57f4c75755424248e154da6c65ed3`.
+Final backend1977/HTTP31/workerd/typecheck/build pass, PID1146844 exit0,
+`.local/recovery-page-projection-integrated.log`, SHA256
+`d68fef43e0dfe2963f7e9f05c1bcdb720c2fbe5d3c92fa41a641218e10a13a99`.
+Prior runtime/browser/shutdown/desktop matrix not rerun for this SQL-only unit.
+No UI, native-child registration, external action or production gate change.
+
 Stopped-runtime retry projection (2026-09-25 Asia/Jakarta): observeStopped now
 returns only id, role, current_attempt and error_code for recovery candidates.
 scheduleRetry preserves checkpoint_json inside SQLite with COALESCE instead of

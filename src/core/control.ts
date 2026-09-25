@@ -696,11 +696,11 @@ export class ControlCore {
   requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);
   // Keyset by immutable ID, independent of timeline retention and newest-run
   // windows. Restart pagination to see concurrent arrivals before the cursor.
-  const rows=this.store.db.all<Run>(`SELECT * FROM runs WHERE status='recovery_required' AND ${object.kind==='persona'?'persona_id':"json_extract(context_json,'$.room_id')"}=? AND id>? ORDER BY id LIMIT ?`,conversationId,after??'',limit+1);
+  const rows=this.store.db.all<Omit<Run,'context_json'|'checkpoint_json'>>(`SELECT id,command_id,occurrence_id,persona_id,routine_id,status,current_attempt,error_code,created_at,updated_at,role,parent_run_id,title FROM runs WHERE status='recovery_required' AND ${object.kind==='persona'?'persona_id':"json_extract(context_json,'$.room_id')"}=? AND id>? ORDER BY id LIMIT ?`,conversationId,after??'',limit+1);
   const runs=rows.slice(0,limit),questions=this.questions.list();
-  return {runs:runs.map(({context_json,checkpoint_json,...run})=>run),recovery:runs.map(run=>this.recoveryMetadata(run,questions)),next_cursor:rows.length>limit?runs.at(-1)!.id:null};
+  return {runs,recovery:runs.map(run=>this.recoveryMetadata(run,questions)),next_cursor:rows.length>limit?runs.at(-1)!.id:null};
  }
- private recoveryMetadata(run:Run,unresolvedQuestions:ReadonlyArray<{run_id:string}>){
+ private recoveryMetadata(run:Pick<Run,'id'|'current_attempt'>,unresolvedQuestions:ReadonlyArray<{run_id:string}>){
   const terminated=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,run.current_attempt)[0]?.status==='terminated';
   const operations=this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length>0;
   const effects=this.store.db.all<{id:string;status:string;classification:string;action_key:string;request_digest:string}>("SELECT id,status,classification,action_key,request_digest FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown') ORDER BY id LIMIT 21",run.id);

@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Latest recovery-page projection returns metadata only from SQL, retaining all
+response fields, persona/room filtering, keyset lookahead/cursor and recovery
+decisions. Old query fails the returned-column regression with >1MiB snapshots;
+focused142/typecheck and backend1977/HTTP31/workerd/typecheck/build pass.
+Prior runtime/browser/shutdown/desktop matrix not rerun for this SQL-only unit.
+No active checks/children/deliveries; schedule enabled. Continue other historical
+reads/cloning and storage/scan bounds, preserving native-child custody. SQLite
+still reads context for room filtering; this is not a SQL-work/storage bound.
+Catalog intermittency remains unresolved; no UI change or external action.
+
 Latest local unit: observeStopped selects only id/role/current_attempt/error_code
 for retry scheduling. scheduleRetry preserves checkpoints with SQL COALESCE;
 NULL alone receives the existing retry timestamp. Context/checkpoint bodies no
