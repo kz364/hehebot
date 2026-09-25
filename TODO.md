@@ -17,8 +17,12 @@ context expiry select only consumed fields, excluding retained checkpoints.
 Old queries fail3; >1MiB checkpoint preservation and exact purge/expiry behavior
 pass. Focused54/backend2096/HTTP31/workerd/typecheck/build pass. Context bodies,
 scan counts and storage remain unbounded; native JS cloning retained per the
-representation decision below. Prior full runtime/browser/native/shutdown/desktop
-matrix not rerun. Next: remaining retention body/scan bounds and native restoration/
+representation decision below. Full credential-free verifier now passes in one
+uninterrupted run on local54e71e1: backend2096/runtime682, browser/native recovery,
+timed shutdown, strict launcher, service variants and build; desktop16 separately.
+All operational/admission/model-verification flags remain false. Desktop install
+still reports 14 advisories (13 high, 1 critical); catalog intermittency is unresolved.
+Next: remaining retention body/scan bounds and native restoration/
 recursive settlement. Local only; production gates and external blockers unchanged.
 
 **Previous checkpoint (2026-09-25, verified locally):** root attempt room authority

@@ -7,9 +7,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 Retention follow-up: memory purge and queued-context expiry now omit checkpoints
 and unused metadata from run reads. Old queries fail3; large checkpoint retention,
 exact purge/replay/expiry, grace and skill regressions pass. Focused54/backend2096/
-HTTP31/workerd/typecheck/build pass; prior full runtime/browser/native/shutdown/
-desktop matrix not rerun. No active checks/children/delivery; existing schedule
-enabled. Next retention context-body/scan bounds and native restoration/settlement.
+HTTP31/workerd/typecheck/build pass. Full `verify-codex.sh` now passes in one run
+on local54e71e1 (backend2096/runtime682, browser/native recovery, timed shutdown,
+strict launcher, all service modes/build); independent desktop16/16 passes.
+PIDs1255664/1255685 exited0; do not restart or poll them. All three final operational/
+admission/model-verification flags remain false. Desktop14 advisories and earlier
+catalog intermittency remain unresolved. Logs/hashes are in IMPLEMENTATION.md.
+No active checks/children/delivery; existing schedule enabled. Next retention
+context-body/scan bounds and native restoration/settlement. Local only, not published.
 Do not mistake selected-column reduction for bounded contexts, scans or storage.
 
 Representation follow-up: retain JS native cloning. Source inspection and focused

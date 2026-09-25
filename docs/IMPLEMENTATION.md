@@ -15,8 +15,22 @@ Old-query regressions fail3: `.local/retention-projection-red.log`, SHA256
 Focused54/typecheck/backend2096/HTTP31/workerd/build pass, PID1252535 exit0:
 `.local/retention-projection-final.log`, SHA256
 `5d95a1fbada0081ab225ce5a1879b807ec70488b6e3aee59a7582668cf4a49d8`.
-Prior full runtime/browser/native/shutdown/desktop matrix not rerun for these two
-SQL projections. No native-clone, migration, production-gate or external changes.
+Full follow-through on local54e71e1: `bash scripts/verify-codex.sh` passed in one
+uninterrupted run (PID1255664 exit0): backend2096/runtime682, dependency and
+backup/restore contracts, HTTP31/workerd, browser fixtures, native recovery/tools,
+managers, all intentional timed shutdown variants, strict launcher, all service
+modes and build. Final status passed; assistantOperational, productionAdmission
+and modelJudgmentVerified all false. Evidence:
+`.local/authority-retention-combined.log`, SHA256
+`390e3e7d49414aa9681d3f8cd9e9ac11cdcc81d0162238a321b20b6f2dee5690`.
+`npm ci --prefix desktop && npm test --prefix desktop` passed16/16 (PID1255685
+exit0); install still reports14 advisories (13 high, 1 critical), no package changes.
+`.local/authority-retention-desktop.log`, SHA256
+`46c2204f02ea345d6dc4eff0f94e82108a95cba85b6882a36751c510f3c5e40f`.
+Catalog browser fixture passed unchanged; earlier intermittency remains undiagnosed.
+All providers/models were disposable loopback fixtures, not live account acceptance.
+Post-run `/etc/codex` and `/.sprite` absent; no tracked worktree changes or remaining
+test-codex/workerd serve process. No native-clone, migration, gate or external changes.
 
 Native representation decision (2026-09-25): direct source inspection traced all
 context writers to JSON.stringify or literal {}, but pinned export/import/backup
