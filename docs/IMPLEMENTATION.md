@@ -4,6 +4,39 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native inherited-context preparation limit (2026-09-25): new native registrations
+project context only when raw UTF-8 <=1048576 bytes, after existing authority and
+receipt/conflict checks. Ordinary <=limit JSON.parse/spread/stringify stays exact.
+Overflow retains child/run/attempt/link custody as cancelling, preserving existing
+revocation/deadline precedence. Parent bytes remain unchanged; no raw SQL clone.
+Focused oracle advice identified raw duplicate-key scope leakage through task
+summaries and alpha reads even on cancelling children. The chosen custody-only
+marker carries null context persona/room/scope and empty grants/skills/memories;
+actual owner persona and ancestry stay in run metadata. Persona task/recovery
+visibility remains; inherited room placement is deliberately unavailable. Marker
+propagation keeps late descendant metadata cancelling after terminal results clear
+the parent's error; it does not attest native stop. Removing it yields a running
+descendant (mutant fails1).
+Restore inspection recognizes only the exact <=4096-byte marker on a matching
+native child outside executable run states, as NATIVE_CONTEXT_UNAVAILABLE, never readiness. Extra
+grants/keys, duplicate keys, running/foreign-role/missing-link cases stay inconsistent.
+No bound claimed for prior authorization fallback, SQL inspection or total storage.
+Existing cross-persona MEMORY_PREPARATION_LIMIT placeholder is unchanged; inspect
+its late-descendant behavior next rather than assuming this new marker covers it.
+Verification: focused135, final backend2228/typecheck/backup drill; runtime682,
+HTTP31/workerd, native service --child/--child-effects and build pass. Original
+focused test API mistakes corrected before final evidence; not counted as red proof.
+Logs and SHA256:
+- .local/native-context-bound-integrated.log:
+  `d64a9885b6947ed61552dbc0f27cfe3b20cc322f322d7eee6393ffbd6dc00b27`
+- .local/native-context-bound-final.log:
+  `5dc8486c71b5c60ae39b52dde4746891f790b542c9f84cacb5368fffac5e3b9a`
+- .local/native-context-marker-mutant.log:
+  `2bcf85bbff85581bab6fb8ef935d9def76aea383ceff807b3b5872f1cabc11d1`
+- .local/native-context-restore-focused.log:
+  `99cba33f43b371febba6f0a8e29cda35e508badab699317418277b86eb76f7ea`
+Prior browser/timed-shutdown/desktop matrix not repeated. No external actions.
+
 Assignment snapshot projections (2026-09-25): bootstrap/warm/background
 assignNewMessage reads metadata, then reuses runHasFalsyRoom in the original
 short-circuit position. Checkpoints never hydrate; unambiguous context returns

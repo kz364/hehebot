@@ -33,6 +33,21 @@ const custody=()=>JSON.parse(db.all<{value_json:string}>("SELECT value_json FROM
 const receipt=(parent:string)=>({parent_run_id:parent,parent_attempt:1,persona_id:bot,native_run_ref:randomUUID(),native_session_key:randomUUID(),title:'Observed child'});
 async function first(){const identity=await boot();await message();const claim=await runtime('claim',{identity});await runtime('submitted',{identity,run_id:claim.run.id,attempt:1,native_ref:'root'});return {identity,claim};}
 
+it('retains overflow child custody without inherited alpha skill or routine authority',async()=>{
+ const {identity,claim}=await first(),input=receipt(claim.run.id);
+ db.exec("UPDATE runs SET context_json=json_set(context_json,'$.padding',?) WHERE id=?",'界'.repeat(400000),claim.run.id);
+ const source=db.all('SELECT context_json FROM runs WHERE id=?',claim.run.id);
+ const child=await runtime('native-child',{identity,child:input,started:true});
+ expect(child).toMatchObject({status:'cancelling',error_code:'CONTEXT_PREPARATION_LIMIT',parent_run_id:claim.run.id,persona_id:bot});
+ const scope={identity,run_id:child.id,attempt:1};
+ await denied('agent-routines',scope,'FORBIDDEN');
+ await denied('agent-skill',{...scope,skill_id:randomUUID()},'FORBIDDEN');
+ expect((await runtime('heartbeat',{identity,operations:[]})).cancellations).toContain(child.id);
+ expect(await runtime('native-child',{identity,child:input,started:true})).toEqual(child);
+ expect(db.all('SELECT context_json FROM runs WHERE id=?',claim.run.id)).toEqual(source);
+ expect(db.all('SELECT status,settled_at FROM attempts WHERE run_id=?',child.id)).toEqual([{status:'claimed',settled_at:null}]);
+});
+
 it('validates native child custody without hydrating child or root snapshots',async()=>{
  const {identity,claim}=await first(),child=await runtime('native-child',{identity,child:receipt(claim.run.id),started:true});
  db.exec("UPDATE runs SET context_json=json_set(context_json,'$.padding',?),checkpoint_json=?",

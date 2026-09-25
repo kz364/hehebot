@@ -12,7 +12,19 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-25, verified locally in segments):** bootstrap/warm/
+**Current checkpoint (2026-09-25, verified locally):** native-child clone preparation
+loads at most1048576 raw UTF-8 bytes. Overflow retains observed receipt/attempt/
+ancestry as cancelling with a non-authorizing marker; original parent bytes remain.
+Normal JS cloning unchanged. Overflow has persona recovery visibility but no
+inherited room/scope placement; late descendants remain blocked after terminal
+results clear errors. Restore inspection recognizes exact markers as blockers,
+not corruption or resume permission. Marker-removal mutant fails1; focused135/
+backend2228/runtime682/HTTP31/workerd/child services/build/typecheck/backup drill pass.
+Prior browser/timed-shutdown/desktop matrix not repeated for this unit. Next inspect
+the older delegated MEMORY_PREPARATION_LIMIT placeholder's late descendants, then
+remaining historical/storage bounds and native restoration. Gates unchanged.
+
+**Previous checkpoint (2026-09-25, verified locally in segments):** bootstrap/warm/
 background assignment uses metadata plus the existing JS-compatible falsy-room
 predicate. Normal snapshots/checkpoints are not hydrated; ambiguous JSON retains
 the JS fallback. Focused278/backend2213/runtime682/HTTP31/workerd/native/shutdown/

@@ -12,6 +12,9 @@ import {legacyOccurrences} from './legacy-occurrences';
 const schema = await readFile(process.env.HEHEBOT_RESTORE_TEST_SCHEMA ?? new URL('../DB/schema.sql', import.meta.url), 'utf8');
 let directory: string, source: string, snapshot: string, db: DatabaseSync;
 const canary = 'PRIVATE_RESTORE_CANARY_793';
+const unavailableContext = {schema_version:1,native_child_context_unavailable:'CONTEXT_PREPARATION_LIMIT',
+  instruction:canary,persona:{id:null},routine:null,room_id:null,scope_key:null,
+  memories:[],skills:[],context_events:[],authorization_policy_ids:[]};
 function run(id: string, parent: string | null, attempt = 1, status = 'completed', persona = 'persona-a') {
   const context = { schema_version: 1, persona: { id: persona }, routine: null, room_id: null, scope_key: `${persona}/personal`, instruction: canary };
   db.prepare('INSERT INTO runs(id,persona_id,context_json,role,parent_run_id,status,current_attempt,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)')
@@ -40,6 +43,32 @@ it('accepts settled nested historical lineage across a newer root attempt withou
   const before = await fingerprint(); expect(await inspectControlRestore(snapshot)).toEqual(report);
   expect(await fingerprint()).toEqual(before); expect(await readdir(snapshot)).toEqual(expect.arrayContaining(['control.sqlite', 'manifest.json']));
   expect((await readdir(snapshot)).length).toBe(2);
+});
+
+it.each(['cancelling','completed'])('preserves native unavailable-context %s as a blocker, not corruption',async status=>{
+  db.prepare('UPDATE runs SET context_json=?,status=? WHERE id=?').run(JSON.stringify(unavailableContext),status,'child-73');
+  const report=await inspect();
+  expect(report.semantic_status).toBe('no_detected_inconsistency');expect(report.inconsistencies).toEqual({});
+  expect(report.blockers.NATIVE_CONTEXT_UNAVAILABLE).toBe(1);
+  expect(report.coordinated_restore_ready).toBe(false);
+  const before=await fingerprint();
+  const cli=spawnSync(process.execPath,[new URL('../scripts/inspect-control-restore.mjs',import.meta.url).pathname,snapshot],{encoding:'utf8'});
+  expect(cli.status).toBe(2);expect(JSON.parse(cli.stdout)).toEqual(report);
+  expect(cli.stdout+cli.stderr).not.toContain(canary);expect(await fingerprint()).toEqual(before);
+});
+
+it.each(['grant','extra-field','duplicate-key','running','coordinator','missing-link'])('does not exempt a forged unavailable-context marker: %s',async kind=>{
+  let context=JSON.stringify({...unavailableContext,...(kind==='grant'?{authorization_policy_ids:['forged-grant']}:{}),...(kind==='extra-field'?{extra:true}:{})});
+  if(kind==='duplicate-key')context=context.slice(0,-1)+',"persona":{"id":null}}';
+  db.prepare('UPDATE runs SET context_json=? WHERE id=?').run(context,'child-73');
+  if(kind==='running')db.exec("UPDATE runs SET status='running' WHERE id='child-73'");
+  if(kind==='coordinator')db.exec("UPDATE runs SET role='coordinator' WHERE id='child-73'");
+  if(kind==='missing-link')db.exec("DELETE FROM native_task_links WHERE run_id='child-73'");
+  const report=await inspect();
+  expect(report.semantic_status).toBe('inconsistent');
+  expect(report.inconsistencies.CONTEXT_IDENTITY_MISMATCH).toBe(1);
+  expect(report.inconsistencies.ADMITTED_CONTEXT_IDENTITY_MISSING).toBe(1);
+  expect(report.blockers.NATIVE_CONTEXT_UNAVAILABLE).toBeUndefined();
 });
 
 it('keeps exact schema8 history inspectable without flight tables', async () => {

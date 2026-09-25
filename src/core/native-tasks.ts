@@ -56,22 +56,32 @@ export class NativeTaskLedger {
    requireThat(!conflictingThread.length,'IDEMPOTENCY_CONFLICT','Native child thread custody was reused.');
    const existing=this.store.db.all<{run_id:string;parent_run_id:string;parent_attempt:number;native_session_key:string}>('SELECT * FROM native_task_links WHERE native_run_ref=?',input.native_run_ref)[0];
    if(existing){requireThat(existing.parent_run_id===parent.id&&existing.parent_attempt===input.parent_attempt&&existing.native_session_key===input.native_session_key&&this.registration(existing.run_id).persona_id===input.persona_id,'IDEMPOTENCY_CONFLICT','Native child identity was reused.');this.core.ownerAlpha.authorize(existing.run_id,1);const run=this.registration(existing.run_id);return started?this.acknowledgeStart(identity,input,run):run;}
-   const oldContext=JSON.parse(this.store.db.all<Pick<Run,'context_json'>>('SELECT context_json FROM runs WHERE id=?',parent.id)[0].context_json) as ContextSnapshot;
-   let context:ContextSnapshot,memoryBlocked=false;
-   try{context=input.persona_id===parent.persona_id?{...oldContext,instruction:input.title}:this.core.context(input.persona_id,input.title,null,oldContext.room_id);}
+   const raw=this.store.db.all<{context_json:string|null}>('SELECT CASE WHEN length(CAST(context_json AS BLOB))<=1048576 THEN context_json END AS context_json FROM runs WHERE id=?',parent.id)[0].context_json;
+   const oldContext=raw===null?null:JSON.parse(raw) as ContextSnapshot&{native_child_context_unavailable?:string};
+   const contextBlocked=raw===null||oldContext?.native_child_context_unavailable==='CONTEXT_PREPARATION_LIMIT';
+   // Custody only, not a partial admitted snapshot. Raw copying could expose
+   // the wrong duplicate-key room/scope through SQLite's first-key semantics.
+   // Keep the source on the parent and no context authority on this child.
+   // The marker survives terminal results clearing status/error_code, so late
+   // observed descendants cannot turn this tombstone into executable context.
+   const unavailableContext={schema_version:1,native_child_context_unavailable:'CONTEXT_PREPARATION_LIMIT',
+    instruction:input.title,persona:{id:null},routine:null,room_id:null,scope_key:null,
+    memories:[],skills:[],context_events:[],authorization_policy_ids:[]};
+   let context:ContextSnapshot|typeof unavailableContext,memoryBlocked=false;
+   try{context=contextBlocked?unavailableContext:input.persona_id===parent.persona_id?{...oldContext!,instruction:input.title}:this.core.context(input.persona_id,input.title,null,oldContext!.room_id);}
    catch(error){
     if(!(error instanceof ControlError)||error.code!=='MEMORY_PREPARATION_LIMIT')throw error;
     // The native child already exists. Retain its receipt and cancel it; unlike
     // an unstarted owner request, it must not be parked as safely waiting.
     // This placeholder never authorizes execution with omitted constraints.
-    context=this.core.context(input.persona_id,input.title,null,oldContext.room_id,null,[]);memoryBlocked=true;
+    context=this.core.context(input.persona_id,input.title,null,oldContext!.room_id,null,[]);memoryBlocked=true;
    }
    const id=this.core.options.uuid(),now=this.core.now();
    const parentAttempt=this.store.db.all<{deadline_at:string;captured_routine_revision:number|null}>('SELECT deadline_at,captured_routine_revision FROM attempts WHERE run_id=? AND attempt=?',parent.id,input.parent_attempt)[0];
    const deadline=parentAttempt.deadline_at;
    // Revoked alpha context stays revoked even when its deadline also expired.
    const revoked=this.core.ownerAlpha.policy&&['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(parent.error_code??'');
-   const cancelCode=revoked?parent.error_code:deadline<=now?'DEADLINE_EXCEEDED':['cancelled','cancelling','recovery_required'].includes(parent.status)?parent.error_code??'OWNER_CANCELLED':memoryBlocked?'MEMORY_PREPARATION_LIMIT':null;
+   const cancelCode=revoked?parent.error_code:deadline<=now?'DEADLINE_EXCEEDED':['cancelled','cancelling','recovery_required'].includes(parent.status)?parent.error_code??'OWNER_CANCELLED':contextBlocked?'CONTEXT_PREPARATION_LIMIT':memoryBlocked?'MEMORY_PREPARATION_LIMIT':null;
    const cancellation=cancelCode!==null;
    this.store.db.exec("INSERT INTO runs(id,command_id,persona_id,routine_id,context_json,status,current_attempt,error_code,created_at,updated_at,role,parent_run_id,title) VALUES(?,?,?,?,?,?,1,?,?,?,'background',?,?)",id,parent.command_id,input.persona_id,input.persona_id===parent.persona_id?parent.routine_id:null,JSON.stringify(context),cancellation?'cancelling':'claimed',cancelCode,now,now,parent.id,input.title);
    this.store.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,native_run_ref,epoch,boot_id,status,deadline_at,started_at,captured_routine_revision) VALUES(?,1,?,?,?,?,?,?,?,?)",id,`native:${input.native_run_ref}`,input.native_run_ref,identity.epoch,identity.boot_id,'claimed',deadline,now,input.persona_id===parent.persona_id?parentAttempt.captured_routine_revision:null);

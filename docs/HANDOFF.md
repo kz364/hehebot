@@ -4,6 +4,18 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-25 Asia/Jakarta)
 
+Native child clone preparation caps raw inherited context at1MiB. Oversized source
+remains on parent; child receipt/attempt/link survives as cancelling with no-context-
+authority marker. Normal JS clone unchanged. Marker propagates after terminal error
+clearing; marker-removal mutant fails1. Persona recovery visible, inherited room
+placement intentionally unavailable. Exact markers restore as blockers, not corrupt
+or resumable context. Focused135/backend2228/runtime682/HTTP31/workerd/native child
+services/build/typecheck/encrypted backup drill pass. No active checks/children/
+delivery. Next inspect existing delegated MEMORY_PREPARATION_LIMIT placeholder
+after terminal results and late descendants, then historical/storage/native recovery.
+Earlier auth fallback and SQL byte inspection remain unbounded. Prior browser/
+timed-shutdown/desktop matrix not rerun; original intermittency evidence retained.
+
 Assignment paths now read metadata plus existing falsy-room projection; historical
 JS fallback/order preserved. Focused278/backend2213/runtime682/HTTP31/workerd and
 native/shutdown/service/build/desktop16 pass in segments. Original full run failed

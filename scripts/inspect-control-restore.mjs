@@ -19,8 +19,8 @@ export async function inspectControlRestore(directory) {
     if (manifest.bytes > MAX_SEMANTIC_BYTES || inspectedTables.reduce((sum, table) => sum + manifest.counts[table], 0) > MAX_SEMANTIC_ROWS) fail();
     const db = new DatabaseSync(join(directory, 'control.sqlite'), { readOnly: true, allowExtension: false });
     const issues = {}, blockers = {};
-    const count = (group, code, sql) => {
-      const n = db.prepare(`SELECT count(*) AS n FROM (${sql})`).get().n;
+    const count = (group, code, sql, ...values) => {
+      const n = db.prepare(`SELECT count(*) AS n FROM (${sql})`).get(...values).n;
       if (n) group[code] = n;
     };
     try {
@@ -46,8 +46,25 @@ export async function inspectControlRestore(directory) {
         JOIN attempts p ON p.run_id=n.parent_run_id AND p.attempt=n.parent_attempt WHERE
         EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=n.run_id AND a.native_run_ref=n.native_run_ref) AND
         NOT EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=n.run_id AND a.native_run_ref=n.native_run_ref AND a.epoch=p.epoch AND a.boot_id=p.boot_id)`);
+      // Native overflow records custody without an admitted context. Recognize
+      // only its exact small representation outside executable run states;
+      // a marker alone must never hide contradictory identity or extra grants.
+      const unavailable = db.prepare(`SELECT r.id,r.context_json FROM runs r WHERE r.role='background' AND r.current_attempt=1
+        AND r.status IN ('cancelling','recovery_required','waiting','completed','failed','cancelled')
+        AND length(CAST(r.context_json AS BLOB))<=4096
+        AND json_extract(r.context_json,'$.native_child_context_unavailable')='CONTEXT_PREPARATION_LIMIT'
+        AND EXISTS(SELECT 1 FROM native_task_links n JOIN attempts a ON a.run_id=n.run_id AND a.attempt=1
+          WHERE n.run_id=r.id AND n.parent_run_id=r.parent_run_id AND a.native_run_ref=n.native_run_ref)`).all().filter(row => {
+        const context = JSON.parse(row.context_json);
+        return typeof context.instruction === 'string' && context.instruction.length > 0 && context.instruction.length <= 200 &&
+          row.context_json === JSON.stringify({schema_version:1,native_child_context_unavailable:'CONTEXT_PREPARATION_LIMIT',
+            instruction:context.instruction,persona:{id:null},routine:null,room_id:null,scope_key:null,
+            memories:[],skills:[],context_events:[],authorization_policy_ids:[]});
+      }).map(row => row.id);
+      const unavailableIds = JSON.stringify(unavailable);
+      if (unavailable.length) blockers.NATIVE_CONTEXT_UNAVAILABLE = unavailable.length;
       // Context JSON is SQLite-valid already, but may carry contradictory typed identity fields.
-      count(issues, 'CONTEXT_IDENTITY_MISMATCH', `SELECT r.id FROM runs r WHERE json_type(context_json)!='object' OR
+      count(issues, 'CONTEXT_IDENTITY_MISMATCH', `SELECT r.id FROM runs r WHERE r.id NOT IN (SELECT value FROM json_each(?)) AND (json_type(context_json)!='object' OR
         (json_type(context_json,'$.persona') IS NOT NULL AND json_type(context_json,'$.persona')!='object') OR
         (json_type(context_json,'$.persona.id') IS NOT NULL AND
           (json_type(context_json,'$.persona.id')!='text' OR json_extract(context_json,'$.persona.id')!=r.persona_id)) OR
@@ -56,12 +73,12 @@ export async function inspectControlRestore(directory) {
         (json_type(context_json,'$.room_id') IS NOT NULL AND json_type(context_json,'$.room_id') NOT IN ('text','null')) OR
         (json_type(context_json,'$.scope_key') IS NOT NULL AND json_extract(context_json,'$.scope_key') IS NOT
           (r.persona_id||'/'||CASE WHEN r.routine_id IS NOT NULL THEN 'routine/'||r.routine_id
-            WHEN json_type(context_json,'$.room_id')='text' THEN 'room/'||json_extract(context_json,'$.room_id') ELSE 'personal' END))`);
-      count(issues, 'ADMITTED_CONTEXT_IDENTITY_MISSING', `SELECT id FROM runs WHERE current_attempt>0 AND
+            WHEN json_type(context_json,'$.room_id')='text' THEN 'room/'||json_extract(context_json,'$.room_id') ELSE 'personal' END)))`, unavailableIds);
+      count(issues, 'ADMITTED_CONTEXT_IDENTITY_MISSING', `SELECT id FROM runs WHERE id NOT IN (SELECT value FROM json_each(?)) AND current_attempt>0 AND
         (json_type(context_json,'$.persona.id') IS NOT 'text' OR json_type(context_json,'$.scope_key') IS NOT 'text' OR
          json_type(context_json,'$.room_id') IS NULL OR
          (routine_id IS NULL AND json_type(context_json,'$.routine') IS NOT 'null') OR
-         (routine_id IS NOT NULL AND json_type(context_json,'$.routine.id') IS NOT 'text'))`);
+         (routine_id IS NOT NULL AND json_type(context_json,'$.routine.id') IS NOT 'text'))`, unavailableIds);
       count(issues, 'TERMINAL_EFFECT_RECEIPT_INVALID', `SELECT id FROM effects WHERE status IN ('confirmed','failed') AND
         (receipt_json IS NULL OR json_type(receipt_json)!='object' OR NOT EXISTS(SELECT 1 FROM json_each(receipt_json)))`);
 

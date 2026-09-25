@@ -38,7 +38,7 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
       const child = tasks.register(identity, input, started);
       expect(child).not.toHaveProperty('context_json');
       expect(child).not.toHaveProperty('checkpoint_json');
-      expect(child).toMatchObject({parent_run_id:p,persona_id:bot,role:'background',current_attempt:1,status:started?'running':'claimed'});
+      expect(child).toMatchObject({parent_run_id:p,persona_id:bot,role:'background',current_attempt:1,status:'cancelling',error_code:'CONTEXT_PREPARATION_LIMIT'});
       const childReads = read.mock.calls.flatMap(([sql,id],i) => sql.includes('FROM runs WHERE id=?') && id === child.id ? [read.mock.results[i].value] : []);
       expect(childReads.length).toBeGreaterThan(0);
       for (const rows of childReads) for (const row of rows) {
@@ -62,6 +62,79 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
       expect(f.store.run(child.id)).toEqual(retained);
       expect(f.store.run(p)).toEqual(parentBefore);
     } finally { read.mockRestore(); }
+  });
+
+  it.each([1048576,1048577])('bounds native clone preparation at %s raw UTF-8 bytes while retaining observed custody', bytes => {
+    const p=parent(),input=receipt(p,'Bounded child'),snapshot={...JSON.parse(f.store.run(p).context_json),padding:'界'.repeat(340000)};
+    const base=JSON.stringify(snapshot),source=base+' '.repeat(bytes-Buffer.byteLength(base));
+    expect(Buffer.byteLength(source)).toBe(bytes);expect(source.length).toBeLessThan(1048576);
+    f.db.exec('UPDATE runs SET context_json=? WHERE id=?',source,p);
+    const before=f.store.run(p),read=vi.spyOn(f.db,'all');
+    let child:ReturnType<typeof tasks.register>;
+    try{
+      child=tasks.register(identity,input,true);
+      const reads=read.mock.calls.flatMap(([sql,id],i)=>sql.includes('FROM runs WHERE id=?')&&id===p?read.mock.results[i].value:[]);
+      expect(reads.filter(row=>row&&typeof row==='object'&&'context_json' in row)).toEqual([{context_json:bytes===1048576?source:null}]);
+    }finally{read.mockRestore();}
+    expect(f.store.run(p)).toEqual(before);
+    expect(f.db.all('SELECT parent_run_id,parent_attempt,native_run_ref,native_session_key FROM native_task_links WHERE run_id=?',child!.id))
+      .toEqual([{parent_run_id:p,parent_attempt:1,native_run_ref:input.native_run_ref,native_session_key:input.native_session_key}]);
+    if(bytes===1048576){
+      expect(child!).toMatchObject({status:'running',error_code:null});
+      expect(f.store.run(child!.id).context_json).toBe(JSON.stringify({...snapshot,instruction:input.title}));
+    }else{
+      expect(child!).toMatchObject({status:'cancelling',error_code:'CONTEXT_PREPARATION_LIMIT'});
+      expect(JSON.parse(f.store.run(child!.id).context_json)).toEqual({schema_version:1,native_child_context_unavailable:'CONTEXT_PREPARATION_LIMIT',
+        instruction:input.title,persona:{id:null},routine:null,room_id:null,scope_key:null,memories:[],skills:[],context_events:[],authorization_policy_ids:[]});
+      expect(f.db.all('SELECT status,settled_at FROM attempts WHERE run_id=?',child!.id)).toEqual([{status:'claimed',settled_at:null}]);
+      expect(life.heartbeat(identity,[]).cancellations).toContain(child!.id);
+      expect(f.core.taskPage(bot).runs.some(row=>row.id===child!.id)).toBe(true);
+    }
+    expect(tasks.register(identity,input,true)).toEqual(child!);
+    expect(()=>tasks.register(identity,{...input,native_session_key:'conflicting'})).toThrowError(expect.objectContaining({code:'IDEMPOTENCY_CONFLICT'}));
+  });
+
+  it('retains non-authorizing overflow ancestry after terminal results clear cancellation errors',()=>{
+    const p=parent(),room=randomUUID(),input=receipt(p);
+    const source=`{"room_id":null,"room_id":"${room}","scope_key":"${bot}/personal","scope_key":"${bot}/room/${room}","padding":"${'界'.repeat(400000)}"}`;
+    f.db.exec('UPDATE runs SET context_json=? WHERE id=?',source,p);
+    const child=tasks.register(identity,input,true);
+    expect(f.core.context(bot,'Independent request',null,null).task_summaries?.some(row=>row.id===child.id)).toBe(false);
+    expect(f.db.all("SELECT id FROM runs WHERE role='background' AND json_extract(context_json,'$.room_id')=?",room)).toEqual([]);
+    expect(()=>resources.acquire(child.id,1,['overflow-resource'])).toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+    expect(()=>new EffectLedger(f.store,()=>f.core.now()).intent({id:randomUUID(),run_id:child.id,attempt:1,action_key:randomUUID(),classification:'read_only',authorization_ref:'',request_digest:'test',provider_idempotency_key:null}))
+      .toThrowError(expect.objectContaining({code:'REVISION_CONFLICT'}));
+    finish(child.id);expect(f.store.run(child.id)).toMatchObject({status:'completed',error_code:null});
+    const nested=tasks.register(identity,receipt(child.id,'Late observation'),true);
+    expect(nested).toMatchObject({status:'cancelling',error_code:'CONTEXT_PREPARATION_LIMIT',parent_run_id:child.id});
+    expect(JSON.parse(f.store.run(nested.id).context_json).native_child_context_unavailable).toBe('CONTEXT_PREPARATION_LIMIT');
+    finish(p);expect(()=>life.prepareSleep(identity)).toThrowError(expect.objectContaining({code:'SLEEP_DENIED'}));
+    f.setNow('2026-09-10T00:00:31.000Z');life.watchdog();
+    expect(f.store.run(nested.id)).toMatchObject({status:'recovery_required',error_code:'CANCEL_UNCONFIRMED'});
+    expect(()=>life.prepareSleep(identity)).toThrowError(expect.objectContaining({code:'SLEEP_DENIED'}));
+    life.complete(identity,nested.id,1,{status:'cancelled',text:''});
+    expect(f.store.run(p).context_json).toBe(source);
+  });
+
+  it.each(['OWNER_CANCELLED','DEADLINE_EXCEEDED'])('keeps %s ahead of historical context overflow',reason=>{
+    const p=parent();f.db.exec('UPDATE runs SET context_json=? WHERE id=?',JSON.stringify({padding:'界'.repeat(400000)}),p);
+    if(reason==='OWNER_CANCELLED')f.accept({schema_version:1,type:'run.cancel',payload:{run_id:p,reason:'Stop'}});
+    else f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?',f.core.now(),p);
+    expect(tasks.register(identity,receipt(p),true)).toMatchObject({status:'cancelling',error_code:reason});
+  });
+
+  it('retains authorized cross-persona overflow custody without preparing replacement authority',()=>{
+    const p=parent();f.core.options.delegations={[bot]:[otherBot]};
+    const source=JSON.stringify({padding:'界'.repeat(400000)});
+    f.db.exec('UPDATE runs SET context_json=? WHERE id=?',source,p);
+    const prepare=vi.spyOn(f.core,'context');
+    try{
+      const child=tasks.register(identity,{...receipt(p),persona_id:otherBot},true);
+      expect(child).toMatchObject({persona_id:otherBot,parent_run_id:p,status:'cancelling',error_code:'CONTEXT_PREPARATION_LIMIT'});
+      expect(prepare).not.toHaveBeenCalled();
+      expect(f.core.taskPage(otherBot).runs.some(row=>row.id===child.id)).toBe(true);
+      expect(f.store.run(p).context_json).toBe(source);
+    }finally{prepare.mockRestore();}
   });
 
   it.each([null, 'historical-room'])('normalizes historical duplicate keys before freezing native child authority: last room=%s', room => {
