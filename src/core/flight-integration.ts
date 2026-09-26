@@ -3,7 +3,7 @@ import {requireThat} from './errors';
 import type {Store} from './store';
 import type {ControlCore} from './control';
 import type {LifecycleCore,Identity} from './lifecycle';
-import type {ContextSnapshot,RoutinePut} from './types';
+import type {ContextSnapshot,RoutinePut,Run} from './types';
 export const FLIGHT_ROUTINES=Object.freeze({inbox:'22222222-2222-4222-8222-222222222222',triage:'f44e6cd0-1175-8c2e-bff6-cddc2b8e76dc',restore:'5a5bc4ca-7f8d-8fdb-be50-8892e46039b4'});
 export type FlightRegistration={identity:Identity;run_id:string;attempt:number;leg:Omit<FlightRestoreInput,'routine_id'>};
 export type FlightReceipt={identity:Identity;run_id:string;attempt:number;leg_id:string;revision:number;effect_id:string};
@@ -28,7 +28,9 @@ export class FlightRestoreIntegration {
  }
  private authorize(identity:Identity,runId:string,attempt:number,routineId:string){
   this.routine(routineId);this.lifecycle.authorizeAttempt(identity,runId,attempt);
-  const run=this.store.run(runId);const context=JSON.parse(run.context_json) as ContextSnapshot;
+  const run=this.store.db.all<Pick<Run,'current_attempt'|'status'|'persona_id'|'routine_id'|'context_json'>>(
+   'SELECT current_attempt,status,persona_id,routine_id,context_json FROM runs WHERE id=?',runId)[0];
+  requireThat(run,'NOT_FOUND','Run unavailable.',404);const context=JSON.parse(run.context_json) as ContextSnapshot;
   requireThat(run.current_attempt===attempt&&run.status==='running'&&run.persona_id===FLIGHT_ROUTINES.inbox&&run.routine_id===routineId&&context.authorization_policy_ids.includes(this.options.policyId),'FORBIDDEN','Flight action is outside the active run policy.',403);
  }
  register(payload:FlightRegistration){validateFlightPayload('flight-register',payload);return this.store.db.transaction(()=>{this.authorize(payload.identity,payload.run_id,payload.attempt,FLIGHT_ROUTINES.triage);this.routine(FLIGHT_ROUTINES.restore);return this.ledger.put({...payload.leg,routine_id:FLIGHT_ROUTINES.restore});});}

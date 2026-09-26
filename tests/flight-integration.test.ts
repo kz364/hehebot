@@ -15,6 +15,20 @@ describe('authenticated canonical flight integration',()=>{
 });
 
 describe('flight alarm and receipt regressions',()=>{
+ it('authorizes registration without hydrating historical checkpoints',()=>{
+  const f=setup();try{
+   f.db.exec('UPDATE runs SET checkpoint_json=? WHERE id=?','界'.repeat(400000),f.run);
+   const before=f.store.run(f.run),read=vi.spyOn(f.db,'all');
+   try{
+    f.service.register({identity,run_id:f.run,attempt:1,leg});
+    expect(f.service.ledger.nextDue()).toBe('2026-09-09T14:00:00.000Z');
+    const rows=read.mock.calls.flatMap(([sql],i)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[i].value:[]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).not.toHaveProperty('checkpoint_json');
+   }finally{read.mockRestore();}
+   expect(f.store.run(f.run)).toEqual(before);
+  }finally{f.close();}
+ });
  it('cron queue_one replaces cron work without cancelling a queued per-leg deadline',()=>{
   const f=setup();try{
    f.service.register({identity,run_id:f.run,attempt:1,leg});f.service.reconcile();

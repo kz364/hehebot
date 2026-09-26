@@ -12,7 +12,13 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** claimed-quarantine attempt
+**Current checkpoint (2026-09-26, verified locally):** flight integration authority
+omits unused checkpoints while retaining context parsing and check order. Red1/
+focused23/backend2378/typecheck/dry-build pass. No routine activation or live calls.
+Next remaining historical/storage/SQL-work/native recovery bounds. Full matrix not
+rerun; original intermittency/advisories/gates unchanged. No total bounds claimed.
+
+**Previous checkpoint (2026-09-26, verified locally):** claimed-quarantine attempt
 checks return at most two metadata rows and strict outcome-nullness, preserving
 run/epoch/boot collision refusal. Red4/focused109/backend2377/typecheck/dry-build pass.
 Next remaining historical/storage/SQL-work and native recovery bounds. No total bound

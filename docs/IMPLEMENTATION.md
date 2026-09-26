@@ -4,6 +4,20 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Flight integration authority projection (2026-09-26 Asia/Jakarta): select four
+metadata fields and context_json, excluding unused checkpoint/history columns.
+Routine/attempt authority, missing-run errors, context parsing before run-policy
+checks and confirmed-effect receipt handling retain their order. Oversized-checkpoint
+regression fails before implementation; source run stays unchanged after registration.
+Initial expected deadline omitted the eight-hour predeparture offset; corrected to
+14:00Z (06:00+08 departure is 22:00Z, minus eight hours), both red logs retained.
+Focused23/backend2378/typecheck/dry-build pass;1588128 exit0. Logs retained at
+.local/flight-projection-{red,red2,focused,backend,build}.log. This is a local synthetic
+fixture, not live account verification, routine activation or timezone adoption.
+Full runtime/HTTP/local-Worker/browser/native-service/shutdown/desktop matrix not
+rerun; original intermittency/advisories/gates unchanged. Remaining historical/storage/
+SQL-work/native recovery bounds continue; no total bounds claimed.
+
 Claimed-quarantine attempt projection (2026-09-26 Asia/Jakarta): the existing OR
 lookup selects seven metadata fields and combined strict nullness for native ref,
 result, release and settlement; LIMIT 2 preserves zero/one/multiple semantics. Any
