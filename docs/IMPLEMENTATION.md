@@ -4,6 +4,25 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Integrated recovery checkpoint (2026-09-26 Asia/Jakarta): complete
+`bash scripts/verify-codex.sh` passes in one invocation on localab33f12 (1621402
+exit0), covering backend2388/runtime688, backup, workerd/HTTP, browser, pinned native
+recovery/tools, warm/background automatic stops with and without pending maintenance,
+strict launcher2148 lock probes, all service variants and dry build. Launcher reports
+uid1000, all five capability masks zero and no-new-privileges. Host fixture paths
+/etc/codex and /.sprite are absent afterward. Final report retains assistantOperational,
+productionAdmission and modelJudgmentVerified false. No segmented rerun or test fix.
+Log .local/recovery-integrated.log SHA256
+01a0cf8a3e61663950c0b253781a23a8df8aa8d8c62c08075dc77b64dee04b34.
+Separate `npm ci --prefix desktop && npm test --prefix desktop` passes16 (1621517
+exit0), log .local/recovery-desktop.log SHA256
+431cb4dde3ff6a60996cf2789263c3a6400c91bd8ad58a65b2f79bd8442ba76b.
+Its14 advisories (13 high,1 critical) remain; dependency versions unchanged.
+Catalog/alpha intermittency did not reproduce, not proved resolved. No live account/
+provider verification, publication, shared migration or production-gate change.
+Native restoration and historical/storage/existing-key bounds remain open; whole-
+record journal I/O and total storage/time remain unbounded.
+
 Native origin lookup (2026-09-26 Asia/Jakarta): sync lazily caches each validated
 thread origin within the captured native snapshot, not across calls. Parent run IDs
 still come from the evolving mapping, preserving parent-first registration, receipt

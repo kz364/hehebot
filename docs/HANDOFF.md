@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Full credential-free verifier on localab33f12 now passes in one invocation1621402
+exit0: backend2388/runtime688, backup/workerd/HTTP/browser/native/automatic shutdown/
+strict launcher/service/build. Separate desktop16 passes1621517;14 advisories remain.
+Evidence and log hashes in IMPLEMENTATION.md, .local/recovery-{integrated,desktop}.log.
+No active checks/children/delivery or host fixture residue; existing schedule enabled.
+Next remaining native restoration and historical/storage/existing-key bounds. Do not
+remove post-RPC observation rereads or cache authority across calls merely to reduce
+scans. No total journal/storage/time bound. Original intermittency did not reproduce,
+not declared fixed. Local only; no external action or production-gate change.
+
 Native sync now caches validated origins within one captured snapshot, retaining
 parent-first registration, lazy validation order and uncertain receipt custody.
 Red1/focused8/runtime688/typecheck/dry-build pass (1617862 exit0); reverse-order

@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** native child sync caches
+**Current checkpoint (2026-09-26, verified locally):** complete credential-free
+matrix passes in one invocation on localab33f12 (1621402 exit0): backend2388,
+runtime688, backup/workerd/HTTP/browser/native/shutdown/strict launcher/service/build.
+Reference desktop16 separately passes (1621517 exit0);14 advisories remain unchanged.
+Catalog/alpha intermittency did not reproduce, not declared resolved. No host fixture
+residue or active checks/children/delivery. Next remaining native restoration and
+historical/storage/existing-key bounds. No total journal/storage/time bound or live
+acceptance claimed; external gates remain false. Local only, no publication.
+
+**Previous checkpoint (2026-09-26, verified locally):** native child sync caches
 validated origins only within its captured snapshot. Reverse-order regression falls
 from7500 owner reads to at most600; uncertain registration rechecks conflicting
 owners next sync without changing pending custody. Red1/focused8/runtime688/
