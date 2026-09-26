@@ -4,6 +4,17 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stopped read/idempotent uncertainty (2026-09-26 Asia/Jakarta): watchdog expires
+the executor lease with a dispatched read_only/idempotent effect and present
+receipt; repeated observeStopped retains outcome_unknown and its resource lock,
+terminates the local attempt, leaves recovery_required/STALE_EPOCH and queues no
+retry. Advancing retryDue does not requeue it. Removing only scheduleRetry's
+unknown-status predicate fails both cases by scheduling retries, independently of
+the mutation-classification blocker. Production restored unchanged; lifecycle106/
+typecheck pass, .local/stopped-read-effect-{mutant,final}.log. Synthetic effect
+records and stop observations are not live provider or native recovery proof.
+Full matrix not rerun for test-only work; production evidence and gates unchanged.
+
 Retry effect presence (2026-09-26 Asia/Jakarta): replace receipt-body hydration and
 JS some with an exact SQL blocker predicate/LIMIT1, and limit the subsequent
 operation existence read to1. Stored receipt TEXT truthiness is retained: SQL NULL

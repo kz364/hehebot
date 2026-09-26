@@ -530,6 +530,29 @@ describe('executor leases and attempts', () => {
     life.observeStopped({ phase: 'stopped', executionStopped: true, persistentState: 'retained', observedAt: Date.now() });
     expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: claim.run.id, expected_attempt: 1 } })).toMatchObject({ status: 'rejected', error: { code: 'OUTCOME_UNKNOWN' } });
   });
+  it.each(['read_only','idempotent'] as const)('stopped executor does not retry an unknown %s effect with a retained receipt', classification => {
+    const id = claimed().run.id;
+    life.submitted(identity, id, 1, 'uncertain-read');
+    new ResourceLedger(f.store, () => f.core.now()).acquire(id, 1, ['browser:uncertain-read']);
+    const effectId = randomUUID(), receipt = JSON.stringify({ prior_response: 'Not settlement proof' });
+    f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,receipt_json,updated_at) VALUES(?,?,?,?,'dispatched','test','digest',?,?)", effectId, id, randomUUID(), classification, receipt, f.core.now());
+    f.setNow('2026-09-10T00:03:00.000Z');
+    life.watchdog();
+    expect(f.store.run(id)).toMatchObject({ status: 'recovery_required', error_code: 'STALE_EPOCH' });
+    const effects = f.db.all('SELECT * FROM effects'), locks = f.db.all('SELECT * FROM resource_locks');
+    expect(effects).toEqual([expect.objectContaining({ id: effectId, classification, status: 'outcome_unknown', receipt_json: receipt })]);
+    const stopped = { phase: 'stopped' as const, executionStopped: true, persistentState: 'retained' as const, observedAt: Date.now() };
+    life.observeStopped(stopped); life.observeStopped(stopped);
+    expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+    expect(f.store.run(id)).toMatchObject({ status: 'recovery_required', error_code: 'STALE_EPOCH', current_attempt: 1 });
+    expect(f.db.all('SELECT * FROM effects')).toEqual(effects);
+    expect(f.db.all('SELECT * FROM resource_locks')).toEqual(locks);
+    expect(f.db.all('SELECT status,settled_at FROM attempts WHERE run_id=?', id))
+      .toEqual([{ status: 'terminated', settled_at: f.core.now() }]);
+    f.setNow('2026-09-10T00:04:00.000Z'); life.retryDue();
+    expect(f.store.run(id).status).toBe('recovery_required');
+  });
+
   it.each(['intent','dispatched','outcome_unknown'] as const)('retains %s effect locks across confirmed stop and rejects competing work until reconciliation', effectStatus => {
     const claim = claimed(), runId = claim.run.id, resources = new ResourceLedger(f.store, () => f.core.now());
     life.submitted(identity, runId, 1, 'native-root');

@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Stopped read_only/idempotent uncertainty tests preserve unknown effects/receipts
+and locks despite process-termination observation; no automatic retry. Unknown-
+status omission mutant fails2; production restored unchanged, lifecycle106/typecheck
+pass, .local/stopped-read-effect-{mutant,final}.log. Synthetic stop/effect input,
+not live recovery proof. No active checks/children/delivery; schedule enabled.
+Continue restoration/recursive settlement and historical/storage bounds. Prior
+production verification and external gates unchanged.
+
 Retry scheduling now reads one effect blocker without receipt bodies, preserving
 stored-TEXT rather than parsed-JSON truthiness and failed mutation refusal. Pending
 operation read also limited to1. Red8/focused104/backend2407/typecheck/build1687583
