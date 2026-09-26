@@ -553,6 +553,7 @@
           "properties": {
             "memory_budget": {"$ref":"#/$defs/memoryBudget"},
             "memory_read_personas":{"type":"array","maxItems":256,"uniqueItems":true,"items":{"type":"string","format":"uuid"}},
+            "lane": {"type":"string","enum":["coordinator","background"]},
             "persona_models": {
               "type": "object",
               "maxProperties": 256,

@@ -24,6 +24,11 @@ import { codexTextOnlyProfileSha256, createCodexTextOnlyCompletionReceipt,
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// G4b: coordinator-only task-management tools (GROK_ALIGNMENT A4). Never
+// granted to a coordinator task run's own isolated thread; see the grant
+// construction in native.submit below.
+const COORDINATOR_ONLY_TASK_TOOLS = Object.freeze(['hehebot_start_task', 'hehebot_list_tasks',
+  'hehebot_task_detail', 'hehebot_steer_task', 'hehebot_queue_followup', 'hehebot_cancel_task']);
 const ownerAlphaGeneration = value => {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       Object.keys(value).sort().join(',') !== 'boot_id,epoch,transition_id' ||
@@ -506,11 +511,22 @@ export function createCodexService(config, dependencies) {
                 ownerAlpha: { ...alpha, expires_at: row.claim.deadline_at }, now, mcpServers,
                 permissionsProfile: permissions?.name }).submit(input);
             }
+            // G4b (GROK_ALIGNMENT A4): a coordinator task run (marked coordinator_task
+            // by task.start) never carries the coordinator-only task-management
+            // tools into its own isolated thread -- hehebot_send_message (and any
+            // other ordinarily-granted tool) is still available, but the task
+            // cannot itself start, list, steer or cancel tasks. This is
+            // defense-in-depth: ControlCore already refuses task.start from a
+            // background run (see tests/task-tools.test.ts "no recursive fan-out").
+            const taskContext = JSON.parse(run.context_json);
+            const allowedTools = taskContext.coordinator_task === true
+              ? persona.allowedTools.filter(name => !COORDINATOR_ONLY_TASK_TOOLS.includes(name))
+              : persona.allowedTools;
             const grant = { origin: config.portalOrigin, tokenFile: config.runtimeTokenFile,
               ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}),
-              identity, runId: run.id, attempt: run.current_attempt, allowedTools: persona.allowedTools };
-            if (persona.allowedTools.includes('hehebot_read_memory')) {
-              const budget = JSON.parse(run.context_json).memory_budget;
+              identity, runId: run.id, attempt: run.current_attempt, allowedTools };
+            if (allowedTools.includes('hehebot_read_memory')) {
+              const budget = taskContext.memory_budget;
               if (!budget || budget.selected_model !== input.model || budget.run_id !== run.id || budget.attempt !== run.current_attempt) fail('TASK_GRANT_CONFLICT');
               grant.memoryBudget = { selected_model: budget.selected_model, sha256: budget.sha256 };
             }
@@ -523,8 +539,8 @@ export function createCodexService(config, dependencies) {
               command: process.execPath, args: [fileURLToPath(new URL('./agent-tools.mjs', import.meta.url))],
               env: { HEHEBOT_AGENT_TOOLS_CONFIG: journal.path(key),
                 ...(config.tlsCAFile ? { NODE_EXTRA_CA_CERTS: config.tlsCAFile } : {}) },
-              tools: Object.fromEntries(persona.allowedTools.map(name => [name, { approval_mode: 'approve' }])),
-              ...(permissions ? { enabled_tools: persona.allowedTools } : {}),
+              tools: Object.fromEntries(allowedTools.map(name => [name, { approval_mode: 'approve' }])),
+              ...(permissions ? { enabled_tools: allowedTools } : {}),
             } };
             // Fresh service-owned native home has no inherited global MCP config.
             return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, testMode: !alpha,

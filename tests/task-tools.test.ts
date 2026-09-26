@@ -258,3 +258,70 @@ describe('task.event coordinator wake',()=>{
   }
  });
 });
+
+// G4b (GROK_ALIGNMENT A4, docs/AGENT_MODEL.md "one reserved interactive model
+// turn plus at most one background model turn installation-wide"): the claim
+// lane that actually executes a G4 task run. Before this row, a started task
+// sat 'queued' forever because nextClaimableRun() only ever admitted
+// role='coordinator' runs (see the G4 TODO gap note and AGENTS.md trap #6:
+// critical path first).
+describe('claim() background task lane (G4b)',()=>{
+ const claimTask=()=>life.claim(identity,undefined,undefined,[],'background');
+ it('a queued task run is claimable on the background lane with an isolated context snapshot',()=>{
+  const capA=randomUUID();
+  const existing=f.store.get(bot,'persona');
+  f.store.put(bot,'persona',{...existing.body,tool_policy_ids:[capA]},existing.revision,'owner',f.core.now());
+  admitCoordinator();
+  const taskId=start('Research hotels','Find three hotel options for the trip.',[capA]).resource_id!;
+  // The coordinator lane never sees a G4 task run as claimable.
+  expect(life.nextClaimableRun('coordinator')?.id).not.toBe(taskId);
+  expect(life.nextClaimableRun('background')?.id).toBe(taskId);
+  const claim=claimTask();
+  expect(claim).not.toBeNull();
+  // Reused claim envelope fields tell the runtime this is a task run: role,
+  // parent_run_id and title already exist on the Run row/claim response.
+  expect(claim!.run).toMatchObject({id:taskId,role:'background',parent_run_id:coordinatorId,title:'Research hotels',status:'claimed',current_attempt:1});
+  const context=JSON.parse(claim!.run.context_json) as ContextSnapshot;
+  expect(context.instruction).toBe('Find three hotel options for the trip.');
+  expect(context.persona.body.tool_policy_ids).toEqual([capA]); // capability-scoped grant
+  expect(context.coordinator_task).toBe(true);
+  // Isolated: never widened into the coordinator's full persona/history context.
+  expect(context.conversation_history).toBeUndefined();
+  expect(context.task_summaries).toBeUndefined();
+ });
+ it('capacity: two queued tasks are claimed one at a time, the second only after the first completes',()=>{
+  const a=start('A','brief a').resource_id!,b=start('B','brief b').resource_id!;
+  const claimA=claimTask();
+  expect(claimA!.run.id).toBe(a);
+  expect(claimTask()).toBeNull(); // capacity: one active background task installation-wide
+  life.submitted(identity,a,1,'native-a');
+  life.complete(identity,a,1,{status:'completed',text:'done'});
+  const claimB=claimTask();
+  expect(claimB!.run.id).toBe(b);
+ });
+ it('a running background task never blocks the coordinator claim, and a running coordinator never blocks a task claim',()=>{
+  const a=start('A','brief a').resource_id!,b=start('B','brief b').resource_id!;
+  const claimA=claimTask();
+  expect(claimA!.run.id).toBe(a);
+  // The coordinator's own run is already 'running' from admitCoordinator();
+  // queue a second coordinator run and confirm it is claimable regardless of
+  // the background task actively running -- the coordinator slot is never
+  // consumed by a task (reserved interactive).
+  f.db.exec("UPDATE runs SET status='completed' WHERE id=?",coordinatorId);
+  const nextCoordinator=f.accept({schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'Hi'}}).resource_id!;
+  const coordinatorClaim=life.claim(identity);
+  expect(coordinatorClaim!.run.id).toBe(nextCoordinator);
+  // And the background lane is still independently claimable, once task A settles.
+  life.submitted(identity,a,1,'native-a');life.complete(identity,a,1,{status:'completed',text:'done'});
+  expect(claimTask()!.run.id).toBe(b);
+ });
+ it('a queued background task does not consume the coordinator capacity check, and vice versa',()=>{
+  const a=start('A','brief a').resource_id!;
+  // With the coordinator's own attempt still 'running' (admitCoordinator), a
+  // fresh coordinator claim is refused for the ordinary single-coordinator-
+  // lane reason -- never because a queued task exists.
+  expect(life.claim(identity)).toBeNull();
+  // The background lane is unaffected by the coordinator being busy.
+  expect(claimTask()!.run.id).toBe(a);
+ });
+});

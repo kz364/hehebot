@@ -12,6 +12,7 @@ export class ExecutionSupervisor {
     children = /** @type {{sync: () => Promise<unknown>, cancel: (runIds: string[]) => Promise<unknown>, steer?: () => Promise<unknown>, publishOutputs?: () => Promise<unknown>} | null} */ (null),
     admission = /** @type {null | (() => Promise<unknown>)} */ (null),
     claimStage = /** @type {null | ((claim: unknown) => Promise<unknown>)} */ (null),
+    lane = /** @type {'coordinator' | 'background'} */ ('coordinator'),
     memoryCounter = /** @type {null | ((input: {selected_model: string, global: string, scoped: string}, options: {signal: AbortSignal}) => Promise<any>)} */ (null),
     now = Date.now, intervalMs = 20000, onRecovery = () => {} }) {
     if (!activity?.ensure || !activity?.releaseAfterDrain || typeof operations !== 'function' ||
@@ -50,7 +51,7 @@ export class ExecutionSupervisor {
       if (memoryCounter && ['memory-prepare', 'claim'].includes(type)) this.assertLease();
       return control.request(type, payload);
     } };
-    this.bridge = new ExecutionBridge({ control: guardedControl, native: guardedNative, journal, identity, installationId, personas,
+    this.bridge = new ExecutionBridge({ control: guardedControl, native: guardedNative, journal, identity, installationId, personas, lane,
       ...(memoryCounter ? { memoryCounter: async input => {
         this.assertLease();
         const counts = await memoryCounter(input, { signal: this.memoryAbort.signal });
