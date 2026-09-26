@@ -352,11 +352,21 @@ export class LifecycleCore {
     // Root inference release is not family settlement. Uncertain roots block;
     // provider-confirmed process termination retains the existing recovery path.
     if(this.store.db.all(`SELECT r.id FROM runs r WHERE r.role='coordinator' AND r.status IN ('claimed','running','finishing','cancelling','recovery_required','interrupted')
-    AND NOT (r.status IN ('recovery_required','interrupted') AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.status='terminated' AND a.settled_at IS NOT NULL)) AND NOT EXISTS(
+    AND NOT (r.status IN ('recovery_required','interrupted') AND (
+     EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.status='terminated' AND a.settled_at IS NOT NULL)
+     -- G3 (GROK_ALIGNMENT A2, AGENTS.md trap 1): an 'interrupted' run is
+     -- ALREADY terminal per interruptRuns/interruptGeneration, with no
+     -- process-death proof required. Once its current attempt belongs to a
+     -- generation other than the one presenting here, it can never block a
+     -- fresh coordinator claim -- waiting for observeStopped's separate
+     -- 'terminated'+settled_at evidence would reintroduce exactly the
+     -- process-death precondition G3 removes.
+     OR (r.status='interrupted' AND NOT EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?))
+    )) AND NOT EXISTS(
      SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?
      AND json_extract(a.coordinator_release_json,'$.native_ref')=a.native_run_ref
      AND json_extract(a.coordinator_release_json,'$.outcome') IN ('completed','failed','interrupted')
-    ) ${current?'AND EXISTS(SELECT 1 FROM attempts current_attempt WHERE current_attempt.run_id=r.id AND current_attempt.attempt=r.current_attempt AND current_attempt.epoch=? AND current_attempt.boot_id=?)':''} LIMIT 1`,identity.epoch,identity.boot_id,...(current?[current.epoch,current.boot_id]:[])).length)return null;
+    ) ${current?'AND EXISTS(SELECT 1 FROM attempts current_attempt WHERE current_attempt.run_id=r.id AND current_attempt.attempt=r.current_attempt AND current_attempt.epoch=? AND current_attempt.boot_id=?)':''} LIMIT 1`,identity.epoch,identity.boot_id,identity.epoch,identity.boot_id,...(current?[current.epoch,current.boot_id]:[])).length)return null;
     // Match the runtime's bounded family registry without evicting old custody.
     // Admission only needs the threshold, not a census beyond it.
     const unresolved=this.store.db.all<{count:number}>(`SELECT COUNT(*) AS count FROM (SELECT 1 FROM runs r WHERE r.role='coordinator' AND r.current_attempt>0 AND ${current?'EXISTS(SELECT 1 FROM attempts current_attempt WHERE current_attempt.run_id=r.id AND current_attempt.attempt=r.current_attempt AND current_attempt.epoch=? AND current_attempt.boot_id=?) AND ':''}(
@@ -417,9 +427,15 @@ export class LifecycleCore {
    // still needs to know it is a continuation and what the abandoned attempt
    // already told the owner, so it can prepend a short preamble instead of
    // silently repeating or contradicting a committed hehebot_send_message.
-   if(run.current_attempt>0&&run.error_code&&['CANCEL_UNCONFIRMED','STALE_EPOCH'].includes(run.error_code)){
+   if(run.current_attempt>0&&run.error_code&&['CANCEL_UNCONFIRMED','STALE_EPOCH','GENERATION_ADVANCED'].includes(run.error_code)){
     const delivered=this.store.db.all<{text:string}>(`SELECT json_extract(e.payload_json,'$.text') AS text FROM bot_messages b JOIN events e ON e.sequence=b.event_sequence WHERE b.run_id=? AND b.attempt=? ORDER BY b.event_sequence`,run.id,run.current_attempt).map(x=>x.text);
-    context.continuation={previous_attempt:run.current_attempt,reason:run.error_code,delivered_messages:delivered};
+    // G3 (G2 follow-up): the seeded continuation also lists this run's own
+    // still-unresolved outcome_unknown effects, so the fresh attempt can tell
+    // the owner/model to reconcile or ask before redoing them (GROK_ALIGNMENT
+    // A3's seeded brief), instead of silently rediscovering them.
+    const unknownEffects=this.store.db.all<{effect_id:string;action_key:string}>("SELECT id AS effect_id,action_key FROM effects WHERE run_id=? AND status='outcome_unknown' ORDER BY updated_at,id",run.id)
+     .map(e=>({effect_id:e.effect_id,kind:e.action_key}));
+    context.continuation={previous_attempt:run.current_attempt,reason:run.error_code,delivered_messages:delivered,...(unknownEffects.length?{unknown_effects:unknownEffects}:{})};
    }
    const command=run.command_id?this.store.db.all<{type:string}>('SELECT type FROM commands WHERE id=?',run.command_id)[0]:null;
    if(command?.type==='skill.run'||prior.skill_invocation){
@@ -662,7 +678,7 @@ export class LifecycleCore {
  private interruptRuns(runIds:Iterable<string>,reason:string):void {
   const now=this.core.now();
   for(const id of new Set(runIds)){
-   const run=this.store.db.all<Pick<Run,'current_attempt'|'status'|'role'|'error_code'|'persona_id'|'command_id'>>('SELECT current_attempt,status,role,error_code,persona_id,command_id FROM runs WHERE id=?',id)[0];
+   const run=this.store.db.all<Pick<Run,'current_attempt'|'status'|'role'|'error_code'|'persona_id'|'command_id'|'parent_run_id'|'title'>>('SELECT current_attempt,status,role,error_code,persona_id,command_id,parent_run_id,title FROM runs WHERE id=?',id)[0];
    if(!run||['completed','failed','cancelled','interrupted'].includes(run.status))continue;
    const errorCode=run.error_code&&['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code)?run.error_code:reason;
    this.store.db.exec("UPDATE runs SET status='interrupted',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE ? END,updated_at=? WHERE id=?",reason,now,id);
@@ -689,6 +705,18 @@ export class LifecycleCore {
     this.store.event(this.core.options.uuid(),run.persona_id,'notice','system',run.command_id,
      {kind:'needs_you',run_id:id,reason:errorCode,effect_ids:effectIds,choices:['reconcile','retry','abandon']},now);
    }
+   // G2 follow-up (GROK_ALIGNMENT A4): a G4 coordinator task (role='background',
+   // parent_run_id set, and taskStart()'s own `coordinator_task` marker --
+   // never an ordinary native-child background row) that gets fenced into
+   // 'interrupted' still owes its coordinator the same task.event + bounded
+   // wake that complete() fires for an ordinary settlement, so the coordinator
+   // can relay "the task was interrupted" instead of leaving it silently dead.
+   // Bounded marker read (json_extract, never the historical body itself) --
+   // this must not pull a possibly-huge context_json blob into JS memory just
+   // to decide whether a coordinator wake is owed.
+   if(run.role==='background'&&run.parent_run_id&&
+    this.store.db.all<{marker:number|null}>("SELECT json_extract(context_json,'$.coordinator_task') AS marker FROM runs WHERE id=?",id)[0]?.marker===1)
+    this.core.enqueueTaskEvent({id,persona_id:run.persona_id,parent_run_id:run.parent_run_id,title:run.title},'interrupted',`Reason: ${errorCode}.`);
   }
  }
  /** Public fence for one generation `(epoch,boot_id)`: every non-terminal run
@@ -701,6 +729,33 @@ export class LifecycleCore {
    const runIds=this.store.db.all<{id:string}>(`SELECT r.id FROM runs r WHERE r.status IN ('claimed','running','finishing','cancelling','recovery_required')
     AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?)`,epoch,boot_id).map(x=>x.id);
    this.interruptRuns(runIds,reason);
+  });
+ }
+ /** G3 (GROK_ALIGNMENT A2, AGENTS.md trap 1): the successor path. From
+  * READY-with-an-expired-lease, RECOVERY_REQUIRED, or STOPPED, atomically bump
+  * the epoch and fence the retiring generation's live work via
+  * {@link interruptGeneration} in the SAME transaction, then leave the
+  * lifecycle BOOTING so the ordinary boot path (registerBoot/ready) can admit
+  * the new generation. No provider stop observation (`observeStopped`) is
+  * required or awaited -- a same-machine flock takeover (with-executor-lock.sh)
+  * is the only other precondition for a live prior process, and that lives
+  * entirely on the runtime side. Idempotent to call again on the SAME prior
+  * generation: interruptGeneration is itself idempotent (terminal runs are
+  * left alone), so a caller that races another advance simply re-fences an
+  * already-fenced generation.
+  */
+ advanceGeneration(reason:string):{epoch:number} {
+  return this.store.db.transaction(()=>{
+   requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Owner alpha successor start requires its own explicit owner authorization.');
+   const state=this.get(),now=this.core.now();
+   const leaseExpired=state.lease_until!==null&&state.lease_until<=now;
+   requireThat(state.phase==='RECOVERY_REQUIRED'||state.phase==='STOPPED'||(state.phase==='READY'&&leaseExpired),
+    'CAPABILITY_UNAVAILABLE','Generation advance requires an expired lease, recovery, or a stopped runtime.');
+   const priorEpoch=state.epoch,priorBootId=state.boot_id,epoch=priorEpoch+1;
+   this.store.db.exec("UPDATE lifecycle SET epoch=?,boot_id=NULL,phase='BOOTING',desired_state='RUN',lease_until=?,last_heartbeat=NULL,stop_token=NULL WHERE singleton=1",
+    epoch,new Date(this.core.options.now().getTime()+90000).toISOString());
+   if(priorBootId)this.interruptGeneration(priorEpoch,priorBootId,reason);
+   return {epoch};
   });
  }
  watchdog():void {
@@ -753,8 +808,8 @@ export class LifecycleCore {
     AND error_code IN ('TEMPORARY_UNAVAILABLE','DEADLINE_EXCEEDED','STALE_EPOCH','CANCEL_UNCONFIRMED')`))this.scheduleRetry(run,run.error_code??'OUTCOME_UNKNOWN');
   });
  }
- private async requestWake(provider:RuntimeProvider,ref:RuntimeRef,state:Lifecycle):Promise<void> {
-  const operation=this.core.options.uuid(),epoch=state.epoch+1;
+ private async requestWake(provider:RuntimeProvider,ref:RuntimeRef,state:Lifecycle,targetEpoch?:number):Promise<void> {
+  const operation=this.core.options.uuid(),epoch=targetEpoch??state.epoch+1;
   this.store.db.transaction(()=>{this.store.db.exec("UPDATE lifecycle SET phase='START_REQUESTED',epoch=?,boot_id=NULL,provider_operation_id=?,wake_after_stop=0,lease_until=? WHERE singleton=1",epoch,operation,new Date(this.core.options.now().getTime()+120000).toISOString());this.store.db.exec("INSERT INTO controller_operations(id,kind,epoch,status,created_at) VALUES(?,'wake',?,'pending',?)",operation,epoch,this.core.now());});
   try{await provider.wake(ref,{operationId:operation,epoch});this.store.db.exec("UPDATE lifecycle SET phase='BOOTING',lease_until=? WHERE singleton=1 AND provider_operation_id=? AND phase='START_REQUESTED'",new Date(this.core.options.now().getTime()+120000).toISOString(),operation);this.store.db.exec("UPDATE controller_operations SET status='submitted' WHERE id=?",operation);}
   catch(error){this.store.db.exec("UPDATE controller_operations SET status='unknown',error_code='TEMPORARY_UNAVAILABLE' WHERE id=?",operation);this.store.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',desired_state='STOP' WHERE singleton=1 AND provider_operation_id=?",operation);throw error;}
@@ -784,6 +839,15 @@ export class LifecycleCore {
    requireThat(provider.capabilities.explicitWake&&provider.capabilities.explicitStop&&provider.capabilities.confirmedStop,'CAPABILITY_UNAVAILABLE','This provider needs a verified lifecycle bridge before execution.');
    requireThat(observation.executionStopped&&observation.persistentState==='retained','CAPABILITY_UNAVAILABLE','Existing runtime ownership is uncertain.');
    await this.requestWake(provider,ref,state);
+  }else if(state.phase==='RECOVERY_REQUIRED'&&!this.core.ownerAlpha.policy&&this.claimableWork()){
+   // G3 (GROK_ALIGNMENT A2, AGENTS.md trap 1): a successor may start on an
+   // atomic epoch advance alone. Do not wait for `observation.executionStopped`
+   // / observeStopped -- advanceGeneration already fenced the retiring
+   // generation's live work (effects/locks/notice) in the same transaction as
+   // the epoch bump. observeStopped remains an optional diagnostic elsewhere;
+   // it is never awaited here as a precondition.
+   const {epoch}=this.advanceGeneration('GENERATION_ADVANCED');
+   await this.requestWake(provider,ref,this.get(),epoch);
   }else if(['STOP_COMMITTED','RECOVERY_REQUIRED'].includes(state.phase)&&!observation.executionStopped){
    requireThat(provider.capabilities.explicitStop,'CAPABILITY_UNAVAILABLE','Provider cannot explicitly stop this runtime.');
    const operation=this.core.options.uuid();

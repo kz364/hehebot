@@ -13,17 +13,51 @@ function run(directory, code) {
   return child;
 }
 
-test('OS lock excludes a second executor and releases after process exit', async t => {
+// G3 (GROK_ALIGNMENT A2, AGENTS.md trap 1): CHANGED from the pre-G3 "second
+// executor is simply refused (exit 73), the first holder keeps running"
+// expectation. That encoded exactly the "successor waits for the prior
+// executor to exit/be proven dead on its own" precondition G3 removes: a
+// contended lock now kills the live prior holder's process group and takes
+// over within the 30s retry budget, so a successor never needs independent
+// proof of process death.
+test('G3: a contended lock kills the live holder and the contender takes over', { timeout: 20000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'hehe-lock-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const holder = run(directory, "process.stdout.write('ready'); setInterval(()=>{},1000)");
   t.after(() => { if (holder.exitCode === null && holder.signalCode === null) holder.kill(); });
   await once(holder.stdout, 'data');
-  const blocked = run(directory, 'process.exit(0)');
-  assert.equal((await once(blocked, 'exit'))[0], 73);
-  const exited = once(holder, 'exit'); holder.kill(); await exited;
+  const successor = run(directory, "process.stdout.write('ok'); process.exit(0)");
+  const [holderExit, successorExit] = await Promise.all([once(holder, 'exit'), once(successor, 'exit')]);
+  // The holder was killed by the takeover (a signal, not its own exit(0)).
+  assert.equal(holderExit[0], null);
+  assert.ok(typeof holderExit[1] === 'string' && holderExit[1].startsWith('SIG'));
+  assert.deepEqual(successorExit, [0, null]);
   const replacement = run(directory, 'process.exit(0)');
-  assert.equal((await once(replacement, 'exit'))[0], 0);
+  assert.deepEqual(await once(replacement, 'exit'), [0, null]);
+});
+
+// G3: when the recorded holder cannot actually be reclaimed (e.g. a stale or
+// foreign pid on record, so the takeover kill is a no-op) the contender waits
+// out the full budget and reports RECOVERY_REQUIRED rather than hanging
+// forever or silently proceeding.
+test('G3: an unreclaimable lock reports RECOVERY_REQUIRED after the retry budget', { timeout: 40000 }, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'hehe-lock-unreclaimable-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const holder = run(directory, "process.stdout.write('ready'); setInterval(()=>{},1000)");
+  t.after(() => { if (holder.exitCode === null && holder.signalCode === null) holder.kill(); });
+  await once(holder.stdout, 'data');
+  // Overwrite the real holder's recorded pid with one that cannot be killed
+  // (already-exited), so the takeover's kill is a genuine no-op and the real
+  // holder survives for the whole retry window.
+  await writeFile(join(directory, 'holder.pid'), '1\n');
+  const start = Date.now();
+  const contender = run(directory, 'process.exit(0)');
+  const [code] = await once(contender, 'exit');
+  const elapsed = Date.now() - start;
+  assert.equal(code, 75);
+  assert.ok(elapsed >= 29000, `expected the full ~30s retry budget, got ${elapsed}ms`);
+  assert.equal(holder.exitCode, null);
+  assert.equal(holder.signalCode, null);
 });
 
 test('symlink and nonprivate state directories cannot acquire ownership', async t => {
