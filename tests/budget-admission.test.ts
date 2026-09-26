@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {afterEach,beforeEach,expect,it} from 'vitest';
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {fixture,bot,routine} from './helpers';
 import {LifecycleCore} from '../src/core/lifecycle';
 import {FakeProvider} from '../src/providers';
@@ -10,6 +10,22 @@ function optional(){const r=routine();expect(f.accept({schema_version:1,type:'ro
 function policy(ids:string[],expected_revision=0){return f.accept({schema_version:1,type:'budget.set',payload:{expected_revision,enabled:true,monthly_cap_cents:500,optional_routine_ids:ids}});}
 function due(){f.setNow('2026-09-10T00:15:00.000Z');f.core.tick();return f.db.all<{id:string}>('SELECT id FROM runs')[0].id;}
 function ready(){const life=new LifecycleCore(f.store,f.core);f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until=?",new Date(f.core.options.now().getTime()+90000).toISOString());const identity=life.registerBoot(randomUUID());life.ready(identity);return {life,identity};}
+it.each([false,true])('budget maintenance returns metadata without historical snapshots: allowed=%s',allowed=>{
+ const r=optional();policy([r.id]);const id=due();
+ const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+ f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,id);
+ if(allowed)f.core.budget.report({period:'2026-09',projected_cents:499,observed_at:f.core.now(),source_ref:'synthetic:maintenance'});
+ else f.db.exec("UPDATE runs SET status='queued',error_code=NULL WHERE id=?",id);
+ const before=f.store.run(id),read=vi.spyOn(f.db,'all');
+ try{
+  expect(f.core.nextBudgetMaintenance()).toBe(f.core.now());expect(f.core.reconcileBudget()).toBe(1);
+  const returned=read.mock.calls.flatMap(([sql],index)=>sql.includes('WITH candidates AS')?read.mock.results[index].value:[]);
+  expect(returned).toEqual(Array.from({length:2},()=>({id,persona_id:bot,command_id:before.command_id,budget_allowed:allowed?1:0})));
+ }finally{read.mockRestore();}
+ expect(f.store.run(id)).toEqual({...before,status:allowed?'queued':'waiting',error_code:allowed?null:'BUDGET_UNKNOWN'});
+ expect(f.core.reconcileBudget()).toBe(0);
+});
+
 it('parks optional occurrences without a wake but still admits explicit owner work',()=>{
  const r=optional();expect(policy([r.id]).status).toBe('applied');const run=due();
  expect(f.store.run(run)).toMatchObject({status:'waiting',error_code:'BUDGET_UNKNOWN',current_attempt:0});

@@ -364,10 +364,10 @@ export class ControlCore {
  }
  private budgetChanges(limit:number){
   const predicate=this.budget.admissionPredicate(),status=this.budget.summary().status;
-  return this.store.db.all<Run&{budget_allowed:number}>(`WITH candidates AS (
-   SELECT r.*,(${predicate.sql}) AS budget_allowed FROM runs r WHERE r.current_attempt=0
+  return this.store.db.all<Pick<Run,'id'|'persona_id'|'command_id'>&{budget_allowed:number}>(`WITH candidates AS (
+   SELECT r.id,r.persona_id,r.command_id,r.status,r.error_code,r.created_at,(${predicate.sql}) AS budget_allowed FROM runs r WHERE r.current_attempt=0
    AND (r.status='queued' OR (r.status='waiting' AND r.error_code IN ('BUDGET_UNKNOWN','BUDGET_BLOCKED'))))
-   SELECT * FROM candidates WHERE (status='queued' AND NOT budget_allowed)
+   SELECT id,persona_id,command_id,budget_allowed FROM candidates WHERE (status='queued' AND NOT budget_allowed)
    OR (status='waiting' AND (budget_allowed OR error_code<>?)) ORDER BY created_at,id LIMIT ?`,...predicate.bindings,status,limit);
  }
  reconcileBudget():number {

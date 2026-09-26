@@ -4,6 +4,17 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Budget-maintenance metadata projection (2026-09-26 Asia/Jakarta): budgetChanges
+returns id/persona_id/command_id/budget_allowed; its CTE retains only filtering and
+ordering fields. Both reconcileBudget(100) and nextBudgetMaintenance(1) retain
+predicate/filter/order/limit semantics. Oversized-context/checkpoint block/unblock
+fixtures fail2 before implementation and preserve exact source snapshots/age after
+reconciliation. Focused114/backend2350/HTTP31/workerd/typecheck/dry-build pass;
+1547684 exited0. Existing 100/38 batch regression passes. Logs retained under
+.local/budget-projection-red.log, -focused.log and -integrated.log. No total SQL-work/
+storage bound claimed. Full runtime/browser/native-service/shutdown/desktop matrix
+not rerun; original intermittency/advisories/gates unchanged. Local only.
+
 Owner-cancellation metadata projection (2026-09-26 Asia/Jakarta): run.cancel selects
 id/persona_id/status/updated_at, preserving NOT_FOUND and all state/event predicates.
 Running, already-cancelling and completed fixtures with >1MiB historical bodies fail3
