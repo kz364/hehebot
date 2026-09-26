@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Own-custody follow-up audit found no supported waiting→cancelled bypass in inspected
+paths. Public operation/lock/unknown-effect cases reject waiting settlement and retain
+cancelling status, live attempt and pending followup. Terminal-cancellation mutant
+fails3; restored focused181/typecheck pass. Production unchanged; not proof over
+arbitrary restored databases. Next remaining historical/storage/native recovery.
+No active checks/children/delivery; schedule reread/enabled. Full matrix not rerun;
+original intermittency/advisories/gates unchanged.
+
 Follow-up admission reads only target metadata. Corrected red3/focused147/backend2342/
 typecheck/build pass;1539577 exited0. Initial red fixture correction retained in logs.
 Next audit terminal-target own custody during flushFollowups, whose SQL currently

@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Follow-up own-custody audit (2026-09-26 Asia/Jakarta): no supported terminal-target
+bypass found in inspected completion/cancellation/heartbeat/effect/resource/native
+question/budget paths. Waiting completion settles the attempt only after own custody
+checks; active cancellation stays cancelling. Heartbeat/new lock/effect admission
+cannot introduce those obligations after terminal completion. The earlier synthetic
+terminal-target effect insertion does not establish production reachability.
+Three public-method regressions admit an unknown operation, resource lock or unknown
+read-only effect, reject waiting completion with the exact error, then retain running
+attempt receipt/custody and pending followup after cancellation. Immediate terminal
+cancellation mutant fails all3. Restored focused181/typecheck pass; production code
+unchanged. Logs: .local/followup-custody-focused.log, -mutant.log, -restored.log.
+This is bounded path evidence, not proof over arbitrary historical/restored data or
+full native acceptance. Remaining historical/storage/native recovery continues.
+Full matrix not rerun; original intermittency/advisories/gates unchanged. Local only.
+
 Follow-up metadata projection (2026-09-26 Asia/Jakarta): run.followup reads only
 id/role/persona_id/status. Missing-run behavior, background-only admission and recursive
 settlement remain unchanged. Red3/focused147/backend2342/typecheck/dry-build pass;

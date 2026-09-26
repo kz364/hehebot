@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** targeted follow-up admission
+**Current checkpoint (2026-09-26, verified locally):** follow-up own-custody audit
+found no supported waiting→cancelled bypass in inspected paths. New operation/lock/
+unknown-effect tests keep cancellation nonterminal and followups pending; immediate
+terminal-cancellation mutant fails3, restored focused181/typecheck pass. Production
+unchanged. Not proof over arbitrary restored state. Next remaining historical/storage/
+native recovery. Full matrix not rerun; original intermittency/advisories/gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** targeted follow-up admission
 reads target metadata only. Active/settled/unknown-descendant-effect fixtures preserve
 source snapshots and pending versus queued continuation. Red3/focused147/backend2342/
 typecheck/dry-build pass. Next audit restored terminal-target custody in follow-up

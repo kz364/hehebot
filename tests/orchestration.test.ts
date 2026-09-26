@@ -273,6 +273,27 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(f.db.all('SELECT status FROM attempts WHERE run_id=?',a.id)).toEqual([{status:'waiting'}]);
   });
 
+  it.each(['operation','lock','effect'] as const)('cannot cancel through waiting and release followup with own unsettled %s',kind=>{
+    const p=parent(),a=tasks.register(identity,receipt(p),true);
+    if(kind==='operation')life.heartbeat(identity,[{id:'own-tool',run_id:a.id,attempt:1,kind:'tool',status:'unknown',started_at:f.core.now(),last_progress_at:f.core.now(),deadline_at:'2026-09-10T00:01:00.000Z'}]);
+    if(kind==='lock')resources.acquire(a.id,1,['calendar:own-task']);
+    if(kind==='effect'){
+      const effects=new EffectLedger(f.store,()=>f.core.now());
+      effects.intent({id:'own-effect',run_id:a.id,attempt:1,action_key:'own-action',classification:'read_only',authorization_ref:'read',request_digest:'digest',provider_idempotency_key:null});
+      effects.transition('own-effect',a.id,'outcome_unknown',null);
+    }
+    const tables=['operations','resource_locks','effects'],before=tables.map(table=>f.db.all(`SELECT * FROM ${table}`));
+    expect(()=>life.complete(identity,a.id,1,{status:'waiting',text:'Not settled',checkpoint:{cursor:'next'}})).toThrowError(expect.objectContaining({code:kind==='operation'?'CANCEL_UNCONFIRMED':kind==='lock'?'RESOURCE_BUSY':'OUTCOME_UNKNOWN'}));
+    expect(f.store.run(a.id).status).toBe('running');
+    expect(f.accept({schema_version:1,type:'run.cancel',payload:{run_id:a.id,reason:'Stop this task'}}).status).toBe('applied');
+    expect(f.store.run(a.id).status).toBe('cancelling');
+    const followup=f.accept({schema_version:1,type:'run.followup',payload:{run_id:a.id,text:'Review after settlement'}});
+    expect(followup.status).toBe('applied');f.core.flushFollowups(a.id);
+    expect(f.db.all('SELECT status,coordinator_run_id FROM task_followups')).toEqual([{status:'pending',coordinator_run_id:null}]);
+    expect(f.db.all('SELECT status,result_json FROM attempts WHERE run_id=?',a.id)).toEqual([{status:'running',result_json:null}]);
+    expect(tables.map(table=>f.db.all(`SELECT * FROM ${table}`))).toEqual(before);
+  });
+
   it('defers a task followup through its live grandchild, then queues it once without waiting for an unrelated sibling', () => {
     const p=parent(),a=tasks.register(identity,receipt(p)),b=tasks.register(identity,receipt(p,'Unrelated sibling'));
     const beforeB=f.store.run(b.id);
