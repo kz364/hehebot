@@ -14,7 +14,12 @@ const valid={run_id:runId,attempt:2,version:1,usage:{total:counters(120,30,7,44,
 const state={objects:[{id:persona,kind:'persona',revision:1,body:{name:'Usage bot',archived:false}},{id:routineId,kind:'routine',revision:1,body:{persona_id:persona,name:'Usage routine',instructions:'Synthetic only',enabled:true,schedule:{cron:'0 8 * * *',timezone:'Asia/Jakarta'}}}],runs:[run],token_usage_snapshots:[valid],summary:{phase:'STOPPED',execution_enabled:false,queued_runs:0,blocked_runs:0}};
 let taskUsage=[valid],routineUsage=[valid],commands=0;const requests=[];
 const page=usage=>({observed_at:'2026-09-17T00:00:00Z',counts:{total:1,waiting:0,recovery:0},runs:[run],next_cursor:null,steering:[],recovery:[],output_previews:[],token_usage_snapshots:usage});
-const server=createServer(async(req,res)=>{requests.push(`${req.method} ${req.url}`);if(req.method!=='GET')commands++;const json=value=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(value));};const path=new URL(req.url,'http://fixture').pathname;
+const server=createServer(async(req,res)=>{const path=new URL(req.url,'http://fixture').pathname;
+ // GROK_ALIGNMENT A6: the portal always attempts a same-origin WebSocket at /v1/stream.
+ // This fixture is plain HTTP with no upgrade handling, so answer with 426 and keep it
+ // out of the request log the assertions below check — it is not one of the reads under test.
+ if(path==='/v1/stream'){res.writeHead(426);return res.end();}
+ requests.push(`${req.method} ${req.url}`);if(req.method!=='GET')commands++;const json=value=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(value));};
  if(path==='/v1/state')return json(state);
  if(path===`/v1/conversations/${persona}/events`)return json({events:[],has_more:false,pruned_through:0});
  if(path===`/v1/conversations/${persona}/tasks`)return json(page(taskUsage));

@@ -16,7 +16,13 @@ const browser=(...args)=>promisify(execFile)('agent-browser',['--session',sessio
 const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
 const wait=code=>browser('wait','--fn',code);
 const server=createServer(async(req,res)=>{
- const path=new URL(req.url,'http://fixture').pathname;requests.push(`${req.method} ${path}`);
+ const path=new URL(req.url,'http://fixture').pathname;
+ // GROK_ALIGNMENT A6: the portal always attempts a same-origin WebSocket at /v1/stream.
+ // This fixture is plain HTTP with no upgrade handling, so answer with 426 (as a real
+ // server would for a non-upgraded request to that path) and keep it out of the request
+ // log the assertions below check — it is not one of the reads under test.
+ if(path==='/v1/stream'){res.writeHead(426);res.end();return;}
+ requests.push(`${req.method} ${path}`);
  const json=value=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(value));};
  if(path==='/v1/state')return json(state);
  if(path.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
