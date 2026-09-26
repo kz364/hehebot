@@ -475,6 +475,9 @@ function alphaConversationAvailable(id){
 async function refresh(force=false){
  if(loading||document.hidden&&!force)return;loading=true;
  try{const value=await api('/v1/state');snapshot=value;
+  // Seed the stream cursor from the snapshot so events committed between this
+  // read and the next subscribe are replayed, not skipped (GROK_ALIGNMENT A6).
+  if(wsCursor===null&&/^\d+$/.test(String(value.next_cursor)))wsCursor=Number(value.next_cursor);
   // Bind background/warm/alpha fences before any conversation reads so
   // unrelated personas and rooms stay read-only without issuing denied
   // requests. Presence of the owner_alpha_background or owner_alpha_warm
@@ -1364,6 +1367,11 @@ $('export-control').onclick=async()=>{
 // so it is handled the same way — capped backoff, with fallback polling
 // covering the gap the whole time.
 let wsSocket=null,wsReconnectDelay=1000,wsReconnectTimer=null,wsCursor=null,wsPingTimer=null,streamActive=false;
+// Stream frames append timeline events immediately; task cards, notices and
+// runtime state still come from /v1/state, so any frame schedules one
+// debounced snapshot refresh instead of relying on the fallback poll.
+let streamRefreshTimer=null;
+function scheduleStreamRefresh(){if(streamRefreshTimer)return;streamRefreshTimer=setTimeout(()=>{streamRefreshTimer=null;refresh();},400);}
 function stopStream(){
  streamActive=false;
  if(wsPingTimer){clearInterval(wsPingTimer);wsPingTimer=null;}
@@ -1396,13 +1404,15 @@ function connectStream(){
     events=[...new Map(combined.map(e=>[e.sequence,e])).values()].sort((a,b)=>a.sequence-b.sequence);
     reconcileOutboxEchoes(selected,relevant);lastSignature='';render();
    }
+   if(frame.events.length)scheduleStreamRefresh();
   }else if(frame.type==='snapshot_required'){
-   // A full resync is required; the next subscribe starts from "now" since
-   // this client does not otherwise track a global cross-conversation cursor.
+   // A full resync is required; refresh() reseeds wsCursor from the
+   // snapshot's next_cursor before resubscribing.
    wsCursor=null;refresh(true).then(()=>{try{socket.send(JSON.stringify({type:'subscribe',cursor:wsCursor}));}catch{}});
   }
-  // "runtime" and "live" frames are presentation-only observations with no
-  // committed state of their own; neither is required to show a reply.
+  else if(frame.type==='runtime')scheduleStreamRefresh();
+  // "live" frames are presentation-only observations with no committed state
+  // of their own; they are not required to show a reply.
  };
  socket.onerror=()=>{};
  socket.onclose=()=>{streamActive=false;if(wsPingTimer){clearInterval(wsPingTimer);wsPingTimer=null;}wsSocket=null;scheduleStreamReconnect();};
