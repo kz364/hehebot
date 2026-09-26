@@ -80,6 +80,41 @@ test('private real journal projects asymmetric identities and obligations withou
   assert.deepEqual(await snapshot(f.directory), before);
 });
 
+test('deep reverse-order ancestry is checked once without truncation or cycle acceptance', async t => {
+  const f = await fixture(t), childTurns = {}, childObligations = {};
+  const thread = i => `deep-thread-${i}`, key = i => JSON.stringify([thread(i), `turn-${i}`]);
+  for (let i = 256; i >= 1; i--) {
+    childTurns[key(i)] = 'interrupted';
+    childObligations[key(i)] = { commands: { [`command-${i}`]: 'inProgress' },
+      spawns: i === 256 ? {} : { next: { status: 'completed', receiverThreadIds: [thread(i + 1)] } } };
+  }
+  const native = { ...f.native, childTurns, childObligations,
+    spawns: { first: { status: 'completed', receiverThreadIds: [thread(1)] } } };
+  await f.journal.write(attemptId, native);
+  const before = await snapshot(f.directory), get = Map.prototype.get;
+  let visits = 0, report;
+  Map.prototype.get = function(key) {
+    if (typeof key === 'string' && key.startsWith('deep-thread-')) visits++;
+    return get.call(this, key);
+  };
+  try { report = await inspectCodexRecovery(f.directory); }
+  finally { Map.prototype.get = get; }
+  assert.deepEqual(report.issues, []);
+  assert.deepEqual(report.native.children.map(row => row.threadId), Array.from({ length: 256 }, (_, i) => thread(256 - i)));
+  assert.equal(report.native.observations.filter(row => row.kind === 'commands' && row.status === 'inProgress').length, 257);
+  assert.equal(report.resumeAllowed, false); assert.equal(report.sleepAllowed, false);
+  assert.deepEqual(await snapshot(f.directory), before);
+  assert.ok(visits <= 256, `Ancestry lookups ${visits} exceed one per edge`);
+  // A disconnected cycle must not acquire root-connected status merely because
+  // its nodes were visited. This is a synthetic contradictory journal, not admission.
+  native.spawns = {};
+  native.childObligations[key(256)].spawns = { cycle: { status: 'completed', receiverThreadIds: [thread(1)] } };
+  await f.journal.write(attemptId, native);
+  const invalid = await inspectCodexRecovery(f.directory);
+  assert.equal(invalid.native, null);
+  assert.ok(invalid.issues.includes('NATIVE_RECORD_INVALID_OR_CONTRADICTORY'));
+});
+
 test('retained families survive an empty admission cursor and permit exact older-attempt inspection', async t => {
   const f = await fixture(t), old = await f.journal.get(f.cursor);
   const retained = { ...old, coordinatorRelease: { acknowledged: true, payload: {

@@ -4,6 +4,18 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Offline ancestry inspection (2026-09-26 Asia/Jakarta): inspector memoizes only
+paths fully proved to reach the root in its immutable snapshot. No visited-only
+marking, traversal truncation, journal writes or resume/sleep permission. A synthetic
+reverse-ordered256-child journal fails before the change at32896 ancestry lookups
+and passes at most256 afterward; all children and257 unresolved commands retained,
+disk snapshot unchanged. A disconnected synthetic cycle still invalidates the native
+report; this is not a reachable-admission claim. Related inspector/question62 and
+typecheck pass (1668684 exit0); .local/inspect-ancestry-{red,final}.log. Other inventory
+membership scans and per-child cancellation reads remain, so no whole-inspection
+time/I/O/storage bound. Full matrix not rerun for this localized offline diagnostic
+change; production gates, known intermittency and advisories unchanged.
+
 Question reopen identity (2026-09-26 Asia/Jakarta, E02): disk-backed regression
 leaves an old handoff_unknown, closes its binding, and reopens with a distinct
 connection ID. An unmatched resolution does nothing; a fresh item reusing numeric

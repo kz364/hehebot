@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** reopened question connection
+**Current checkpoint (2026-09-26, verified locally):** offline recovery inspection
+reuses root-connected ancestry paths within one snapshot. Deep reverse-order fixture
+falls from32896 to at most256 edge lookups; all256 children/257 unresolved commands
+retained, synthetic disconnected cycle refused, journal unchanged. Red1/related62/
+typecheck pass. No total inspection/storage bound or resume/sleep authority. Next
+remaining restoration/recursive settlement and storage bounds; gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** reopened question connection
 can resolve a fresh item reusing request ID71 without settling an older uncertain
 handoff. Disk custody, original connection identity and redacted recovery diagnostics
 retained; resume/sleep denied with one unresolved question. Related104/typecheck

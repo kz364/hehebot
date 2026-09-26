@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Offline inspector reuses proved root-connected ancestry paths within one snapshot;
+reverse-order fixture32896 to at most256 lookups, exhaustive child/command custody
+and synthetic-cycle rejection retained. Red1/related62/typecheck1668684 exit0, logs
+.local/inspect-ancestry-{red,final}.log. No active checks/children/delivery; schedule
+enabled. Other inventory scans/cancellation I/O remain; no total bound or safe resume.
+Continue remaining restoration/recursive settlement and storage bounds. Full matrix
+not rerun for this localized diagnostic change; gates/intermittency/advisories unchanged.
+
 Question disk-reopen identity regression passes: a new connection resolves its
 fresh item using the same request ID without settling old handoff_unknown custody.
 Offline diagnostics still deny resume/sleep with one unresolved question and redact

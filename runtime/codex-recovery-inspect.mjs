@@ -263,9 +263,12 @@ export async function inspectCodexRecovery(directory, attemptId = undefined) {
       items(owner, pair[0], pair[1]);
     }
     for (const [key] of entries(native.childObligations)) require(turns.some(([turn]) => turn === key));
+    const rootConnected = new Set([root.threadId]);
     for (const child of children) {
       let current = child.threadId; const seen = new Set();
-      while (current !== root.threadId) { require(!seen.has(current) && origins.has(current)); seen.add(current); current = origins.get(current); }
+      while (!rootConnected.has(current)) { require(!seen.has(current) && origins.has(current)); seen.add(current); current = origins.get(current); }
+      // Cache only paths proved to reach the root, never merely visited nodes.
+      for (const threadId of seen) rootConnected.add(threadId);
     }
     report.native = { root, children, observations: obligations };
     if (!root.threadId || !root.turnId || !dispatch.nativeRunId) issue('NATIVE_ACKNOWLEDGEMENT_UNKNOWN');
