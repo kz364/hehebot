@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** enqueue budget admission
+**Current checkpoint (2026-09-26, verified locally):** export summary scans stop
+at the remaining row allowance plus one overflow witness. Red1/focused143/backend2381/
+typecheck/dry-build pass; measured rate-limit row visits fall from19963 to9964.
+Exact10000/one-over export boundaries retained; no writes or schema changes.
+Next native settlement run-key indexes need migration/export-pin compatibility;
+other historical/storage/native recovery bounds remain. Full matrix not rerun;
+original intermittency/advisories/gates unchanged. No byte-work/total-time bound.
+
+**Previous checkpoint (2026-09-26, verified locally):** enqueue budget admission
 reads seven metadata fields instead of reloading context/checkpoint. Red2/focused29/
 backend2380/typecheck/dry-build pass. Blocked/allowed status and wake state preserved.
 Context construction/storage remains unbounded; no whole-request bound claimed.

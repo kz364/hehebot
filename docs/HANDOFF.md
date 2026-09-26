@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Export summary row visits now stop at remaining allowance+1. Red1/focused143/
+backend2381/typecheck/build pass;1595312 exit0. Exact10000/10001 total rows and typed
+exports retained. No whole-request byte/time bound. Next native settlement run-key
+indexes: operations(run_id,status), effects(run_id,status), resource_locks(run_id),
+with bounded migration and schema/export/import compatibility. No shared migration
+authorized. Broader historical/storage/native recovery remains. No active checks/
+children/delivery; schedule enabled. Full matrix not rerun; external gates unchanged.
+
 Enqueue budget checks now reload seven metadata fields, not context/checkpoint.
 Red2/focused29/backend2380/typecheck/build pass;1591776 exit0. Status/wake predicates
 unchanged; context construction/storage still unbounded. Next remaining historical/

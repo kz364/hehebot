@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { exportControl } from '../src/core/control-export';
-import { fixture, bot } from './helpers';
+import { fixture, bot, TestDatabase } from './helpers';
 import type { Database } from '../src/core/store';
 import {legacyOccurrences} from './legacy-occurrences';
 
@@ -46,6 +46,29 @@ it.each(['raw','escaped','rows'])('rejects oversized %s before returning a parti
  if(kind==='rows')f.db.exec("WITH RECURSIVE seq(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM seq WHERE n<10001) INSERT INTO rate_limits SELECT CAST(n AS TEXT),1,1 FROM seq");
  else f.db.exec('INSERT INTO rate_limits VALUES(?,1,1)',kind==='raw'?'x'.repeat(4*1024*1024):'\u0001'.repeat(750000));
  expect(()=>exportControl(f.db,f.core.now())).toThrowError(expect.objectContaining({code:'EXPORT_LIMIT'}));
+});
+
+it('accepts exactly 10000 total rows and stops summary scans at the remaining allowance plus one',()=>{
+ const db=new TestDatabase();try{
+  // 37 early rows + 9962 rate rows + one later schema version = 10000.
+  db.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<37) INSERT INTO context_retention SELECT 'consumer',CAST(i AS TEXT),0 FROM n");
+  db.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<9962) INSERT INTO rate_limits SELECT CAST(i AS TEXT),1,1 FROM n");
+  const exported=JSON.parse(exportControl(db,f.core.now()));
+  expect(exported.tables.reduce((n:number,t:{rows:unknown[]})=>n+t.rows.length,0)).toBe(10000);
+  db.exec("INSERT INTO rate_limits VALUES('one-over',1,1)");
+  expect(()=>exportControl(db,f.core.now())).toThrowError(expect.objectContaining({code:'EXPORT_LIMIT'}));
+  db.exec("WITH RECURSIVE n(i) AS (VALUES(1) UNION ALL SELECT i+1 FROM n WHERE i<10000) INSERT INTO rate_limits SELECT 'extra-'||i,1,1 FROM n");
+  let visited=0;db.sqlite.function('export_scan_probe',()=>{visited++;return 1;});
+  const before=db.all('SELECT total_changes() AS n');
+  const measured:Database={
+   all:(sql,...values)=>db.all(sql.includes('AS unsupported FROM')?sql.replace('FROM "rate_limits"','FROM "rate_limits" WHERE export_scan_probe()'):sql,...values),
+   exec:()=>{throw new Error('Export must not write');},transaction:fn=>db.transaction(fn),
+  };
+  expect(()=>exportControl(measured,f.core.now())).toThrowError(expect.objectContaining({code:'EXPORT_LIMIT'}));
+  expect(visited).toBe(9964); // Remaining 9963 rows + one overflow witness, not the full table.
+  expect(db.all('SELECT total_changes() AS n')).toEqual(before);
+  expect(db.all('SELECT count(*) AS n FROM rate_limits')).toEqual([{n:19963}]);
+ }finally{db.close();}
 });
 
 it.each([9,10,11,12])('keeps v%s exports readable without migration or fabricated attribution',version=>{

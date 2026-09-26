@@ -35,7 +35,8 @@ export function exportControl(db:Database,createdAt:string):string {
    const unsupported=columns.map(column=>`typeof(${quote(column)}) NOT IN ('null','text','integer')`).join(' OR ');
    // Count and bound raw bytes before materializing values in JS. A final UTF-8
    // bound also includes JSON escaping, cell tags, columns and table metadata.
-   const summary=db.all<{n:number;bytes:number;unsupported:number}>(`SELECT count(*) AS n,COALESCE(SUM(${size}),0) AS bytes,COALESCE(MAX(CASE WHEN ${unsupported} THEN 1 ELSE 0 END),0) AS unsupported FROM ${quote(name)}`)[0];
+   // One overflow witness is enough to refuse; do not scan the rest of history.
+   const summary=db.all<{n:number;bytes:number;unsupported:number}>(`SELECT count(*) AS n,COALESCE(SUM(${size}),0) AS bytes,COALESCE(MAX(CASE WHEN ${unsupported} THEN 1 ELSE 0 END),0) AS unsupported FROM (SELECT ${columns.map(quote).join(',')} FROM ${quote(name)} LIMIT ?)`,maxRows-rowCount+1)[0];
    rowCount+=summary.n;rawBytes+=summary.bytes;
    requireThat(Number.isSafeInteger(rowCount)&&rowCount<=maxRows&&Number.isSafeInteger(rawBytes)&&rawBytes<=maxBytes,'EXPORT_LIMIT','Application export exceeds its bounded snapshot size.',413);
    requireThat(!summary.unsupported,'UNSUPPORTED_DATA','Application export cannot coerce unsupported SQLite values.',409);

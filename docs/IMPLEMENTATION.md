@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Export summary scan bound (2026-09-26 Asia/Jakarta): the aggregate now consumes a
+subquery limited to the remaining10000-row allowance plus one overflow witness.
+It still rejects the whole export; it never truncates or deletes source data.
+An SQLite function probe measures19963 source visits before versus9964 after with
+37 prior-table rows. Independent exact10000/10001 total-row fixtures retain the
+boundary, including a later schema-version row. Typed/legacy exports and import/
+restore inspection remain covered. Red1/focused143/backend2381/typecheck/build pass;
+1595312 exit0. Logs .local/export-scan-{red,focused,backend,build}.log. Bounds cover
+summary row visits, not raw byte-processing, schema enumeration or total request time.
+Full runtime/HTTP/workerd/browser/native-service/shutdown/desktop matrix not rerun.
+Native investigation: recursive UNION prevents cycles but operations/effects/locks
+lack run-key indexes. Follow up with versioned indexes, bounded migration work and
+backup/export schema compatibility; do not cap descendants by silently ignoring
+unresolved custody. Original intermittency/advisories and production gates unchanged.
+
 Enqueue budget admission projection (2026-09-26 Asia/Jakarta): reload only the seven
 metadata fields consumed by BudgetLedger.blocks after inserting the run; its input
 type now states that contract. Database defaults, budget predicates, status updates
