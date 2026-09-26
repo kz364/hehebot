@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** claim stops counting after32
+**Current checkpoint (2026-09-26, verified locally):** completion reads at most one
+operation/lock/effect blocker, retaining predicates, refusal order and custody.
+Red3/focused96/backend2399/typecheck/dry-build pass; all blocker/run/attempt rows
+unchanged on refusal and no result publication. This bounds returned witnesses,
+not whole-request SQL work or storage. Next restoration/recursive settlement and
+historical/storage bounds. Full matrix not rerun; external gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** claim stops counting after32
 qualifying unresolved families without changing custody predicates. Red1 detects40
 visits instead of32;31/32 threshold and mixed settled-history cases pass. Backend2396/
 typecheck/dry-build/native child fixture pass. Checkpoint delivery retained because

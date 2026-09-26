@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Completion blocker queries now return at most one operation/lock/effect witness;
+authority, refusal order, rollback and unknown custody retained. Red3/focused96/
+backend2399/typecheck/build1684588 exit0; .local/completion-witness-*.log. No total
+SQL-work/storage bound. No active checks/children/delivery; existing schedule reread
+and enabled. Continue restoration/recursive settlement and historical/storage work.
+Full matrix not rerun; gates/intermittency/advisories unchanged.
+
 Claim family census now stops after32 qualifying roots; all custody and generation
 predicates retained. Red1/31-vs32/mixed-history fixtures, backend2396/typecheck/build/
 native child pass (1680601/1681030 exit0); .local/family-count-*.log. Claim checkpoint

@@ -469,10 +469,10 @@ export class LifecycleCore {
     return;
    }
    requireThat(['claimed','running','finishing','cancelling','recovery_required'].includes(run.status),'REVISION_CONFLICT','Run is not active.');
-   requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND attempt=? AND status!='settled'",runId,attempt).length,'CANCEL_UNCONFIRMED','Live operations have not settled.');
+   requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND attempt=? AND status!='settled' LIMIT 1",runId,attempt).length,'CANCEL_UNCONFIRMED','Live operations have not settled.');
    requireThat(!this.core.questions.list().some(question=>question.run_id===runId),'CANCEL_UNCONFIRMED','A native question remains unresolved.');
-   requireThat(!this.store.db.all('SELECT resource_id FROM resource_locks WHERE run_id=?',runId).length,'RESOURCE_BUSY','Release scoped resources after tool settlement before completing.');
-   requireThat(!this.store.db.all("SELECT id FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown')",runId).length,'OUTCOME_UNKNOWN','An external effect needs reconciliation.');
+   requireThat(!this.store.db.all('SELECT resource_id FROM resource_locks WHERE run_id=? LIMIT 1',runId).length,'RESOURCE_BUSY','Release scoped resources after tool settlement before completing.');
+   requireThat(!this.store.db.all("SELECT id FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown') LIMIT 1",runId).length,'OUTCOME_UNKNOWN','An external effect needs reconciliation.');
    requireThat(result.status!=='waiting'||result.checkpoint,'INVALID_INPUT','Waiting requires a durable checkpoint.',422);
    const now=this.core.now();
    if(proof)this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?)',proofKey,proof);

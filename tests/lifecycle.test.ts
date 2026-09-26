@@ -29,6 +29,32 @@ function unknownEffect(runId: string) {
   f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','outcome_unknown','synthetic-authorization','synthetic-digest',?)", randomUUID(), runId, randomUUID(), f.core.now());
 }
 describe('executor leases and attempts', () => {
+  it.each(['operations','resource_locks','effects'] as const)('completion reads one %s blocker without changing custody', table => {
+    const id = claimed().run.id;
+    life.submitted(identity, id, 1, 'completion-blockers');
+    if (table === 'operations') life.heartbeat(identity, Array.from({ length: 40 }, () => operation(id, 'tool')));
+    if (table === 'resource_locks') {
+      const ledger = new ResourceLedger(f.store, () => f.core.now());
+      for (let i = 0; i < 40; i++) ledger.acquire(id, 1, [`browser:blocker-${i}`]);
+    }
+    if (table === 'effects') for (let i = 0; i < 40; i++) unknownEffect(id);
+    const before = f.db.all(`SELECT * FROM ${table}`), run = f.store.run(id);
+    const attempts = f.db.all('SELECT * FROM attempts WHERE run_id=?', id);
+    const read = vi.spyOn(f.db, 'all');
+    try {
+      expect(() => life.complete(identity, id, 1, { status: 'completed', text: 'Not yet' }))
+        .toThrowError(expect.objectContaining({ code: table === 'operations' ? 'CANCEL_UNCONFIRMED' : table === 'resource_locks' ? 'RESOURCE_BUSY' : 'OUTCOME_UNKNOWN' }));
+      const rows = read.mock.calls.flatMap(([sql], index) => sql.includes(`FROM ${table} WHERE run_id=?`)
+        ? [read.mock.results[index].value as unknown[]] : []);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toHaveLength(1);
+    } finally { read.mockRestore(); }
+    expect(f.db.all(`SELECT * FROM ${table}`)).toEqual(before);
+    expect(f.store.run(id)).toEqual(run);
+    expect(f.db.all('SELECT * FROM attempts WHERE run_id=?', id)).toEqual(attempts);
+    expect(f.db.all("SELECT id FROM events WHERE type='run.result'")).toEqual([]);
+  });
+
   it('does not let settled history consume the unresolved-family threshold', () => {
     for (let i = 0; i < 40; i++) {
       const id = enqueue();

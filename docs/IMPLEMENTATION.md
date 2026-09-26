@@ -4,6 +4,17 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Completion blocker witnesses (2026-09-26 Asia/Jakarta): LIMIT1 on existing operation,
+resource-lock and unresolved-effect existence reads. Exact predicates, attempt
+binding, question-check position, refusal codes and transaction order unchanged.
+Three regressions fail before the change with40 returned witnesses instead of1;
+afterward each retains all blocker/run/attempt rows and publishes no result.
+Operation and lock fixtures use heartbeat/acquire paths; unknown effects are seeded
+synthetically. Focused96/backend2399/typecheck/dry-build pass (1684588 exit0), logs
+.local/completion-witness-{red,focused,backend,build}.log. Returned-row bound only,
+not total SQL scan/request/storage bound. Full matrix not rerun for this localized
+control query change; restoration/storage acceptance and external gates remain open.
+
 Claim family threshold (2026-09-26 Asia/Jakarta): count a subquery limited to32
 qualifying unresolved roots, preserving generation parameters and every run,
 attempt, operation, lock, effect and recursive-descendant predicate. Admission
