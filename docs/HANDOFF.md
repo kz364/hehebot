@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Real Codex crash fixture now covers lost registration response: pending exact child
+receipt survives SIGKILL, retries once after readback/reopen, maps the same synthetic
+logical child and skips further registration. Native child interrupted,3 total model
+requests, no replacement inference/cancel replay, sleep denied, replacement PIDs gone.
+Native/related44/typecheck1666122 exit0, .local/crash-registration{,-focused}.log.
+Worker response and lease boundary synthetic; no takeover/safe-resume claim. No
+active checks/children/delivery; schedule enabled. Continue restoration/recursive
+settlement and historical/storage/existing-key bounds. Production unchanged; full
+matrix not rerun for fixture-only work, external gates and known limitations unchanged.
+
 Effect lineage retains only id/current_attempt/status after unchanged exhaustive
 authority validation. Red1/focused113/backend2389/typecheck/dry-build pass1663058;
 initial test callback annotation fixed. Synthetic oversized historical contexts

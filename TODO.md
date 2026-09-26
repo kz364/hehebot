@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** effect ancestry retains only
+**Current checkpoint (2026-09-26, verified locally):** F3/E02 crash fixture now
+reconciles a lost child-registration response across real pinned-Codex SIGKILL.
+Exact receipt persists/retries once, same synthetic logical child ID, no third
+registration or replacement inference; interrupted child retained and sleep denied.
+Native fixture/related44/typecheck pass. Worker response/lease boundary is synthetic,
+not provider takeover or safe resume. Next remaining restoration/recursive settlement
+and historical/storage/existing-key bounds; external gates unchanged. Local only.
+
+**Previous checkpoint (2026-09-26, verified locally):** effect ancestry retains only
 id/attempt/status in its returned lineage, not each ancestor context body. Full JS
 authority parsing/order and exhaustive custody walk unchanged. Red1/focused113/
 backend2389/typecheck/dry-build pass after fixing a test callback annotation.

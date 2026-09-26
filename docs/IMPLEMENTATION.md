@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Crash registration custody (2026-09-26 Asia/Jakarta, F3/E02): the existing real
+Codex0.154.0 SIGKILL fixture now loses a synthetic native-child registration response
+before the crash. Actual native thread/turn receipt persists with null run ID and
+started=false; replacement task control over a reopened FileJournal resends the
+identical receipt, records the same synthetic logical child ID, then skips a third
+registration. Native history recovers interrupted child, unchanged root identity;
+replacement sends only four thread/read calls, no inference or cancellation replay.
+Model request count stays3 and sleep remains denied; both replacement PIDs exit.
+`node scripts/test-codex-crash-readback.mjs`, related adapter/task44 and typecheck
+pass (1666122 exit0), logs .local/crash-registration{,-focused}.log. This is real
+native process-crash plus synthetic Worker-response evidence, not authenticated
+Worker deduplication, lease renewal, provider takeover, safe resume or power loss.
+Production code unchanged; full matrix not rerun for the fixture extension, which
+is already included in the combined verifier. Gates/intermittency/advisories remain.
+
 Effect lineage retention (2026-09-26 Asia/Jakarta): admitted lineage now stores
 id/current_attempt/status only, the three fields consumed by subsequent status and
 deadline checks. Every ancestor still undergoes the same exhaustive identity/scope/

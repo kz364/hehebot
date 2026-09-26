@@ -40,6 +40,7 @@ import { join, resolve } from 'node:path';
 import { spawnCodex } from '../runtime/codex-transport.mjs';
 import { CodexAdapter } from '../runtime/codex-adapter.mjs';
 import { CodexEventRouter } from '../runtime/codex-events.mjs';
+import { CodexTaskControl } from '../runtime/codex-tasks.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -229,6 +230,28 @@ try {
   assert.deepEqual(routerFailures, []); assert.equal(router.pending.length, 0);
   report.liveSpawnReceiptRouting = true;
   const parentRowSnapshot = structuredClone(parentRow);
+  // Simulate a Worker commit whose response is lost, using actual native IDs.
+  // This is a metadata transport fixture, not live Worker takeover authority.
+  const taskIdentity = { epoch: 7, boot_id: 'crash-fixture-boot' };
+  const taskParent = { runId: 'crash-root-run', personaId: 'crash-persona', attempt: 1 };
+  const registrations = [];
+  const taskControl = { request: async (method, payload) => {
+    assert.equal(method, 'native-child');
+    registrations.push(structuredClone(payload));
+    if (registrations.length === 1) throw new Error('synthetic lost registration response');
+    assert.deepEqual(payload, registrations[0], 'recovery must reconcile the exact original receipt');
+    return { id: 'retained-child-run', parent_run_id: taskParent.runId, persona_id: taskParent.personaId,
+      current_attempt: 1, role: 'background', status: 'recovery_required' };
+  } };
+  const tasks = new CodexTaskControl({ adapter: liveAdapter, control: taskControl, journal,
+    identity: taskIdentity, attemptId: 'crash-parent', parent: taskParent, assertLease: () => {} });
+  await assert.rejects(tasks.sync(), /synthetic lost registration response/);
+  const pendingMapping = await new FileJournal(journalPath).get(tasks.key);
+  assert.deepEqual(Object.keys(pendingMapping.children), [childKey]);
+  assert.equal(pendingMapping.children[childKey].runId, null);
+  assert.equal(pendingMapping.children[childKey].started, false);
+  assert.equal(pendingMapping.children[childKey].receipt.native_session_key, childThread);
+  report.uncertainRegistrationPersistedBeforeCrash = true;
   router.close();
   await router.tail;
   router = null;
@@ -322,6 +345,22 @@ try {
   }
   assert.equal(replacementAdapter.sleepReadiness().allowed, false);
   report.sleepDeniedAfterCrashReadback = true;
+
+  assert.deepEqual(await new FileJournal(journalPath).get(tasks.key), pendingMapping);
+  const restoredTasks = new CodexTaskControl({ adapter: replacementAdapter, control: taskControl,
+    journal: new FileJournal(journalPath), identity: taskIdentity, attemptId: 'crash-parent',
+    parent: taskParent, assertLease: () => {} });
+  const mapped = await restoredTasks.sync();
+  assert.deepEqual(Object.keys(mapped), [childKey]);
+  assert.equal(mapped[childKey].runId, 'retained-child-run');
+  assert.equal(mapped[childKey].started, true);
+  assert.deepEqual(mapped[childKey].receipt, pendingMapping.children[childKey].receipt);
+  assert.deepEqual(await restoredTasks.sync(), mapped);
+  assert.equal(registrations.length, 2, 'one uncertain request plus exact retry, no third registration');
+  assert.deepEqual((await new FileJournal(journalPath).get(tasks.key)).children, mapped);
+  assert.equal(replacementAdapter.sleepReadiness().allowed, false);
+  report.exactRegistrationReconciledAfterCrash = true;
+  report.registrationBoundary = 'synthetic Worker response; no lease or takeover claim';
 
   // Identical duplicate readback must not rewrite custody, for the child and
   // for the already-settled root. The root snapshot is taken AFTER the child
