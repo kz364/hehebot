@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Approval resolution returns metadata/presence flag, retaining stored checkpoint text
+truthiness (including NUL) and rollback. Red6/focused165/backend2356/HTTP31/existing
+workerd/typecheck/build pass;1551124 exit0. No new authority or snapshot rewrite.
+Next remaining historical/storage/native recovery; no total bounds claimed. No active
+checks/children/delivery; schedule enabled. Full runtime/browser/native-service/shutdown/
+desktop matrix not rerun; original intermittency/advisories/gates unchanged.
+
 Budget maintenance now returns metadata only from both next-check and reconciliation
 queries, retaining predicates/order/limits. Red2/focused114/backend2350/HTTP31/workerd/
 typecheck/build pass;1547684 exited0. No total SQL/storage bound. Next remaining

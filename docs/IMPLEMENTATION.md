@@ -4,6 +4,18 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Approval-resolution projection (2026-09-26 Asia/Jakarta): select id/status and
+checkpoint_json IS NOT NULL AND checkpoint_json<>'' instead of full run snapshots.
+This retains stored-text JS truthiness, including NUL and false-valued JSON text;
+it does not parse/validate or rewrite checkpoints. Approval revision/expiry checks,
+transaction order, NOT_FOUND, execution gate and deny handling unchanged. Six tests
+fail before implementation, then preserve source bytes and rejected-approval rollback.
+Focused165/backend2356/HTTP31/existing workerd/typecheck/dry-build pass;1551124 exit0.
+Logs: .local/approval-projection-red.log, -focused.log and -integrated.log. No total
+SQL/storage bounds claimed. Remaining historical/storage/native recovery continues.
+Full runtime/browser/native-service/shutdown/desktop matrix not rerun; original
+intermittency/advisories/gates unchanged. Local only.
+
 Budget-maintenance metadata projection (2026-09-26 Asia/Jakarta): budgetChanges
 returns id/persona_id/command_id/budget_allowed; its CTE retains only filtering and
 ordering fields. Both reconcileBudget(100) and nextBudgetMaintenance(1) retain

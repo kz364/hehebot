@@ -18,6 +18,23 @@ function memory(scope: MemoryPut['scope'], text = 'Synthetic memory') {
   return payload;
 }
 describe('durable control transactions', () => {
+  it.each([null,'','\u0000','false','{}','界'.repeat(400000)])('approval checkpoint truthiness without historical hydration: case %#',checkpoint=>{
+    const id=f.accept(message()).resource_id!,approval=randomUUID(),context=JSON.stringify({padding:'x'.repeat(1100000)});
+    f.core.options.executionEnabled=true;
+    f.db.exec("UPDATE runs SET status='waiting',context_json=?,checkpoint_json=? WHERE id=?",context,checkpoint,id);
+    f.store.put(approval,'approval',{run_id:id,expires_at:'2026-09-11T00:00:00.000Z',status:'pending'},0,'owner',f.core.now());
+    const read=vi.spyOn(f.db,'all');
+    try{
+      const result=f.accept({schema_version:1,type:'approval.resolve',payload:{approval_id:approval,expected_revision:1,decision:'approve'}});
+      expect(result.status).toBe(checkpoint?'applied':'rejected');
+      if(!checkpoint)expect(result.error?.code).toBe('INVALID_INPUT');
+      const returned=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[index].value:[]);
+      expect(returned).toEqual([{id,status:'waiting',checkpoint_present:checkpoint?1:0}]);
+    }finally{read.mockRestore();}
+    expect(f.store.run(id)).toMatchObject({status:checkpoint?'queued':'waiting',context_json:context,checkpoint_json:checkpoint});
+    expect(f.store.get(approval).revision).toBe(checkpoint?2:1);
+  });
+
   it('projects recent run metadata without hydrating snapshots for initial or incremental state',()=>{
     const ids=Array.from({length:101},(_,i)=>{
       f.setNow(new Date(Date.parse('2026-09-10T00:00:00.000Z')+i*1000).toISOString());

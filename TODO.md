@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** budget maintenance returns
+**Current checkpoint (2026-09-26, verified locally):** approval resolution reads
+run metadata and checkpoint-presence flag, retaining JS text truthiness and rollback.
+Null/empty/NUL/false-text/object-text/oversized fixtures fail6 before implementation;
+focused165/backend2356/HTTP31/workerd/typecheck/dry-build pass. No snapshot rewrite or
+new authority. Remaining historical/storage/native recovery stays open. Full runtime/
+browser/native-service/shutdown/desktop matrix not rerun; original intermittency/gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** budget maintenance returns
 metadata only, preserving admission predicates/order/limits and source snapshots.
 Block/unblock regressions fail2 before implementation; focused114/backend2350/HTTP31/
 workerd/typecheck/dry-build pass. Remaining historical/storage/native recovery stays

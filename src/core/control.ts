@@ -355,8 +355,10 @@ export class ControlCore {
     requireThat(a.revision===p.expected_revision,'REVISION_CONFLICT','Approval has changed.');
     requireThat(a.body.status==='pending'&&a.body.expires_at>now,'FORBIDDEN','This approval is no longer valid.',403);
     this.store.put(a.id,'approval',{...a.body,status:p.decision},a.revision,owner,now,commandId);
-    const run=this.store.run(a.body.run_id);
-    requireThat(run.status==='waiting'&&run.checkpoint_json,'INVALID_INPUT','This run has no resumable checkpoint.',422);
+    // Check the stored text's truthiness, not JSON validity or parsed value.
+    const run=this.store.db.all<Pick<Run,'id'|'status'>&{checkpoint_present:number}>("SELECT id,status,checkpoint_json IS NOT NULL AND checkpoint_json<>'' AS checkpoint_present FROM runs WHERE id=?",a.body.run_id)[0];
+    requireThat(run,'NOT_FOUND','Run unavailable.',404);
+    requireThat(run.status==='waiting'&&run.checkpoint_present,'INVALID_INPUT','This run has no resumable checkpoint.',422);
     this.store.db.exec('UPDATE runs SET status=?,updated_at=? WHERE id=?',p.decision==='deny'?'cancelled':this.options.executionEnabled?'queued':'waiting',now,run.id);
     if(p.decision==='approve'&&this.options.executionEnabled)this.noteRunnable();return a.id;
    }
