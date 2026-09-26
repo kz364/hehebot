@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Owner cancellation now reads metadata only, retaining grace anchor and terminal
+no-op behavior. Red3/focused153/backend2348/HTTP31/workerd/typecheck/build pass;
+1544260 exited0. Next remaining historical/storage/native recovery; no total bounds
+claimed. No active checks/children/delivery; existing schedule enabled. Full runtime/
+browser/native-service/shutdown/desktop matrix not rerun; original intermittency/
+advisories/gates unchanged.
+
 Own-custody follow-up audit found no supported waiting→cancelled bypass in inspected
 paths. Public operation/lock/unknown-effect cases reject waiting settlement and retain
 cancelling status, live attempt and pending followup. Terminal-cancellation mutant

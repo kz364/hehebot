@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** follow-up own-custody audit
+**Current checkpoint (2026-09-26, verified locally):** owner cancellation reads
+metadata only; repeated requests preserve the original grace anchor and terminal
+no-op behavior without historical snapshot hydration. Red3/focused153/backend2348/
+HTTP31/workerd/typecheck/dry-build pass. Remaining historical/storage/native recovery
+stays open; no total bounds claimed. Full runtime/browser/native-service/shutdown/
+desktop matrix not rerun; original intermittency/advisories/gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** follow-up own-custody audit
 found no supported waiting→cancelled bypass in inspected paths. New operation/lock/
 unknown-effect tests keep cancellation nonterminal and followups pending; immediate
 terminal-cancellation mutant fails3, restored focused181/typecheck pass. Production

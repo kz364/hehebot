@@ -4,6 +4,17 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Owner-cancellation metadata projection (2026-09-26 Asia/Jakarta): run.cancel selects
+id/persona_id/status/updated_at, preserving NOT_FOUND and all state/event predicates.
+Running, already-cancelling and completed fixtures with >1MiB historical bodies fail3
+before the change; two requests ten seconds apart retain exact snapshots/attempts
+and original grace timestamps. Red3/focused153/backend2348/HTTP31/workerd/typecheck/
+dry-build pass;1544260 exited0. Logs retained as .local/cancel-projection-red.log,
+-focused.log and -integrated.log. No whole-request/SQL/storage bound claimed.
+Remaining historical/storage/native recovery continues. Full runtime/browser/native-
+service/timed-shutdown/desktop matrix not rerun; original intermittency/advisories/
+gates unchanged. Local only.
+
 Follow-up own-custody audit (2026-09-26 Asia/Jakarta): no supported terminal-target
 bypass found in inspected completion/cancellation/heartbeat/effect/resource/native
 question/budget paths. Waiting completion settles the attempt only after own custody

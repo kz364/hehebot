@@ -29,6 +29,27 @@ function unknownEffect(runId: string) {
   f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','outcome_unknown','synthetic-authorization','synthetic-digest',?)", randomUUID(), runId, randomUUID(), f.core.now());
 }
 describe('executor leases and attempts', () => {
+  it.each(['running','cancelling','completed'] as const)('cancels %s using metadata without historical bodies or grace renewal',status=>{
+    const id=claimed().run.id;life.submitted(identity,id,1,'cancel-native');
+    const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+    f.db.exec('UPDATE runs SET status=?,context_json=?,checkpoint_json=? WHERE id=?',status,context,checkpoint,id);
+    const initial=f.store.run(id),attempts=f.db.all('SELECT * FROM attempts WHERE run_id=?',id);
+    const cancel=()=>f.accept({schema_version:1,type:'run.cancel',payload:{run_id:id,reason:'Stop exact task'}});
+    const read=vi.spyOn(f.db,'all');
+    try{
+      f.setNow('2026-09-10T00:00:10.000Z');expect(cancel().status).toBe('applied');
+      f.setNow('2026-09-10T00:00:20.000Z');expect(cancel().status).toBe('applied');
+      const returned=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[index].value:[]);
+      expect(returned).toEqual([
+        {id,persona_id:bot,status,updated_at:initial.updated_at},
+        {id,persona_id:bot,status:status==='completed'?'completed':'cancelling',updated_at:status==='running'?'2026-09-10T00:00:10.000Z':initial.updated_at}
+      ]);
+    }finally{read.mockRestore();}
+    expect(f.store.run(id)).toMatchObject({context_json:context,checkpoint_json:checkpoint,
+      status:status==='completed'?'completed':'cancelling',updated_at:status==='running'?'2026-09-10T00:00:10.000Z':initial.updated_at});
+    expect(f.db.all('SELECT * FROM attempts WHERE run_id=?',id)).toEqual(attempts);
+  });
+
   it.each(['completed','failed','waiting'] as const)('completes %s without historical snapshot hydration',status=>{
     const id=claimed().run.id;life.submitted(identity,id,1,'completion-native');
     const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});

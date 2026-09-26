@@ -305,7 +305,8 @@ export class ControlCore {
    }
    case 'room.publish': return this.publishRoom(owner,commandId,command.payload);
    case 'run.cancel': {
-    const run=this.store.run(command.payload.run_id);
+    const run=this.store.db.all<Pick<Run,'id'|'persona_id'|'status'|'updated_at'>>('SELECT id,persona_id,status,updated_at FROM runs WHERE id=?',command.payload.run_id)[0];
+    requireThat(run,'NOT_FOUND','Run unavailable.',404);
     if(['completed','failed','cancelled'].includes(run.status))return run.id;
     // Recovery remains parked; heartbeats already deliver cancellation for it.
     const status=run.status==='recovery_required'?'recovery_required':['queued','waiting'].includes(run.status)?'cancelled':'cancelling';
