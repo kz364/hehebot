@@ -4,6 +4,18 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Nested registration reopen (2026-09-26 Asia/Jakarta): integrated adapter/FileJournal/
+Worker-core fixture loses the grandchild response after SQL registration, records
+root completion with an unresolved grandchild command, then recreates journal,
+adapter and task control. Exact pending receipt reconciles to the existing run and
+parent; second sync sends no registration. Native journal, Worker runs/attempts/
+links remain unchanged; no native RPC and sleep denied. Temporary rootSettled early
+return fails this test, then production restored with zero diff. Related102 and
+typecheck pass; .local/nested-reopen-{mutant,final}.log. Initial test field typo
+child_run_id corrected to schema run_id. This is disk-object reopen with synthetic
+response loss, not process crash, Worker restart, power-loss or safe-resume proof.
+Full matrix not rerun for test-only work; gates and known limitations unchanged.
+
 Offline read allocation (2026-09-26 Asia/Jakarta): allocate validated file size+1
 instead of admission ceiling+1. The extra byte still detects growth; exact bytes
 read and second-stat size/mtime/ctime checks, owner/mode/no-symlink protections and

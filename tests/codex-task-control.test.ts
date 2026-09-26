@@ -134,6 +134,48 @@ it('reconciles lost registration acknowledgements with identical receipts and pr
   await expect(mapper({ runId: randomUUID(), personaId: bot, attempt: 1 }).sync()).rejects.toMatchObject({ code: 'TASK_GRANT_CONFLICT' });
 });
 
+it('reopens a lost grandchild registration after root completion without settling descendant custody', async () => {
+  life.submitted(identity, parentId, 1, 'turn');
+  await spawn('root', 'child-a'); await spawn('root', 'child-b'); await spawn('child-a', 'grandchild');
+  await adapter.observe('native', { method: 'item/started', params: { threadId: 'grandchild', turnId: 'turn',
+    item: { id: 'pending-command', type: 'commandExecution', status: 'inProgress', command: 'synthetic' } } });
+  const tasks = mapper(), request = tasks.control.request;
+  tasks.control.request = async (method: string, params: any) => {
+    if (params.child?.native_session_key === 'grandchild') lostAck = true;
+    return request(method, params);
+  };
+  await expect(tasks.sync()).rejects.toThrow('lost acknowledgement');
+  const pending = (await journal.get(tasks.key)).children['["grandchild","turn"]'];
+  expect(pending).toMatchObject({ runId: null, started: false, parentKey: '["child-a","turn"]' });
+  const links = f.db.all<any>('SELECT * FROM native_task_links ORDER BY native_run_ref');
+  expect(links).toHaveLength(3);
+  const grand = links.find(row => row.native_session_key === 'grandchild');
+  const child = links.find(row => row.native_session_key === 'child-a');
+  expect(grand.parent_run_id).toBe(child.run_id);
+  await adapter.observe('native', { method: 'turn/completed', params: { threadId: 'root',
+    turn: { id: 'turn', status: 'completed' } } });
+  const native = await journal.get('native');
+  expect(native).toMatchObject({ rootSettled: true, status: 'finishing' });
+  expect(native.childObligations['["grandchild","turn"]'].commands).toEqual({ 'pending-command': 'inProgress' });
+  const runs = f.db.all('SELECT * FROM runs'), attempts = f.db.all('SELECT * FROM attempts');
+  journal = new FileJournal(directory);
+  adapter = new CodexAdapter({ journal, cwd: directory,
+    rpc: async (method: string, params: any) => { interrupts.push({ method, params }); return {}; } });
+  const restored = mapper(), mapped = await restored.sync();
+  expect(mapped['["grandchild","turn"]']).toMatchObject({ runId: grand.run_id, started: true,
+    parentKey: '["child-a","turn"]', receipt: pending.receipt });
+  expect(registrations).toHaveLength(4);
+  expect(registrations[3]).toEqual(registrations[2]);
+  await restored.sync();
+  expect(registrations).toHaveLength(4);
+  expect(f.db.all('SELECT * FROM native_task_links ORDER BY native_run_ref')).toEqual(links);
+  expect(f.db.all('SELECT * FROM runs')).toEqual(runs);
+  expect(f.db.all('SELECT * FROM attempts')).toEqual(attempts);
+  expect(await journal.get('native')).toEqual(native);
+  expect(interrupts).toEqual([]);
+  expect(adapter.sleepReadiness().allowed).toBe(false);
+});
+
 it('maps sequential flat V2 child turns to distinct replay-stable receipts and exact provisional outputs', async () => {
   life.submitted(identity, parentId, 1, 'turn');
   const activity = (id: string, method: 'item/started' | 'item/completed', kind: 'started' | 'interacted', target: string) =>

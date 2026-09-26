@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Nested grandchild registration now has combined lost-response/root-completion/
+journal-reopen coverage. Exact replay identity and parent, unresolved command and
+Worker custody survive; no duplicate registration/native RPC, sleep denied.
+Root-terminal shortcut mutant fails; production restored unchanged, related102/
+typecheck pass, .local/nested-reopen-{mutant,final}.log. No process crash/Worker
+restart or safe-resume claim. No active checks/children/delivery; schedule enabled.
+Continue restoration/recursive settlement and historical/storage/existing-key bounds.
+Full matrix not rerun for test-only addition; gates/intermittency/advisories unchanged.
+
 Offline reads allocate validated size+1, preserving overflow and second-stat checks.
 Red1 catches four full-limit allocations; related63/typecheck1670421 exit0,
 .local/inspect-allocation-{red,final}.log. Exact small buffers, unchanged disk and

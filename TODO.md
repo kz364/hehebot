@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** offline inspector allocates
+**Current checkpoint (2026-09-26, verified locally):** nested lost-registration
+replay after root completion survives journal/adapter reopen. Exact grandchild
+identity, parent, unresolved command and unchanged Worker custody retained; replay
+does not duplicate registration or send native RPCs. Root-terminal shortcut mutant
+fails; restored production unchanged, related102/typecheck pass. This is not process
+crash/Worker restart or safe-resume proof. Next restoration/recursive settlement and
+historical/storage/existing-key bounds; full matrix not rerun, gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** offline inspector allocates
 validated file size plus one overflow byte, retaining size/timestamp and security
 checks. Red1 detects four full-limit buffers; related63/typecheck pass, exact small
 allocations and no-write/unknown custody verified. This is not a peak-memory or
