@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** completion reads at most one
+**Current checkpoint (2026-09-26, verified locally):** retry scheduling tests effect
+blocker existence without hydrating historical receipts; operation witness also
+limited to1. Exact receipt-TEXT semantics, checkpoint and10-second retry retained.
+Red8/focused104/backend2407/typecheck/dry-build pass; effects unchanged. No total
+SQL-work/storage bound. Next restoration/recursive settlement and historical/storage
+work; full matrix not rerun, external gates unchanged. Local only.
+
+**Previous checkpoint (2026-09-26, verified locally):** completion reads at most one
 operation/lock/effect blocker, retaining predicates, refusal order and custody.
 Red3/focused96/backend2399/typecheck/dry-build pass; all blocker/run/attempt rows
 unchanged on refusal and no result publication. This bounds returned witnesses,

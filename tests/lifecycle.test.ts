@@ -29,6 +29,30 @@ function unknownEffect(runId: string) {
   f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','outcome_unknown','synthetic-authorization','synthetic-digest',?)", randomUUID(), runId, randomUUID(), f.core.now());
 }
 describe('executor leases and attempts', () => {
+  it.each([
+    ['idempotent', null, false], ['idempotent', 'null', true], ['idempotent', 'false', true],
+    ['idempotent', '0', true], ['idempotent', '""', true], ['mutation', '{}', false],
+    ['read_only', null, true], ['idempotent', JSON.stringify({ padding: 'x'.repeat(1100000) }), true],
+  ] as const)('retry effect admission preserves receipt-text semantics (case %#)', (classification, receipt, allowed) => {
+    const id = claimed().run.id;
+    for (let i = 0; i < 40; i++) f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,receipt_json,updated_at) VALUES(?,?,?,'read_only','confirmed','test','digest','{}',?)", randomUUID(), id, randomUUID(), f.core.now());
+    f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,receipt_json,updated_at) VALUES(?,?,?,?,'failed','test','digest',?,?)", randomUUID(), id, randomUUID(), classification, receipt, f.core.now());
+    const effects = f.db.all('SELECT * FROM effects'), read = vi.spyOn(f.db, 'all');
+    try {
+      life.complete(identity, id, 1, { status: 'failed', text: '', error_code: 'TEMPORARY_UNAVAILABLE', checkpoint: { cursor: 71 } });
+      for (const [index, [sql]] of read.mock.calls.entries()) if (sql.includes('FROM effects WHERE run_id=?')) {
+        const rows = read.mock.results[index].value as Array<Record<string, unknown>>;
+        expect(rows.length).toBeLessThanOrEqual(1);
+        for (const row of rows) expect(row).not.toHaveProperty('receipt_json');
+      }
+    } finally { read.mockRestore(); }
+    expect(f.store.run(id)).toMatchObject({ status: allowed ? 'waiting' : 'failed', current_attempt: 1,
+      checkpoint_json: JSON.stringify({ cursor: 71 }), error_code: 'TEMPORARY_UNAVAILABLE' });
+    expect(f.db.all('SELECT run_id,due_at,reason FROM retry_queue')).toEqual(allowed
+      ? [{ run_id: id, due_at: '2026-09-10T00:00:10.000Z', reason: 'TEMPORARY_UNAVAILABLE' }] : []);
+    expect(f.db.all('SELECT * FROM effects')).toEqual(effects);
+  });
+
   it.each(['operations','resource_locks','effects'] as const)('completion reads one %s blocker without changing custody', table => {
     const id = claimed().run.id;
     life.submitted(identity, id, 1, 'completion-blockers');

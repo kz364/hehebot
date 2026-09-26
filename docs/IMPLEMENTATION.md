@@ -4,6 +4,18 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Retry effect presence (2026-09-26 Asia/Jakarta): replace receipt-body hydration and
+JS some with an exact SQL blocker predicate/LIMIT1, and limit the subsequent
+operation existence read to1. Stored receipt TEXT truthiness is retained: SQL NULL
+blocks idempotent retry; JSON text null/false/0/empty-string counts as present.
+Mutation history still blocks even on failed effects; read_only without receipt
+does not. Eight regressions fail on41 returned effect rows before the change;
+afterward no receipt_json column returns, including a1.1MB synthetic receipt.
+Checkpoint cursor71, exact10-second retry and every effect row remain unchanged.
+Focused104/backend2407/typecheck/dry-build pass (1687583 exit0), logs
+.local/retry-effect-presence-{red,focused,backend,build}.log. No whole-query SQL or
+storage bound claimed; full matrix not rerun, gates/intermittency/advisories unchanged.
+
 Completion blocker witnesses (2026-09-26 Asia/Jakarta): LIMIT1 on existing operation,
 resource-lock and unresolved-effect existence reads. Exact predicates, attempt
 binding, question-check position, refusal codes and transaction order unchanged.

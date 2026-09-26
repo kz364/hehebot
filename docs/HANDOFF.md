@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Retry scheduling now reads one effect blocker without receipt bodies, preserving
+stored-TEXT rather than parsed-JSON truthiness and failed mutation refusal. Pending
+operation read also limited to1. Red8/focused104/backend2407/typecheck/build1687583
+exit0, .local/retry-effect-presence-*.log. Effects/checkpoint/due time unchanged.
+No active check/child/delivery; schedule enabled. Continue restoration/recursive
+settlement and historical/storage bounds. Full matrix not rerun; no whole-query
+SQL/storage bound, external gates and known limitations unchanged.
+
 Completion blocker queries now return at most one operation/lock/effect witness;
 authority, refusal order, rollback and unknown custody retained. Red3/focused96/
 backend2399/typecheck/build1684588 exit0; .local/completion-witness-*.log. No total

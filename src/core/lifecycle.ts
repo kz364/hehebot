@@ -519,9 +519,12 @@ export class LifecycleCore {
   if(this.core.ownerAlpha.policy)return;
   if(run.role==='background'||run.current_attempt>=3 || !['TEMPORARY_UNAVAILABLE','DEADLINE_EXCEEDED','STALE_EPOCH','CANCEL_UNCONFIRMED'].includes(reason))return;
   if(this.core.questions.list().some(question=>question.run_id===run.id))return;
-  const effects=this.store.db.all<{classification:string;status:string;receipt_json:string|null}>('SELECT classification,status,receipt_json FROM effects WHERE run_id=?',run.id);
-  if(effects.some(x=>['intent','dispatched','outcome_unknown'].includes(x.status)||x.classification==='mutation'||x.classification==='idempotent'&&!x.receipt_json))return;
-  if(this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled'",run.id).length)return;
+  // Receipt presence follows the stored TEXT's truthiness, not its JSON value.
+  if(this.store.db.all(`SELECT id FROM effects WHERE run_id=? AND (
+   status IN ('intent','dispatched','outcome_unknown') OR classification='mutation'
+   OR (classification='idempotent' AND (receipt_json IS NULL OR receipt_json=''))
+  ) LIMIT 1`,run.id).length)return;
+  if(this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length)return;
   const due=new Date(this.core.options.now().getTime()+(run.current_attempt<=1?10000:60000)).toISOString();
   this.store.db.exec('INSERT INTO retry_queue(run_id,due_at,reason) VALUES(?,?,?) ON CONFLICT(run_id) DO NOTHING',run.id,due,reason);
   this.store.db.exec("UPDATE runs SET status='waiting',error_code=?,checkpoint_json=COALESCE(checkpoint_json,?),updated_at=? WHERE id=?",reason,JSON.stringify({retry_at:due}),this.core.now(),run.id);
