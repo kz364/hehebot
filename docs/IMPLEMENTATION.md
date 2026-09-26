@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Coordinator-release metadata projection (2026-09-26 Asia/Jakarta): select only
+current_attempt/role/status rather than full historical context/checkpoint bodies.
+Authorization order, NOT_FOUND code/message/404 and receipt validation are unchanged.
+Three oversized snapshot regressions fail before the change, then pass for running,
+cancelling and recovery_required; identical replay makes no changes, conflicting
+replay refuses, snapshots/child/unknown effects remain unchanged and attempt result
+stays unset. Focused380/backend2334/typecheck/dry-build pass;1526121 exited0.
+No total SQL/storage/recovery bound claimed. Next completion historical reads and
+remaining storage/native recovery. Runtime/workerd/browser/native/timed-shutdown/
+desktop matrix not rerun for this localized projection; original catalog/alpha
+intermittency, desktop advisories and production gates remain unchanged. Local only.
+- .local/release-projection-red.log SHA256: `606e666c6e6d6284039257ac50eda5ed995b2065187e039c8391298842cd5784`
+- .local/release-projection-focused.log SHA256: `211bbf35f81dcdd3d65bb6e6a8a73772783965e957cd8b1549429c0907557b1f`
+- .local/release-projection-integrated.log SHA256: `7f05bc67bd29a81bae67c82e1a483b432262aaa72da3e40005f857ba2b881629`
+
 Heartbeat metadata projection (2026-09-26 Asia/Jakarta): operation validation
 selects only run id/current_attempt/status instead of store.run's full historical
 context/checkpoint bodies for every operation. NOT_FOUND retains its code/message/

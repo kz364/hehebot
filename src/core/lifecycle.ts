@@ -388,7 +388,9 @@ export class LifecycleCore {
  }
  coordinatorRelease(identity:Identity,runId:string,attempt:number,nativeRef:string,outcome:CoordinatorOutcome):void {
   this.store.db.transaction(()=>{
-   this.authorizeAttempt(identity,runId,attempt);const run=this.store.run(runId);
+   this.authorizeAttempt(identity,runId,attempt);
+   const run=this.store.db.all<Pick<Run,'current_attempt'|'role'|'status'>>('SELECT current_attempt,role,status FROM runs WHERE id=?',runId)[0];
+   requireThat(run,'NOT_FOUND','Run unavailable.',404);
    requireThat(run.current_attempt===attempt,'REVISION_CONFLICT','Attempt has changed.');
    requireThat(run.role==='coordinator','FORBIDDEN','Only a coordinator may release its inference lane.');
    requireThat(['completed','failed','interrupted'].includes(outcome),'INVALID_INPUT','Invalid root terminal outcome.',422);

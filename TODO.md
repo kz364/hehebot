@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** operation heartbeat reads
+**Current checkpoint (2026-09-26, verified locally):** coordinator release reads
+only current attempt/role/status, without historical context/checkpoint hydration.
+Oversized running/cancelling/recovery-required fixtures preserve exact replay,
+conflict refusal, child custody and unknown effects. Red3/focused380/backend2334/
+typecheck/dry-build pass. Next completion historical reads, storage/native recovery.
+No total read/storage bound claimed. Prior runtime/browser/native/timed-shutdown/
+desktop matrix not rerun; original intermittency/advisories/external gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** operation heartbeat reads
 only run identity/current attempt/status instead of context/checkpoint bodies.
 Running/cancelling/recovery-required regressions preserve operation settlement,
 cancellation reporting and snapshots. Red3/focused366/backend2331/runtime682/HTTP31/

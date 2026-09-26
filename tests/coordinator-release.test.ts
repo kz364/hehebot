@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { beforeEach, afterEach, expect, it } from 'vitest';
+import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { LifecycleCore, type Identity, type CoordinatorOutcome } from '../src/core/lifecycle';
 import { NativeTaskLedger } from '../src/core/native-tasks';
 import { ResourceLedger } from '../src/core/resources';
@@ -27,6 +27,27 @@ function changes() { return f.db.all<{n:number}>('SELECT total_changes() AS n')[
 function child(id: string) {
   return new NativeTaskLedger(f.store, f.core, life).register(identity, { parent_run_id: id, parent_attempt: 1, persona_id: bot, native_run_ref: randomUUID(), native_session_key: randomUUID(), title: 'Unsettled child' }, true);
 }
+
+it.each(['running','cancelling','recovery_required'] as const)('releases %s coordinator custody without historical snapshot hydration', status => {
+  const id = root(), descendant = child(id);
+  const context = JSON.stringify({ padding: '界'.repeat(400000) }), checkpoint = JSON.stringify({ padding: 'x'.repeat(1100000) });
+  f.db.exec('UPDATE runs SET status=?,context_json=?,checkpoint_json=? WHERE id=?', status, context, checkpoint, id);
+  f.db.exec("INSERT INTO effects VALUES('retained-effect',?,'retained-action','mutation','outcome_unknown','policy','digest',NULL,NULL,?)", id, f.core.now());
+  const before = f.store.run(id), oldChild = f.store.run(descendant.id), effects = f.db.all('SELECT * FROM effects');
+  const read = vi.spyOn(f.db, 'all');
+  try {
+    release(id, 'interrupted');
+    const count = changes(); release(id, 'interrupted'); expect(changes()).toBe(count);
+    expect(() => release(id, 'completed')).toThrowError(expect.objectContaining({ code: 'IDEMPOTENCY_CONFLICT' }));
+    const rows = read.mock.calls.flatMap(([sql], index) => sql.includes('FROM runs WHERE id=?') ? read.mock.results[index].value : []);
+    expect(rows).toEqual(Array.from({ length: 3 }, () => ({ current_attempt: 1, role: 'coordinator', status })));
+  } finally { read.mockRestore(); }
+  expect(f.store.run(id)).toEqual(before); expect(f.store.run(descendant.id)).toEqual(oldChild);
+  expect(f.db.all('SELECT * FROM effects')).toEqual(effects);
+  expect(f.db.all('SELECT status,result_json,coordinator_release_json FROM attempts WHERE run_id=?', id)).toEqual([
+    { status: 'running', result_json: null, coordinator_release_json: JSON.stringify({ native_ref: `native:${id}`, outcome: 'interrupted' }) }
+  ]);
+});
 
 it('releases only the root inference lane while child, unknown operations, effects, locks and deadlines remain unchanged', () => {
   const id = root(), descendant = child(id), next = message(otherBot);
