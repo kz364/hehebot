@@ -17,7 +17,7 @@ import { warmManifestSha256, stageWarmClaim, validateWarmClaim, validateWarmLaun
 import { FileJournal } from '../runtime/file-journal.mjs';
 
 // The real client is the existing first-party TS bundle, not a copied mock.
-execFileSync('bash', [new URL('../scripts/build-codex-service.sh', import.meta.url).pathname], { stdio: 'pipe' });
+execFileSync('bash', [decodeURIComponent(new URL('../scripts/build-codex-service.sh', import.meta.url).pathname)], { stdio: 'pipe' });
 
 const id = n => `${String(n).padStart(8, '0')}-1111-4111-8111-111111111111`;
 const sha = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');

@@ -18,7 +18,7 @@ import { FileJournal } from '../runtime/file-journal.mjs';
 import { CodexOperations } from '../runtime/codex-operations.mjs';
 
 // The real client is the existing first-party TS bundle, not a copied mock.
-execFileSync('bash', [new URL('../scripts/build-codex-service.sh', import.meta.url).pathname], { stdio: 'pipe' });
+execFileSync('bash', [decodeURIComponent(new URL('../scripts/build-codex-service.sh', import.meta.url).pathname)], { stdio: 'pipe' });
 
 const id = n => `${String(n).padStart(8, '0')}-1111-4111-8111-111111111111`;
 const sha = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
@@ -491,7 +491,7 @@ test('--inspect-locked refuses before the exact expiry boundary and reports at o
       staged = { path, sha256: options.expectedSha256 };
       throw new Error('staged session captured for direct CLI boundary reads');
     } }));
-  const self = new URL('../runtime/hosted-owner-background-manager.mjs', import.meta.url).pathname;
+  const self = decodeURIComponent(new URL('../runtime/hosted-owner-background-manager.mjs', import.meta.url).pathname);
   const read = () => promisify(execFile)(process.execPath, [self, '--inspect-locked', staged.path, staged.sha256],
     { timeout: 10000, maxBuffer: 16384 });
   await assert.rejects(read(), error => error.code === 1 && error.stderr.trim() === 'HOSTED_BACKGROUND_MANAGER_REFUSED_OR_UNKNOWN',
