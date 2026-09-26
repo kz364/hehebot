@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** schema v16
+**Current checkpoint (2026-09-26, verified locally):** native history
+reconciliation indexes relevant item IDs instead of repeated full-history scans.
+Red2/focused34/runtime684/typecheck/build and pinned Codex abrupt-crash readback pass.
+Duplicate/type/omitted obligations and unknown effects retained; no inference replay.
+This reduces repeated scans, not total readback bytes or storage. Next remaining
+native restoration and historical/storage/existing-key bounds; external gates false.
+
+**Previous checkpoint (2026-09-26, verified locally):** schema v16
 adds run-key settlement indexes with aggregate migration construction limits of
 100000 rows and 4 MiB of key input. Red2/focused218/backend2388/typecheck/build,
 workerd migration/reopen/query plans, HTTP31 and encrypted backup drill pass.

@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Native history reconciliation now indexes relevant IDs once, preserving duplicate
+refusal, exact types/identity, omitted custody and unknown effects. Red2/focused34/
+runtime684/typecheck/build pass; final empty-set refinement focused34/runtime684
+passes again. Pinned Codex abrupt-crash readback passes without replacement inference
+or duplicate journal writes; sleep remains denied. Logs .local/native-history-*.
+No active checks/children/delivery; schedule enabled. Next remaining native restoration
+and historical/storage/existing-key bounds. No total journal/readback bound. Backend
+unchanged since v16; full browser/native-service/shutdown/desktop matrix not rerun.
+
 Schema v16 settlement run-key indexes are locally verified. Joint missing-index
 construction caps: 100000 rows and 4 MiB UTF-8 key input with rowid reserve. Oversized
 pre-v16 storage fails closed without deleting custody; shared migration not authorized.

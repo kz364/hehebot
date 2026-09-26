@@ -612,6 +612,37 @@ for (const child of [false, true]) test(`exact ${child ? 'child' : 'root'} comma
   assert.equal(restored.sleepReadiness().allowed, false);
 });
 
+for (const child of [false,true]) test(`restored ${child?'child':'root'} history lookup is linear without losing duplicate or omitted custody`, async t => {
+  const {adapter,journal,cwd}=await fixture(t);await adapter.submit(input);
+  const key='["child-a","child-turn"]',sibling='["sibling","child-turn"]';
+  const ids=[...Array.from({length:64},(_,i)=>`cmd-${i}`),'7','__proto__'];
+  const commands=Object.fromEntries([...ids.map(id=>[id,'inProgress']),['omitted','inProgress']]);
+  await journal.update(input.attemptId,{commands,effectsSettled:false,
+    spawns:{spawn:{status:'completed',receiverThreadIds:['child-a','sibling']}},
+    childTurns:{[key]:'inProgress',[sibling]:'inProgress'},
+    childObligations:{[key]:{commands},[sibling]:{commands}}});
+  const threadId=child?'child-a':'thread-a',turnId=child?'child-turn':'turn-b';
+  const items=[...Array.from({length:1024},(_,i)=>({id:`irrelevant-${i}`,type:'futureItem'})),
+    {id:7,type:'commandExecution',status:'failed'},
+    ...ids.map(id=>({id,type:'commandExecution',status:'completed'})),
+    ...Array.from({length:32},(_,i)=>({id:`message-${i}`,type:'agentMessage',text:`Reply ${i}`}))];
+  let visits=0;
+  const measured=new Proxy(items,{get(target,key,receiver){if(typeof key==='string'&&/^\d+$/.test(key))visits++;return Reflect.get(target,key,receiver);}});
+  const restored=new CodexAdapter({cwd,journal:new FileJournal(cwd),rpc:async method=>{
+    assert.equal(method,'thread/read');return {thread:{id:threadId,source:{subAgent:{thread_spawn:{parent_thread_id:'thread-a'}}},
+      turns:[{id:turnId,status:'completed',items:measured}]}};
+  }});
+  const reconcile=()=>child?restored.reconcileChild(input.attemptId,{threadId,turnId}):restored.reconcile(input.attemptId);
+  const row=await reconcile(),selected=child?row.childObligations[key]:row;
+  assert.deepEqual(selected.commands,Object.fromEntries([...ids.map(id=>[id,'completed']),['omitted','inProgress']]));
+  assert.deepEqual(selected.outputPreview,{version:32,text:'Reply 31',truncated:false});
+  assert.equal(row.effectsSettled,false);assert.deepEqual(row.childObligations[sibling],{commands});
+  assert.ok(visits<=items.length*3,`History item visits ${visits} exceed three passes over ${items.length} items`);
+  items.push({id:'cmd-63',type:'futureItem'});
+  await assert.rejects(reconcile(),{code:'RECONCILIATION_INCOMPLETE'});
+  assert.deepEqual(await journal.get(input.attemptId),row);
+});
+
 test('invalid command history cannot partially settle a turn or overwrite a newer live observation', async t => {
   const { adapter, journal } = await fixture(t);
   await adapter.submit(input);
@@ -620,6 +651,8 @@ test('invalid command history cannot partially settle a turn or overwrite a newe
   let items;
   adapter.rpc = async () => ({ thread: { id: 'thread-a', turns: [{ id: 'turn-b', status: 'completed', items }] } });
   for (const [bad, code] of [
+    [[null, { type: 'agentMessage', text: 'Missing ID' }], 'CODEX_PROTOCOL_ERROR'],
+    [[{ id: 'reply', type: 'agentMessage', text: 'Ambiguous' }, { id: 'reply', type: 'futureItem' }], 'RECONCILIATION_INCOMPLETE'],
     [[command('first'), command('second', 'unknown')], 'CODEX_PROTOCOL_ERROR'],
     [[command('first'), { ...command('second'), type: 'mcpToolCall' }], 'CODEX_PROTOCOL_ERROR'],
     [[command('first'), command('second'), command('second')], 'RECONCILIATION_INCOMPLETE'],

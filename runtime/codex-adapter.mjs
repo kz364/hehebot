@@ -512,15 +512,26 @@ export class CodexAdapter {
       if (prior !== 'inProgress' && prior !== turn.status) fail('SETTLEMENT_CONFLICT');
       const owner = child ? row.childObligations?.[key] ?? {} : row;
       const recovered = {};
+      const types = { commands: 'commandExecution', mcpCalls: 'mcpToolCall',
+        dynamicCalls: 'dynamicToolCall', fileChanges: 'fileChange' };
+      const messages = turn.status === 'completed' ? (turn.items ?? []).filter(item => item?.type === 'agentMessage') : [];
+      const wanted = new Set([...messages.map(item => item.id), ...Object.keys(types).flatMap(field => Object.keys(owner[field] ?? {}))]);
+      const byId = new Map();
+      // Index only relevant IDs, but count every matching type so ambiguous
+      // history still refuses atomically. Omitted obligations remain unresolved.
+      if (wanted.size) for (const item of turn.items ?? []) if (typeof item?.id === 'string' && wanted.has(item.id)) {
+        const match = byId.get(item.id);
+        if (match) match.count++;
+        else byId.set(item.id, { item, count: 1 });
+      }
       // Only successful terminal history has final message text. In-progress or
       // interrupted streams cannot establish an immutable output digest.
       if (turn.status === 'completed') {
-        const messages = (turn.items ?? []).filter(item => item?.type === 'agentMessage');
         const seen = owner.outputItems ?? {}, history = Object.create(null);
         let added = 0, last;
         for (const item of messages) {
           if (typeof item.id !== 'string' || !item.id || item.id.length > 256) fail('CODEX_PROTOCOL_ERROR');
-          if ((turn.items ?? []).filter(candidate => candidate?.id === item.id).length !== 1) fail('RECONCILIATION_INCOMPLETE');
+          if (byId.get(item.id).count !== 1) fail('RECONCILIATION_INCOMPLETE');
           const message = projectOutputMessage(item);
           if (Object.hasOwn(seen, item.id)) {
             if (seen[item.id] !== message.outputDigest) fail('OUTPUT_MESSAGE_CONFLICT');
@@ -538,14 +549,13 @@ export class CodexAdapter {
             text: last.text, truncated: last.truncated };
         }
       }
-      for (const [field, type] of Object.entries({ commands: 'commandExecution', mcpCalls: 'mcpToolCall',
-        dynamicCalls: 'dynamicToolCall', fileChanges: 'fileChange' })) {
+      for (const [field, type] of Object.entries(types)) {
         const values = { ...owner[field] }; let changed = false;
         for (const [id, status] of Object.entries(values)) {
-          const matches = (turn.items ?? []).filter(item => item?.id === id);
-          if (!matches.length) continue; // Omitted history is not a terminal receipt.
-          if (matches.length !== 1) fail('RECONCILIATION_INCOMPLETE');
-          const item = matches[0];
+          const match = byId.get(id);
+          if (!match) continue; // Omitted history is not a terminal receipt.
+          if (match.count !== 1) fail('RECONCILIATION_INCOMPLETE');
+          const item = match.item;
           const states = ['inProgress', 'completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : [])];
           if (item.type !== type || !states.includes(item.status)) fail('CODEX_PROTOCOL_ERROR');
           if (status !== 'inProgress' && status !== item.status) fail('SETTLEMENT_CONFLICT');

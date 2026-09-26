@@ -4,6 +4,24 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native history lookup (2026-09-26 Asia/Jakarta): reconciliation indexes only message
+and already-recorded tool IDs, counting duplicate matches across all item types.
+It preserves string identity (including numeric-looking and prototype-named IDs),
+error ordering, output limits, omitted obligations, sibling isolation and atomic
+rejection; no new tool or external-effect settlement is inferred. Empty relevant-ID
+sets skip indexing. Two root/child regressions fail before the change at 112300
+item visits over 1123 items and pass afterward within three scans. This reduces
+repeated scans, not readback size, journal size, total allocation or recovery time.
+Red2/focused34/typecheck/runtime684/build pass (1606896 exit0); final empty-set
+refinement passes focused34/runtime684 again (1608968 exit0). Pinned unmodified
+Codex 0.154.0 abrupt SIGKILL/readback passes (1607309 exit0): held synthetic provider
+request dies, replacement recovers exact root/interrupted-child identities without
+inference, duplicate readback does not rewrite, unknown obligations still deny sleep,
+and replacement processes exit. No live provider/account calls or native DB edits.
+Logs .local/native-history-*.log. Backend unchanged since v16/backend2388; full
+browser/native-service/timed-shutdown/desktop matrix not rerun. Original intermittency,
+advisories and gates unchanged; remaining historical/storage/native recovery is open.
+
 Settlement run-key indexes (2026-09-26 Asia/Jakarta): application schema v16 adds
 operations(run_id,status), effects(run_id,status) and resource_locks(run_id).
 The exhaustive recursive UNION and all custody predicates are unchanged. Node and
