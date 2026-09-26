@@ -41,6 +41,11 @@ still couldn't chat with a bot during a background task. See the traps in
      `control-backup-creation`, `control-backup-pruning`, `control-export-import`,
      `control-restore-inspection`, `encrypted-control-backup`, `owner-auth-binding`
      (1 case). All other files pass: 2,246 tests.
+   - **Runtime suite on macOS:** `npm run test:runtime` hangs on macOS in
+     `runtime-process-lock.mjs` and `runtime-hosted-owner-unused.mjs` (Linux flock/process-group
+     semantics; still fails with Homebrew `flock`/`util-linux`), and several codex-service cases
+     fail because `build-codex-service.sh` needs the Linux Codex binary. Run focused runtime files
+     individually on macOS; run the full runtime suite on Linux. G3's lock work needs Linux evidence.
 4. Pick the lowest open G row whose dependencies are merged (waves are listed in TODO).
 
 ### Code map for the G rows
