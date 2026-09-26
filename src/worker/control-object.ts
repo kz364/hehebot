@@ -35,6 +35,13 @@ import {HostedWakeDeliveryError,parseHostedOwnerWake,sendHostedOwnerWake,type Ho
 import {TestCampaign,parseTestCampaignGrant} from '../core/test-campaign';
 import {parseTestAuthConfig} from './test-auth';
 export type TriggerPolicy={routine_id:string;event_types:string[]};
+/** Per-socket Hibernation API attachment (GROK_ALIGNMENT A6). `cursor` is the
+ * last sequence delivered to this socket; null means the socket has not
+ * completed a subscribe (a gap reply also resets it to null, since a pruned
+ * cursor is not a safe delivery point). `runtime` is the last mapped
+ * runtime-state label sent, so a phase change can be pushed without a client
+ * poll. */
+type StreamAttachment={cursor:number|null;runtime:string|null};
 function stringList(value:string):string[]{const parsed:unknown=JSON.parse(value);if(!Array.isArray(parsed)||!parsed.every(x=>typeof x==='string'))throw new Error('Invalid policy configuration');return parsed;}
 function delegationMap(value:string):Record<string,string[]>{
  const parsed:unknown=JSON.parse(value);
@@ -129,7 +136,111 @@ export class PersonalControl extends DurableObject<Env> {
  private rpc<T>(fn:()=>T|Promise<T>):Promise<RpcResult<T>>{
   const failure=this.initializationFailure;
   if(failure)return Promise.resolve({ok:false,error:safeError(failure),status:failure.status});
-  return rpcResult(fn);
+  // Broadcast-on-commit (GROK_ALIGNMENT A6): every RPC entry point funnels
+  // through here, so this is the single place that notices anything a
+  // request may have committed — new events or a runtime-phase change — and
+  // pushes it to open stream sockets. It never affects the RPC's own result.
+  return rpcResult(fn).then(result=>{this.broadcastStreamCommit();return result;});
+ }
+ /** GET /v1/stream (Access + same-origin already verified by the Worker):
+  * upgrade to a hibernatable WebSocket. Idle/hibernated sockets cost nothing
+  * here and are never independently timed; all delivery happens from
+  * broadcastStreamCommit, driven by real requests and alarms. */
+ async fetch(request:Request):Promise<Response>{
+  const failure=this.initializationFailure;
+  if(failure)return new Response(JSON.stringify({error:safeError(failure)}),{status:failure.status,headers:{'Content-Type':'application/json'}});
+  try{
+   this.rate('stream:connect',120);
+   // Auto-response answers "ping" with "pong" without waking the DO or
+   // invoking webSocketMessage. Guarded for hosts/tests without the API.
+   try{if(typeof WebSocketRequestResponsePair!=='undefined')this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping','pong'));}catch{}
+   const pair=new WebSocketPair();
+   const [client,server]=Object.values(pair);
+   this.ctx.acceptWebSocket(server);
+   server.serializeAttachment({cursor:null,runtime:null} satisfies StreamAttachment);
+   return new Response(null,{status:101,webSocket:client});
+  }catch(error){
+   const status=error instanceof ControlError?error.status:500;
+   return new Response(JSON.stringify({error:safeError(error)}),{status,headers:{'Content-Type':'application/json'}});
+  }
+ }
+ /** Client frames: text "ping" is normally intercepted by the auto-response
+  * pair and never reaches here; the check below is defensive only. The only
+  * JSON frame is `{type:"subscribe",cursor}`. Anything else is ignored, not
+  * an error: an idle/misbehaving socket must not affect the request path. */
+ async webSocketMessage(ws:WebSocket,message:string|ArrayBuffer):Promise<void>{
+  if(typeof message!=='string'||message==='ping')return;
+  try{
+   let parsed:unknown;
+   try{parsed=JSON.parse(message);}catch{return;}
+   if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)||(parsed as {type?:unknown}).type!=='subscribe')return;
+   const cursor=(parsed as {cursor?:unknown}).cursor??null;
+   if(cursor!==null&&!(typeof cursor==='number'&&Number.isSafeInteger(cursor)&&cursor>=0))return;
+   const now=this.core.now(),runtime=this.runtimeStreamState();
+   if(cursor!==null){
+    // Same gap logic as state()/HISTORY_GAP: a cursor at or behind the
+    // retention floor, or before the oldest retained sequence, cannot be
+    // resumed from safely.
+    const first=this.store.db.all<{seq:number|null}>('SELECT MIN(sequence) AS seq FROM events')[0].seq;
+    const floor=this.store.retentionFloor(now);
+    if(cursor<floor||(first&&cursor<first-1)){
+     ws.send(JSON.stringify({type:'snapshot_required'}));
+     ws.send(JSON.stringify({type:'runtime',state:runtime}));
+     ws.serializeAttachment({cursor:null,runtime} satisfies StreamAttachment);
+     return;
+    }
+   }
+   const attachment:StreamAttachment={cursor:cursor===null?this.store.sequence():cursor,runtime};
+   if(cursor===null)ws.send(JSON.stringify({type:'events',events:[],cursor:attachment.cursor}));
+   else this.deliverStreamEvents(ws,attachment,now);
+   ws.send(JSON.stringify({type:'runtime',state:runtime}));
+   ws.serializeAttachment(attachment);
+  }catch{try{ws.close(1011,'Stream message failed.');}catch{}}
+ }
+ async webSocketClose(ws:WebSocket,code:number,reason:string):Promise<void>{try{ws.close(code,reason);}catch{}}
+ async webSocketError(ws:WebSocket):Promise<void>{try{ws.close(1011,'Stream error.');}catch{}}
+ /** Maps lifecycle phases to the client-facing runtime label (GROK_ALIGNMENT A6). */
+ private runtimeStreamState():'asleep'|'waking'|'running'|'recovery_required'{
+  const phase=this.lifecycle.get().phase;
+  if(phase==='RECOVERY_REQUIRED')return 'recovery_required';
+  if(phase==='START_REQUESTED'||phase==='BOOTING')return 'waking';
+  if(phase==='READY'||phase==='DRAINING')return 'running';
+  return 'asleep'; // STOPPED, IDLE_PERMITTED, STOP_COMMITTED, STOPPING
+ }
+ private streamAttachment(ws:WebSocket):StreamAttachment{
+  try{const value=ws.deserializeAttachment();if(value&&typeof value==='object')return value as StreamAttachment;}catch{}
+  return {cursor:null,runtime:null};
+ }
+ /** Sends owner-visible events after the attachment's cursor, ≤100 per frame,
+  * serialized exactly like the per-conversation timeline endpoint (same
+  * TimelineEvent rows, via the same Store method family). */
+ private deliverStreamEvents(ws:WebSocket,attachment:StreamAttachment,now:string):void{
+  while(attachment.cursor!==null){
+   const page=this.store.events(attachment.cursor,100,now);
+   if(!page.length)break;
+   ws.send(JSON.stringify({type:'events',events:page,cursor:page.at(-1)!.sequence}));
+   attachment.cursor=page.at(-1)!.sequence;
+   if(page.length<100)break;
+  }
+ }
+ /** Broadcast-on-commit: called after every RPC and after every alarm. Must
+  * never throw into the request/alarm path — every layer is caught. A
+  * hibernated socket with nothing new costs one attachment read and no I/O. */
+ private broadcastStreamCommit():void{
+  let sockets:WebSocket[];
+  try{sockets=this.ctx.getWebSockets();}catch{return;}
+  if(!sockets.length)return;
+  let now:string,after:number,runtime:'asleep'|'waking'|'running'|'recovery_required';
+  try{now=this.core.now();after=this.store.sequence();runtime=this.runtimeStreamState();}catch{return;}
+  for(const ws of sockets){
+   try{
+    const attachment=this.streamAttachment(ws);
+    let changed=false;
+    if(attachment.cursor!==null&&after>attachment.cursor){this.deliverStreamEvents(ws,attachment,now);changed=true;}
+    if(attachment.runtime!==runtime){ws.send(JSON.stringify({type:'runtime',state:runtime}));attachment.runtime=runtime;changed=true;}
+    if(changed)ws.serializeAttachment(attachment);
+   }catch{try{ws.close(1011,'Stream delivery failed.');}catch{}}
+  }
  }
  private rate(subject:string,limit:number){
   const window=Math.floor(Date.now()/60000);
@@ -191,7 +302,22 @@ export class PersonalControl extends DurableObject<Env> {
  getRoutineTasks(owner:string,id:string,after?:string,limit=10){return this.rpc(()=>{this.rate(owner+':read',120);return this.core.routineTaskPage(id,after,limit);});}
  getRecovery(owner:string,id:string,after?:string,limit=20){return this.rpc(async()=>{await this.beforeRequest(owner+':read',120);return this.core.recoveryPage(id,after,limit);});}
  getControlExport(owner:string){return this.rpc(()=>{this.rate(owner+':export',2);return new Blob([exportControl(this.store.db,this.core.now())]).stream();});}
- getTimeline(owner:string,id:string,before?:number){return this.rpc(async()=>{await this.beforeRequest(owner+':read',120);const object=this.store.get(id);requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);const now=this.core.now();const events=this.store.conversationEvents(id,now,before,100);const prunedThrough=this.store.retentionFloor(now,id);return {events,before_cursor:events[0]?.sequence??null,has_more:events.length===100,history_gap:prunedThrough>0,pruned_through:prunedThrough};});}
+ getTimeline(owner:string,id:string,before?:number,after?:number){return this.rpc(async()=>{
+  await this.beforeRequest(owner+':read',120);
+  const object=this.store.get(id);
+  requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);
+  const now=this.core.now();
+  const prunedThrough=this.store.retentionFloor(now,id);
+  // Forward pagination is the long-poll/fallback cursor for the streamed
+  // timeline (GROK_ALIGNMENT A6): a cursor at or behind the retention floor
+  // cannot be resumed from, mirroring state()'s HISTORY_GAP check.
+  if(after!==undefined){
+   const events=this.store.conversationEventsAfter(id,after,now,100);
+   return {events,after_cursor:events.at(-1)?.sequence??after,has_more:events.length===100,history_gap:after<prunedThrough,pruned_through:prunedThrough};
+  }
+  const events=this.store.conversationEvents(id,now,before,100);
+  return {events,before_cursor:events[0]?.sequence??null,has_more:events.length===100,history_gap:prunedThrough>0,pruned_through:prunedThrough};
+ });}
  private providerSummary(){
   try{const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);return {id:provider.id,capabilities:provider.capabilities,live_verified:false};}
   catch{return {id:'unconfigured',capabilities:null,live_verified:false};}
@@ -652,6 +778,6 @@ export class PersonalControl extends DurableObject<Env> {
    }
    if(this.core.options.executionEnabled){const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);await this.lifecycle.drive(provider);}
   }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code}));}
-  finally{await this.arm(failed?300000:0);}
+  finally{this.broadcastStreamCommit();await this.arm(failed?300000:0);}
  }
 }

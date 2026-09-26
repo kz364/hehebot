@@ -121,6 +121,15 @@ export default {
    }
    // Auth is applied before assets as well as API. Local dev is loopback-only.
    const owner=await authenticateOwner(request,env);
+   if(path==='/v1/stream'){
+    // GROK_ALIGNMENT A6: same owner authentication and same-origin check as
+    // every other /v1 route; only the transport differs. The Durable Object
+    // owns the actual WebSocket Hibernation upgrade.
+    assertSameOrigin(request);
+    requireThat(request.method==='GET','NOT_FOUND','Route unavailable.',404);
+    requireThat((request.headers.get('Upgrade')??'').toLowerCase()==='websocket','UPGRADE_REQUIRED','A WebSocket upgrade is required.',426);
+    return control.fetch(request);
+   }
    if(path==='/v1/connectors/catalog'&&request.method==='GET')return json(unwrap(await control.getConnectorCatalog(owner)));
    if(path==='/v1/schedules/preview'&&request.method==='GET')return json(unwrap(await control.getSchedulePreview(owner,url.searchParams.get('cron')??'',url.searchParams.get('timezone')??'')));
    const skillHistory=path.match(/^\/v1\/skills\/([0-9a-f-]{36})\/revisions$/i);
@@ -143,7 +152,13 @@ export default {
    }
    if(path==='/v1/export/control'&&request.method==='GET')return new Response(unwrap(await control.getControlExport(owner)),{headers:{'Content-Type':'application/json','Content-Disposition':'attachment; filename="hehebot-control-export.json"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
    const conversation=path.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/events$/i);
-   if(conversation&&request.method==='GET'){const before=url.searchParams.get('before');requireThat(before===null||/^\d+$/.test(before)&&Number.isSafeInteger(Number(before)),'INVALID_INPUT','Invalid history cursor.',422);return json(unwrap(await control.getTimeline(owner,conversation[1],before===null?undefined:Number(before))));}
+   if(conversation&&request.method==='GET'){
+    const before=url.searchParams.get('before'),after=url.searchParams.get('after');
+    requireThat(before===null||/^\d+$/.test(before)&&Number.isSafeInteger(Number(before)),'INVALID_INPUT','Invalid history cursor.',422);
+    requireThat(after===null||/^\d+$/.test(after)&&Number.isSafeInteger(Number(after)),'INVALID_INPUT','Invalid forward cursor.',422);
+    requireThat(before===null||after===null,'INVALID_INPUT','Specify only one of before or after.',422);
+    return json(unwrap(await control.getTimeline(owner,conversation[1],before===null?undefined:Number(before),after===null?undefined:Number(after))));
+   }
    const tasks=path.match(/^\/v1\/conversations\/([0-9a-f-]{36})\/tasks$/i);
    if(tasks&&request.method==='GET')return json(unwrap(await control.getTasks(owner,tasks[1],url.searchParams.get('after')??undefined,Number(url.searchParams.get('limit')??10))));
    const routinePreflight=path.match(/^\/v1\/routines\/([0-9a-f-]{36})\/preflight$/i);
