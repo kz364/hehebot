@@ -4,6 +4,24 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+**Owner pause/publication (2026-09-26):** implementation and scheduled
+follow-through are paused. GitHub publication of existing source and the full
+[state handoff](HANDOFF.md#owner-pause-and-publication-handoff--2026-09-26) is
+authorized. No merge, deployment, live operation or gate change is authorized by
+that request. Historical continuation instructions below do not override the pause.
+
+Current integrated verification (2026-09-26): `bash scripts/verify-codex.sh`
+on source d249b26 completed in one invocation, process1698933 exit0. Backend2413,
+runtime700, backup drill, workerd migration/reopen, HTTP/browser, native process,
+normal and pending-maintenance warm/background automatic stop, strict launcher,
+all service variants and dry build passed. Final JSON status passed retains
+assistantOperational/productionAdmission/modelJudgmentVerified false. Log remains
+private at .local/recovery-current-combined.log. Desktop reinstall/tests separately
+pass16;14 advisories (13 high,1 critical) remain. No fixture test processes or
+/etc/codex or /.sprite residue remain. Documentation-only publication edits follow
+that check. Earlier catalog/alpha intermittency remains unreproduced, not fixed;
+all live/provider/account/Mac/cost acceptance and production gates remain open.
+
 Question retry disk persistence (2026-09-26 Asia/Jakarta): strengthened the four
 existing question timer cases to restore a closed SQLite backup and reopen again
 after timer processing. Exact questions and attempts survive; unresolved states

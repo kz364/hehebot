@@ -1,8 +1,251 @@
 # Hehebot agent handoff
 
+## Owner pause and publication handoff — 2026-09-26
+
+This section supersedes the older continuation instructions below. The owner
+paused implementation and authorized publishing all local Git work and this state
+report to GitHub. The two-hour Amp follow-through schedule is **disabled**. Do not
+resume implementation or re-enable it without the owner's instruction. Publication
+does not authorize deployment, live tests, account access, spending, migrations on
+shared data, or production-gate changes.
+
+### Fresh agent: start here, not in the historical notes
+
+1. **Check the latest owner instruction.** If it only asks you to inspect this
+   handoff, report status and remain paused. If it explicitly resumes engineering,
+   continue the local work below. Do not interpret the older “continue” paragraphs
+   or the existence of unfinished TODO rows as a resume instruction.
+2. **Use the right source.** For a new checkout:
+   ```sh
+   git clone --branch source-custody https://github.com/kz364/hehebot.git
+   cd hehebot
+   git status --short
+   git branch --show-current
+   ```
+   In an existing checkout, inspect changes before switching branches; never reset
+   someone else's work. `main` and `review/e06-*` are not the continuation branch.
+3. **Read in order:** root `AGENTS.md`, this current handoff section, `README.md`,
+   `docs/PROJECT_INTENT.md`, the current and remaining-work sections of `TODO.md`,
+   then relevant evidence in `docs/IMPLEMENTATION.md`. Specs are targets, not pass
+   claims. You do not need this Amp conversation or `.amp/coordination` to resume.
+4. **Prepare the disposable local environment.** Inspect `.agents/setup` and run
+   `bash .agents/setup` when prerequisites are missing; use `.agents/resume` after
+   an orb restore. Keep Codex pinned at 0.154.0. Never import private account state
+   to make credential-free tests work. `.local` log paths below are historical
+   evidence references, not files guaranteed to exist in a fresh clone.
+5. **Resume at F3/E01/E02**, with storage bounds as the coupled E06/E10 workstream.
+   The latest finished unit is the disk-reopened question retry regression; do
+   not redo it or merely add more variants of the same object-reconstruction test.
+   The next concrete target is a supported native/process recovery sequence with
+   retained nested-child and unknown-effect obligations, beyond graceful SQLite
+   reopen. Inspect existing coverage before selecting the missing boundary.
+6. **Keep one accountable owner.** No child thread is running or expected to
+   deliver changes. Reconstruct any local coordination ledger from this handoff;
+   do not wait for obsolete worker messages. The paused schedule has no automatic
+   resume. Re-enable it only if the owner asks for automated follow-through.
+
+### Code map and first recovery deliverable
+
+| Concern | Implementation / evidence to inspect |
+| --- | --- |
+| Worker task admission, retry, completion, sleep | `src/core/lifecycle.ts`; `tests/lifecycle.test.ts`, `tests/recovery.test.ts` |
+| Recorded descendant settlement and registration | `src/core/native-tasks.ts` (`nativeDescendantsSettledSql`); `tests/codex-task-control.test.ts` |
+| Native observations, sync and durable runtime custody | `runtime/codex-adapter.mjs`, `runtime/codex-tasks.mjs`, `runtime/file-journal.mjs`, `runtime/execution-bridge.mjs` |
+| Offline recovery evidence, never automatic resume | `runtime/codex-recovery-inspect.mjs`; `tests/runtime-codex-recovery-inspect.mjs` |
+| Question authority and connection-local callbacks | `src/core/native-questions.ts`, `runtime/codex-questions.mjs`; `tests/question-control.test.ts`, `tests/runtime-codex-questions.mjs` |
+| Existing actual-process fixtures | `scripts/test-codex-crash-readback.mjs`, `scripts/test-control-crash.mjs` |
+| Lifecycle/product requirements | `docs/CODEX_RECOVERY.md`, `docs/NATIVE_ORCHESTRATION.md`, `SPEC.md`, `docs/BOT_ORCHESTRATION_ADDENDUM.md` |
+| Live-trial prerequisites, not permission | `docs/AUTH_SETUP.md`; the “next bounded owner trial” procedure |
+
+For the next recovery unit, trace the existing root/child crash-readback and
+lost-registration acknowledgement tests into Worker admission. Identify which
+transition still has only in-memory or graceful-reopen evidence. Add the smallest
+disposable process-level fixture for that transition, fixing production behavior
+only if it exposes a real defect. Its acceptance must demonstrate exact
+run/attempt/native parent identity, retained pending/unknown obligations, no
+duplicate external submission or effect, and refusal of sleep/retry/replacement
+until the relevant obligations settle. Include an independent-task control so
+global blocking cannot masquerade as correct per-task isolation. If supported
+native interfaces cannot establish the required observation, record the precise
+missing interface and preserve the refusal; do not infer success from process exit.
+This is an engineering target, not a claim that the fixture already exists or
+that the provider permits takeover.
+
+Use the existing tests rather than introducing another harness. Quick local check:
+
+```sh
+npx vitest run tests/lifecycle.test.ts tests/recovery.test.ts tests/question-control.test.ts tests/codex-task-control.test.ts
+npm run typecheck
+```
+
+For integrated completion, run `bash scripts/verify-codex.sh` and the separate
+`npm ci --prefix desktop && npm test --prefix desktop`. The combined verifier has
+deliberately quiet timed shutdown/launcher stages and can take tens of minutes.
+Capture its final exit status, not just passing lines from intermediate stages.
+Keep private logs under `.local`; update TODO, implementation evidence and this
+current handoff at material checkpoints. Do not change historical evidence to
+make it look current, and do not claim full acceptance from another partial test.
+
+### Delivery and operational state
+
+- Repository: `kz364/hehebot`. The implementation is on `source-custody`, not local
+  `main`. Before this publication, `origin/main` ended at `656432f` and the
+  implementation branch contained 215 additional commits through `d249b26`.
+- This publication preserves the implementation branch and retained `review/e06-*`
+  branches without merging them. Review branches are historical work products, not alternative
+  supported builds or unreviewed changes to import automatically. The owner has
+  not requested a pull request, merge, release, or deployment.
+- Private `.local` evidence, credentials, installation state, generated browser
+  artifacts and the ignored coordination ledger are not publication payloads.
+  Source-controlled documentation carries the continuation facts instead.
+- The protected hosted portal previously demonstrated canonical bounded text-only
+  replies, a Worker-triggered wake and authenticated reload persistence. This is
+  historical evidence, not a current availability check. Trial policies expired;
+  historical failed tasks retain recovery-required custody. Do not replay them,
+  erase journals, reset an installation, or infer retirement from a cold status.
+- Production execution and native-verification gates remain false. No new live
+  inference, provider action, connector activation or deployment occurred during
+  the recovery work reported here. The latest local source is not a statement of
+  what is deployed.
+
+### What exists and what has been demonstrated
+
+The architecture is a Cloudflare Worker/SQLite Durable Object control plane, a
+remote-only portal, and one customer-owned sleeping runtime for all personas.
+Sprites is selected. Direct Codex app-server **0.154.0** is the only supported
+harness. The SwiftUI/WKWebView Mac client has source but lacks real Mac acceptance;
+Electron is a tested reference shell, not the selected final Mac product.
+
+Locally implemented and tested components include durable command receipts,
+task/attempt identities, scoped context and memory preparation, routines, questions
+and approvals, resource locks, effect tracking, native task metadata, runtime
+journaling, authenticated wake transport, task controls and portal history.
+Finite warm/background fixtures compose Chromium, signed Worker/SQLite and a
+pristine native process: independent messages do not implicitly steer active work,
+exact task cancellation is isolated, results survive reload, and passive reads do
+not create inference or wake requests. Fixed scripted routing is not model intent
+acceptance or unrestricted concurrent production service.
+
+Normal-expiry and pending-maintenance fixtures exercise automatic launcher/native
+termination. Root/child readback and selected real subprocess-death tests retain
+unknown obligations without replay. These establish individual boundaries, not
+complete recursive settlement, provider termination, safe replacement or resume.
+
+Recent recovery/storage work adds narrower SQL projections and blocker-existence
+queries, versioned native settlement indexes with bounded migration preflight,
+legacy backup compatibility, child-origin/parent-edge indexing, batches for more
+than 100 observed turns, final-send lease checks after durable intent writes, and
+tests for late observations, lost acknowledgements and question connection scope.
+The newest test restores a SQLite backup and reopens again after retry-timer
+writes: pending/answered/response_unknown questions retain custody without wake;
+resolved questions requeue once. This is graceful disk reopen, not native takeover.
+
+### Verification and its limits
+
+- Latest focused check: `npx vitest run tests/question-control.test.ts
+  tests/lifecycle.test.ts tests/recovery.test.ts` — **178 passed**; typecheck passed.
+- Full `bash scripts/verify-codex.sh` on source checkpoint `d249b26` completed in
+  one invocation with **exit 0**. Backend **2,413** and runtime **700** tests passed,
+  together with backup, workerd/HTTP/browser/native fixtures, normal and pending-
+  maintenance automatic stop for both warm and background modes, strict launcher,
+  all service variants and dry build. Final output was `status:passed`, with
+  `assistantOperational:false`, `productionAdmission:false` and
+  `modelJudgmentVerified:false`. Local log: `.local/recovery-current-combined.log`.
+  Only publication documentation changed afterward. No checks or children remain
+  running; temporary `/etc/codex` and `/.sprite` fixture paths are absent.
+- `npm ci --prefix desktop && npm test --prefix desktop` — **16 passed**. Install
+  reports **14 advisories (13 high, 1 critical)**; these remain unresolved.
+- Earlier complete one-invocation evidence is recorded in IMPLEMENTATION.md for
+  the `ab33f12` source checkpoint. Subsequent focused suites are not a substitute
+  for a full current combined result.
+- Earlier catalog/alpha intermittency has not been reproduced in later successful
+  runs; it is not established as fixed. WhatsApp negative compatibility checks
+  passing do not mean the integration is compatible or installed.
+- No test here establishes subscription eligibility, real model judgment, live
+  connector effects, real provider retirement, Mac behavior, or measured cost.
+
+### Remaining work, in dependency order
+
+`TODO.md` remains the sole task checklist. Its F1–F6 and E01–E15 rows contain exact
+acceptance requirements; this is a handoff summary, not a second completion list.
+
+1. **Recovery, cancellation and settlement (F3/E01/E02).** Finish recursive
+   child/tool/transfer/device/flush coverage, unknown and streaming activity,
+   human waits, legacy clocks and progress-extension policy. Establish supported
+   launcher/containment composition, interrupted approval/checkpoint restoration,
+   crash takeover and warm/cold service recovery. Retain one executor and all
+   outstanding effects/locks. A terminal root, process exit, free lock or received
+   callback does not prove settlement or permit sleep/replacement.
+2. **Resource/storage bounds (E06/E10).** Bound inherited historical snapshots,
+   existing-key paths, whole-record journal reads, aggregate descendant mapping,
+   database scan work, stored data and retention/cleanup work. Existing row limits,
+   input preflights and indexes are not total memory, I/O, SQL-work or elapsed-time
+   bounds. Do not silently cap traversal of already-observed descendants.
+3. **Usable hosted trial (F4/E14).** Apply the prepared bounded-trial procedure to
+   explicitly authorized targets after predecessor retirement/containment,
+   account eligibility and budget evidence. Verify wake, two canonical replies,
+   background responsiveness, cancellation, automatic stop and reload. No warm
+   rollover, fabricated empty seed, automatic retry of unknown work or gate flip.
+4. **Conversation and task UX (E03/E04).** Complete natural-language status/new
+   task/steering/follow-up routing, ambiguity handling, saturation and isolation;
+   finish streaming/reconnect, attention/approvals, search, attachments, reactions,
+   references, read state, notifications and accessibility/device coverage.
+5. **Skills, routines and scoped communication (E05/E06).** Finish correction-to-
+   skill authoring, review/rollback, natural-language routine lifecycle and
+   execution-versus-delivery handling; measure routine limits. Finish bounded
+   attributed bot/group communication and native retrieval/transcript/filesystem
+   isolation. Summary fidelity and model routing need separate live evidence.
+6. **Connectors and computer work (F5/E07/E08/E09).** Complete supported installation,
+   inventory, scoped authority and transport recovery for Google/WhatsApp/Messages;
+   implement remote/local browser control, locks, reconnect and uncertain mutation
+   handling. Demonstration capture → reviewed skill → safe test is not implemented.
+   WhatsApp recent-message arrays violate SDK 1.30.0's object-shaped
+   `structuredContent` contract. Search is not a substitute. A reviewed upstream
+   fix or separately approved patch is required; pairing alone cannot fix it.
+7. **Operational product completion (F6/E10–E15).** Complete coordinated native/
+   application/browser/config backups, off-host/key custody and second-install
+   restore; configurable retention and forget-everywhere semantics; clean setup,
+   interrupted upgrades and provider/version migration; dependency/license audit;
+   actual Mac build/render/permissions/signing/updater and resource measurements;
+   usage/reliability/freshness reporting and measured seven-day all-in cost.
+   Finish load/privacy/crash/latency/browser/backup acceptance and release review.
+
+### Owner/account/device boundaries
+
+Local recovery, storage, UX and synthetic verification work remains available
+when the owner resumes. It does not require new account access. The external paths
+need concrete, separately authorized actions:
+
+- Sprites/Cloudflare deployment and lifecycle targets, supported predecessor
+  retirement/containment evidence, and appropriate Access/runtime configuration.
+- Supported Codex login on the executing runtime, subscription eligibility/quota,
+  no-paid-fallback and refresh evidence. Never copy OAuth caches.
+- Actual billing/credits and an agreed enforced limit where supported. Prior test
+  allowances and a ~$5/month target are not provider-enforced cost guarantees.
+- Exact Google scopes; selected WhatsApp pairing/chat and 5-minute/1-hour/24-hour/
+  72-hour catch-up evidence; Mac hardware/runner and explicit local permissions.
+- Explicit adoption of account/chat/calendar mappings and the five-persona/seven-
+  routine setup. Jakarta remains the timezone; Singapore monitoring is not adopted.
+- Release/deployment/signing authorization remains separate from this Git push.
+
+### Resume safely
+
+Start from the published `source-custody` branch and this section, then read
+`AGENTS.md`, `README.md`, `TODO.md`, `docs/IMPLEMENTATION.md` and
+`docs/PROJECT_INTENT.md`. Check Git status and current infrastructure evidence
+before acting; historical prose below may describe superseded assignments or
+expired grants. No active child assignments are carried forward. Resume recovery
+and storage work ahead of peripheral polish, preserving exact JavaScript authority
+semantics, post-RPC observation rereads and unknown-outcome custody. Use supported
+upstream interfaces only. Re-enable automated follow-through only on owner request.
+
+---
+
+## Historical checkpoints — evidence only, not current instructions
+
 Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies, including one Worker-triggered staged wake, have canonical completion and full-reload persistence. Historical failed work remains recovery-required. Bounded policies expired and launchers stopped; this is not ongoing chat availability or production readiness. Production execution/native gates remain false.
 
-## Active follow-up (2026-09-26 Asia/Jakarta)
+### Historical follow-up (2026-09-26 Asia/Jakarta)
 
 Four question retry cases now use SQLite backup/reopen and second reopen after
 timer writes. Exact question/attempt custody and one-time resolved requeue persist;

@@ -4,6 +4,13 @@
 This is the owner-facing progress checklist. Open this file to check progress without asking in chat.
 It describes this checkout; local checkpoints are not necessarily published to GitHub.
 
+**Owner pause (2026-09-26):** implementation and the two-hour follow-through
+schedule are paused. The owner authorized GitHub publication of the existing work
+and a full state report, not deployment or production activation. Read the current
+[publication handoff](docs/HANDOFF.md#owner-pause-and-publication-handoff--2026-09-26)
+before the historical checkpoints below. The remaining queue is retained for an
+explicit owner resume; it is not permission to continue during the pause.
+
 ## Owner follow-through queue — current priority
 
 Owner instruction, 2026-09-19: record all remaining work and orchestrate implementors
@@ -12,7 +19,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** question retry custody now
+**Current checkpoint (2026-09-26, publication):** full credential-free verifier on
+source d249b26 exits0 in one invocation: backend2413/runtime700, backup, workerd,
+HTTP/browser/native, all warm/background timed shutdown, strict launcher, service
+and dry-build checks pass. Desktop16 separately passes;14 advisories unchanged.
+Full current state and next recovery deliverable are in docs/HANDOFF.md. Owner
+paused implementation/schedule and authorized branch publication only; production
+gates stay false. No active checks/children or host fixture residue remain.
+
+**Previous checkpoint (2026-09-26, verified locally):** question retry custody now
 passes SQLite backup/reopen and a second reopen after timer writes for all four
 states. Exact question/attempt records persist, unresolved states do not wake,
 resolved state requeues once. Related178/typecheck pass; production unchanged.
