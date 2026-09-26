@@ -203,7 +203,8 @@ export class ControlCore {
     return new TaskSteering(this.store,()=>this.now()).queue(commandId,{run_id:p.run_id,attempt:p.expected_attempt});
    }
    case 'run.followup': {
-    const p=command.payload,run=this.store.run(p.run_id);
+    const p=command.payload,run=this.store.db.all<Pick<Run,'id'|'role'|'persona_id'|'status'>>('SELECT id,role,persona_id,status FROM runs WHERE id=?',p.run_id)[0];
+    requireThat(run,'NOT_FOUND','Run unavailable.',404);
     requireThat(run.role==='background','INVALID_INPUT','Select a background task for a targeted follow-up.',422);
     const id=this.options.uuid();
     this.store.db.exec("INSERT INTO task_followups(id,run_id,text,status,command_id,created_at) VALUES(?,?,?,'pending',?,?)",id,run.id,p.text,commandId,now);

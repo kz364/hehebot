@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Follow-up admission reads only target metadata. Corrected red3/focused147/backend2342/
+typecheck/build pass;1539577 exited0. Initial red fixture correction retained in logs.
+Next audit terminal-target own custody during flushFollowups, whose SQL currently
+checks descendants only; establish reachability before changing behavior. Remaining
+storage/native recovery stays open. No active checks/children/delivery; schedule enabled.
+Prior full matrix not rerun; original intermittency/advisories/gates unchanged.
+
 Preview/usage record/read now select metadata only; terminal-preview hiding versus
 historical usage visibility and existing authority/replay/expiry rules preserved.
 Red2/focused129/backend2339/HTTP31/workerd/typecheck/dry-build pass;1535710 exited0.

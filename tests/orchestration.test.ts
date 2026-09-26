@@ -205,6 +205,26 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     // Whether a native model asks for clarification remains a live gate.
   });
 
+  it.each(['running','settled','unknown-effect'] as const)('queues %s followup without hydrating the target snapshot',kind=>{
+    const p=parent(),a=tasks.register(identity,receipt(p),true);
+    if(kind==='unknown-effect'){
+      const child=tasks.register(identity,receipt(a.id),true);finish(child.id);
+      f.db.exec("INSERT INTO effects VALUES('followup-unknown',?,'action','mutation','outcome_unknown','policy','digest',NULL,NULL,?)",child.id,f.core.now());
+    }
+    if(kind!=='running')finish(a.id);
+    const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+    f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,a.id);
+    const before=f.store.run(a.id),effects=f.db.all('SELECT * FROM effects'),read=vi.spyOn(f.db,'all');
+    try{
+      const result=f.accept({schema_version:1,type:'run.followup',payload:{run_id:a.id,text:'Review only this task'}});
+      expect(result.status).toBe('applied');
+      const returned=read.mock.calls.flatMap(([sql,...args],index)=>sql.includes('FROM runs WHERE id=?')&&args[0]===a.id?read.mock.results[index].value:[]);
+      expect(returned).toEqual([{id:a.id,role:'background',persona_id:bot,status:kind==='running'?'running':'completed'}]);
+    }finally{read.mockRestore();}
+    expect(f.store.run(a.id)).toEqual(before);expect(f.db.all('SELECT * FROM effects')).toEqual(effects);
+    expect(f.db.all('SELECT status FROM task_followups')).toEqual([{status:kind==='settled'?'coordinator_queued':'pending'}]);
+  });
+
   it('keeps targeted followup pending until settlement and emits one separate coordinator continuation', () => {
     const p = parent(), a = tasks.register(identity, receipt(p)), b = tasks.register(identity, receipt(p, 'Task B'));
     const beforeA=f.store.run(a.id),beforeB=f.store.run(b.id);

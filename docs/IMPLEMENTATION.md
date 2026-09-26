@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Follow-up metadata projection (2026-09-26 Asia/Jakarta): run.followup reads only
+id/role/persona_id/status. Missing-run behavior, background-only admission and recursive
+settlement remain unchanged. Red3/focused147/backend2342/typecheck/dry-build pass;
+1539577 exited0. Oversized snapshots remain exact; active and unknown-descendant-effect
+work stays pending, settled work queues continuation. Initial fixture omitted native
+start and placed the unknown effect on the target rather than a descendant; corrected
+fixture still fails3 before implementation. Both red logs retained under
+.local/followup-projection-red.log and -red-corrected.log; focused/integrated logs
+use the same prefix. No total bounds claimed. NativeTaskLedger's bounded parent
+snapshot cloning remains necessary and unchanged. Next inspect whether restored
+terminal targets with their own unsettled custody can release followups: current
+flushFollowups checks descendant custody, not the target's own obligations. This is
+an open audit question, not verified reachability. Prior runtime/HTTP/workerd/browser/
+native-service/timed-shutdown/desktop matrix not rerun; original intermittency,
+advisories and gates unchanged. Local only.
+
 Observation metadata projection (2026-09-26 Asia/Jakarta): OutputPreviews and
 TokenUsageSnapshots record/read no longer return historical context/checkpoint
 bodies. Select only each path's consumed fields, retaining NOT_FOUND code/message/404,

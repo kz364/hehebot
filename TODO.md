@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** preview/usage record and read
+**Current checkpoint (2026-09-26, verified locally):** targeted follow-up admission
+reads target metadata only. Active/settled/unknown-descendant-effect fixtures preserve
+source snapshots and pending versus queued continuation. Red3/focused147/backend2342/
+typecheck/dry-build pass. Next audit restored terminal-target custody in follow-up
+release, then remaining historical/storage/native recovery. Prior full matrix not
+rerun; original intermittency/advisories/gates unchanged. No total bounds claimed.
+
+**Previous checkpoint (2026-09-26, verified locally):** preview/usage record and read
 paths select run metadata only, preserving terminal-preview hiding versus historical
 usage visibility, authorization/replay/expiry rules and source snapshots.
 Red2/focused129/backend2339/HTTP31/workerd/typecheck/dry-build pass. Remaining
