@@ -50,7 +50,13 @@ async function fixture(t) {
       if (type === 'heartbeat') return { lease_until: new Date(now + 60000).toISOString(), cancellations: [] };
       if (type === 'steer-pending') return [];
       if (type === 'memory-prepare') return preparedMemory('run', payload.persona_models.bot);
-      if (type === 'claim') return { submission_key: 'run:1', run: { id: 'run', current_attempt: 1, persona_id: 'bot', context_json: memoryContext(payload) } };
+      // G4c: this generic fixture models a single ordinary coordinator run with no
+      // queued background task, so the background lane never has anything to
+      // claim -- matching a real Worker's nextClaimableRun('background') when no
+      // coordinator_task run is queued. Tests exercising the task lane itself use
+      // their own dedicated fixture below.
+      if (type === 'claim') return payload.lane === 'background' ? null
+        : { submission_key: 'run:1', run: { id: 'run', current_attempt: 1, persona_id: 'bot', context_json: memoryContext(payload) } };
       throw Error('unexpected control RPC');
     } },
   };
@@ -412,7 +418,10 @@ test('opt-in question waits for acknowledged admission, takes once, and resolves
       { label: 'West43', description: 'Western route' }, { label: 'East19', description: 'Eastern route' }] }] };
   const expected = { answers: { route: { answers: ['West43'] } } };
   let launched, answer, submitted = false, recorded, takes = 0, resolves = 0;
-  const service = createCodexService({ ...f.config, ownerQuestions: true }, {
+  // This test exercises owner-question wiring on the coordinator lane only; the
+  // background task lane is irrelevant here and this fixture's fake control
+  // handler models a single claimable run, not per-lane claim discrimination.
+  const service = createCodexService({ ...f.config, ownerQuestions: true, backgroundTaskLane: false }, {
     ...f.dependencies,
     launch: options => { launched = options; return f.transport; },
     control: { request: async (type, payload) => {
@@ -465,7 +474,9 @@ test('maintenance retains old-family coverage and late output after fresh coordi
   const ids = ['77777777-0000-4000-8000-000000000017', '77777777-0000-4000-8000-000000000053'];
   let claims = 0, threads = 0;
   const heartbeats = [], previews = [], releases = [];
-  const service = createCodexService(f.config, { ...f.dependencies, operations: undefined,
+  // This test exercises coordinator-lane family retention/sequencing with a
+  // fixed two-claim script; the background lane is irrelevant here.
+  const service = createCodexService({ ...f.config, backgroundTaskLane: false }, { ...f.dependencies, operations: undefined,
     control: { request: async (type, payload) => {
       if (type === 'memory-prepare') return ids[claims] ? preparedMemory(ids[claims]) : null;
       if (type === 'claim') {
@@ -1023,4 +1034,135 @@ test('service validates the declared shell deadline before any side effect', asy
     await service.start();
     await service.stop();
   }
+});
+
+// G4c: a real service composition runs the coordinator lane and the background
+// task lane concurrently on one Codex app-server connection -- shared
+// native/adapter.rpc/router, per-lane heartbeat, admit()/maintain()/stop()
+// driving both, notifications routed by attemptId (already lane-disambiguating).
+async function twoLaneFixture(t) {
+  const f = await fixture(t);
+  f.config.personas.bot.allowedTools = ['hehebot_send_message', 'hehebot_start_task'];
+  let threads = 0, claims = { coordinator: [], background: [] }, completions = [];
+  const request = f.dependencies.control.request;
+  const control = { request: async (type, payload) => {
+    const lane = payload?.lane === 'background' ? 'background' : 'coordinator';
+    if (type === 'memory-prepare') {
+      // memory-prepare carries no lane discriminator (only `claim` does), and
+      // service.maintain() always fully resolves the coordinator lane's own
+      // dispatch before starting the background lane's -- so whichever queue
+      // still has an unconsumed head is the one actually calling right now.
+      const next = claims.coordinator[0] ?? claims.background[0];
+      return next ? preparedMemory(next.id, payload.persona_models.bot) : null;
+    }
+    if (type === 'claim') {
+      const next = claims[lane].shift();
+      if (!next) return null;
+      const context = { instruction: next.role === 'background' ? 'run the task' : 'fixture',
+        selected_model: payload.persona_models.bot, memories: [],
+        ...(next.role === 'background' ? { coordinator_task: true } : {}),
+        ...(payload.memory_budget ? { memory_budget: payload.memory_budget } : {}) };
+      return { submission_key: `${next.id}:1`, run: { id: next.id, current_attempt: 1, persona_id: 'bot',
+        role: next.role, ...(next.parent ? { parent_run_id: next.parent } : {}), context_json: JSON.stringify(context) } };
+    }
+    if (type === 'coordinator-release') return {};
+    if (type === 'complete') { completions.push(payload); return {}; }
+    return request(type, payload);
+  } };
+  f.transport.request = async (method, params) => {
+    f.calls.push({ method, params });
+    if (method === 'thread/start') return { thread: { id: `thread-${++threads}` } };
+    if (method === 'turn/start') {
+      const threadId = params.threadId;
+      f.transport.emit('notification', { method: 'turn/started', params: { threadId, turn: { id: `turn-${threadId}`, status: 'inProgress' } } });
+      return { turn: { id: `turn-${threadId}` } };
+    }
+    throw Error(`unexpected native RPC ${method}`);
+  };
+  const service = createCodexService(f.config, { ...f.dependencies, control });
+  // This fixture layers a second, independently driven service on the same
+  // temp directory as the base fixture's own (never-started) service; the base
+  // fixture's own teardown (`rm(directory, ...)`) can race this service's final
+  // stop() write, so cleanup errors here are immaterial to the test's assertions.
+  t.after(() => service.stop().catch(() => {}));
+  const queueCoordinator = id => claims.coordinator.push({ id, role: 'coordinator' });
+  const queueTask = (id, parent) => claims.background.push({ id, role: 'background', parent });
+  return { ...f, service, queueCoordinator, queueTask, completions };
+}
+
+test('G4c: coordinator turn starts a task claimed on the background lane in its own thread while the coordinator lane stays free', async t => {
+  const f = await twoLaneFixture(t);
+  f.queueCoordinator('coord-1');
+  const first = await f.service.start();
+  assert.equal(first.claim.run.id, 'coord-1');
+  // The background lane starts idle: nothing queued, so it claims nothing.
+  assert.ok(f.service.taskSupervisor, 'the ordinary non-alpha path gets a background task lane');
+  assert.equal(f.service.taskSupervisor.phase, 'running');
+  const coordThread = (await f.service.observe()).threadId;
+
+  // Simulate the coordinator's turn calling hehebot_start_task: a task run
+  // becomes claimable on the background lane.
+  f.queueTask('task-1', 'coord-1');
+  await f.service.maintain();
+  const taskRow = (await f.service.taskSupervisor.bridge.families()).at(-1);
+  assert.equal(taskRow.claim.run.id, 'task-1');
+  assert.equal(taskRow.claim.run.role, 'background');
+  const taskNative = await f.service.observe(taskRow.attemptId);
+  assert.notEqual(taskNative.threadId, coordThread, 'the task runs in its own isolated native thread, never the coordinator\'s');
+
+  // The task's own grant excludes coordinator-only task-management tools but
+  // keeps hehebot_send_message, and carries task_guidance, not coordinator_guidance.
+  const taskThreadStart = f.calls.filter(call => call.method === 'thread/start').at(-1);
+  const taskTurnStart = f.calls.filter(call => call.method === 'turn/start').at(-1);
+  const grant = JSON.parse(await readFile(taskThreadStart.params.config.mcp_servers.hehebot.env.HEHEBOT_AGENT_TOOLS_CONFIG, 'utf8'));
+  assert.deepEqual(grant.allowedTools, ['hehebot_send_message']);
+  const taskMessage = JSON.parse(taskTurnStart.params.input[0].text);
+  assert.ok(taskMessage.task_guidance, 'the task thread carries task-executor guidance');
+  assert.equal(taskMessage.coordinator_guidance, undefined);
+
+  // Capacity: while task-1 is active, a second background claim is refused
+  // (nothing more is even offered by this fixture's script), and the running
+  // coordinator lane is unaffected by the background lane being busy.
+  f.queueCoordinator('coord-2');
+  f.transport.emit('notification', { method: 'turn/completed', params: { threadId: coordThread, turn: { id: `turn-${coordThread}`, status: 'completed' } } });
+  const second = await f.service.maintain();
+  assert.equal(second.claim.run.id, 'coord-2', 'the coordinator lane claims a fresh owner message while the task is still running');
+  assert.equal(f.service.taskSupervisor.phase, 'running', 'the background lane is untouched by coordinator release/re-claim');
+
+  // The task completes: settled directly by the trusted native reconciler path,
+  // exactly like the coordinator's own bridge.complete() (see execution-bridge.mjs).
+  const completed = await f.service.taskSupervisor.complete({ attemptId: taskRow.attemptId, nativeRunId: taskNative.nativeRunId,
+    rootSettled: true, toolsSettled: true, childrenSettled: true, effectsSettled: true, outputCommitted: true,
+    result: { status: 'completed', text: 'Task finished' } });
+  assert.equal(completed.phase, 'complete');
+  assert.equal(completed.result.text, 'Task finished');
+
+  // Task.event + coordinator wake: once complete, the Worker's own ControlCore
+  // enqueues a wake; here we just prove the coordinator lane keeps claiming
+  // independently of the (now idle) background lane's own state.
+  f.queueCoordinator('coord-3');
+  const secondThread = (await f.service.observe(second.attemptId)).threadId;
+  f.transport.emit('notification', { method: 'turn/completed', params: { threadId: secondThread, turn: { id: `turn-${secondThread}`, status: 'completed' } } });
+  const third = await f.service.maintain();
+  assert.equal(third.claim.run.id, 'coord-3', 'coordinator wake claim succeeds after the task lane settles');
+});
+
+test('G4c: stop() stops both lanes and each lane keeps its own heartbeat cadence', async t => {
+  const f = await twoLaneFixture(t);
+  f.queueCoordinator('coord-1');
+  await f.service.start();
+  assert.equal(f.service.supervisor.phase, 'running');
+  assert.equal(f.service.taskSupervisor.phase, 'running');
+  const coordinatorLease = f.service.supervisor.leaseUntil, taskLease = f.service.taskSupervisor.leaseUntil;
+  assert.ok(coordinatorLease > 0); assert.ok(taskLease > 0);
+  f.advance(1000);
+  await f.service.maintain();
+  // Each lane renews its own lease independently on the shared heartbeat channel.
+  assert.ok(f.service.supervisor.leaseUntil >= coordinatorLease);
+  assert.ok(f.service.taskSupervisor.leaseUntil >= taskLease);
+  await f.service.stop();
+  assert.equal(f.service.supervisor.phase, 'recovery');
+  assert.equal(f.service.taskSupervisor.phase, 'recovery');
+  assert.throws(() => f.service.supervisor.assertLease(), { code: 'EXECUTOR_FENCED' });
+  assert.throws(() => f.service.taskSupervisor.assertLease(), { code: 'EXECUTOR_FENCED' });
 });

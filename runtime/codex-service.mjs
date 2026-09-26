@@ -61,6 +61,7 @@ export function createCodexService(config, dependencies) {
       if (result.stdout.trim() !== `codex-cli ${PINNED_CODEX}`) fail('CODEX_VERSION_MISMATCH');
     } } = dependencies;
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
+  let taskSupervisor = null, taskAdmission;
   let ownsIntent = false, stopping, questions, questionNotification, admission;
   let alpha = null, textOnlyProfile = null, textOnlyVerification = null, textOnlyCatalogContent = null, commandedConfigContent = null;
   let alphaGeneration = null, alphaWarm = null, alphaBackground = null, backgroundProfile = null;
@@ -91,9 +92,26 @@ export function createCodexService(config, dependencies) {
     }
     return snapshots;
   });
+  // G4c: the background task lane is a plain ordinary-execution supervisor (never
+  // alpha/text-only/background-generation), so its own heartbeat snapshot never
+  // carries those legacy discriminators. Kept separate from `operations` above
+  // rather than parametrized, so the coordinator's alpha-specific snapshot shape
+  // is untouched by this change.
+  const taskOperations = dependencies.operations ?? (async () => {
+    if (!taskSupervisor) return [];
+    const snapshots = [];
+    for (const row of await taskSupervisor.bridge.families()) {
+      if (!row.nativeRunId || row.phase === 'complete') continue;
+      snapshots.push(...await new CodexOperations({ journal, attemptId: row.attemptId, runId: row.claim.run.id,
+        attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at,
+        deadlineAt: row.claim.deadline_at, textOnlyProfile: null, backgroundRole: null,
+        ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}) }).snapshot());
+    }
+    return snapshots;
+  });
   const recover = () => {
     if (phase === 'recovery') return;
-    phase = 'recovery'; questions?.close(); supervisor?.disconnect();
+    phase = 'recovery'; questions?.close(); supervisor?.disconnect(); taskSupervisor?.disconnect();
     onRecovery({ code: 'SERVICE_RECOVERY_REQUIRED' });
   };
   const admit = () => {
@@ -176,9 +194,23 @@ export function createCodexService(config, dependencies) {
     })().catch(error => { recover(); throw error; }).finally(() => { admission = null; });
     return admission;
   };
+  // G4c: the background task lane has no coordinator-release/text-only/background-
+  // receipt admission ceremony -- only one task is ever active at a time and its
+  // own settlement is driven externally via `taskSupervisor.complete()`, exactly
+  // like the coordinator's own `complete()` is. Admission here is just re-dispatch.
+  const admitTask = () => {
+    if (!taskSupervisor) return Promise.resolve(null);
+    if (taskAdmission) return taskAdmission;
+    taskAdmission = (async () => {
+      await router.flush();
+      return taskSupervisor.dispatch();
+    })().catch(error => { recover(); throw error; }).finally(() => { taskAdmission = null; });
+    return taskAdmission;
+  };
   const service = {
     get phase() { return phase; },
     get supervisor() { return supervisor; },
+    get taskSupervisor() { return taskSupervisor; },
     get adapter() { return adapter; },
     get journal() { return journal; },
     async start() {
@@ -229,10 +261,13 @@ export function createCodexService(config, dependencies) {
       } else if (config.backgroundProfile !== undefined) fail('INVALID_SERVICE_CONFIGURATION');
       if (config.textOnlyProfile !== undefined && !alpha?.text_only) fail('INVALID_SERVICE_CONFIGURATION');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs', 'backgroundTaskLane'].includes(key)) ||
         config.nativeHome !== undefined && (!alpha || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean' ||
+        // The background task lane is a plain ordinary-execution concern: it is
+        // never offered on an owner-alpha/hosted staged boot (single-lane always).
+        config.backgroundTaskLane !== undefined && (typeof config.backgroundTaskLane !== 'boolean' || alpha) ||
         // A declared shell-operation deadline is a timing bound only: it never
         // widens the admitted tool surface, and it must be an explicit safe
         // integer above the two-minute default, capped at ten minutes.
@@ -436,7 +471,10 @@ export function createCodexService(config, dependencies) {
         assertStarting();
         adapter = new CodexAdapter({ journal, cwd: workspace, rpc: (method, params) => {
           // Durable intent writes may outlive the controller's prior lease check.
-          if (method === 'turn/steer' || method === 'turn/interrupt') supervisor.assertLease();
+          // This rpc closure is shared by both lanes' CodexAdapter instances (one
+          // native connection, one fenced identity/epoch); a durable-intent write
+          // fences on every lane currently in play, never on the coordinator alone.
+          if (method === 'turn/steer' || method === 'turn/interrupt') { supervisor.assertLease(); taskSupervisor?.assertLease(); }
           return transport.request(method, params);
         },
           testMode: !alpha, ownerAlpha: alpha, now, permissionsProfile: permissions?.name, textOnlyProfile });
@@ -446,18 +484,27 @@ export function createCodexService(config, dependencies) {
           cancel: id => adapter.cancel(id),
           submit: async input => {
             input = { ...input };
+            // G4c: the background task lane shares this single native.submit
+            // closure with the coordinator lane (same Codex app-server connection,
+            // same fenced identity/epoch). `lane` is routing metadata added by
+            // ExecutionBridge; it must never reach the strict-validated
+            // CodexAdapter.submit() input allowlist below, so it is stripped here.
+            const lane = input.lane === 'background' ? 'background' : 'coordinator';
+            delete input.lane;
+            if (lane === 'background' && !taskSupervisor) fail('INVALID_SUBMISSION');
+            const sup = lane === 'background' ? taskSupervisor : supervisor;
             const background = Object.hasOwn(input, 'ownerAlphaBackground');
             if (background && (input.ownerAlphaBackground !== true || alpha?.background_first_root !== true)) fail('OWNER_ALPHA_ADMISSION_DENIED');
-            supervisor.assertLease();
+            sup.assertLease();
             if (permissions) {
               const contents = await readFile(join(home, 'config.toml')).catch(error => {
                 if (config.nativeHome && error.code === 'ENOENT') return '';
                 throw error;
               });
               if (createHash('sha256').update(contents).digest('hex') !== permissions.configSha256) fail('RESTRICTED_PROFILE_CHANGED');
-              supervisor.assertLease();
+              sup.assertLease();
             }
-            const row = await journal.get(supervisor.bridge.cursor);
+            const row = await journal.get(sup.bridge.cursor);
             if (row?.attemptId !== input.attemptId || !row.claim?.run) fail('CLAIM_IDENTITY_MISMATCH');
             if (Object.hasOwn(row.claim, 'owner_alpha_background') !== background ||
                 Object.hasOwn(row.claim, 'owner_alpha_background') && row.claim.owner_alpha_background !== true) fail('OWNER_ALPHA_ADMISSION_DENIED');
@@ -534,7 +581,7 @@ export function createCodexService(config, dependencies) {
             const key = `grant-${input.attemptId}`;
             const existing = await journal.putIfAbsent(key, grant);
             if (existing && JSON.stringify(existing) !== JSON.stringify(grant)) fail('TASK_GRANT_CONFLICT');
-            supervisor.assertLease();
+            sup.assertLease();
             const mcpServers = { hehebot: {
               command: process.execPath, args: [fileURLToPath(new URL('./agent-tools.mjs', import.meta.url))],
               env: { HEHEBOT_AGENT_TOOLS_CONFIG: journal.path(key),
@@ -549,15 +596,21 @@ export function createCodexService(config, dependencies) {
           },
         };
         router = new CodexEventRouter({ transport, adapter, onRecovery: recover, now });
+        // G4c: notifications/children are keyed by `attemptId`, already globally
+        // unique per lane (it hashes the claim's submission_key, which embeds the
+        // run id), so one shared map safely covers both lanes' native families.
+        // Each row's own supervisor -- never the other lane's -- owns its fence.
         const eachController = async action => {
-          for (const row of await supervisor.bridge.families()) {
-            if (!row.nativeRunId || row.phase === 'complete') continue;
-            if (!taskControllers.has(row.attemptId)) {
-              taskControllers.set(row.attemptId, new CodexTaskControl({ adapter, control, journal, identity, attemptId: row.attemptId,
-                parent: { runId: row.claim.run.id, personaId: row.claim.run.persona_id, attempt: row.claim.run.current_attempt },
-                assertLease: () => supervisor.assertLease() }));
+          for (const sup of [supervisor, taskSupervisor].filter(Boolean)) {
+            for (const row of await sup.bridge.families()) {
+              if (!row.nativeRunId || row.phase === 'complete') continue;
+              if (!taskControllers.has(row.attemptId)) {
+                taskControllers.set(row.attemptId, new CodexTaskControl({ adapter, control, journal, identity, attemptId: row.attemptId,
+                  parent: { runId: row.claim.run.id, personaId: row.claim.run.persona_id, attempt: row.claim.run.current_attempt },
+                  assertLease: () => sup.assertLease() }));
+              }
+              await action(taskControllers.get(row.attemptId));
             }
-            await action(taskControllers.get(row.attemptId));
           }
         };
         supervisor = new ExecutionSupervisor({ control, native, journal, identity, installationId: config.installationId,
@@ -576,9 +629,25 @@ export function createCodexService(config, dependencies) {
             generationSha256: alphaBackground.generation_sha256, background: backgroundProfile, now }) } : {}),
           children: { sync: () => eachController(controller => controller.sync()), cancel: ids => eachController(controller => controller.cancel(ids)),
             steer: () => eachController(controller => controller.steer()), publishOutputs: () => eachController(controller => controller.publishOutputs()) } });
+        // G4c: the background task lane is a second ExecutionSupervisor sharing this
+        // same native connection/adapter/router and single fenced boot identity --
+        // both lanes are the same generation, so epoch fencing applies to both.
+        // It is never constructed for owner-alpha/hosted/warm/background-generation
+        // composition (always single-lane there); ordinary local execution gets it
+        // unless the caller explicitly opts out via `backgroundTaskLane: false`.
+        const taskLaneEnabled = !alpha && config.backgroundTaskLane !== false;
+        if (taskLaneEnabled) {
+          taskSupervisor = new ExecutionSupervisor({ control, native, journal, identity, installationId: config.installationId,
+            personas: config.personas, events: router, activity, operations: taskOperations, now, onRecovery: recover,
+            admission: admitTask, memoryCounter: countSelectedModelMemory, lane: 'background' });
+        }
         await starting(() => control.request('ready', { identity }));
         const dispatched = await starting(() => supervisor.start());
         if (supervisor.phase !== 'running') fail('SERVICE_RECOVERY_REQUIRED');
+        if (taskSupervisor) {
+          await starting(() => taskSupervisor.start());
+          if (taskSupervisor.phase !== 'running') fail('SERVICE_RECOVERY_REQUIRED');
+        }
         await starting(() => journal.update('service', { phase: 'running' }));
         assertStarting();
         phase = 'running';
@@ -592,7 +661,9 @@ export function createCodexService(config, dependencies) {
       await router?.flush();
       const cursor = supervisor && await journal.get(supervisor.bridge.cursor);
       if (attemptId !== undefined) {
-        if (!(await supervisor.bridge.families()).some(row => row.attemptId === attemptId)) fail('UNKNOWN_ATTEMPT');
+        const known = [...(supervisor ? await supervisor.bridge.families() : []),
+          ...(taskSupervisor ? await taskSupervisor.bridge.families() : [])];
+        if (!known.some(row => row.attemptId === attemptId)) fail('UNKNOWN_ATTEMPT');
         return adapter.requireRun(attemptId);
       }
       const latest = cursor?.attemptId ?? (supervisor && (await supervisor.bridge.families()).at(-1)?.attemptId);
@@ -601,15 +672,22 @@ export function createCodexService(config, dependencies) {
     async maintain() {
       if (phase !== 'running') fail('SERVICE_RECOVERY_REQUIRED');
       await router.flush();
+      // Both lanes drive their own maintain/admission cycle each tick. The
+      // service's own return value stays the coordinator lane's dispatch result,
+      // exactly as before -- callers that only know the single-lane contract
+      // (existing tests, the coordinator's own claim/reply path) are unaffected.
       await supervisor.maintain();
-      return admit();
+      if (taskSupervisor) await taskSupervisor.maintain();
+      const result = await admit();
+      if (taskSupervisor) await admitTask();
+      return result;
     },
     stop() {
       return stopping ??= (async () => {
         phase = 'recovery';
         questions?.close();
         if (questionNotification) { transport?.off('notification', questionNotification); transport?.off('disconnect', recover); }
-        supervisor?.disconnect(); router?.close(); transport?.close();
+        supervisor?.disconnect(); taskSupervisor?.disconnect(); router?.close(); transport?.close();
         if (router) await router.tail;
         if (transport) {
           const exited = () => transport.child.exitCode !== null || transport.child.signalCode !== null;
@@ -619,7 +697,9 @@ export function createCodexService(config, dependencies) {
           if (!exited()) fail('NATIVE_STOP_UNCONFIRMED');
         }
         if (supervisor) { await supervisor.work; await supervisor.maintenance?.catch(() => {}); }
+        if (taskSupervisor) { await taskSupervisor.work; await taskSupervisor.maintenance?.catch(() => {}); }
         await admission?.catch(() => {});
+        await taskAdmission?.catch(() => {});
         if (ownsIntent) await journal.update('service', { phase: 'recovery', nativeStopped: true });
         phase = 'recovery';
         // Intentionally no complete/commit-sleep or activity release on shutdown.
