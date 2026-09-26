@@ -38,7 +38,7 @@ import { reviewControlBackups, applyControlBackups, withBackupDirectoryLock, CON
 const ageBinary = process.env.HEHEBOT_AGE_BIN ?? resolve('.local/age-v1.3.2/age/age');
 const keygen = process.env.HEHEBOT_AGE_KEYGEN_BIN ?? resolve('.local/age-v1.3.2/age/age-keygen');
 const schema = await readFile(process.env.HEHEBOT_CREATOR_TEST_SCHEMA ?? new URL('../DB/schema.sql', import.meta.url), 'utf8');
-const cli = new URL('../scripts/create-control-backup.mjs', import.meta.url).pathname;
+const cli = decodeURIComponent(new URL('../scripts/create-control-backup.mjs', import.meta.url).pathname);
 const now = '2026-09-28T17:00:00.000Z', original = '2026-09-06T17:00:00.000Z';
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');

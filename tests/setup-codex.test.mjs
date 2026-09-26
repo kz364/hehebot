@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
-const exec = promisify(execFile), root = resolve(new URL('..', import.meta.url).pathname);
+const exec = promisify(execFile), root = resolve(decodeURIComponent(new URL('..', import.meta.url).pathname));
 const script = join(root, 'scripts/setup-codex.sh');
 async function executable(path, body) { await writeFile(path, body); await chmod(path, 0o755); }
 

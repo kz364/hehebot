@@ -25,7 +25,7 @@ vi.mock('node:fs/promises', async importOriginal => {
 import { applyControlBackups, reviewControlBackups, controlBackupPruneStatus, withBackupDirectoryLock, CONFIRM_LOCAL_DELETION } from '../scripts/prune-control-backups.mjs';
 
 const age = resolve('.local/age-v1.3.2/age/age'), keygen = resolve('.local/age-v1.3.2/age/age-keygen');
-const cli = new URL('../scripts/prune-control-backups.mjs', import.meta.url).pathname;
+const cli = decodeURIComponent(new URL('../scripts/prune-control-backups.mjs', import.meta.url).pathname);
 const now = '2026-09-28T17:00:00.000Z'; // Tuesday00:00 Jakarta.
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');

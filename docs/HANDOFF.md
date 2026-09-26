@@ -35,9 +35,9 @@ still couldn't chat with a bot during a background task. See the traps in
      `node --test tests/runtime-<file>.mjs`.
    - The full `bash scripts/verify-codex.sh` needs the Linux Codex binary, so it runs
      in Linux containers, not on macOS.
-   - **Known macOS baseline:** 8 backup/export vitest files fail on macOS before any G
+   - **Known macOS baseline:** 7 backup/export vitest files fail on macOS before any G
      work (no `age` binary; `UNSAFE_PATH` from the space in the path or the
-     `/private/tmp` symlink): `backup-control`, `backup-retention`,
+     `/private/tmp` symlink): `backup-control`,
      `control-backup-creation`, `control-backup-pruning`, `control-export-import`,
      `control-restore-inspection`, `encrypted-control-backup`, `owner-auth-binding`
      (1 case). All other files pass: 2,246 tests.

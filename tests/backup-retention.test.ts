@@ -84,7 +84,7 @@ it('rejects future records, duplicate identities, oversized catalogs and extra c
 });
 
 it('CLI emits only bounded decision metadata, and rejects content without echoing it', () => {
-  const cli = new URL('../scripts/plan-backup-retention.mjs', import.meta.url).pathname;
+  const cli = decodeURIComponent(new URL('../scripts/plan-backup-retention.mjs', import.meta.url).pathname);
   const good = spawnSync(process.execPath, [cli], { input: JSON.stringify({ now: '2026-09-14T06:00:00.000Z', snapshots: [] }), encoding: 'utf8' });
   expect(good.status).toBe(0); expect(JSON.parse(good.stdout).decisions).toEqual([]);
   for (const input of ['{"credential":"SECRET_CANARY"}', 'x'.repeat(1024 * 1024 + 1)]) {

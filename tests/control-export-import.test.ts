@@ -360,7 +360,7 @@ it('refuses links, public files, relative paths and overwrites without touching 
 });
 
 it('CLI reports no private content and rejects corrupted exports with a fixed error', async () => {
-  const cli = new URL('../scripts/import-control-export.mjs', import.meta.url).pathname;
+  const cli = decodeURIComponent(new URL('../scripts/import-control-export.mjs', import.meta.url).pathname);
   const good = spawnSync(process.execPath, [cli, input, destination], { encoding: 'utf8', timeout: 15000 });
   expect(good.status).toBe(0); expect(JSON.parse(good.stdout).activation_allowed).toBe(false);
   for (const secret of [canary, directory, 'policy-secret', 'calendar:secret']) expect(good.stdout + good.stderr).not.toContain(secret);

@@ -52,7 +52,7 @@ it.each(['CONTEXT_PREPARATION_LIMIT','MEMORY_PREPARATION_LIMIT'].flatMap(reason=
   expect(report.blockers.NATIVE_CONTEXT_UNAVAILABLE).toBe(1);
   expect(report.coordinated_restore_ready).toBe(false);
   const before=await fingerprint();
-  const cli=spawnSync(process.execPath,[new URL('../scripts/inspect-control-restore.mjs',import.meta.url).pathname,snapshot],{encoding:'utf8'});
+  const cli=spawnSync(process.execPath,[decodeURIComponent(new URL('../scripts/inspect-control-restore.mjs', import.meta.url).pathname),snapshot],{encoding:'utf8'});
   expect(cli.status).toBe(2);expect(JSON.parse(cli.stdout)).toEqual(report);
   expect(cli.stdout+cli.stderr).not.toContain(canary);expect(await fingerprint()).toEqual(before);
 });
@@ -139,7 +139,7 @@ it('preserves expired pending/answered/unknown question obligations on a termina
   expect(report.inconsistencies).toEqual({});
   expect(report.blockers).toEqual({ UNRESOLVED_NATIVE_QUESTION: 3 });
   const before = await fingerprint();
-  const cli = spawnSync(process.execPath, [new URL('../scripts/inspect-control-restore.mjs', import.meta.url).pathname, snapshot], { encoding: 'utf8' });
+  const cli = spawnSync(process.execPath, [decodeURIComponent(new URL('../scripts/inspect-control-restore.mjs', import.meta.url).pathname), snapshot], { encoding: 'utf8' });
   expect(cli.status).toBe(2); expect(JSON.parse(cli.stdout)).toEqual(report);
   expect(cli.stdout + cli.stderr).not.toContain(canary);
   expect(report.coordinated_restore_ready).toBe(false); expect(await fingerprint()).toEqual(before);
@@ -198,7 +198,7 @@ it('reports preserved recovery locks/effects/operations without declaring corrup
   expect(report.inconsistencies).toEqual({});
   expect(report.blockers).toMatchObject({ RECOVERY_RUN: 1, RETAINED_LOCK: 1, UNRESOLVED_EFFECT: 1, UNRESOLVED_OPERATION: 1, STALE_NATIVE_CUSTODY: 1 });
   const before = await fingerprint();
-  const cli = new URL('../scripts/inspect-control-restore.mjs', import.meta.url).pathname;
+  const cli = decodeURIComponent(new URL('../scripts/inspect-control-restore.mjs', import.meta.url).pathname);
   const result = spawnSync(process.execPath, [cli, snapshot], { encoding: 'utf8' });
   expect(result.status).toBe(2); expect(JSON.parse(result.stdout)).toEqual(report);
   for (const value of [canary, 'secret-resource', 'secret-policy', 'secret-digest', 'child-73']) expect(result.stdout + result.stderr).not.toContain(value);
@@ -275,7 +275,7 @@ it('fails closed beyond the semantic row budget after snapshot verification', as
 
 it('redacts CLI diagnostics and keeps failed verification separate from semantics', async () => {
   await inspect();
-  const cli = new URL('../scripts/inspect-control-restore.mjs', import.meta.url).pathname;
+  const cli = decodeURIComponent(new URL('../scripts/inspect-control-restore.mjs', import.meta.url).pathname);
   const good = spawnSync(process.execPath, [cli, snapshot], { encoding: 'utf8' });
   expect(good.status).toBe(0); expect(JSON.parse(good.stdout).coordinated_restore_ready).toBe(false);
   for (const value of [canary, 'root-19', 'child-73', 'boot-1', 'persona-a', directory]) expect(good.stdout + good.stderr).not.toContain(value);

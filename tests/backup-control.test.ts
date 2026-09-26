@@ -11,7 +11,7 @@ import type { SqlValue } from '../src/core/store';
 import {legacyOccurrences} from './legacy-occurrences';
 
 const schema = await readFile(process.env.HEHEBOT_BACKUP_TEST_SCHEMA ?? new URL('../DB/schema.sql', import.meta.url), 'utf8');
-const cli = new URL('../scripts/backup-control.mjs', import.meta.url).pathname;
+const cli = decodeURIComponent(new URL('../scripts/backup-control.mjs', import.meta.url).pathname);
 const digest = (value: Buffer) => createHash('sha256').update(value).digest('hex');
 let directory: string, source: string, destination: string, db: DatabaseSync;
 function legacyLinks() {

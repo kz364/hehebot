@@ -11,7 +11,7 @@ import { encryptControlBackup, decryptControlBackup, MAX_DATABASE_BYTES } from '
 const age = process.env.HEHEBOT_AGE_BIN ?? resolve('.local/age-v1.3.2/age/age');
 const keygen = process.env.HEHEBOT_AGE_KEYGEN_BIN ?? resolve('.local/age-v1.3.2/age/age-keygen');
 const schema = await readFile(process.env.HEHEBOT_ENCRYPTED_BACKUP_TEST_SCHEMA ?? new URL('../DB/schema.sql', import.meta.url), 'utf8');
-const cli = new URL('../scripts/encrypt-control-backup.mjs', import.meta.url).pathname;
+const cli = decodeURIComponent(new URL('../scripts/encrypt-control-backup.mjs', import.meta.url).pathname);
 let fixtureDirectory: string, directory: string, snapshot: string, encrypted: string, staging: string, identity: string, recipient: string;
 const clean = async () => expect((await readdir(directory)).filter(name => name.startsWith('.hehebot-age-'))).toEqual([]);
 const absent = async (path: string) => expect(lstat(path)).rejects.toMatchObject({ code: 'ENOENT' });
