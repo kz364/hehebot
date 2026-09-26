@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Operation heartbeat now selects id/current_attempt/status, avoiding repeated
+historical context/checkpoint hydration. NOT_FOUND and authorization/timing order
+retained. Red3/focused366/backend2331/runtime682/HTTP31/workerd/typecheck/build pass;
+1519995 exited0. Running/cancelling/recovery-required cases preserve snapshots,
+operation settlement and cancellation reporting. No total SQL/storage bound.
+Next completion/coordinator-release metadata projections, then remaining storage/
+native recovery. No active checks/children/delivery; schedule enabled. Prior browser/
+native/timed-shutdown/desktop matrix not rerun; original intermittency/gates unchanged.
+
 Root authority row is now reused during ancestry traversal in the same synchronous
 transaction; its JS object is still parsed independently for comparison. Inspected
 authorizeAttempt/owner-alpha propagation can update descendants, not the root row.

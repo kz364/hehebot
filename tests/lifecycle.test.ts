@@ -29,6 +29,22 @@ function unknownEffect(runId: string) {
   f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','outcome_unknown','synthetic-authorization','synthetic-digest',?)", randomUUID(), runId, randomUUID(), f.core.now());
 }
 describe('executor leases and attempts', () => {
+  it.each(['running','cancelling','recovery_required'] as const)('heartbeats %s operation custody without historical snapshot hydration',status=>{
+    const id=claimed().run.id;life.submitted(identity,id,1,'heartbeat-native');
+    const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+    f.db.exec('UPDATE runs SET status=?,context_json=?,checkpoint_json=? WHERE id=?',status,context,checkpoint,id);
+    const op=operation(id,'tool'),read=vi.spyOn(f.db,'all');
+    try{
+      const heartbeat=life.heartbeat(identity,[op]);
+      expect(heartbeat.cancellations.includes(id)).toBe(status!=='running');
+      life.heartbeat(identity,[{...op,status:'settled'}]);
+      const rows=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[index].value:[]);
+      expect(rows).toEqual([{id,current_attempt:1,status},{id,current_attempt:1,status}]);
+    }finally{read.mockRestore();}
+    expect(f.db.all('SELECT * FROM operations WHERE id=?',op.id)).toEqual([{...op,status:'settled'}]);
+    expect(f.store.run(id)).toMatchObject({status,context_json:context,checkpoint_json:checkpoint});
+  });
+
   it.each([false,true])('acknowledges native receipts without historical body reads: expired=%s',expired=>{
     const id=claimed().run.id,context=JSON.stringify({...JSON.parse(f.store.run(id).context_json),padding:'界'.repeat(400000)});
     const checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});

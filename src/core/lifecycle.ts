@@ -249,7 +249,8 @@ export class LifecycleCore {
    this.identity(identity);
    for(const input of operations){
     const op={...input,started_at:operationTime(input.started_at),deadline_at:operationTime(input.deadline_at),last_progress_at:operationTime(input.last_progress_at)};
-    const run=this.store.run(op.run_id);
+    const run=this.store.db.all<Pick<Run,'id'|'current_attempt'|'status'>>('SELECT id,current_attempt,status FROM runs WHERE id=?',op.run_id)[0];
+    requireThat(run,'NOT_FOUND','Run unavailable.',404);
     this.core.ownerAlpha.authorize(run.id,op.attempt);
     requireThat(run.current_attempt===op.attempt&&['claimed','running','finishing','cancelling','recovery_required'].includes(run.status),'STALE_EPOCH','Operation does not belong to an active attempt.');
     const attempt=this.store.db.all<{epoch:number;boot_id:string;deadline_at:string}>('SELECT epoch,boot_id,deadline_at FROM attempts WHERE run_id=? AND attempt=?',run.id,op.attempt)[0];

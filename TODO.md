@@ -12,7 +12,17 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** ancestry validation reuses
+**Current checkpoint (2026-09-26, verified locally):** operation heartbeat reads
+only run identity/current attempt/status instead of context/checkpoint bodies.
+Running/cancelling/recovery-required regressions preserve operation settlement,
+cancellation reporting and snapshots. Red3/focused366/backend2331/runtime682/HTTP31/
+workerd/typecheck/build pass. Owner-alpha authorization and timing checks unchanged.
+This removes repeated historical hydration, not total heartbeat/SQL/storage bounds.
+Next remaining completion/release historical reads and storage/native recovery.
+Prior browser/native/timed-shutdown/desktop matrix not rerun; original intermittency,
+advisories and external gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** ancestry validation reuses
 the already hydrated root row within the transaction, but parses its JSON twice
 independently to retain JS object-identity semantics. Root bytes now count once
 toward the unchanged4MiB returned-body budget; five-row exact/one-over fixtures

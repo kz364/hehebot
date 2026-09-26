@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Heartbeat metadata projection (2026-09-26 Asia/Jakarta): operation validation
+selects only run id/current_attempt/status instead of store.run's full historical
+context/checkpoint bodies for every operation. NOT_FOUND retains its code/message/
+404 status; owner-alpha authorization, attempt/timing/custody predicates, transaction,
+lease renewal and cancellation reporting remain unchanged. Three regressions fail
+with the old returned row, then pass for running/cancelling/recovery_required with
+>1MiB context/checkpoint bodies, active→settled operation content and source retention.
+Focused366/backend2331/runtime682/HTTP31/workerd/typecheck/dry-build pass;1519995
+exited0. No total heartbeat SQL-work/storage or recovery acceptance claimed. Next
+completion/release historical reads and remaining storage/native restoration work.
+Prior full browser/native/timed-shutdown/desktop matrix was not repeated; original
+catalog/alpha intermittency, desktop advisories and production gates unchanged.
+- .local/heartbeat-projection-red.log SHA256: `02872719041473a358dfb9afd4c53442bf3dc1b7dd40cf0df54fe2072799f6cc`
+- .local/heartbeat-projection-focused.log SHA256: `a06c691882cd26d77262021ac97dad4bda4ac2ffbe36cf809d6c2a79fc39a75a`
+- .local/heartbeat-projection-integrated.log SHA256: `a403004610c1ac005eb0284ffbee2e4f60b29a3c0759481ff0d3333151d26f5e`
+
 Root authority hydration reuse (2026-09-26 Asia/Jakarta): ancestry traversal reuses
 the root row already read in the same synchronous transaction. authorizeAttempt
 performs owner-alpha cancellation propagation, but inspected propagation only updates
