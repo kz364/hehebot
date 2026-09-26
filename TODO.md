@@ -12,7 +12,13 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** agent-command admission omits
+**Current checkpoint (2026-09-26, verified locally):** bootstrap recovery reads run
+metadata and strict checkpoint nullness, not snapshot bodies. Red2/focused105/
+backend2373/typecheck/dry-build pass; empty/NUL/JSON-null text still blocks recovery.
+Next claimed-quarantine attempt hydration/count bounds, then storage/native recovery.
+Full matrix not rerun; original intermittency/advisories/gates unchanged. Local only.
+
+**Previous checkpoint (2026-09-26, verified locally):** agent-command admission omits
 unused checkpoint data, retaining full context and authority order. Red1/focused153/
 backend2371/typecheck/dry-build pass. Next bootstrap recovery null-check projections,
 then remaining context/storage/native recovery bounds. Full matrix not rerun;

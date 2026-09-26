@@ -4,6 +4,18 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Bootstrap recovery run projection (2026-09-26 Asia/Jakarta): unused and claimed
+pre-turn custody checks select status/current_attempt and checkpoint_json IS NULL.
+Missing-run errors and exact grant/attempt/activity check order retained. No absence
+of effects is inferred from this projection. Two oversized-history tests fail before
+implementation, then distinguish SQL NULL from empty, NUL, JSON-null and large text;
+source snapshots remain unchanged. Focused105/backend2373/typecheck/dry-build pass;
+1581246 exit0. Logs: .local/recovery-projection-{red,focused,backend,build}.log.
+Claimed quarantine still hydrates all matching attempts and their receipt bodies;
+that read/count boundary is next, then remaining storage/native recovery bounds.
+Full runtime/HTTP/local-Worker/browser/native-service/shutdown/desktop matrix not
+rerun; original intermittency/advisories/external gates unchanged. Local only.
+
 Agent-command admission projection (2026-09-26 Asia/Jakarta): admitted selects its
 six consumed metadata fields and context_json, excluding unused checkpoint/history
 columns. All consumers inspected, including memory read/reservation, skill loading/

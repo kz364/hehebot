@@ -9,7 +9,7 @@ import {ControlCore} from '../src/core/control';
 import {LifecycleCore} from '../src/core/lifecycle';
 import {Store,type Database} from '../src/core/store';
 import type {OwnerAlphaPolicy} from '../src/core/owner-alpha';
-import {ownerAlphaManifestSha256,parseOwnerAlphaBootstrap,parseOwnerAlphaClaimedPreTurnQuarantine,type OwnerAlphaBootstrapConfig,type OwnerAlphaRetirement} from '../src/core/owner-alpha-bootstrap';
+import {assertUnusedRecoveryCustody,assertClaimedPreTurnQuarantineCustody,ownerAlphaManifestSha256,parseOwnerAlphaBootstrap,parseOwnerAlphaClaimedPreTurnQuarantine,type OwnerAlphaBootstrapConfig,type OwnerAlphaRetirement} from '../src/core/owner-alpha-bootstrap';
 import {sendHostedOwnerWake} from '../src/worker/hosted-owner-wake';
 
 function setup(overrides:Partial<OwnerAlphaBootstrapConfig>={}){
@@ -374,6 +374,27 @@ function quarantined(){
   metadata:f.db.all("SELECT * FROM runtime_metadata WHERE key IN ('owner_alpha_generation:2','owner_alpha_reservation:2','owner_alpha_cost_baseline','owner_alpha_wake:2') ORDER BY key")});
  return {f,key,receipt,prior,config,retained};
 }
+it.each(['unused','claimed'] as const)('projects %s recovery checkpoint nullness without loading history',async mode=>{
+ const {f,prior,config}=mode==='unused'?await unused():quarantined();try{
+  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',JSON.stringify({padding:'界'.repeat(400000)}),prior.run_id);
+  const check=()=>mode==='unused'
+   ?assertUnusedRecoveryCustody(f.store,config.unused_recovery!,prior,f.core.now())
+   :assertClaimedPreTurnQuarantineCustody(f.store,config.claimed_pre_turn_quarantine!,prior,f.core.now());
+  for(const checkpoint of [null,'','\u0000','null','x'.repeat(1100000)]){
+   f.db.exec('UPDATE runs SET checkpoint_json=? WHERE id=?',checkpoint,prior.run_id);
+   const before=f.store.run(prior.run_id),read=vi.spyOn(f.db,'all');
+   try{
+    if(checkpoint===null)expect(check).not.toThrow();
+    else expect(check).toThrowError(expect.objectContaining({code:'CAPABILITY_UNAVAILABLE'}));
+    const rows=read.mock.calls.flatMap(([sql],i)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[i].value:[]);
+    expect(rows).toHaveLength(1);
+    for(const row of rows){expect(row).not.toHaveProperty('context_json');expect(row).not.toHaveProperty('checkpoint_json');}
+   }finally{read.mockRestore();}
+   expect(f.store.run(prior.run_id)).toEqual(before);
+  }
+ }finally{f.close();}
+});
+
 it('quarantines exact claimed uncertainty without settlement and admits only a fresh independently claimable message',()=>{
  const {f,key,receipt,prior,config,retained}=quarantined();try{
   expect(()=>f.lifecycle.assertOwnerAlphaSettlement(true)).toThrow();const before=retained();

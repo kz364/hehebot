@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Bootstrap recovery now projects run status/attempt/strict checkpoint nullness.
+Red2/focused105/backend2373/typecheck/build pass;1581246 exit0. Empty/NUL/JSON-null
+and large checkpoint text remain blockers; source snapshots unchanged. Next claimed
+quarantine attempt hydration/count bounds, then storage/native recovery. No active
+checks/children/delivery; schedule enabled. Full matrix not rerun; original
+intermittency/advisories/gates unchanged. Local only.
+
 Agent-command admission now excludes unused checkpoint data. Context and check order
 retained across all consumers. Red1/focused153/backend2371/typecheck/build pass;
 1578039 exit0. Next bootstrap recovery null-check projections, then context/storage/
