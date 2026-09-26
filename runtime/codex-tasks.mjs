@@ -42,13 +42,19 @@ export class CodexTaskControl {
       const pending = Object.keys(native.childTurns ?? {}).filter(key => !mapped.children[key]?.runId || mapped.children[key]?.started !== true);
       if (Object.keys(native.childTurns ?? {}).length > 100) fail('CHILD_TASK_TRACKING_LIMIT');
       const owners = [[null, native], ...Object.entries(native.childObligations ?? {})];
+      // Origins belong to this captured snapshot, not to the evolving mapping.
+      // Resolve lazily to retain validation order, and never cache across syncs.
+      const parentKeysByThread = new Map();
       while (pending.length) {
         let progressed = false;
         for (let index = 0; index < pending.length;) {
           const key = pending[index], [threadId, turnId] = JSON.parse(key);
-          const origins = owners.filter(([, owner]) => Object.values(owner.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(threadId)));
-          if (origins.length !== 1) fail('NATIVE_CHILD_ORIGIN_UNKNOWN');
-          const parentKey = origins[0][0];
+          if (!parentKeysByThread.has(threadId)) {
+            const origins = owners.filter(([, owner]) => Object.values(owner.spawns ?? {}).some(spawn => spawn.receiverThreadIds.includes(threadId)));
+            if (origins.length !== 1) fail('NATIVE_CHILD_ORIGIN_UNKNOWN');
+            parentKeysByThread.set(threadId, origins[0][0]);
+          }
+          const parentKey = parentKeysByThread.get(threadId);
           const parentRun = parentKey === null ? this.parent.runId : mapped.children[parentKey]?.runId;
           if (!parentRun) { index++; continue; }
           const child = { parent_run_id: parentRun, parent_attempt: parentKey === null ? this.parent.attempt : 1,

@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native origin lookup (2026-09-26 Asia/Jakarta): sync lazily caches each validated
+thread origin within the captured native snapshot, not across calls. Parent run IDs
+still come from the evolving mapping, preserving parent-first registration, receipt
+and lease checks, and error order. Reverse-ordered 24-child regression fails before
+the change at7500 owner reads and passes within600 afterward, with exact parent/
+attempt binding and no re-registration of acknowledged children. Duplicate spawns
+from the same owner remain valid. After an uncertain registration, a new conflicting
+owner on the next sync refuses before another request and preserves the pending
+receipt. No new inference or inferred settlement. Pending traversal still repeats;
+whole-record journal I/O and total storage/time remain unbounded.
+Red1/focused8/runtime688/typecheck/dry-build pass (1617862 exit0), logs
+.local/native-origin-{red,focused,runtime,build}.log. Full browser/native-service/
+timed-shutdown/desktop matrix not rerun; original intermittency/advisories and external
+gates unchanged. Remaining native restoration and historical/storage/existing-key
+bounds stay open. Local-only implementation; no external actions.
+
 Native cancellation traversal (2026-09-26 Asia/Jakarta): CodexTaskControl indexes
 registered parent edges once and expands the selected Set without repeated scans.
 Dispatch still follows journal order with unchanged lease checks. Two disk-reopen

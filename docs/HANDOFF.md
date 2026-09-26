@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Native sync now caches validated origins within one captured snapshot, retaining
+parent-first registration, lazy validation order and uncertain receipt custody.
+Red1/focused8/runtime688/typecheck/dry-build pass (1617862 exit0); reverse-order
+owner reads7500 to at most600. A new conflicting owner is rechecked on the next sync.
+Logs .local/native-origin-*.log. No active checks/children/delivery; existing schedule
+enabled. Next remaining native restoration and historical/storage/existing-key bounds.
+Pending traversal and whole-record journal I/O remain; no total storage/time bound.
+Full matrix not rerun; original intermittency/advisories and external gates unchanged.
+
 Native cancellation now indexes parent edges once, preserving exhaustive selected
 descendants and journal dispatch order with unchanged lease checks. Red2/focused6/
 runtime686/typecheck/dry-build pass (1614267 exit0); disk-reopen tests preserve

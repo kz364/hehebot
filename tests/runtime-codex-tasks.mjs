@@ -35,6 +35,58 @@ async function fixture(native, request, assertLease = () => {}) {
   return { control, journal };
 }
 
+test('reverse-order registration resolves each thread origin only once per snapshot', async () => {
+  const key = i => JSON.stringify([`thread-${i}`, `turn-${i}`]);
+  const native = { childTurns: {}, spawns: { root: { receiverThreadIds: ['thread-1'] } }, childObligations: {} };
+  for (let i = 24; i >= 1; i--) {
+    native.childTurns[key(i)] = 'inProgress';
+    native.childObligations[key(i)] = { spawns: i === 24 ? {} : { next: { receiverThreadIds: [`thread-${i + 1}`] } } };
+  }
+  const calls = [], f = await fixture(native, async (type, payload) => {
+    assert.equal(type, 'native-child'); assert.equal(payload.started, true);
+    assert.deepEqual(payload.identity, identity);
+    const i = Number(payload.child.native_session_key.slice(7));
+    assert.equal(payload.child.parent_run_id, i === 1 ? parent.runId : `run-${i - 1}`);
+    assert.equal(payload.child.parent_attempt, i === 1 ? 3 : 1);
+    calls.push(i);
+    return { id: `run-${i}`, parent_run_id: payload.child.parent_run_id,
+      persona_id: parent.personaId, current_attempt: 1, role: 'background', status: 'recovery_required' };
+  });
+  let reads = 0;
+  f.control.adapter.requireRun = async () => {
+    const snapshot = structuredClone(native);
+    for (const owner of [snapshot, ...Object.values(snapshot.childObligations)]) {
+      const spawns = owner.spawns;
+      Object.defineProperty(owner, 'spawns', { get() { reads++; return spawns; } });
+    }
+    return snapshot;
+  };
+  const children = await f.control.sync();
+  assert.deepEqual(calls, Array.from({ length: 24 }, (_, i) => i + 1));
+  assert.equal(Object.keys(children).length, 24);
+  assert.ok(Object.values(children).every(child => child.started === true));
+  assert.ok(reads <= 24 * 25, `Origin scans ${reads} exceed one per thread`);
+  await f.control.sync();
+  assert.equal(calls.length, 24, 'Acknowledged children must not be registered again');
+});
+
+test('origin cache does not survive uncertain registration or hide a new conflicting owner', async () => {
+  const key = '["child","turn"]';
+  const native = { childTurns: { [key]: 'inProgress' }, spawns: {
+    a: { receiverThreadIds: ['child'] }, b: { receiverThreadIds: ['child'] },
+  }, childObligations: {} };
+  let calls = 0;
+  const f = await fixture(native, async () => { calls++; throw new Error('uncertain response'); });
+  await assert.rejects(f.control.sync(), /uncertain response/);
+  const pending = await f.journal.get(f.control.key);
+  assert.equal(pending.children[key].runId, null);
+  assert.equal(pending.children[key].started, false);
+  native.childObligations['["other","turn"]'] = { spawns: { conflicting: { receiverThreadIds: ['child'] } } };
+  await assert.rejects(f.control.sync(), { code: 'NATIVE_CHILD_ORIGIN_UNKNOWN' });
+  assert.equal(calls, 1);
+  assert.deepEqual(await f.journal.get(f.control.key), pending);
+});
+
 for (const cycle of [false, true]) test(`restored reverse-order cancellation walks each edge once (synthetic cycle=${cycle})`, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'hehe-task-cancel-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
