@@ -4,6 +4,15 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Question retry disk persistence (2026-09-26 Asia/Jakarta): strengthened the four
+existing question timer cases to restore a closed SQLite backup and reopen again
+after timer processing. Exact questions and attempts survive; unresolved states
+retain recovery_required without a wake, resolved state queues once, consumed
+timers stay absent after reopen. Related178/typecheck pass in
+.local/question-disk-final.log. Production unchanged; this is graceful database
+reopen, not process-crash/native takeover or permission to resume. Full matrix
+not rerun and external gates unchanged.
+
 Question retry reconstruction (2026-09-26 Asia/Jakarta): expanded retained timer
 test across pending, answered, response_unknown and resolved custody. Recreated
 control/lifecycle objects retain exact question/run records; unresolved states

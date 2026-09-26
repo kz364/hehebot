@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** reconstructed retry control
+**Current checkpoint (2026-09-26, verified locally):** question retry custody now
+passes SQLite backup/reopen and a second reopen after timer writes for all four
+states. Exact question/attempt records persist, unresolved states do not wake,
+resolved state requeues once. Related178/typecheck pass; production unchanged.
+Not process-crash/native takeover evidence. Remaining restoration/recursive
+settlement and historical/storage bounds; full matrix not rerun, gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** reconstructed retry control
 preserves pending, answered and response_unknown questions without waking; resolved
 questions permit one requeue. Pending-only mutant fails two cases; production
 unchanged, related155/typecheck pass. No process-crash or safe-resume claim.

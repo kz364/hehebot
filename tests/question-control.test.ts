@@ -1,9 +1,14 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { backup, DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { LifecycleCore } from '../src/core/lifecycle';
 import { ControlCore } from '../src/core/control';
+import { Store } from '../src/core/store';
 import type { Command } from '../src/core/types';
-import { bot, otherBot, fixture } from './helpers';
+import { bot, otherBot, fixture, TestDatabase } from './helpers';
 
 let f: ReturnType<typeof fixture>, lifecycle: LifecycleCore, runId: string;
 const identity = { epoch: 3, boot_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' };
@@ -308,7 +313,7 @@ it('stale closure revisions and mismatched owner receipts cannot close another q
   expect(f.core.questions.get(id).state).toBe('answered');
 });
 
-it.each(['pending', 'answered', 'response_unknown', 'resolved'])('a retained due retry preserves %s question custody after control reconstruction', state => {
+it.each(['pending', 'answered', 'response_unknown', 'resolved'])('a retained due retry preserves %s question custody across disk reopen', async state => {
   const id = f.core.questions.record(identity, runId, 1, input());
   if (state === 'answered' || state === 'response_unknown') f.accept(answer(id));
   if (state === 'response_unknown') f.core.questions.takeAnswer(identity, id, connection);
@@ -318,18 +323,34 @@ it.each(['pending', 'answered', 'response_unknown', 'resolved'])('a retained due
   stop();
   f.db.exec("UPDATE runs SET status='waiting' WHERE id=?", runId);
   f.db.exec("INSERT INTO retry_queue(run_id,due_at,reason) VALUES(?,?,'STALE_EPOCH') ON CONFLICT(run_id) DO UPDATE SET due_at=excluded.due_at", runId, f.core.now());
-  const core = new ControlCore(f.store, f.core.options), restored = new LifecycleCore(f.store, core);
-  const before = restored.get(), run = f.store.run(runId);
-  restored.retryDue();
-  expect(core.questions.get(id)).toEqual(question);
-  expect(f.store.run(runId)).toEqual({ ...run, status: state === 'resolved' ? 'queued' : 'recovery_required',
-    error_code: state === 'resolved' ? run.error_code : 'NATIVE_QUESTION_UNRESOLVED' });
-  if (state === 'resolved') expect(restored.get()).toMatchObject({ queue_sequence: before.queue_sequence + 1, desired_state: 'RUN' });
-  else expect(restored.get()).toEqual(before);
-  expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
-  const settled = restored.get(); restored.retryDue();
-  expect(restored.get()).toEqual(settled);
-  expect(core.questions.get(id)).toEqual(question);
+  const before = lifecycle.get(), run = f.store.run(runId);
+  const expectedRun = { ...run, status: state === 'resolved' ? 'queued' : 'recovery_required',
+    error_code: state === 'resolved' ? run.error_code : 'NATIVE_QUESTION_UNRESOLVED' };
+  const attempts = f.db.all('SELECT * FROM attempts ORDER BY run_id,attempt');
+  const dir = mkdtempSync(join(tmpdir(), 'hehebot-question-retry-')), file = join(dir, 'control.db');
+  let db: TestDatabase | undefined;
+  try {
+    await backup(f.db.sqlite, file);
+    db = new TestDatabase(new DatabaseSync(file));
+    const store = new Store(db), core = new ControlCore(store, f.core.options);
+    const restored = new LifecycleCore(store, core);
+    restored.retryDue();
+    expect(core.questions.get(id)).toEqual(question);
+    expect(store.run(runId)).toEqual(expectedRun);
+    if (state === 'resolved') expect(restored.get()).toMatchObject({ queue_sequence: before.queue_sequence + 1, desired_state: 'RUN' });
+    else expect(restored.get()).toEqual(before);
+    const settled = restored.get();
+    db.close(); db = undefined;
+    db = new TestDatabase(new DatabaseSync(file));
+    const reopenedStore = new Store(db), reopenedCore = new ControlCore(reopenedStore, f.core.options);
+    const reopened = new LifecycleCore(reopenedStore, reopenedCore);
+    expect(db.all('SELECT * FROM retry_queue')).toEqual([]);
+    reopened.retryDue();
+    expect(reopened.get()).toEqual(settled);
+    expect(reopenedStore.run(runId)).toEqual(expectedRun);
+    expect(reopenedCore.questions.get(id)).toEqual(question);
+    expect(db.all('SELECT * FROM attempts ORDER BY run_id,attempt')).toEqual(attempts);
+  } finally { db?.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
 it('claim selection skips a retained queued question task before LIMIT without starving fresh work', () => {

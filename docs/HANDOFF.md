@@ -4,6 +4,12 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Four question retry cases now use SQLite backup/reopen and second reopen after
+timer writes. Exact question/attempt custody and one-time resolved requeue persist;
+related178/typecheck pass, .local/question-disk-final.log. Production unchanged.
+Not process crash/native takeover. Continue restoration/recursive settlement and
+historical/storage bounds; full matrix not rerun, gates unchanged.
+
 Question retry reconstruction tests retain pending/answered/response_unknown
 custody and block wake, while resolved permits one requeue. Pending-only mutant
 fails2; restored production unchanged, related155/typecheck pass. Same retained
