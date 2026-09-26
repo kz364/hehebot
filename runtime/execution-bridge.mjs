@@ -173,6 +173,11 @@ export class ExecutionBridge {
       const input = {
         attemptId: hash([this.installationId, claim.submission_key]), installationId: this.installationId,
         personaId: persona.agentId, model: persona.model,
+        // G4c: routing metadata only -- codex-service.mjs's native.submit reads
+        // this to pick the correct lane's supervisor/bridge cursor, then strips
+        // it before the actual CodexAdapter.submit() call (whose input allowlist
+        // never includes `lane`).
+        ...(this.lane === 'background' ? { lane: 'background' } : {}),
         ...(background ? { ownerAlphaBackground: true } : {}),
         scope: claim.run.routine_id ? 'routine' : 'conversation',
         // G4b: a coordinator task run gets its own scope, keyed by its own run
