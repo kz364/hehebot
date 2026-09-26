@@ -1,5 +1,6 @@
 import type { Identity, LifecycleCore } from './lifecycle';
 import type { Store } from './store';
+import type { Run } from './types';
 import { requireThat } from './errors';
 
 export type OutputPreview = { run_id: string; attempt: number; native_ref: string; version: number; text: string; truncated: boolean };
@@ -15,7 +16,8 @@ export class OutputPreviews {
    'INVALID_INPUT', 'Invalid provisional output.', 422);
   this.store.db.transaction(() => {
    lifecycle.authorizeAttempt(identity, input.run_id, input.attempt);
-   const run = this.store.run(input.run_id);
+   const run = this.store.db.all<Pick<Run,'id'|'current_attempt'|'status'|'error_code'>>('SELECT id,current_attempt,status,error_code FROM runs WHERE id=?', input.run_id)[0];
+   requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404);
    const alpha=!!lifecycle.core.ownerAlpha.policy;
    requireThat(run.current_attempt === input.attempt && (alpha?['running','finishing','cancelling','recovery_required']:['running', 'finishing']).includes(run.status) &&
     !['OWNER_CANCELLED', 'CONTEXT_INVALIDATED'].includes(run.error_code ?? ''), 'OUTPUT_FENCED', 'Task no longer accepts provisional output.');
@@ -37,7 +39,8 @@ export class OutputPreviews {
   });
  }
  read(runId: string, attempt: number, ownerAlpha=false): Pick<OutputPreview,'run_id'|'attempt'|'version'|'text'|'truncated'> | null {
-  const run = this.store.run(runId);
+  const run = this.store.db.all<Pick<Run,'current_attempt'|'status'|'error_code'>>('SELECT current_attempt,status,error_code FROM runs WHERE id=?', runId)[0];
+  requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404);
   if (run.current_attempt !== attempt || !(ownerAlpha?['running','finishing','cancelling','recovery_required']:['running', 'finishing', 'recovery_required']).includes(run.status) || ['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code ?? '')) return null;
   const row = this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?', prefix + runId)[0];
   if (!row) return null;

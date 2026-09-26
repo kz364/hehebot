@@ -4,6 +4,20 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Observation metadata projection (2026-09-26 Asia/Jakarta): OutputPreviews and
+TokenUsageSnapshots record/read no longer return historical context/checkpoint
+bodies. Select only each path's consumed fields, retaining NOT_FOUND code/message/404,
+authorization ordering, expiry and replay predicates. Two oversized-body regressions
+fail before the change and then verify exact returned metadata and source preservation;
+terminal previews remain hidden while current-attempt usage remains visible.
+Focused129/backend2339/HTTP31/workerd/typecheck/dry-build pass;1535710 exited0.
+No UI behavior or whole-request/SQL/storage bound change claimed. Remaining historical/
+storage/native recovery is open. Runtime/browser/native-service/timed-shutdown/desktop
+matrix not repeated; original intermittency/advisories/gates unchanged. Local only.
+- .local/observation-projection-red.log SHA256: `c8fda551bf01811801efe1181299cb2c5eb7d5b163dc50e5e527ea2f1395b390`
+- .local/observation-projection-focused.log SHA256: `5352438c76832ce068f8ccf9a678ae9da858d0df2d3bc7b6b3a62b831245237e`
+- .local/observation-projection-integrated.log SHA256: `f8e2d402352cc22e0de3a9b5e260759f51d89d79e0cec625d518f96d962bd02d`
+
 Completion metadata projection (2026-09-26 Asia/Jakarta): no full historical
 context/checkpoint read in complete(); retry scheduling reuses id/role/current_attempt.
 Inspected settlement updates and flushFollowups/enqueue: none changes those fields

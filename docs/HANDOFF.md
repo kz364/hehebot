@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Preview/usage record/read now select metadata only; terminal-preview hiding versus
+historical usage visibility and existing authority/replay/expiry rules preserved.
+Red2/focused129/backend2339/HTTP31/workerd/typecheck/dry-build pass;1535710 exited0.
+Next remaining historical/storage/native recovery; do not claim a whole-request bound
+or change late-outcome authority. No active checks/children/delivery; schedule enabled.
+Prior runtime/browser/native-service/timed-shutdown/desktop matrix not rerun;
+original intermittency/advisories/gates unchanged.
+
 Completion now reads metadata only and reuses id/role/current_attempt for retry;
 settlement and flushFollowups/enqueue leave those fields unchanged. Red3/focused383/
 backend2337/runtime682/HTTP/workerd/typecheck/dry-build pass;1529339 exit0. Exact

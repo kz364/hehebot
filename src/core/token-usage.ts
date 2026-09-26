@@ -1,6 +1,7 @@
 import { ControlError, requireThat } from './errors';
 import type { Identity, LifecycleCore } from './lifecycle';
 import type { Store } from './store';
+import type { Run } from './types';
 
 export type TokenUsageCounts = {
  inputTokens: number;
@@ -44,7 +45,8 @@ export class TokenUsageSnapshots {
     if (error instanceof ControlError) throw new ControlError('USAGE_FENCED', 'Token usage no longer matches runtime custody.');
     throw error;
    }
-   const run = this.store.run(input.run_id);
+   const run = this.store.db.all<Pick<Run,'current_attempt'|'status'|'error_code'>>('SELECT current_attempt,status,error_code FROM runs WHERE id=?', input.run_id)[0];
+   requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404);
    const attempt = this.store.db.all<{native_run_ref:string|null;deadline_at:string}>('SELECT native_run_ref,deadline_at FROM attempts WHERE run_id=? AND attempt=?', input.run_id, input.attempt)[0];
    requireThat(run.current_attempt === input.attempt && ['running', 'finishing'].includes(run.status) &&
     !['OWNER_CANCELLED', 'CONTEXT_INVALIDATED'].includes(run.error_code ?? '') && attempt?.native_run_ref === input.native_ref && attempt.deadline_at > this.now(),
@@ -68,7 +70,8 @@ export class TokenUsageSnapshots {
  }
 
  read(runId: string, attempt: number): Omit<TokenUsageSnapshot, 'native_ref'> | null {
-  const run = this.store.run(runId);
+  const run = this.store.db.all<Pick<Run,'current_attempt'>>('SELECT current_attempt FROM runs WHERE id=?', runId)[0];
+  requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404);
   if (run.current_attempt !== attempt) return null;
   const row = this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?', prefix + runId)[0];
   if (!row) return null;

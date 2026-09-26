@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { bot, fixture } from './helpers';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { TokenUsageSnapshots, type TokenUsageCounts, type TokenUsageSnapshot } from '../src/core/token-usage';
@@ -17,6 +17,24 @@ beforeEach(()=>{
 afterEach(()=>f.close());
 const rows=()=>f.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key GLOB 'token-usage:*'");
 const record=(value=input)=>snapshots.record(identity,value,lifecycle);
+
+it('records and reads usage without historical run bodies',()=>{
+ const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+ f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,input.run_id);
+ const read=vi.spyOn(f.db,'all');
+ try{
+  record();record();
+  expect(snapshots.read(input.run_id,1)).toEqual({run_id:input.run_id,attempt:1,version:1,usage:input.usage});
+  f.db.exec("UPDATE runs SET status='completed' WHERE id=?",input.run_id);
+  expect(snapshots.read(input.run_id,1)).toEqual({run_id:input.run_id,attempt:1,version:1,usage:input.usage});
+  const returned=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[index].value:[]);
+  expect(returned).toEqual([
+   ...Array.from({length:2},()=>({current_attempt:1,status:'running',error_code:null})),
+   {current_attempt:1},{current_attempt:1}
+  ]);
+ }finally{read.mockRestore();}
+ expect(f.store.run(input.run_id)).toMatchObject({context_json:context,checkpoint_json:checkpoint});
+});
 
 it('stores asymmetric observations without summing and mutates no task custody',()=>{
  const tables=['runs','attempts','lifecycle','events','effects','resource_locks','operations','outbox'];

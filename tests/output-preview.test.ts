@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { fixture, bot } from './helpers';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { OutputPreviews, type OutputPreview } from '../src/core/output-preview';
@@ -17,6 +17,24 @@ beforeEach(()=>{
 afterEach(()=>f.close());
 const record=(value=input)=>previews.record(identity,value,life);
 const stored=()=>f.db.all("SELECT * FROM runtime_metadata WHERE key GLOB 'output-preview:*'");
+
+it('records and reads previews without historical run bodies',()=>{
+ const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+ f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,input.run_id);
+ const read=vi.spyOn(f.db,'all');
+ try{
+  record();record();
+  expect(previews.read(input.run_id,1)).toEqual({run_id:input.run_id,attempt:1,version:1,text:input.text,truncated:false});
+  f.db.exec("UPDATE runs SET status='completed' WHERE id=?",input.run_id);
+  expect(previews.read(input.run_id,1)).toBeNull();
+  const rows=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[index].value:[]);
+  expect(rows).toEqual([
+   ...Array.from({length:2},()=>({id:input.run_id,current_attempt:1,status:'running',error_code:null})),
+   {current_attempt:1,status:'running',error_code:null},{current_attempt:1,status:'completed',error_code:null}
+  ]);
+ }finally{read.mockRestore();}
+ expect(f.store.run(input.run_id)).toMatchObject({context_json:context,checkpoint_json:checkpoint});
+});
 
 it('publishes only a bounded display snapshot without settling or changing task obligations',()=>{
  const tables=['runs','attempts','lifecycle','effects','resource_locks','operations','outbox','events'];
