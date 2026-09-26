@@ -4,6 +4,12 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Agent-command admission now excludes unused checkpoint data. Context and check order
+retained across all consumers. Red1/focused153/backend2371/typecheck/build pass;
+1578039 exit0. Next bootstrap recovery null-check projections, then context/storage/
+native recovery bounds. No active checks/children/delivery; schedule enabled. Full
+matrix not rerun; original intermittency/advisories/gates unchanged. Local only.
+
 WhatsApp read ancestry projects metadata, loading only selected-task context for
 unchanged grant parsing. Red1/focused10/backend2370/typecheck/build pass;1574760 exit0.
 Shorter parent deadline and exact chat grants preserved, historical rows untouched.

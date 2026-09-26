@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {requireThat} from './errors';
 import type {LifecycleCore,Identity} from './lifecycle';
 import {parseCommand,type ControlCore} from './control';
-import type {Command,ContextSnapshot,RoutinePut,MemoryPut} from './types';
+import type {Command,ContextSnapshot,RoutinePut,MemoryPut,Run} from './types';
 import {MEMORY_TOKENIZER,MEMORY_READ_POLICY,projectMemory} from './memory-context';
 
 // Stable IDs in the existing UUID tool-policy registry. Installing code does not
@@ -26,7 +26,9 @@ export class AgentCommandBoundary {
  constructor(private core:ControlCore,private lifecycle:LifecycleCore){}
  private admitted(request:AgentScope){
   this.lifecycle.authorizeAttempt(request.identity,request.run_id,request.attempt);
-  const run=this.core.store.run(request.run_id);
+  const run=this.core.store.db.all<Pick<Run,'id'|'persona_id'|'routine_id'|'current_attempt'|'status'|'error_code'|'context_json'>>(
+   'SELECT id,persona_id,routine_id,current_attempt,status,error_code,context_json FROM runs WHERE id=?',request.run_id)[0];
+  requireThat(run,'NOT_FOUND','Run unavailable.',404);
   const alpha=!!this.core.ownerAlpha.policy;
   requireThat(!alpha||!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code??''),'REVISION_CONFLICT','The owner revoked this admitted context.');
   requireThat(run.current_attempt===request.attempt&&(alpha?['claimed','running','finishing','cancelling','recovery_required']:['claimed','running','finishing']).includes(run.status),'REVISION_CONFLICT','The admitted attempt is no longer active.');

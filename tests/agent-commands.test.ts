@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {afterEach,beforeEach,describe,expect,it} from 'vitest';
+import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {AgentCommandBoundary,ROUTINE_MANAGE_POLICY,SKILL_PROPOSE_POLICY} from '../src/core/agent-commands';
 import {LifecycleCore,type Identity} from '../src/core/lifecycle';
 import type {Command,ContextSnapshot,RoutinePut} from '../src/core/types';
@@ -25,6 +25,20 @@ beforeEach(()=>{f=fixture(true);f.core.options.actionPolicyIds=[action];boundary
 afterEach(()=>f.close());
 
 describe('model-facing agent command boundary',()=>{
+ it('keeps admitted command authority without hydrating historical checkpoints',()=>{
+  admit([SKILL_PROPOSE_POLICY,ROUTINE_MANAGE_POLICY]);
+  const owned=routine({enabled:false});f.store.put(owned.id,'routine',owned,0,'owner',f.core.now());
+  f.db.exec('UPDATE runs SET checkpoint_json=? WHERE id=?','界'.repeat(400000),runId);
+  const before=f.store.run(runId),read=vi.spyOn(f.db,'all');
+  try{
+   expect(boundary.routines({identity,run_id:runId,attempt:1,id:owned.id}).routines).toEqual([f.store.get(owned.id,'routine')]);
+   const proposed=proposal();expect(boundary.accept(request(proposed)).status).toBe('applied');
+   const rows=read.mock.calls.flatMap(([sql],i)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[i].value:[]);
+   expect(rows.length).toBeGreaterThan(0);
+   for(const row of rows)expect(row).not.toHaveProperty('checkpoint_json');
+  }finally{read.mockRestore();}
+  expect(f.store.run(runId)).toEqual(before);
+ });
  it('searches literal current catalog metadata with exclusive pages without enabling body access',()=>{
   const ids=Array.from({length:23},()=>randomUUID()).sort();
   for(const [index,id] of ids.entries())f.store.put(id,'skill',{...skillBody,name:`Item ${index}`,description:index%2?'ALPHA %_ note':'Other',when_to_use:index%2?'Other':'alpha %_ occasion',references:[{name:'private.md',text:'BODY MUST NOT LEAK'}]},0,'owner',f.core.now());

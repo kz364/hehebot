@@ -4,6 +4,19 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Agent-command admission projection (2026-09-26 Asia/Jakarta): admitted selects its
+six consumed metadata fields and context_json, excluding unused checkpoint/history
+columns. All consumers inspected, including memory read/reservation, skill loading/
+search and routine commands. Context bytes/JS parsing and authority order unchanged.
+Oversized checkpoint regression covers routine read and skill proposal, fails before
+implementation, then passes without modifying source run. Initial fixture mistakenly
+used the routine factory as ID; corrected failure and original retained in red logs.
+Focused153 (agent commands and memory)/backend2371/typecheck/dry-build pass;1578039
+exit0. Evidence: .local/agent-projection-{red,red2,focused,backend,build}.log. Next
+bootstrap recovery null-check projections, then remaining context/storage/native
+recovery bounds. Full runtime/HTTP/local-Worker/browser/native-service/shutdown/desktop
+matrix not rerun; original intermittency/advisories/gates unchanged. Local only.
+
 WhatsApp read ancestry projection (2026-09-26 Asia/Jakarta): WhatsAppReadAccess loads
 metadata for the selected run and ancestors, then only the selected context for the
 unchanged JS grant checks. Checkpoints and ancestor contexts are not consumed here.
