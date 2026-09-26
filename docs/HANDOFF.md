@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Question disk-reopen identity regression passes: a new connection resolves its
+fresh item using the same request ID without settling old handoff_unknown custody.
+Offline diagnostics still deny resume/sleep with one unresolved question and redact
+private data. Related104/typecheck1667793 exit0; .local/question-reopen-identity.log.
+Production unchanged; no interrupted-answer recovery claim. No active checks/
+children/delivery; existing schedule reread/enabled. Continue restoration/recursive
+settlement and storage bounds; full matrix not rerun, external gates unchanged.
+
 Real Codex crash fixture now covers lost registration response: pending exact child
 receipt survives SIGKILL, retries once after readback/reopen, maps the same synthetic
 logical child and skips further registration. Native child interrupted,3 total model

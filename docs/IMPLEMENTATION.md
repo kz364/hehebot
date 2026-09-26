@@ -4,6 +4,17 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Question reopen identity (2026-09-26 Asia/Jakarta, E02): disk-backed regression
+leaves an old handoff_unknown, closes its binding, and reopens with a distinct
+connection ID. An unmatched resolution does nothing; a fresh item reusing numeric
+request ID71 receives its answer and resolves only its own question/connection.
+The old row is unchanged on reread; offline diagnostics retain one unresolved
+question, deny resume/sleep and exclude private text/IDs. Question/service104 and
+typecheck pass (1667793 exit0), .local/question-reopen-identity.log. Production
+unchanged; this is connection isolation, not recovery of an interrupted answer or
+proof of authenticated native continuity. Full matrix not rerun for test-only work.
+Remaining E02/restoration/storage and external gates remain open.
+
 Crash registration custody (2026-09-26 Asia/Jakarta, F3/E02): the existing real
 Codex0.154.0 SIGKILL fixture now loses a synthetic native-child registration response
 before the crash. Actual native thread/turn receipt persists with null run ID and

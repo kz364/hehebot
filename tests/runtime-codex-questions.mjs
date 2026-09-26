@@ -97,6 +97,32 @@ test('unknown take is not retried and fresh binding cannot replay the durable sa
   await reopened.onNotification(resolved()); assert.equal(JSON.stringify(await f.rows()), before); reopened.close();
   assert.equal(f.calls.filter(c => c.type === 'question-take').length, 1);
 });
+test('reopened connection resolves its reused request ID without settling an older handoff', async t => {
+  const f = await fixture(t);
+  f.setTake(async () => ({ state: 'response_unknown', answer: answer() }));
+  assert.deepEqual(await f.binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 }), answer());
+  const old = (await f.rows())[0];
+  assert.equal(old.phase, 'handoff_unknown');
+  f.binding.close();
+  const reopened = new CodexQuestionBinding({ journal: new FileJournal(f.dir), control: f.control, resolveBinding: () => f.claim });
+  t.after(() => reopened.close());
+  assert.notEqual(reopened.connectionId, old.connectionId);
+  await reopened.onNotification(resolved());
+  assert.deepEqual(await f.rows(), [old]);
+  assert.deepEqual(await reopened.onUserInput(params('item/new-connection'), { signal: new AbortController().signal, requestId: 71 }), answer());
+  await reopened.onNotification(resolved());
+  const rows = await f.rows(), current = rows.find(row => row.connectionId === reopened.connectionId);
+  assert.equal(rows.length, 2);
+  assert.deepEqual(rows.find(row => row.questionId === old.questionId), old);
+  assert.equal(current.phase, 'resolved');
+  assert.equal(current.resolutionObserved, true);
+  assert.deepEqual(f.calls.filter(call => call.type === 'question-resolve').map(call => call.payload),
+    [{ identity: f.claim.identity, question_id: current.questionId, connection_id: reopened.connectionId }]);
+  const report = await inspectCodexRecovery(f.dir);
+  assert.equal(report.questions.unresolved, 1);
+  assert.equal(report.resumeAllowed, false); assert.equal(report.sleepAllowed, false);
+  assert.doesNotMatch(JSON.stringify(report), /Private synthetic|Blue|questionId|connectionId/);
+});
 for (const state of ['response_unknown', 'resolved', 'answered']) test(`${state} null stops rather than delivering or repolling`, async t => {
   const f = await fixture(t); f.setTake(async () => ({ state, answer: null }));
   await assert.rejects(f.binding.onUserInput(params(), { signal: new AbortController().signal, requestId: 71 }));

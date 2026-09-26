@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** F3/E02 crash fixture now
+**Current checkpoint (2026-09-26, verified locally):** reopened question connection
+can resolve a fresh item reusing request ID71 without settling an older uncertain
+handoff. Disk custody, original connection identity and redacted recovery diagnostics
+retained; resume/sleep denied with one unresolved question. Related104/typecheck
+pass. Production unchanged; no interrupted-answer recovery or E02 completion claim.
+Next remaining restoration/recursive settlement and storage bounds; gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** F3/E02 crash fixture now
 reconciles a lost child-registration response across real pinned-Codex SIGKILL.
 Exact receipt persists/retries once, same synthetic logical child ID, no third
 registration or replacement inference; interrupted child retained and sleep denied.
