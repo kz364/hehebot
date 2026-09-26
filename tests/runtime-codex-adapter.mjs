@@ -643,6 +643,42 @@ for (const child of [false,true]) test(`restored ${child?'child':'root'} history
   assert.deepEqual(await journal.get(input.attemptId),row);
 });
 
+for (const child of [false, true]) test(`pending ${child ? 'child' : 'root'} readback retains newly observed obligations across reopen`, async t => {
+  const { adapter, journal, cwd } = await fixture(t);
+  await adapter.submit(input);
+  const key = '["child-a","child-turn"]', sibling = '["sibling","child-turn"]';
+  await journal.update(input.attemptId, { commands: { old: 'inProgress' }, effectsSettled: false,
+    spawns: { spawn: { status: 'completed', receiverThreadIds: ['child-a', 'sibling'] } },
+    childTurns: { [key]: 'inProgress', [sibling]: 'inProgress' },
+    childObligations: { [key]: { commands: { old: 'inProgress' } }, [sibling]: { commands: { sibling: 'inProgress' } } } });
+  const threadId = child ? 'child-a' : 'thread-a', turnId = child ? 'child-turn' : 'turn-b';
+  let release;
+  adapter.rpc = async method => {
+    assert.equal(method, 'thread/read');
+    return new Promise(resolve => { release = resolve; });
+  };
+  const pending = child ? adapter.reconcileChild(input.attemptId, { threadId, turnId }) : adapter.reconcile(input.attemptId);
+  while (!release) await new Promise(resolve => setImmediate(resolve));
+  for (const [id, type] of [['late-command', 'commandExecution'], ['late-tool', 'mcpToolCall']]) {
+    await adapter.observe(input.attemptId, { method: 'item/started', params: {
+      threadId, turnId, item: { id, type, status: 'inProgress' },
+    } });
+  }
+  const live = await journal.get(input.attemptId);
+  release({ thread: { id: threadId, source: { subAgent: { thread_spawn: { parent_thread_id: 'thread-a' } } },
+    turns: [{ id: turnId, status: 'completed', items: [{ id: 'old', type: 'commandExecution', status: 'completed' }] }] } });
+  const recovered = await pending, selected = child ? recovered.childObligations[key] : recovered;
+  assert.deepEqual(selected.commands, { old: 'completed', 'late-command': 'inProgress' });
+  assert.deepEqual(selected.mcpCalls, { 'late-tool': 'inProgress' });
+  assert.equal(recovered.effectsSettled, false);
+  assert.deepEqual(recovered.childObligations[sibling], live.childObligations[sibling]);
+  if (child) assert.deepEqual(recovered.commands, live.commands);
+  else assert.deepEqual(recovered.childObligations[key], live.childObligations[key]);
+  const restored = new CodexAdapter({ cwd, journal: new FileJournal(cwd), rpc: () => assert.fail('Reopen must not replay') });
+  assert.deepEqual(await restored.requireRun(input.attemptId), recovered);
+  assert.equal(restored.sleepReadiness().allowed, false);
+});
+
 test('invalid command history cannot partially settle a turn or overwrite a newer live observation', async t => {
   const { adapter, journal } = await fixture(t);
   await adapter.submit(input);

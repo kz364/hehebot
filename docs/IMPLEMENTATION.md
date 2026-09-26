@@ -4,6 +4,19 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Post-RPC custody regression (2026-09-26 Asia/Jakarta): root and child fixtures hold
+thread/read pending, observe a new command and MCP invocation through the adapter,
+then return terminal history for only an older command. Late obligations remain
+inProgress, sibling/unselected owners remain unchanged, effects stay unknown and
+disk reopen preserves the exact recovered row without replay or sleep permission.
+Replacing the serialized post-RPC reread with the pre-RPC snapshot fails both tests
+by dropping the late command. Mutant restored with zero production diff. Final
+adapter36/typecheck pass (1661705 exit0); .local/recovery-reread-{mutant,final}.log.
+This proves the exercised race, not universal restoration safety or any storage/
+time bound. Prior full matrix on ab33f12 remains valid production-code evidence;
+not repeated for these test-only additions. External gates and known advisories/
+intermittency unchanged; remaining native restoration/storage work is open.
+
 Integrated recovery checkpoint (2026-09-26 Asia/Jakarta): complete
 `bash scripts/verify-codex.sh` passes in one invocation on localab33f12 (1621402
 exit0), covering backend2388/runtime688, backup, workerd/HTTP, browser, pinned native

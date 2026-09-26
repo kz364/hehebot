@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** complete credential-free
+**Current checkpoint (2026-09-26, verified locally):** root/child pending-readback
+race tests preserve newly observed command/MCP obligations across disk reopen.
+Stale-snapshot mutant fails2 by dropping the late command; restored production has
+zero diff. Focused36/typecheck pass. Full matrix remains the preceding ab33f12
+evidence, not rerun for test-only additions. Next remaining native restoration and
+historical/storage/existing-key bounds; external gates and known limitations unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** complete credential-free
 matrix passes in one invocation on localab33f12 (1621402 exit0): backend2388,
 runtime688, backup/workerd/HTTP/browser/native/shutdown/strict launcher/service/build.
 Reference desktop16 separately passes (1621517 exit0);14 advisories remain unchanged.

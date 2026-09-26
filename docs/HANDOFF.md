@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Post-RPC root/child race tests now cover late command/MCP starts while history is
+pending, exact disk reopen and unchanged unknown/sibling custody. Cached pre-RPC
+snapshot mutant fails2; restored production zero diff, adapter36/typecheck pass
+(1661705 exit0). Logs .local/recovery-reread-{mutant,final}.log. Full matrix below
+not repeated for test-only additions. No active checks/children/delivery; schedule
+enabled. Continue remaining native restoration and historical/storage/existing-key
+bounds, retaining current-observation rereads. External gates/limitations unchanged.
+
 Full credential-free verifier on localab33f12 now passes in one invocation1621402
 exit0: backend2388/runtime688, backup/workerd/HTTP/browser/native/automatic shutdown/
 strict launcher/service/build. Separate desktop16 passes1621517;14 advisories remain.
