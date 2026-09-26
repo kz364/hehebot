@@ -33,11 +33,11 @@ const save=async()=>{await clickSelector('#editor-form button[type=submit]');awa
 try{
  await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');await click('Add bot');
  assert.equal(await value('role'),'');assert.equal(await value('instructions'),'');await browser('fill','[name=name]','Minimal');await browser('fill','[name=instructions]','Use only public information.');
- await browser('screenshot',new URL('portal-profile-minimal.png',artifacts).pathname);await save();assert.deepEqual(commands[0].command.payload.tool_policy_ids,[]);assert.notEqual(commands[0].command.payload.id,bot);assert.equal(commands[0].command.payload.role,'');
+ await browser('screenshot',decodeURIComponent(new URL('portal-profile-minimal.png',artifacts).pathname));await save();assert.deepEqual(commands[0].command.payload.tool_policy_ids,[]);assert.notEqual(commands[0].command.payload.id,bot);assert.equal(commands[0].command.payload.role,'');
  await click('Instructions');await click('Duplicate as new bot');await wait('document.querySelector("#editor-title").textContent==="Duplicate bot"');assert.equal(await value('role'),'');assert.equal(await value('instructions'),'');assert.equal(commands.length,1);
  await clickSelector('#editor input[type=checkbox]');assert.equal(await value('role'),'Researcher');assert.equal(await value('instructions'),source.body.instructions);
  await browser('set','viewport','390','844','2');await browser('eval','document.querySelector("#editor .review-notice").scrollIntoView({behavior:"instant",block:"start"});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
- assert.equal(JSON.parse((await browser('eval','document.documentElement.scrollWidth<=innerWidth')).stdout),true);await browser('screenshot',new URL('portal-profile-duplicate-narrow.png',artifacts).pathname);
+ assert.equal(JSON.parse((await browser('eval','document.documentElement.scrollWidth<=innerWidth')).stdout),true);await browser('screenshot',decodeURIComponent(new URL('portal-profile-duplicate-narrow.png',artifacts).pathname));
  loseAck=true;await clickSelector('#editor-form button[type=submit]');await wait('!document.querySelector("#editor-error").hidden');await save();
  assert.equal(commands.length,3);assert.equal(receipts.size,2);assert.deepEqual(commands[1],commands[2]);
  const duplicate=commands[1].command.payload;assert.notEqual(duplicate.id,bot);assert.notEqual(duplicate.id,commands[0].command.payload.id);assert.equal(duplicate.expected_revision,0);assert.equal(duplicate.archived,false);assert.deepEqual(duplicate.tool_policy_ids,[]);

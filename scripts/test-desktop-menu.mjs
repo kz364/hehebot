@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { once } from 'node:events';
-const root=new URL('../',import.meta.url).pathname;
+const root=decodeURIComponent(new URL('../',import.meta.url).pathname);
 const directory=await mkdtemp(join(tmpdir(),'hehe-desktop-menu-'));
 const server=createServer((_req,res)=>{res.writeHead(200,{'content-type':'text/html'});res.end('<!doctype html><title>Hehebot menu fixture</title><h1>Hehebot Portal</h1><p>Synthetic local page. Native menu inspection only; no authentication or external browser launch.</p>');});
 let xvfb,electron;

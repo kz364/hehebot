@@ -36,7 +36,7 @@ try{
  assert.match((await browser('get','text',`[data-run-id="${child}"]`)).stdout,/Preview shortened/);
  assert.equal((await browser('eval','document.querySelectorAll(".output-preview img").length===0&&!window.executed')).stdout.trim(),'true');
  await browser('eval','document.querySelector(".timeline").style.scrollBehavior="auto";document.querySelector(".task-card").scrollIntoView({behavior:"instant",block:"start"});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
- await browser('screenshot',new URL('portal-output-desktop.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-output-desktop.png',artifacts).pathname));
  state.output_previews[1]={...state.output_previews[1],version:2,text:'The arrival check needs reconciliation. No submission receipt is confirmed.',truncated:false};
  state.runs[1].status='recovery_required';
  await browser('click','#refresh');await browser('wait','--fn','document.querySelector(".timeline").textContent.includes("No submission receipt is confirmed")');
@@ -44,7 +44,7 @@ try{
  await browser('set','viewport','390','844','2');
  await browser('eval',`document.querySelector('[data-run-id="${child}"]').scrollIntoView({behavior:"instant",block:"start"});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
  assert.equal((await browser('eval','document.documentElement.scrollWidth<=innerWidth')).stdout.trim(),'true');
- await browser('screenshot',new URL('portal-output-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-output-narrow.png',artifacts).pathname));
  state.runs[0].status='completed';state.runs[1].status='cancelling';
  await browser('click','#refresh');await browser('wait','--fn','document.querySelectorAll(".output-preview").length===0');
  state.runs[1].status='running';state.runs[1].current_attempt=2;

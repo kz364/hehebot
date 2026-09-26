@@ -36,20 +36,20 @@ const top=()=>browser('eval','document.querySelector("#timeline").scrollTo({top:
 try{
  await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','1050','2');await wait();
  const expected=['Recorded outcome: Failed · TEMPORARY_UNAVAILABLE · Arrival check','Recorded outcome: Waiting · Draft review','Recorded outcome: Cancelled · OWNER_CANCELLED · Background task','Recorded outcome: Completed · Mail check','Recorded outcome: Unavailable'];
- assert.deepEqual(await labels(),expected);await top();await browser('screenshot',new URL('portal-results-desktop.png',artifacts).pathname);
+ assert.deepEqual(await labels(),expected);await top();await browser('screenshot',decodeURIComponent(new URL('portal-results-desktop.png',artifacts).pathname));
  await browser('click','#refresh');await wait();assert.deepEqual(await labels(),expected);
  await browser('reload');await wait();assert.deepEqual(await labels(),expected);
  await browser('click',`[data-persona-id="${other}"]`);await browser('wait','--fn','document.querySelector("h1").textContent==="Beta"');
  assert.equal(Number((await browser('get','count','.result-outcome')).stdout.trim()),0);
  await browser('click',`[data-persona-id="${bot}"]`);await wait();assert.deepEqual(await labels(),expected);
- await browser('set','viewport','390','844','2');await top();await browser('screenshot',new URL('portal-results-narrow.png',artifacts).pathname);
+ await browser('set','viewport','390','844','2');await top();await browser('screenshot',decodeURIComponent(new URL('portal-results-narrow.png',artifacts).pathname));
  assert.equal((await browser('eval','document.querySelector("#timeline").getBoundingClientRect().bottom<=document.querySelector("#task-strip").getBoundingClientRect().top&&document.querySelector("#timeline").scrollHeight>document.querySelector("#timeline").clientHeight')).stdout.trim(),'true');
  for(const [index,name] of [[1,'waiting'],[4,'last']]){
   // GROK_ALIGNMENT A7: a run.result outcome is a non-bubble notice (`div.event`), not an
   // `article` — only the legacy fallback for a pre-G1 completed run without a bot.message
   // renders an article. Match either container.
   await browser('eval',`document.querySelectorAll('.result-outcome')[${index}].closest('article,.event').scrollIntoView({block:'start',behavior:'instant'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
-  await browser('screenshot',new URL(`portal-results-narrow-${name}.png`,artifacts).pathname);
+  await browser('screenshot',decodeURIComponent(new URL(`portal-results-narrow-${name}.png`,artifacts).pathname));
  }
  events[0].payload.title='<img src=x onerror=alert(1)>'+ 'x'.repeat(150);await browser('click','#refresh');
  await browser('wait','--fn','document.querySelector(".result-outcome").textContent.includes("<img")');

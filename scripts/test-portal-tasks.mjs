@@ -42,7 +42,7 @@ try{
  await browser('click','#task-strip-summary');
  assert.equal(Number((await browser('get','count','.task-strip-row')).stdout.trim()),10);
  assert.match((await browser('get','text','#task-strip')).stdout,/Task B — mail check · Alpha · Waiting/);
- await browser('screenshot',new URL('portal-tasks-desktop.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-tasks-desktop.png',artifacts).pathname));
  await browser('click',`[data-task-id="${id(1)}"]`);
  await browser('wait','--fn',`document.querySelector('[data-run-id="${id(1)}"]')?.open===true`);
  assert.match((await browser('get','text',`[data-run-id="${id(1)}"]`)).stdout,/Request application is not task completion/);
@@ -60,13 +60,13 @@ try{
  await browser('set','viewport','390','844','2');await browser('click','#task-strip-summary');
  await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
  assert.equal((await browser('eval','document.documentElement.scrollWidth<=innerWidth&&document.querySelector("#task-strip").getBoundingClientRect().bottom<=document.querySelector("#composer").getBoundingClientRect().top')).stdout.trim(),'true');
- await browser('screenshot',new URL('portal-tasks-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-tasks-narrow.png',artifacts).pathname));
  failTasks=true;await browser('click','#refresh');await browser('wait','--fn','document.querySelector("#task-strip-summary").textContent.includes("stale")');
  assert.equal(Number((await browser('get','count','.task-strip-row')).stdout.trim()),0);
- await browser('screenshot',new URL('portal-tasks-stale.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-tasks-stale.png',artifacts).pathname));
  failTasks=false;await click('Beta');await browser('wait','--fn','document.querySelector("#task-strip-summary").textContent.includes("Tasks 0")');
  assert.doesNotMatch((await browser('get','text','#task-strip')).stdout,/Task A|Task B/);
- await browser('screenshot',new URL('portal-tasks-empty.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-tasks-empty.png',artifacts).pathname));
  await click('Alpha');await browser('wait','--fn','document.querySelector("#task-strip-summary").textContent.includes("Tasks 13")');
  const held={};const arrived=new Promise(ok=>held.arrived=ok);delay=held;
  let timer;

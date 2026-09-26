@@ -76,7 +76,7 @@ const capture=async name=>{
  assert.equal(await evaluate('devicePixelRatio'),2);
  await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
- await browser('screenshot',new URL(name,artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL(name,artifacts).pathname));
 };
 const envelope=(row,run,reason)=>{
  assert.deepEqual(row.command,{schema_version:1,type:'run.cancel',payload:{run_id:run.id,reason}});

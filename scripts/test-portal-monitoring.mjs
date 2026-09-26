@@ -29,7 +29,7 @@ try{
  assert.match((await browser('get','text','#monitoring-panel')).stdout,/Zero recorded activity does not prove native settlement or safe sleep/);
  assert.match((await browser('get','text','#monitoring-stats')).stdout,/Not verified/);
  assert.equal(Number((await browser('get','count','#monitoring-alerts p')).stdout.trim()),0);
- await browser('eval','document.querySelector("#monitoring-panel").scrollIntoView()');await browser('screenshot',new URL('portal-monitoring-empty.png',artifacts).pathname);
+ await browser('eval','document.querySelector("#monitoring-panel").scrollIntoView()');await browser('screenshot',decodeURIComponent(new URL('portal-monitoring-empty.png',artifacts).pathname));
  monitoring.lease={expected_running:true,heartbeat_age_seconds:46};monitoring.queue={count:3,oldest_request_age_seconds:121};monitoring.operations=[{kind:'tool',status:'active',count:2},{kind:'child',status:'unknown',count:1}];monitoring.effects=[{status:'outcome_unknown',count:2}];monitoring.locks=1;
  state.summary={phase:'READY',execution_enabled:true,queued_runs:3,blocked_runs:1};
  monitoring.alerts=[{code:'HEARTBEAT_STALE',severity:'warning'},{code:'CANCEL_UNCONFIRMED',severity:'error',count:1},{code:'OUTCOME_UNKNOWN',severity:'error',count:2},{code:'BACKUP_UNVERIFIED',severity:'warning'}];
@@ -42,8 +42,8 @@ try{
  await browser('eval','window.originalAlerts=Array.from(document.querySelector("#monitoring-alerts").children);window.renderCount=0;window.observer=new MutationObserver(()=>window.renderCount++);window.observer.observe(document.querySelector("#monitoring-stats"),{childList:true})');
  await browser('click','#refresh');await browser('wait','--fn','window.renderCount>0');
  assert.equal((await browser('eval','window.originalAlerts.every((element,index)=>element===document.querySelector("#monitoring-alerts").children[index])')).stdout.trim(),'true');
- await browser('eval','document.querySelector("#monitoring-panel").scrollIntoView()');await browser('screenshot',new URL('portal-monitoring-alerts.png',artifacts).pathname);
+ await browser('eval','document.querySelector("#monitoring-panel").scrollIntoView()');await browser('screenshot',decodeURIComponent(new URL('portal-monitoring-alerts.png',artifacts).pathname));
  await browser('set','viewport','390','844','2');await browser('click','#show-details');await browser('eval','document.querySelector("#monitoring-panel").scrollIntoView();new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
- assert.equal((await browser('eval','document.documentElement.scrollWidth<=innerWidth')).stdout.trim(),'true');await browser('screenshot',new URL('portal-monitoring-narrow.png',artifacts).pathname);
+ assert.equal((await browser('eval','document.documentElement.scrollWidth<=innerWidth')).stdout.trim(),'true');await browser('screenshot',decodeURIComponent(new URL('portal-monitoring-narrow.png',artifacts).pathname));
  assert.equal(mutations,0);console.log('PASS: empty/alert monitoring DOM, recorded tool/child counts, uncertainty and backup warnings, stable live-region nodes, narrow layout; zero mutations.');
 }finally{await browser('close');server.closeAllConnections();await new Promise(ok=>server.close(ok));}

@@ -57,7 +57,7 @@ try{
  console.log('PASS text-only edit: exact sensitive expiry/source/persona/revision preserved (keyboard Enter).');
  await open();assert.equal(await evaluate('document.querySelector("#editor").getAttribute("aria-labelledby")'),'editor-title');
  assert.match((await browser('get','text','#editor')).stdout,/sensitive.*2091-03-17T04:23:11.000Z/s);
- await browser('screenshot',new URL('portal-memory-preserved.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-memory-preserved.png',artifacts).pathname));
  await browser('select','#editor [name="scope"]','global');await submit();await wait('!document.querySelector("#editor").open');
  assert.deepEqual(commands.at(-1).command.payload.scope,{kind:'global',id:null});assert.equal(commands.at(-1).command.payload.sensitivity,'sensitive');
  memory.body.scope={kind:'global',id:null};await refresh();await open();await submit();await wait('!document.querySelector("#editor").open');assert.deepEqual(commands.at(-1).command.payload.scope,{kind:'global',id:null});
@@ -76,7 +76,7 @@ try{
   await refresh();await reject();
   if(change==='offline'){
    await browser('set','viewport','390','844','2');assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
-   await browser('screenshot',new URL('portal-memory-offline.png',artifacts).pathname);await browser('set','viewport','1280','900','2');
+   await browser('screenshot',decodeURIComponent(new URL('portal-memory-offline.png',artifacts).pathname));await browser('set','viewport','1280','900','2');
   }
   await close();memory.revision=7;memory.body.scope={kind:'global',id:null};if(!state.objects.includes(memory))state.objects.push(memory);offline=false;
   await browser('eval',`document.querySelector('[data-persona-id="${bot}"]').click()`);await refresh();
@@ -87,7 +87,7 @@ try{
   const first=commands.at(-1),count=commands.length;
   assert.equal(await evaluate('document.querySelector("#editor [name=text]").readOnly'),true);
   assert.equal(await evaluate('document.querySelector("#editor [name=scope]").disabled'),true);
-  if(mode==='uncertain')await browser('screenshot',new URL('portal-memory-uncertain.png',artifacts).pathname);
+  if(mode==='uncertain')await browser('screenshot',decodeURIComponent(new URL('portal-memory-uncertain.png',artifacts).pathname));
   if(mode==='rejected')assert.match((await browser('get','text','#editor-error')).stdout,/revision conflict/);
   if(mode==='http')assert.match((await browser('get','text','#editor-error')).stdout,/permission denied/);
   if(mode==='uncertain'){memory.revision=8;await refresh();await reject();memory.revision=7;}

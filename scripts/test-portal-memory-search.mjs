@@ -48,7 +48,7 @@ const capture=async name=>{
  assert.equal(await evaluate('devicePixelRatio'),2);
  await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth && document.querySelector("#details").scrollWidth<=document.querySelector("#details").clientWidth'),true);
- await browser('screenshot',new URL(name,artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL(name,artifacts).pathname));
 };
 try{
  await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');

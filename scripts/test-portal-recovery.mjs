@@ -67,7 +67,7 @@ try{
  await browser('find','role','button','click','--name','Review recovery tasks','--exact');
  await browser('wait','--fn',`document.querySelector('${card(oldA.id)}')!==null`);
  assert.equal((await browser('eval',`document.querySelector('${card(a)}')===null`)).stdout.trim(),'true');
- await browser('screenshot',new URL('portal-recovery-page.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-recovery-page.png',artifacts).pathname));
  await click(`${card(oldA.id)} summary`);
  assert.equal(await enabled(`${card(oldA.id)} [data-action="run-recover"]`),false);
  assert.equal((await browser('eval','document.querySelector("#timeline").getBoundingClientRect().bottom<=document.querySelector("#composer").getBoundingClientRect().top')).stdout.trim(),'true');
@@ -81,17 +81,17 @@ try{
  assert.equal((await browser('eval',`document.querySelector('${card(oldA.id)}')===null`)).stdout.trim(),'true');
  await browser('set','viewport','390','844','2');await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
  assert.equal((await browser('eval','document.documentElement.scrollWidth<=innerWidth')).stdout.trim(),'true');
- await browser('screenshot',new URL('portal-recovery-page-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-recovery-page-narrow.png',artifacts).pathname));
  await browser('find','role','button','click','--name','Previous recovery page','--exact');
  await browser('wait','--fn',`document.querySelector('${card(oldA.id)}')!==null`);
  emptyRecovery=true;await browser('find','role','button','click','--name','First recovery page','--exact');
  await browser('wait','--fn','document.querySelector("#timeline").textContent.includes("No recovery tasks on this page")');
- await browser('screenshot',new URL('portal-recovery-empty-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-recovery-empty-narrow.png',artifacts).pathname));
  await browser('find','role','button','click','--name','Back to messages','--exact');
  emptyRecovery=false;holdRecovery=true;
  await browser('find','role','button','click','--name','Review recovery tasks','--exact');
  await browser('wait','--fn','document.querySelector("#timeline").textContent.includes("Loading recovery tasks")');
- await browser('screenshot',new URL('portal-recovery-loading-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-recovery-loading-narrow.png',artifacts).pathname));
  await browser('find','role','button','click','--name','Back to messages','--exact');
  holdRecovery=false;assert.ok(heldRecovery);heldRecovery();
  await browser('wait','--fn',`document.querySelector('${card(a)}')!==null`);
@@ -99,7 +99,7 @@ try{
  failRecovery=true;await browser('find','role','button','click','--name','Review recovery tasks','--exact');
  await browser('wait','--fn','document.querySelector("#error").textContent==="Recovery listing unavailable."');
  assert.equal((await browser('eval',`document.querySelector('${card(oldA.id)}')===null`)).stdout.trim(),'true');
- await browser('screenshot',new URL('portal-recovery-error-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-recovery-error-narrow.png',artifacts).pathname));
  assert.equal(commands.length,0);failRecovery=false;
  await browser('find','role','button','click','--name','Review recovery tasks','--exact');
  await browser('wait','--fn',`document.querySelector('${card(oldA.id)}')!==null`);
@@ -121,7 +121,7 @@ try{
  assert.equal(await enabled(`${card(a)} [data-action="effect-reconcile"]`),false);
  await rejected(0,/status is stale/);
  assert.equal((await browser('get','value','[name="evidence_ref"]')).stdout.trim(),'manual-check:103');
- await browser('screenshot',new URL('portal-recovery-offline-editor.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-recovery-offline-editor.png',artifacts).pathname));
  offline=false;await refresh();assert.equal(commands.length,0);
  // Same effect ID with a different digest must not reuse the reviewed decision.
  const digest=effect.request_digest;effect.request_digest=`root-child-v1:${'c'.repeat(64)}:${'d'.repeat(64)}`;await refresh();
@@ -139,7 +139,7 @@ try{
  await browser('select','[name="outcome"]','failed');await browser('fill','[name="evidence_ref"]','manual-check:103');
  await browser('check','#editor input[type="checkbox"]');
  await browser('click','[name="evidence_ref"]');
- await browser('screenshot',new URL('portal-recovery-decision.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-recovery-decision.png',artifacts).pathname));
  await browser('click','#editor-form button[type="submit"]');await browser('wait','--fn','!document.querySelector("#editor").open');
  assert.deepEqual(commands[0],{schema_version:1,type:'effect.reconcile',payload:{run_id:a,expected_attempt:3,effect_id:effectId,expected_request_digest:effect.request_digest,outcome:'failed',evidence_ref:'manual-check:103'}});
  await browser('wait','--fn',`document.querySelector('${card(a)} [data-action="run-recover"]')?.disabled===false`);
@@ -149,9 +149,9 @@ try{
  await browser('set','viewport','390','844','2');await browser('eval',`document.querySelector('${card(a)}').scrollIntoView({behavior:'instant',block:'start'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
  assert.equal((await browser('eval','document.documentElement.scrollWidth<=innerWidth')).stdout.trim(),'true');
  assert.equal((await browser('eval','document.querySelector("#timeline").getBoundingClientRect().bottom<=document.querySelector("#composer").getBoundingClientRect().top')).stdout.trim(),'true');
- await browser('screenshot',new URL('portal-recovery-ready-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-recovery-ready-narrow.png',artifacts).pathname));
  await click(`${card(b)} summary`);await browser('eval',`document.querySelector('${card(b)}').scrollIntoView({behavior:'instant',block:'start'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
- await browser('screenshot',new URL('portal-recovery-unconfirmed-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-recovery-unconfirmed-narrow.png',artifacts).pathname));
  await click(`${card(a)} [data-action="run-recover"]`);
  assert.match((await browser('get','text','#editor')).stdout,/never successful/);
  await browser('click','#editor-form button[type="submit"]');assert.equal(commands.length,1);
@@ -162,7 +162,7 @@ try{
  state.runs[0].current_attempt=4;recovery.attempt=4;await refresh();await rejected(1,/task attempt changed/);
  state.runs[0].current_attempt=3;recovery.attempt=3;recovery.can_recover=false;await refresh();
  await rejected(1,/no longer eligible/);
- await browser('screenshot',new URL('portal-recovery-stale-closure-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-recovery-stale-closure-narrow.png',artifacts).pathname));
  recovery.can_recover=true;await refresh();
  await browser('click','#editor-form button[type="submit"]');
  await browser('wait','--fn','document.querySelector("#timeline").textContent.includes("Recovery closed as failed")');

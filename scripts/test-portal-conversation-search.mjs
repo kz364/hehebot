@@ -56,7 +56,7 @@ const capture=async name=>{
  await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
  assert.equal(await evaluate('devicePixelRatio'),2);
  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
- await browser('screenshot',new URL(name,artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL(name,artifacts).pathname));
 };
 try{
  await mkdir(artifacts,{recursive:true});await new Promise(ok=>server.listen(0,'127.0.0.1',ok));

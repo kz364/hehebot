@@ -52,7 +52,7 @@ try{
  await open();assert.match((await browser('get','text','#editor')).stdout,new RegExp(`${routine.id}.*revision 7`));
  assert.equal(await evaluate('document.querySelector("#editor").getAttribute("aria-labelledby")'),'editor-title');
  await submit();assert.equal(commands.length,0);assert.equal(await evaluate('document.querySelector("#editor-form").checkValidity()'),false);
- await browser('screenshot',new URL('routine-delete-confirmation.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('routine-delete-confirmation.png',artifacts).pathname));
  await browser('press','Escape');assert.equal(await evaluate('document.querySelector("#editor").open'),false);
  await open();await confirm();routine.revision=8;await refresh();await reject();routine.revision=7;
  await browser('press','Escape');await refresh();await open();await confirm();
@@ -61,7 +61,7 @@ try{
  await browser('set','viewport','390','844','2');await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
  assert.equal(await evaluate('document.querySelector("#editor-error").getAttribute("role")'),'alert');
- await browser('screenshot',new URL('routine-delete-offline-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('routine-delete-offline-narrow.png',artifacts).pathname));
  offline=false;await refresh();assert.equal(commands.length,0);await browser('press','Escape');
  await browser('set','viewport','1280','900','2');await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
  await open();await confirm();routine.body.persona_id=other;await refresh();await reject();routine.body.persona_id=bot;
@@ -72,7 +72,7 @@ try{
  await browser('set','viewport','1280','900','2');await open();await confirm();
  await browser('focus','#editor-form button[type="submit"]');await browser('press','Enter');
  await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,1);
- await browser('screenshot',new URL('routine-delete-uncertain.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('routine-delete-uncertain.png',artifacts).pathname));
  await submit();await wait('!document.querySelector("#editor").open');
  assert.equal(commands.length,2);assert.equal(commands[0].key,commands[1].key);assert.equal(receipts.size,1);
  assert.equal(state.objects.some(row=>row.id===sibling.id),true);

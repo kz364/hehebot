@@ -44,7 +44,7 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
-const capture=async name=>{await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',new URL(`skill-review-${name}.png`,artifacts).pathname);};
+const capture=async name=>{await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',decodeURIComponent(new URL(`skill-review-${name}.png`,artifacts).pathname));};
 const checkReviewScroll=async()=>{
  const result=await evaluate(`(()=>{const fields=document.querySelector('#editor-fields');fields.scrollTop=fields.scrollHeight;const area=fields.getBoundingClientRect(),last=fields.querySelector('[data-skill-field="references"]').getBoundingClientRect(),footer=document.querySelector('#editor .dialog-footer').getBoundingClientRect();return {scrolls:fields.scrollTop>0,lastVisible:last.top>=area.top&&last.bottom<=area.bottom+1,footerSeparate:footer.top>=area.bottom};})()`);
  assert.deepEqual(result,{scrolls:true,lastVisible:true,footerSeparate:true});

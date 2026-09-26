@@ -25,7 +25,7 @@ const server=createServer(async(req,res)=>{try{const path=new URL(req.url,'http:
  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];if(!file){res.writeHead(404);return res.end();}res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
  }catch(error){json(res,{error:{message:String(error)}},400);}});
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
-const capture=async name=>{await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',new URL(`skill-run-${name}.png`,artifacts).pathname);};
+const capture=async name=>{await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',decodeURIComponent(new URL(`skill-run-${name}.png`,artifacts).pathname));};
 const open=async()=>{await click('#show-skills');await wait('document.querySelector("[data-action=skill-run]")');await browser('eval','document.querySelector("[data-action=skill-run]").click()');await wait('document.querySelector("#editor").open');};
 const fill=async text=>{await browser('fill','#editor textarea',text);await browser('check','#editor [name=confirm]');};
 const submit=()=>click('#editor-form button[type=submit]');

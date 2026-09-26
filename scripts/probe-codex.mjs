@@ -7,7 +7,7 @@ import { spawnCodex } from '../runtime/codex-transport.mjs';
 
 const exec = promisify(execFile);
 const PINNED = '0.154.0';
-const root = resolve(new URL('..', import.meta.url).pathname);
+const root = resolve(decodeURIComponent(new URL('..', import.meta.url).pathname));
 let binary = join(root, '.local/codex-runtime/node_modules/.bin/codex');
 let timeoutMs = 15_000;
 for (let i = 2; i < process.argv.length; i++) {

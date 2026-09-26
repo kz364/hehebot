@@ -72,7 +72,7 @@ try{
  assert.equal(await evaluate('document.querySelectorAll(".message .provisional-text").length'),0,'provisional text is never inside a chat bubble');
  assert.equal(await evaluate('document.querySelectorAll(".provisional-typing .provisional-text").length'),1,'provisional text renders once, outside any bubble');
  assert.equal(await evaluate('document.querySelector(".provisional-typing").textContent').then(t=>t.includes('Synthetic provisional working text')),true);
- await browser('screenshot',new URL('portal-outbox-bot-message.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-outbox-bot-message.png',artifacts).pathname));
 
  // --- rejected send restores the draft (A5/G-A5) ---
  commandMode='reject';
@@ -81,7 +81,7 @@ try{
  await wait('document.querySelector("#error").textContent.length>0');
  await wait('document.querySelector("#message").value==="Draft that will be rejected"');
  assert.equal(await evaluate('document.querySelectorAll("article.message.user.outbox-pending").length'),0,'a rejected send leaves no outbox bubble behind');
- await browser('screenshot',new URL('portal-outbox-rejected.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-outbox-rejected.png',artifacts).pathname));
 
  // --- network-killed send reconciles to exactly one message after reload (A5/G-A5) ---
  commandMode='network-fail';
@@ -97,7 +97,7 @@ try{
  await wait('document.querySelectorAll("article.message.user .message-body").length===1');
  assert.deepEqual(await bubbleTexts(),['Message sent while the network is down']);
  assert.equal(await evaluate('document.querySelectorAll(".outbox-pending").length'),0,'the reconciled send is the committed bubble, not an optimistic one');
- await browser('screenshot',new URL('portal-outbox-reconciled.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-outbox-reconciled.png',artifacts).pathname));
 
  console.log('PASS: bot.message renders as a bubble with a task attribution chip while provisional working text never does; a rejected send restores the exact draft with no leftover bubble; a send killed mid-network reconciles through GET /v1/receipts on reload to exactly one committed message.');
 }catch(error){

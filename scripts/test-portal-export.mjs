@@ -35,7 +35,7 @@ const server=createServer(async(req,res)=>{
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url),directory=await mkdtemp(join(tmpdir(),'hehe-export-ui-'));
 await mkdir(artifacts,{recursive:true});
-async function capture(name){await browser('eval','document.querySelector("#export-panel").scrollIntoView();new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');await browser('screenshot',new URL(`portal-export-${name}.png`,artifacts).pathname);}
+async function capture(name){await browser('eval','document.querySelector("#export-panel").scrollIntoView();new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');await browser('screenshot',decodeURIComponent(new URL(`portal-export-${name}.png`,artifacts).pathname));}
 try{
  await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','1000','2');
  await browser('wait','--fn','document.querySelector("#connection").textContent==="Connected"');

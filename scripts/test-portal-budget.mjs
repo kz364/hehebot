@@ -42,7 +42,7 @@ try{
  await browser('wait','--fn','document.querySelector("#connection").textContent==="Connected"');
  assert.match((await browser('get','text','#budget-summary')).stdout,/Budget suspension is off/);
  await browser('click','#edit-budget');await browser('select','[name="enabled"]','true');await browser('fill','[name="cap"]','7.19');await browser('check','[name="optional"]');
- await browser('screenshot',new URL('portal-budget-editor.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-budget-editor.png',artifacts).pathname));
  await browser('click','#editor-form button[type="submit"]');await browser('wait','--fn','!document.querySelector("#editor").open');
  assert.deepEqual(commands[0],{schema_version:1,type:'budget.set',payload:{expected_revision:0,enabled:true,monthly_cap_cents:719,optional_routine_ids:[routine]}});
  await browser('wait','--fn','document.querySelector("#budget-summary").textContent.includes("estimate unavailable or expired")');
@@ -54,7 +54,7 @@ try{
  budget.report.projected_cents=743;budget.status='BUDGET_BLOCKED';budget.threshold=100;
  state.runs=[{id:run,persona_id:bot,routine_id:routine,role:'coordinator',status:'waiting',current_attempt:0,error_code:'BUDGET_BLOCKED'}];
  await refresh('projected cap reached');await browser('eval','document.querySelector("#budget-panel").scrollIntoView()');
- await browser('screenshot',new URL('portal-budget-blocked.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-budget-blocked.png',artifacts).pathname));
  await browser('click','#budget-waits button');await browser('wait','--fn','document.querySelector("#editor").open');
  assert.match((await browser('get','text','#editor')).stdout,/only this scheduled run/);
  await browser('click','#editor-form button[type="submit"]');await browser('wait','--fn','!document.querySelector("#editor").open');
@@ -64,7 +64,7 @@ try{
  assert.equal(Number((await browser('get','count','#budget-summary [role="status"]')).stdout.trim()),0);
  await browser('set','viewport','390','844','2');await browser('click','#show-details');await browser('eval','document.querySelector("#budget-panel").scrollIntoView(); new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
  assert.equal((await browser('eval','document.documentElement.scrollWidth<=innerWidth')).stdout.trim(),'true');
- await browser('screenshot',new URL('portal-budget-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-budget-narrow.png',artifacts).pathname));
  assert.equal(commands.length,2);
  console.log('PASS: disabled/missing/fresh/blocked/stale budget DOM; exact cents, selected routines and revision-bound override; two synthetic commands; narrow layout without horizontal overflow.');
 }finally{await browser('close');server.closeAllConnections();await new Promise(ok=>server.close(ok));}

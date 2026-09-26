@@ -38,7 +38,7 @@ const server=createServer(async(req,res)=>{
  }catch{res.writeHead(500);res.end();}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
-const capture=name=>browser('screenshot',new URL(`portal-schedule-${name}.png`,artifacts).pathname);
+const capture=name=>browser('screenshot',decodeURIComponent(new URL(`portal-schedule-${name}.png`,artifacts).pathname));
 const preview=async()=>{await clickSelector('.schedule-picker button');await wait('document.querySelectorAll("#schedule-preview li").length===3');};
 const save=async()=>{await clickSelector('#editor-form button[type=submit]');await wait('!document.querySelector("#editor").open');};
 try{

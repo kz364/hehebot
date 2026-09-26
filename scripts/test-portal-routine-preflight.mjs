@@ -50,7 +50,7 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
-const capture=async(name,anchor=panel)=>{await browser('eval',`document.querySelector(${JSON.stringify(anchor)}).scrollIntoView({behavior:'instant',block:'start'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',new URL(`routine-preflight-${name}.png`,artifacts).pathname);};
+const capture=async(name,anchor=panel)=>{await browser('eval',`document.querySelector(${JSON.stringify(anchor)}).scrollIntoView({behavior:'instant',block:'start'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',decodeURIComponent(new URL(`routine-preflight-${name}.png`,artifacts).pathname));};
 const late=async action=>{
  let arrived;const arrival=new Promise(ok=>arrived=ok),gate={arrived};held=gate;
  await click(toggle);let timer;

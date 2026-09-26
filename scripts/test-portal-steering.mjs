@@ -45,7 +45,7 @@ try{
  await browser('click',`${card(a)} [data-action="steer"]`);
  assert.match((await browser('get','text','#editor')).stdout,/does not undo effects/);
  await browser('fill','[name="text"]','Use tomorrow for form A only');
- await browser('screenshot',new URL('portal-steering-editor.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-steering-editor.png',artifacts).pathname));
  await browser('click','#editor-form button[type="submit"]');await waitText('awaits native acknowledgement');
  assert.deepEqual(commands[0],{schema_version:1,type:'run.steer',payload:{run_id:a,expected_attempt:3,text:'Use tomorrow for form A only'}});
  assert.equal((await browser('eval',`document.querySelector('${card(a)}').open`)).stdout.trim(),'true');
@@ -59,13 +59,13 @@ try{
  assert.deepEqual(commands[1],{schema_version:1,type:'run.followup',payload:{run_id:b,text:'After B finishes check its receipt'}});
  state.steering[0].status='accepted';await refresh('Understanding and completion are not yet verified');
  assert.equal((await browser('is','enabled',`${card(a)} [data-action="steer"]`)).stdout.trim(),'true');
- await browser('screenshot',new URL('portal-steering-accepted.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-steering-accepted.png',artifacts).pathname));
  state.steering[0].status='outcome_unknown';await refresh('delivery is uncertain');
  assert.equal((await browser('is','enabled',`${card(a)} [data-action="steer"]`)).stdout.trim(),'false');
  await browser('set','viewport','390','844','2');await browser('eval',`document.querySelector('${card(a)}').scrollIntoView({behavior:'instant',block:'start'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
  assert.equal((await browser('eval','document.documentElement.scrollWidth<=innerWidth')).stdout.trim(),'true');
  assert.equal((await browser('eval',`document.querySelector('#timeline').getBoundingClientRect().bottom<=document.querySelector('#composer').getBoundingClientRect().top`)).stdout.trim(),'true');
- await browser('screenshot',new URL('portal-steering-uncertain-narrow.png',artifacts).pathname);
+ await browser('screenshot',decodeURIComponent(new URL('portal-steering-uncertain-narrow.png',artifacts).pathname));
  state.steering[0].status='not_delivered';state.runs[0].status='completed';await refresh('was not delivered');
  assert.equal(Number((await browser('get','count',`${card(a)} [data-action="steer"]`)).stdout.trim()),0);
  await browser('set','viewport','1280','900','2');await browser('click','#bots button:nth-child(2)');await browser('wait','--fn','document.querySelector("#conversation-name").textContent==="Inbox"');

@@ -60,7 +60,7 @@ const capture=async name=>{
  // Taller review capture includes the expanded preview; interactions still run at 900px.
  await browser('set','viewport','1280','1200','2');
  await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
- assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',new URL(`portal-alpha-${name}.png`,artifacts).pathname);
+ assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',decodeURIComponent(new URL(`portal-alpha-${name}.png`,artifacts).pathname));
  await browser('set','viewport','1280','900','2');
 };
 const blocked=async()=>{assert.equal(await evaluate('document.querySelector("#send").disabled'),true);const n=commands.length;await evaluate('document.querySelector("#message").value="Blocked draft"; document.querySelector("#composer").dispatchEvent(new Event("submit",{cancelable:true}))');assert.equal(commands.length,n);};
@@ -129,7 +129,7 @@ try{
  await evaluate('document.querySelector("#message").value="Preserved unsent draft";document.querySelector("#message").dispatchEvent(new Event("input"))');
  assert.equal(await evaluate('document.querySelector("#send").disabled'),true);await capture('session-changed');
  await review();assert.equal(commands.length,4);assert.match(await evaluate('document.querySelector("#editor-fields").textContent'),/synthetic-policy-3/);
- await capture('session-review');await browser('set','viewport','390','844','2');await browser('screenshot',new URL('portal-alpha-session-review-narrow.png',artifacts).pathname);await browser('set','viewport','1280','900','2');
+ await capture('session-review');await browser('set','viewport','390','844','2');await browser('screenshot',decodeURIComponent(new URL('portal-alpha-session-review-narrow.png',artifacts).pathname));await browser('set','viewport','1280','900','2');
  await dismiss();assert.equal(await evaluate('document.querySelector("#send").disabled'),true);
  await review();state.summary.owner_alpha_bootstrap.max_task_seconds=84;await confirm();
  await wait('!document.querySelector("#editor-error").hidden');assert.match(await evaluate('document.querySelector("#editor-error").textContent'),/changed or expired/);

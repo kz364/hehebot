@@ -74,8 +74,8 @@ const enabled=async()=>{assert.equal(await evaluate('document.querySelector("#se
 const passive=async n=>{await refresh();await evaluate(`document.querySelector('[data-persona-id="${other}"]').click()`);await evaluate(`document.querySelector('[data-persona-id="${bot}"]').click()`);assert.equal(commands.length,n);};
 const rollbackClock=async()=>evaluate('(()=>{globalThis.realDateNow=Date.now;Date.now=()=>0;return null})()');
 const restoreClock=async()=>evaluate('(()=>{Date.now=globalThis.realDateNow;return null})()');
-const capture=async name=>{await browser('set','viewport','1280','1200','2');await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',new URL(`portal-alpha-warm-${name}.png`,artifacts).pathname);await browser('set','viewport','1280','900','2');};
-const narrowCapture=async name=>{await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',new URL(`portal-alpha-warm-${name}.png`,artifacts).pathname);};
+const capture=async name=>{await browser('set','viewport','1280','1200','2');await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',decodeURIComponent(new URL(`portal-alpha-warm-${name}.png`,artifacts).pathname));await browser('set','viewport','1280','900','2');};
+const narrowCapture=async name=>{await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',decodeURIComponent(new URL(`portal-alpha-warm-${name}.png`,artifacts).pathname));};
 const resetPage=async()=>{await evaluate('sessionStorage.clear()');await open();};
 try{
  // Phase 0 — ordinary default mode before any warm summary.
@@ -87,7 +87,7 @@ try{
  assert.match(await banner(),/not always-on chat/);assert.match(await banner(),/No renewal, rollover, successor generation or background work/);
  assert.equal(await evaluate('document.querySelector("#show-connectors").hidden'),true); // legacy alpha restrictions apply
  await passive(1);await capture('pre-first');
- await browser('set','viewport','390','844','2');await browser('screenshot',new URL('portal-alpha-warm-pre-first-narrow.png',artifacts).pathname);await browser('set','viewport','1280','900','2');
+ await browser('set','viewport','390','844','2');await browser('screenshot',decodeURIComponent(new URL('portal-alpha-warm-pre-first-narrow.png',artifacts).pathname));await browser('set','viewport','1280','900','2');
  // Phase B — first message starts the generation; unavailable while the first task runs;
  // canonical completion reopens the SECOND admission in the SAME generation; then exhaustion.
  await browser('fill','#message','Warm first message');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(2);assert.equal(commands.length,2);

@@ -46,6 +46,13 @@ still couldn't chat with a bot during a background task. See the traps in
      semantics; still fails with Homebrew `flock`/`util-linux`), and several codex-service cases
      fail because `build-codex-service.sh` needs the Linux Codex binary. Run focused runtime files
      individually on macOS; run the full runtime suite on Linux. G3's lock work needs Linux evidence.
+   - **Browser fixtures on macOS:** `npm i -g agent-browser && agent-browser install`, plus
+     `bash scripts/setup-codex.sh && bash scripts/build-codex-service.sh` for the codex manager
+     fixtures. Already failing at `d1a9906` (baseline, not G work): test-portal-{connector-catalog,
+     memory-delete, memory-edit, memory-inspect, output, recovery, routine-delete, skill-draft,
+     skill-references, skill-review, skill-run, skill-task-proposal, steering, task-cancel}
+     (several flaky) and the RETIREMENT_REPORTED / HOSTED_WAKE_OUTCOME_UNKNOWN assertions in
+     test-codex-{background,hosted,warm}-manager.
 4. Pick the lowest open G row whose dependencies are merged (waves are listed in TODO).
 
 ### Code map for the G rows

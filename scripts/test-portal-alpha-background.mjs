@@ -79,7 +79,7 @@ const enabled=async()=>{assert.equal(await evaluate('document.querySelector("#se
 const passive=async n=>{await refresh();await evaluate(`document.querySelector('[data-persona-id="${other}"]').click()`);await evaluate(`document.querySelector('[data-persona-id="${bot}"]').click()`);assert.equal(commands.length,n);};
 const rollbackClock=async()=>evaluate('(()=>{globalThis.realDateNow=Date.now;Date.now=()=>0;return null})()');
 const restoreClock=async()=>evaluate('(()=>{Date.now=globalThis.realDateNow;return null})()');
-const capture=async name=>{await browser('set','viewport','1280','1200','2');await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',new URL(`portal-alpha-background-${name}.png`,artifacts).pathname);await browser('set','viewport','1280','900','2');};
+const capture=async name=>{await browser('set','viewport','1280','1200','2');await evaluate('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',decodeURIComponent(new URL(`portal-alpha-background-${name}.png`,artifacts).pathname));await browser('set','viewport','1280','900','2');};
 const resetPage=async()=>{await evaluate('sessionStorage.clear()');await open();};
 try{
  // Phase 0 — ordinary default mode before any background summary.
