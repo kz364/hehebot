@@ -189,17 +189,36 @@ export class LifecycleCore {
   if(this.core.questions.list().length)return true;
   return this.store.db.all("SELECT resource_id FROM resource_locks LIMIT 1").length>0 || this.store.db.all(`SELECT r.id FROM runs r WHERE r.status IN ('claimed','running','finishing','cancelling','recovery_required') OR (r.status='queued' AND (${budget.sql})) LIMIT 1`,...budget.bindings).length>0 || this.store.db.all("SELECT id FROM operations WHERE status!='settled' LIMIT 1").length>0 || this.store.db.all("SELECT e.id FROM effects e JOIN runs r ON r.id=e.run_id WHERE e.status IN ('intent','dispatched') OR (e.status='outcome_unknown' AND r.status IN ('claimed','running','finishing','cancelling')) LIMIT 1").length>0;
  }
- nextClaimableRun():PendingRun|undefined {
+ /** G4b (GROK_ALIGNMENT A4, docs/AGENT_MODEL.md "one reserved interactive model
+  * turn plus at most one background model turn installation-wide"): two
+  * independent claim lanes. 'coordinator' is the pre-existing persona
+  * conversation lane (unchanged selection). 'background' selects a queued
+  * task run the coordinator started via `hehebot_start_task`/`task.start`
+  * (role='background', parent_run_id set, and the `coordinator_task` marker
+  * taskStart() stamps into its context — distinct from ordinary native-child
+  * background rows, which share role='background'+parent_run_id but must
+  * never be claimed here). Capacity (at most one active run per lane) is
+  * enforced by claim(), not here; this only orders/filters candidates. */
+ nextClaimableRun(lane:'coordinator'|'background'='coordinator'):PendingRun|undefined {
   return this.store.db.transaction(()=>{
-   if(this.core.ownerAlpha.policy&&!this.core.ownerAlpha.available())return undefined;
+   if(lane==='coordinator'&&this.core.ownerAlpha.policy&&!this.core.ownerAlpha.available())return undefined;
    const cutoff=new Date(this.core.options.now().getTime()-90*86400000).toISOString(),budget=this.core.budget.admissionPredicate();
-   const skillCutoff=new Date(this.core.options.now().getTime()-30*86400000).toISOString();
    const questions=[...new Set(this.core.questions.list().map(question=>question.run_id))];
-   const alpha=this.core.ownerAlpha.policy;
-   const assigned=this.core.bootstrap.assignedManifest();
    // One MiB combined UTF-8 historical bodies per candidate. SQLite still
    // inspects stored values; this bounds returned bytes, not SQL work/storage.
    const snapshotFits='length(CAST(r.context_json AS BLOB))+COALESCE(length(CAST(r.checkpoint_json AS BLOB)),0)<=1048576';
+   if(lane==='background'){
+    return this.store.db.all<PendingRun>(`SELECT r.id,r.command_id,r.occurrence_id,r.persona_id,r.routine_id,r.status,r.current_attempt,r.error_code,r.created_at,r.updated_at,r.role,r.parent_run_id,r.title,
+     CASE WHEN ${snapshotFits} THEN r.context_json END AS context_json,
+     CASE WHEN ${snapshotFits} THEN r.checkpoint_json END AS checkpoint_json
+     FROM runs r WHERE r.role='background' AND r.parent_run_id IS NOT NULL AND json_extract(r.context_json,'$.coordinator_task')=1
+      AND r.status='queued' AND (${budget.sql}) AND (${nativeDescendantsSettledSql})
+      ${questions.length?`AND r.id NOT IN (${questions.map(()=>'?').join(',')})`:''}
+     ORDER BY r.created_at,r.rowid LIMIT 1`,...budget.bindings,...questions)[0];
+   }
+   const skillCutoff=new Date(this.core.options.now().getTime()-30*86400000).toISOString();
+   const alpha=this.core.ownerAlpha.policy;
+   const assigned=this.core.bootstrap.assignedManifest();
    return this.store.db.all<PendingRun>(`SELECT r.id,r.command_id,r.occurrence_id,r.persona_id,r.routine_id,r.status,r.current_attempt,r.error_code,r.created_at,r.updated_at,r.role,r.parent_run_id,r.title,
     CASE WHEN ${snapshotFits} THEN r.context_json END AS context_json,
     CASE WHEN ${snapshotFits} THEN r.checkpoint_json END AS checkpoint_json
@@ -210,6 +229,9 @@ export class LifecycleCore {
     ORDER BY r.created_at,r.id LIMIT 1`,cutoff,...budget.bindings,...questions,skillCutoff,...(assigned?[assigned.run_id]:[]),...(alpha?[alpha.persona_id,assigned?assigned.event_sequence-1:this.core.ownerAlpha.cutoff()]:[]))[0];
   });
  }
+ /** Either lane has claimable work. Used only to decide whether a sleeping
+  * runtime is worth waking; capacity is re-checked inside claim() itself. */
+ private claimableWork():boolean{return Boolean(this.nextClaimableRun('coordinator')||this.nextClaimableRun('background'));}
  private touch():void{this.store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('last_activity',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(this.core.now()));}
  private identity(identity:Identity,allowBoot=false):Lifecycle {
   const state=this.get();
@@ -297,34 +319,48 @@ export class LifecycleCore {
     'Historical context and checkpoint exceed the combined read limit. Stored data was retained and no attempt was started.':
     'Memory preparation blocked before execution. No memory was truncated and no attempt was started.'},this.core.now());
  }
- claim(identity:Identity,personaModels?:Record<string,string>,memoryBudget?:MemoryBudgetReceipt,memoryReadPersonas:string[]=[]):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
+ claim(identity:Identity,personaModels?:Record<string,string>,memoryBudget?:MemoryBudgetReceipt,memoryReadPersonas:string[]=[],lane:'coordinator'|'background'='coordinator'):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled||this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
+   // G4b: the background task lane only exists under ordinary execution
+   // admission. Owner-alpha's staged single-coordinator boot never has task
+   // runs to claim (task.start itself only queues once executionEnabled).
+   requireThat(lane==='coordinator'||this.core.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Background task lane requires ordinary execution admission.');
    const current=this.core.ownerAlpha.activeGeneration();
-   // Root inference release is not family settlement. Uncertain roots block;
-   // provider-confirmed process termination retains the existing recovery path.
-   if(this.store.db.all(`SELECT r.id FROM runs r WHERE r.role='coordinator' AND r.status IN ('claimed','running','finishing','cancelling','recovery_required')
-   AND NOT (r.status='recovery_required' AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.status='terminated' AND a.settled_at IS NOT NULL)) AND NOT EXISTS(
-    SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?
-    AND json_extract(a.coordinator_release_json,'$.native_ref')=a.native_run_ref
-    AND json_extract(a.coordinator_release_json,'$.outcome') IN ('completed','failed','interrupted')
-   ) ${current?'AND EXISTS(SELECT 1 FROM attempts current_attempt WHERE current_attempt.run_id=r.id AND current_attempt.attempt=r.current_attempt AND current_attempt.epoch=? AND current_attempt.boot_id=?)':''} LIMIT 1`,identity.epoch,identity.boot_id,...(current?[current.epoch,current.boot_id]:[])).length)return null;
-   // Match the runtime's bounded family registry without evicting old custody.
-   // Admission only needs the threshold, not a census beyond it.
-   const unresolved=this.store.db.all<{count:number}>(`SELECT COUNT(*) AS count FROM (SELECT 1 FROM runs r WHERE r.role='coordinator' AND r.current_attempt>0 AND ${current?'EXISTS(SELECT 1 FROM attempts current_attempt WHERE current_attempt.run_id=r.id AND current_attempt.attempt=r.current_attempt AND current_attempt.epoch=? AND current_attempt.boot_id=?) AND ':''}(
-    r.status IN ('claimed','running','finishing','cancelling','recovery_required')
-    OR EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.status IN ('claimed','running'))
-    OR EXISTS(SELECT 1 FROM operations o WHERE o.run_id=r.id AND o.status!='settled')
-    OR EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=r.id)
-    OR EXISTS(SELECT 1 FROM effects e WHERE e.run_id=r.id AND e.status IN ('intent','dispatched','outcome_unknown'))
-    OR NOT (${nativeDescendantsSettledSql})
-   ) LIMIT 32)`,...(current?[current.epoch,current.boot_id]:[]))[0].count;
-   if(unresolved>=32)return null;
-   const run=this.nextClaimableRun();if(!run)return null;
+   if(lane==='coordinator'){
+    // Root inference release is not family settlement. Uncertain roots block;
+    // provider-confirmed process termination retains the existing recovery path.
+    if(this.store.db.all(`SELECT r.id FROM runs r WHERE r.role='coordinator' AND r.status IN ('claimed','running','finishing','cancelling','recovery_required')
+    AND NOT (r.status='recovery_required' AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.status='terminated' AND a.settled_at IS NOT NULL)) AND NOT EXISTS(
+     SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?
+     AND json_extract(a.coordinator_release_json,'$.native_ref')=a.native_run_ref
+     AND json_extract(a.coordinator_release_json,'$.outcome') IN ('completed','failed','interrupted')
+    ) ${current?'AND EXISTS(SELECT 1 FROM attempts current_attempt WHERE current_attempt.run_id=r.id AND current_attempt.attempt=r.current_attempt AND current_attempt.epoch=? AND current_attempt.boot_id=?)':''} LIMIT 1`,identity.epoch,identity.boot_id,...(current?[current.epoch,current.boot_id]:[])).length)return null;
+    // Match the runtime's bounded family registry without evicting old custody.
+    // Admission only needs the threshold, not a census beyond it.
+    const unresolved=this.store.db.all<{count:number}>(`SELECT COUNT(*) AS count FROM (SELECT 1 FROM runs r WHERE r.role='coordinator' AND r.current_attempt>0 AND ${current?'EXISTS(SELECT 1 FROM attempts current_attempt WHERE current_attempt.run_id=r.id AND current_attempt.attempt=r.current_attempt AND current_attempt.epoch=? AND current_attempt.boot_id=?) AND ':''}(
+     r.status IN ('claimed','running','finishing','cancelling','recovery_required')
+     OR EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.status IN ('claimed','running'))
+     OR EXISTS(SELECT 1 FROM operations o WHERE o.run_id=r.id AND o.status!='settled')
+     OR EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=r.id)
+     OR EXISTS(SELECT 1 FROM effects e WHERE e.run_id=r.id AND e.status IN ('intent','dispatched','outcome_unknown'))
+     OR NOT (${nativeDescendantsSettledSql})
+    ) LIMIT 32)`,...(current?[current.epoch,current.boot_id]:[]))[0].count;
+    if(unresolved>=32)return null;
+   }else{
+    // G4b capacity rule: at most one background coordinator-task run active
+    // installation-wide. This lane never touches or blocks the coordinator's
+    // own single-run slot (checked only above, for lane==='coordinator').
+    if(this.store.db.all(`SELECT r.id FROM runs r WHERE r.role='background' AND r.parent_run_id IS NOT NULL
+     AND json_extract(r.context_json,'$.coordinator_task')=1 AND r.status IN ('claimed','running','finishing','cancelling','recovery_required') LIMIT 1`).length)return null;
+   }
+   const run=this.nextClaimableRun(lane);if(!run)return null;
    if(run.context_json===null){this.blockMemoryPreparation(run,'CONTEXT_PREPARATION_LIMIT');return null;}
+   const prior=JSON.parse(run.context_json) as ContextSnapshot;
    let prepared:ReturnType<typeof prepareMemory>|undefined;
    if(memoryBudget){
+    requireThat(!prior.coordinator_task,'CAPABILITY_UNAVAILABLE','Memory preparation is only available for the coordinator lane.');
     requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Staged alpha does not permit generic memory preparation.');
     const model=personaModels&&Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
     prepared=prepareMemory(this.store,run,model!,this.core.now(),memoryReadPersonas);
@@ -332,13 +368,18 @@ export class LifecycleCore {
      this.blockMemoryPreparation(run,'MEMORY_BUDGET_EXCEEDED');return null;
     }
    }
-   const prior=JSON.parse(run.context_json) as ContextSnapshot;
    // Background-generation admitted roots claim the restricted per-task snapshot
    // (§9): no shared conversation history, task summaries, or WhatsApp grants
    // may reach A/S/B through the generic context composition.
    const backgroundRootRole=this.core.ownerAlpha.backgroundCompletionRole(run.id);
    let context:ContextSnapshot;
-   try{context=backgroundRootRole?this.core.backgroundContext(run.persona_id,prior.instruction,run.id):
+   try{context=prior.coordinator_task?
+    // G4b: a coordinator task run already carries its own isolated context
+    // snapshot from task.start (persona grant restricted to the admitted
+    // capabilities, brief as instruction, no shared conversation history).
+    // Never recompute or widen it through the coordinator's full persona
+    // context — that is exactly the isolation task executors require.
+    {...prior}:backgroundRootRole?this.core.backgroundContext(run.persona_id,prior.instruction,run.id):
     this.core.context(run.persona_id,prior.instruction,run.routine_id,prior.room_id,run.command_id,prepared?.memories);}
    catch(error){
     if(!(error instanceof ControlError)||error.code!=='MEMORY_PREPARATION_LIMIT')throw error;
@@ -636,14 +677,14 @@ export class LifecycleCore {
   if(this.options.idleMode){
    requireThat(provider.capabilities.stopMode==='provider-idle','CAPABILITY_UNAVAILABLE','Provider idle mode does not match the configured lifecycle.');
    requireThat(!['RECOVERY_REQUIRED','STOPPING','STOP_COMMITTED'].includes(state.phase),'CAPABILITY_UNAVAILABLE','Unsettled work needs explicit recovery; provider idle cannot prove termination.');
-   const queued=Boolean(this.nextClaimableRun());
+   const queued=this.claimableWork();
    if(!queued||!['STOPPED','IDLE_PERMITTED'].includes(state.phase))return;
    requireThat(state.phase==='IDLE_PERMITTED'||state.epoch===0,'CAPABILITY_UNAVAILABLE','Existing ownership requires a clean idle handoff.');
    requireThat(!this.store.db.all("SELECT id FROM runs WHERE status IN ('claimed','running','finishing','cancelling') LIMIT 1").length&&!this.store.db.all("SELECT id FROM operations WHERE status!='settled' LIMIT 1").length,'CAPABILITY_UNAVAILABLE','Live work prevents idle admission.');
    const observedState=state,idleObservation=await provider.observe(ref);state=this.get();
    // Observation is an await boundary. A different alarm/boot may have won.
    if(state.epoch!==observedState.epoch||state.boot_id!==observedState.boot_id||state.provider_ref_json!==observedState.provider_ref_json||state.provider_operation_id!==observedState.provider_operation_id)return;
-   if(!['STOPPED','IDLE_PERMITTED'].includes(state.phase)||!this.nextClaimableRun())return;
+   if(!['STOPPED','IDLE_PERMITTED'].includes(state.phase)||!this.claimableWork())return;
    requireThat(provider.capabilities.explicitWake&&idleObservation.persistentState==='retained'&&(idleObservation.phase==='running'||idleObservation.executionPaused===true),'CAPABILITY_UNAVAILABLE','The same persistent runtime is not confirmed available.');
    await this.requestWake(provider,ref,state);return;
   }
@@ -651,7 +692,7 @@ export class LifecycleCore {
   state=this.get();
   if(state.epoch!==observedState.epoch||state.boot_id!==observedState.boot_id||state.provider_ref_json!==observedState.provider_ref_json||state.provider_operation_id!==observedState.provider_operation_id)return;
   if(observation.executionStopped&&['STOPPING','STOP_COMMITTED','RECOVERY_REQUIRED'].includes(state.phase)){this.observeStopped(observation);state=this.get();}
-  if(state.phase==='STOPPED'&&this.nextClaimableRun()){
+  if(state.phase==='STOPPED'&&this.claimableWork()){
    requireThat(provider.capabilities.explicitWake&&provider.capabilities.explicitStop&&provider.capabilities.confirmedStop,'CAPABILITY_UNAVAILABLE','This provider needs a verified lifecycle bridge before execution.');
    requireThat(observation.executionStopped&&observation.persistentState==='retained','CAPABILITY_UNAVAILABLE','Existing runtime ownership is uncertain.');
    await this.requestWake(provider,ref,state);

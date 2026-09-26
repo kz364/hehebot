@@ -22,6 +22,13 @@ function coordinatorGuidance(allowedTools = []) {
   return ['You are the coordinator for this conversation. Reply to the owner only through hehebot_send_message.',
     ...lines, 'When a background task completes, fails, is cancelled or needs input, you are woken with its result; relay it to the owner via hehebot_send_message.'].join(' ');
 }
+// G4b (GROK_ALIGNMENT A4, docs/AGENT_MODEL.md): concise instructions composed
+// only into a coordinator task run's own isolated turn (never the coordinator's).
+function taskExecutorGuidance(personaName) {
+  return `You are a task executor${personaName ? ` for ${personaName}` : ''}. ` +
+    'Post progress or results with hehebot_send_message sparingly, not for every step. ' +
+    'Your final answer is relayed to the owner by the coordinator; you do not talk to the owner directly.';
+}
 
 /** Claim-to-result custody, not an agent loop. The native driver owns tools and children.
  * One fenced, single-writer supervisor owns this journal. No process takeover or sleep
@@ -29,16 +36,21 @@ function coordinatorGuidance(allowedTools = []) {
  */
 export class ExecutionBridge {
   #busy = false;
-  constructor({ control, native, journal, identity, installationId, personas, claimStage = null,
+  constructor({ control, native, journal, identity, installationId, personas, claimStage = null, lane = 'coordinator',
     memoryCounter = /** @type {null | ((input: {selected_model: string, global: string, scoped: string}) => Promise<any>)} */ (null) }) {
     if (!control?.request || !native?.submit || !native?.admissionReadiness || !journal?.putIfAbsent ||
         !Number.isSafeInteger(identity?.epoch) || typeof identity.boot_id !== 'string' ||
         typeof installationId !== 'string' || !personas ||
         claimStage !== null && typeof claimStage !== 'function' ||
+        !['coordinator', 'background'].includes(lane) ||
         memoryCounter !== null && typeof memoryCounter !== 'function') fail('INVALID_BRIDGE_CONFIGURATION');
-    Object.assign(this, { control, native, journal, identity, installationId, personas, claimStage });
+    Object.assign(this, { control, native, journal, identity, installationId, personas, claimStage, lane });
     this.memoryCounter = memoryCounter;
-    this.cursor = `dispatch-${hash(identity)}`;
+    // G4b: the background task lane gets its own journal cursor/dispatch slot so
+    // it never contends with, or is confused for, the coordinator's own single
+    // dispatch record. The coordinator's cursor format is unchanged (existing
+    // recovery tooling -- codex-recovery-inspect.mjs -- keys off dispatch-${hash(identity)}).
+    this.cursor = lane === 'background' ? `dispatch-background-${hash(identity)}` : `dispatch-${hash(identity)}`;
   }
   /** Released coordinators remain active families, not completed tasks. */
   async families() {
@@ -129,7 +141,8 @@ export class ExecutionBridge {
       if (prior) await this.journal.update(this.cursor, { phase: 'claim_unknown', claim: null, attemptId: null, nativeRunId: null, result: null });
       else await this.journal.putIfAbsent(this.cursor, { phase: 'claim_unknown', identity: this.identity });
       let claim;
-      try { claim = await this.control.request('claim', { identity: this.identity, persona_models, ...(memory_budget ? { memory_budget, memory_read_personas } : {}) }); }
+      try { claim = await this.control.request('claim', { identity: this.identity, persona_models,
+        ...(this.lane === 'background' ? { lane: 'background' } : {}), ...(memory_budget ? { memory_budget, memory_read_personas } : {}) }); }
       catch { return this.journal.update(this.cursor, { phase: 'claim_unknown' }); }
       if (claim === null) return this.journal.update(this.cursor, { phase: 'complete' });
       if (!claim?.run?.id || !Number.isSafeInteger(claim.run.current_attempt) ||
@@ -162,7 +175,10 @@ export class ExecutionBridge {
         personaId: persona.agentId, model: persona.model,
         ...(background ? { ownerAlphaBackground: true } : {}),
         scope: claim.run.routine_id ? 'routine' : 'conversation',
-        scopeId: claim.run.routine_id ?? context.room_id ?? claim.run.persona_id,
+        // G4b: a coordinator task run gets its own scope, keyed by its own run
+        // id -- never the coordinator's persona/room scope -- so the native
+        // adapter opens an isolated Codex thread for it, never the coordinator's.
+        scopeId: claim.run.routine_id ?? context.room_id ?? (context.coordinator_task ? claim.run.id : claim.run.persona_id),
         message: JSON.stringify({ ...context, skills: (context.skills ?? []).map(skill => ({
           id: skill.id, revision: skill.revision, name: skill.body.name,
           description: skill.body.description, when_to_use: skill.body.when_to_use,
@@ -172,7 +188,9 @@ export class ExecutionBridge {
             ? { durable_checkpoint: JSON.parse(claim.run.checkpoint_json) } : {}),
           ...(claim.run.role !== 'background' && claim.role === undefined
             ? (guidance => guidance ? { coordinator_guidance: guidance } : {})(coordinatorGuidance(persona.allowedTools))
-            : {}) }),
+            : {}),
+          ...(claim.run.role === 'background' && claim.role === undefined && context.coordinator_task
+            ? { task_guidance: taskExecutorGuidance(persona.agentId) } : {}) }),
       };
       await this.journal.update(this.cursor, { phase: 'submission_unknown', attemptId: input.attemptId });
       let submitted;
