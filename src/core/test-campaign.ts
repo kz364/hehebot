@@ -47,6 +47,10 @@ export class TestCampaign {
   requireThat(c&&c.owner_id===actor&&this.read<string>(markerKey(actor,c.idempotency_key))===hash(p)&&c.type==='message.send'&&c.body_hash===hash(command(p.grant.persona_id))&&hash(JSON.parse(c.payload_json))===hash(command(p.grant.persona_id).payload),'NOT_FOUND','Test command unavailable.',404);
   return {p,c};
  }
+ private status(id:string){
+  const r=this.core.store.db.all<Pick<Run,'status'>>('SELECT status FROM runs WHERE id=?',id)[0];
+  requireThat(r,'NOT_FOUND','Run unavailable.',404);return r.status;
+ }
  submit(actor:string,key:string){return this.core.store.db.transaction(()=>{
   const p=this.actor(actor);this.persona(p);
   const prior=this.core.store.db.all<{id:string}>('SELECT id FROM commands WHERE owner_id=? AND idempotency_key=?',actor,key)[0];
@@ -60,12 +64,12 @@ export class TestCampaign {
   requireThat(count<p.grant.max_submissions,'CAPABILITY_UNAVAILABLE','Test campaign submission limit reached.');
   const priorCommands=this.core.store.db.all<CommandRow>('SELECT * FROM commands WHERE owner_id=?',actor);
   for(const c of priorCommands)if(this.read<string>(markerKey(actor,c.idempotency_key))===hash(p)){
-   const r=c.resource_id?this.core.store.run(c.resource_id):null;
-   requireThat(r&&['completed','failed','cancelled'].includes(r.status),'RESOURCE_BUSY','An earlier test is unsettled.');
+   const status=c.resource_id?this.status(c.resource_id):null;
+   requireThat(status!==null&&['completed','failed','cancelled'].includes(status),'RESOURCE_BUSY','An earlier test is unsettled.');
   }
   this.put(markerKey(actor,key),hash(p));
   const input=command(p.grant.persona_id),receipt=this.core.accept(actor,key,hash(input),input),m=this.core.bootstrap.assignedManifest();
-  requireThat(receipt.status==='applied'&&receipt.resource_id&&m?.command_id===receipt.id&&m.run_id===receipt.resource_id&&this.core.store.run(receipt.resource_id).status==='queued','CAPABILITY_UNAVAILABLE','Test admission did not assign a fresh runnable manifest.');
+  requireThat(receipt.status==='applied'&&receipt.resource_id&&m?.command_id===receipt.id&&m.run_id===receipt.resource_id&&this.status(receipt.resource_id)==='queued','CAPABILITY_UNAVAILABLE','Test admission did not assign a fresh runnable manifest.');
   this.actor(actor);
   return receipt;
  });}

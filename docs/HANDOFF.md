@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Campaign submission now projects status at both checks. Red2/focused24/backend2365/
+typecheck/build pass;1562488 exit0. Distinct null/missing resource errors and rollback
+retained; synthetic post-manifest fixture isolates read shape, not live reachability.
+Next remaining historical/storage/SQL-work/existing-key and native recovery bounds.
+No active checks/children/delivery; schedule reread and enabled. Full matrix not rerun;
+original intermittency/advisories/gates unchanged. No whole-request bound claimed.
+
 Task-sourced skill provenance and campaign run readback now select metadata only.
 Red2/focused55/backend2361/typecheck/build pass;1558025 exit0. Exact source provenance,
 foreign-actor refusal and snapshots retained. Campaign submission status reads remain

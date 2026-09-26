@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Campaign submission status projections (2026-09-26 Asia/Jakarta): both prior-command
+settlement and fresh-manifest admission select only status, preserving read order,
+short-circuiting, missing-run NOT_FOUND/404 and null-resource RESOURCE_BUSY/409.
+Two oversized-history regressions fail on returned full rows before implementation;
+two error/rollback cases also pass. Initial fresh fixture hit the earlier generation
+binding check; corrected injection occurs after manifest validation, not before it.
+That synthetic seam proves the final read shape, not reachable oversized admission.
+Initial fixture failures and a corrected test-spy typing error retained in logs.
+Focused24 (campaign and HTTP)/backend2365/typecheck/dry-build pass;1562488 exited0.
+Evidence: .local/campaign-submit-red{,2,3}.log, -focused-final.log, -backend.log,
+-build.log. No history truncation, authority change or total SQL/request bound.
+Next remaining historical/storage/existing-key/native recovery bounds. Full runtime/
+local-Worker/browser/native-service/shutdown/desktop matrix not rerun; original
+intermittency/advisories and external gates unchanged. Local only.
+
 Provenance/readback metadata projections (2026-09-26 Asia/Jakarta): task-sourced
 skill proposal selects id/persona_id/current_attempt; TestCampaign.run selects only
 identity/scope/status/timestamps consumed by its existing checks and response.

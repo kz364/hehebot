@@ -1,5 +1,5 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {expect,it,vi} from 'vitest';
+import {expect,it,vi,type MockInstance} from 'vitest';
 import {fixture,bot} from './helpers';
 import {ControlCore} from '../src/core/control';
 import {LifecycleCore} from '../src/core/lifecycle';
@@ -44,6 +44,48 @@ it('campaign run readback excludes historical snapshots and preserves actor fenc
    for(const row of returned){expect(row).not.toHaveProperty('context_json');expect(row).not.toHaveProperty('checkpoint_json');}
   }finally{read.mockRestore();}
   expect(f.store.run(id)).toEqual(before);
+ }finally{f.close();}
+});
+
+it('checks unsettled campaign status without hydrating historical snapshots',()=>{
+ const f=setup();try{
+  f.retire();const receipt=f.submit(),id=receipt.resource_id!;
+  f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',JSON.stringify({padding:'界'.repeat(400000)}),'x'.repeat(1100000),id);
+  const before=f.snapshot(),read=vi.spyOn(f.db,'all');
+  try{
+   expect(()=>f.submit()).toThrowError(expect.objectContaining({code:'RESOURCE_BUSY'}));
+   const returned=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[index].value:[]);
+   expect(returned).toEqual([{status:'queued'}]);
+  }finally{read.mockRestore();}
+  expect(f.snapshot()).toBe(before);
+ }finally{f.close();}
+});
+it('checks fresh campaign admission status without hydrating historical snapshots',()=>{
+ const f=setup();try{
+  f.retire();const manifest=f.core.bootstrap.assignedManifest.bind(f.core.bootstrap);let read:MockInstance<typeof f.db.all>|undefined;
+  const admit=vi.spyOn(f.core.bootstrap,'assignedManifest').mockImplementation(()=>{
+   const m=manifest();
+   if(!m)return m;
+   f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',JSON.stringify({padding:'界'.repeat(400000)}),'x'.repeat(1100000),m!.run_id);
+   read=vi.spyOn(f.db,'all');return m;
+  });
+  try{
+   const receipt=f.submit();expect(receipt.status).toBe('applied');
+   const returned=read!.mock.calls.flatMap(([sql],index)=>String(sql).includes('FROM runs WHERE id=?')?read!.mock.results[index].value:[]);
+   expect(returned).toEqual([{status:'queued'}]);
+  }finally{read?.mockRestore();admit.mockRestore();}
+ }finally{f.close();}
+});
+
+it.each([null,'missing'] as const)('preserves prior campaign resource error and rollback for %s',resource=>{
+ const f=setup();try{
+  f.retire();const receipt=f.submit();
+  f.db.exec('UPDATE commands SET resource_id=? WHERE id=?',resource===null?null:randomUUID(),receipt.id);
+  const before=f.snapshot();
+  expect(()=>f.submit()).toThrowError(expect.objectContaining(resource===null
+   ?{code:'RESOURCE_BUSY',message:'An earlier test is unsettled.',status:409}
+   :{code:'NOT_FOUND',message:'Run unavailable.',status:404}));
+  expect(f.snapshot()).toBe(before);
  }finally{f.close();}
 });
 
