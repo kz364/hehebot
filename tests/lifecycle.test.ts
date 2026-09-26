@@ -812,6 +812,31 @@ describe('executor leases and attempts', () => {
     expect(f.db.all('SELECT * FROM outbox')).toHaveLength(1);
     expect(f.db.all("SELECT * FROM events WHERE type='run.result'")).toHaveLength(1);
   });
+  it('publishes a final_text bot.message once when the turn sent none, and never when one already exists', () => {
+    const withTool = claimed().run.id;
+    f.db.exec("INSERT INTO events(id,conversation_id,type,actor_id,cause_id,payload_json,created_at) VALUES(?,?,?,?,?,?,?)",
+      randomUUID(), bot, 'bot.message', bot, withTool, JSON.stringify({ text: 'Sent by the tool', run_id: withTool, attempt: 1, task_run_id: null, origin: 'tool', reply_to_event_id: null }), f.core.now());
+    f.db.exec("INSERT INTO bot_messages(message_key,run_id,attempt,event_sequence,origin,created_at) VALUES(?,?,?,?,?,?)",
+      `${withTool}:1:synthetic`, withTool, 1, f.store.db.all<{ sequence: number }>("SELECT sequence FROM events WHERE type='bot.message'")[0].sequence, 'tool', f.core.now());
+    life.complete(identity, withTool, 1, { status: 'completed', text: 'Final assistant text' });
+    expect(f.db.all("SELECT origin FROM bot_messages WHERE run_id=?", withTool)).toEqual([{ origin: 'tool' }]);
+    expect(f.db.all("SELECT * FROM events WHERE type='bot.message' AND cause_id=?", withTool)).toHaveLength(1);
+
+    const withoutTool = claimed().run.id;
+    life.complete(identity, withoutTool, 1, { status: 'completed', text: 'Only the final reply' });
+    const rows = f.db.all<{ origin: string; event_sequence: number }>("SELECT origin,event_sequence FROM bot_messages WHERE run_id=?", withoutTool);
+    expect(rows).toEqual([{ origin: 'final_text', event_sequence: rows[0].event_sequence }]);
+    const event = f.db.all<{ payload_json: string; actor_id: string; conversation_id: string; cause_id: string }>("SELECT payload_json,actor_id,conversation_id,cause_id FROM events WHERE sequence=?", rows[0].event_sequence)[0];
+    expect(JSON.parse(event.payload_json)).toEqual({ text: 'Only the final reply', run_id: withoutTool, attempt: 1, task_run_id: null, origin: 'final_text', reply_to_event_id: null });
+    expect(event).toMatchObject({ actor_id: bot, conversation_id: bot, cause_id: withoutTool });
+    // Replaying the identical completion receipt must not publish a second message.
+    life.complete(identity, withoutTool, 1, { status: 'completed', text: 'Only the final reply' });
+    expect(f.db.all("SELECT * FROM bot_messages WHERE run_id=?", withoutTool)).toHaveLength(1);
+
+    const empty = claimed().run.id;
+    life.complete(identity, empty, 1, { status: 'completed', text: '' });
+    expect(f.db.all("SELECT * FROM bot_messages WHERE run_id=?", empty)).toHaveLength(0);
+  });
 });
 describe('drain, stop and takeover races', () => {
   it('requires the full idle grace before preparing sleep', () => {

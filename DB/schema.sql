@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (16, '2026-09-26T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (17, '2026-09-27T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -164,3 +164,12 @@ CREATE TABLE flight_restore_deadlines (
  status TEXT NOT NULL CHECK(status IN ('pending','enqueued','confirmed','superseded','outcome_unknown')),
  run_id TEXT, receipt_json TEXT, PRIMARY KEY(leg_id,revision)
 );
+
+-- Committed bot messages (GROK_ALIGNMENT A1). One row per delivered hehebot_send_message
+-- call or final_text fallback; the bot.message event is the durable record, this table
+-- is the dedupe/rate-limit index over it.
+CREATE TABLE bot_messages (
+ message_key TEXT PRIMARY KEY, run_id TEXT NOT NULL, attempt INTEGER NOT NULL,
+ event_sequence INTEGER NOT NULL, origin TEXT NOT NULL CHECK(origin IN ('tool','final_text')), created_at TEXT NOT NULL
+);
+CREATE INDEX bot_messages_run_attempt ON bot_messages(run_id,attempt);

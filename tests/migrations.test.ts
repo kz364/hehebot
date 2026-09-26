@@ -31,7 +31,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual([{id:'run-1',status:'waiting',context_json:'{"synthetic":"preserve context"}',command_id:'command-1',role:'coordinator',parent_run_id:null,title:null}]);
    expect(db.all("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('native_task_links','resource_locks','task_followups','skill_proposals','skill_enablements')")).toHaveLength(5);
    expect(db.all('SELECT * FROM room_publications')).toEqual([]);
-   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(16);
+   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(17);
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=2')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=3')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=4')[0].applied_at).toBe('2026-09-10T00:00:00Z');
@@ -59,7 +59,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual(before);
    sqlite.exec('DROP INDEX room_publications_cause');
    migrateApplication(db,'2026-09-12T00:00:00Z');
-   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:16}]);
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:17}]);
   }finally{sqlite.close();}
  });
  it('preserves v7 followups and foreign keys, and rolls back a failed table replacement',()=>{
@@ -156,6 +156,26 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT total_changes() AS n')).toEqual(changes);
    expect(db.all('SELECT * FROM attempts')).toEqual(after);
    expect(db.all('SELECT * FROM schema_versions WHERE version=12')).toEqual([{version:12,applied_at:'2026-09-12T00:00:00Z'}]);
+  }finally{sqlite.close();}
+ });
+ it('adds v17 bot_messages atomically and reruns without writes',()=>{
+  const {db,sqlite}=legacy();try{
+   migrateApplication(db,'2026-09-10T00:00:00Z');
+   sqlite.exec("DROP TABLE bot_messages; DELETE FROM schema_versions WHERE version>=17; CREATE TRIGGER reject_v17 BEFORE INSERT ON schema_versions WHEN NEW.version=17 BEGIN SELECT RAISE(ABORT,'synthetic v17 failure'); END");
+   const schema=db.all('SELECT * FROM sqlite_schema ORDER BY name');
+   expect(()=>migrateApplication(db,'2026-09-11T00:00:00Z')).toThrow('synthetic v17 failure');
+   expect(db.all("SELECT name FROM sqlite_master WHERE name='bot_messages'")).toEqual([]);
+   expect(db.all('SELECT * FROM sqlite_schema ORDER BY name')).toEqual(schema);
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:16}]);
+   sqlite.exec('DROP TRIGGER reject_v17');migrateApplication(db,'2026-09-12T00:00:00Z');
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:17}]);
+   db.exec("INSERT INTO bot_messages VALUES('run-1:1:key','run-1',1,7,'tool','2026-09-01T00:00:00.000Z')");
+   expect(()=>db.exec("INSERT INTO bot_messages VALUES('run-1:1:key','run-1',1,8,'final_text','2026-09-01T00:00:00.000Z')")).toThrow();
+   expect(()=>db.exec("INSERT INTO bot_messages VALUES('other-key','run-1',1,9,'unexpected','2026-09-01T00:00:00.000Z')")).toThrow();
+   const after=db.all('SELECT * FROM bot_messages'),changes=db.all('SELECT total_changes() AS n');
+   migrateApplication(db,'2026-09-13T00:00:00Z');
+   expect(db.all('SELECT total_changes() AS n')).toEqual(changes);
+   expect(db.all('SELECT * FROM bot_messages')).toEqual(after);
   }finally{sqlite.close();}
  });
  it('rejects unknown future schema without changing application data',()=>{

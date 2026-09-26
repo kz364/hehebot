@@ -9,6 +9,7 @@ import {createHash} from 'node:crypto';
 import type {TextOnlyReceipt,BackgroundReceipt} from './runtime-types';
 import {ownerAlphaSuccessorSha256,parseOwnerAlphaSuccessor,type OwnerAlphaGeneration,type OwnerAlphaSuccessor} from './owner-alpha';
 import {assertUnusedRecoveryCustody,assertClaimedPreTurnQuarantineCustody,type ClaimedPreTurnMessageBoundAuthority,type MessageBoundAuthority,type UnusedMessageBoundAuthority} from './owner-alpha-bootstrap';
+import {appendBotMessageEvent} from './bot-messages';
 import type {Command} from './types';
 const hex64=/^[0-9a-f]{64}$/;
 export type Phase='STOPPED'|'START_REQUESTED'|'BOOTING'|'READY'|'DRAINING'|'STOP_COMMITTED'|'STOPPING'|'RECOVERY_REQUIRED'|'IDLE_PERMITTED';
@@ -486,6 +487,10 @@ export class LifecycleCore {
    this.store.db.exec('UPDATE runs SET status=?,error_code=?,checkpoint_json=?,updated_at=? WHERE id=?',result.status,result.error_code??null,result.checkpoint?JSON.stringify(result.checkpoint):null,now,runId);
    this.store.db.exec("INSERT INTO outbox(id,run_id,destination,payload_json,status,created_at,updated_at) VALUES(?,?,'portal',?,'delivered',?,?) ON CONFLICT(run_id,destination) DO UPDATE SET payload_json=excluded.payload_json,status='delivered',updated_at=excluded.updated_at",this.core.options.uuid(),runId,JSON.stringify(result),now,now);
    this.store.event(this.core.options.uuid(),run.persona_id,'run.result','runtime',run.command_id,{run_id:runId,role:run.role,title:run.title,...result},now);
+   // A1 fallback: a completed attempt that sent no hehebot_send_message still
+   // reaches the owner. This never fires twice for the same attempt.
+   if(result.status==='completed'&&result.text.length>0&&!this.store.db.all('SELECT 1 FROM bot_messages WHERE run_id=? AND attempt=? LIMIT 1',runId,attempt).length)
+    appendBotMessageEvent(this.store,this.core.options.uuid,now,{id:runId,persona_id:run.persona_id,role:run.role},attempt,result.text,'final_text',null,`${runId}:${attempt}:final_text`);
    if(['completed','failed','cancelled'].includes(result.status))this.core.flushFollowups(runId);
    if(run.occurrence_id&&result.status!=='waiting')this.store.db.exec('UPDATE occurrences SET status=? WHERE id=?',result.status==='completed'?'completed':'failed',run.occurrence_id);
    // Settlement and follow-up enqueueing do not change id, role or current_attempt.

@@ -7,7 +7,7 @@ import type {Database,SqlValue} from '../src/core/store';
 import {legacyOccurrencesSql} from './legacy-occurrences';
 
 const schema=readFileSync(new URL('../DB/schema.sql',import.meta.url),'utf8');
-const prior=schema.replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (16,','VALUES (12,').replace(/^CREATE INDEX (objects_memory_scope|runs_parent|operations_run_status|effects_run_status|resource_locks_run) .*\n/gm,'');
+const prior=schema.replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (17,','VALUES (12,').replace(/^CREATE INDEX (objects_memory_scope|runs_parent|operations_run_status|effects_run_status|resource_locks_run|bot_messages_run_attempt) .*\n/gm,'').replace(/\n-- Committed bot messages[\s\S]*?CREATE TABLE bot_messages \([\s\S]*?\n\);\n/,'\n');
 const schemaRows=(sqlite:DatabaseSync)=>sqlite.prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name").all();
 function fixture(migrated=true){
  const sqlite=new DatabaseSync(':memory:');sqlite.exec(migrated?prior:schema);
@@ -31,7 +31,7 @@ describe('v13 occurrence origin migration',()=>{
    expect(db.all('SELECT * FROM occurrences')).toEqual(occurrences.map(row=>({...row as object,origin:'scheduled'})));
    expect(db.all('SELECT * FROM runs')).toEqual(runs);expect(db.all('SELECT * FROM attempts')).toEqual(attempts);
    expect(schemaRows(sqlite)).toEqual(schemaRows(fresh));
-   expect(createHash('sha256').update(JSON.stringify(schemaRows(sqlite))).digest('hex')).toBe('ce7ce5e8bf6f0d2574a42eb90653900e79b67c240b55bdd8b12acea29874cb80');
+   expect(createHash('sha256').update(JSON.stringify(schemaRows(sqlite))).digest('hex')).toBe('b66a8db8aa4b008053201a56ea680ff51f628d13619354f75414abec70336664');
    expect(db.all('PRAGMA foreign_key_check')).toEqual([]);
    expect(db.all('PRAGMA foreign_keys')).toEqual([{foreign_keys:1}]);
    expect(db.all('PRAGMA defer_foreign_keys')).toEqual([{defer_foreign_keys:0}]);
