@@ -1,12 +1,15 @@
 # Implementation status
 
+> **2026-09-27:** Architecture direction is now [GROK_ALIGNMENT.md](GROK_ALIGNMENT.md), and the live checklist is the G rows in [TODO.md](../TODO.md). This file is a **historical evidence log**: search it, don't read it top to bottom. Its "next" and "continue" statements predate the realignment and are superseded.
+
+
 Hehebot has demonstrated canonically completed hosted text-only replies, including a Worker-triggered staged wake, with authenticated full-reload persistence. This is not production operation or ongoing availability. Direct Codex app-server **0.154.0** is the only supported harness. Historical failed trial custody remains recovery-required. Production execution and native-verification flags remain false.
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
 **Owner pause/publication (2026-09-26):** implementation and scheduled
 follow-through are paused. GitHub publication of existing source and the full
-[state handoff](HANDOFF.md#owner-pause-and-publication-handoff--2026-09-26) is
+[state handoff](archive/HANDOFF_HISTORY_2026-09.md#owner-pause-and-publication-handoff--2026-09-26) is
 authorized. No merge, deployment, live operation or gate change is authorized by
 that request. Historical continuation instructions below do not override the pause.
 

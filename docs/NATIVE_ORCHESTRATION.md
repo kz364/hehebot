@@ -1,5 +1,12 @@
 # Codex orchestration and settlement contract
 
+> **2026-09-27 supersession ([GROK_ALIGNMENT.md](GROK_ALIGNMENT.md)):**
+> - Routing is the coordinator's choice of tool (A4), not classification.
+> - Settlement and descendant coverage gate **automatic sleep and effect reconciliation only**. They don't gate committed `hehebot_send_message` replies (A1) or successor start (A2).
+> - An interrupted turn is terminal for its attempt. Its descendants are killed with the process group, and effects are fenced by epoch. There is no native takeover or reconstruction of child trees (A3).
+>
+> Read the settlement rules below in that light.
+
 Codex app-server **0.154.0** is the sole execution harness. The application owns persona, conversation, logical task, policy, memory, occurrence, effect, and user-visible result identity. Codex owns its thread/turn/tool loop and runtime-private state. Integrate only through supported app-server and host-tool boundaries.
 
 ## Required routing

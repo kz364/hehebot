@@ -1,5 +1,8 @@
 # Implementation plan — local work in progress
 
+> **2026-09-27:** Milestones below are historical design milestones. The current implementation plan is the G rows in [TODO.md](TODO.md), per [docs/GROK_ALIGNMENT.md](docs/GROK_ALIGNMENT.md).
+
+
 Direct Codex app-server 0.154.0 is the sole harness. Use [TODO.md](TODO.md) for the maintained progress checklist and ordered work, [the agent handoff](docs/HANDOFF.md) for continuation context and [current implementation status](docs/IMPLEMENTATION.md) for partial evidence. This document preserves design milestones, not a second live checklist. Unchecked broad milestones can include implemented subfeatures; inspect owning code and tests before rebuilding them.
 
 Read [SPEC.md](SPEC.md) as the normative contract. Public examples are in [TEST_VECTORS/commands.json](TEST_VECTORS/commands.json); lifecycle expectations in [TEST_VECTORS/lifecycle.json](TEST_VECTORS/lifecycle.json). See docs/IMPLEMENTATION.md for current implementation evidence. No production application deployment is verified; production execution flags remain false and acceptance gates remain unpassed.

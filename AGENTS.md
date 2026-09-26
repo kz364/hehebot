@@ -1,6 +1,21 @@
 # Hehebot working context
 
-Read `README.md`, `docs/IMPLEMENTATION.md`, `docs/PROJECT_INTENT.md`, and `docs/HANDOFF.md` first. `SPEC.md`, `PRODUCT_UX_SPEC.md`, and the S/O/UX acceptance IDs are targets, not completion claims. The only supported harness is direct Codex app-server **0.154.0**; preserve the external control plane, sleeping runtime, and replaceable supported-interface boundary.
+Read in this order: this file, **`docs/GROK_ALIGNMENT.md`** (normative architecture since 2026-09-27; it overrides conflicting older clauses), the current section of `docs/HANDOFF.md`, the G rows at the top of `TODO.md`, then `README.md` and `docs/PROJECT_INTENT.md`. `docs/IMPLEMENTATION.md` is a historical evidence log. Search it when you need something; don't read it end to end. `SPEC.md`, `PRODUCT_UX_SPEC.md`, and the S/O/UX/G acceptance IDs are targets, not completion claims. The only supported harness is direct Codex app-server **0.154.0**; preserve the external control plane, sleeping runtime, and replaceable supported-interface boundary.
+
+## Traps: do not repeat (read before choosing work)
+
+From 2026-09-16 to 09-26 about 150 commits hardened crash-recovery custody. Meanwhile the owner still could not chat with a bot while it ran a task, and a correct hosted reply was hidden because its turn never "settled". These rules prevent a repeat:
+
+1. **Fence effects; don't prove process death.** Successor start needs only an atomic epoch advance plus the same-machine flock kill (GROK_ALIGNMENT A2). Don't pursue provider termination proofs, kernel/boot-ID comparisons, retirement inventories or restart-contract clarifications as prerequisites.
+2. **A committed message is never gated on turn settlement.** Replies go out through `hehebot_send_message` and are final once committed (A1). "Root completion is not settlement" matters for sleep and effects. It never decides whether the owner sees a reply.
+3. **Interrupted is terminal for the attempt.** Don't reconstruct, take over or resume in-flight native turns or child trees. Continue with a new attempt seeded from durable state (A3).
+4. **Records of dead generations don't block sleep.** Only live work of the current generation does. Unknown effects become owner-visible needs-you items, not sleep blockers.
+5. **The model routes; don't build a classifier.** Intent resolution is the coordinator's choice of tool (A4).
+6. **Critical path first.** Every checkpoint must advance a G row or fix a defect that blocks one. Hardening, bounds, indexes and extra test variants are allowed only for a concrete defect found on the critical path. After three consecutive commits without a user-visible capability change, stop and re-read the G rows.
+7. **Show uncertainty; don't eliminate it.** Grok ships `UNKNOWN_DURABILITY`, `parked` and `interrupted` states. A visible uncertain state beats an invisible correct one.
+8. **Check the reference first.** Before designing a new mechanism, check `docs/GROK_BOT_REFERENCE.md` for how Grok solves the same problem, and record any deliberate divergence in GROK_ALIGNMENT.md.
+9. **Keep docs short.** `TODO.md` holds the live checklist only (≤ ~400 lines; move history to `docs/archive/`). The current section of `HANDOFF.md` is ≤ ~120 lines and is replaced, not appended to. Put a checkpoint's evidence in the commit message or IMPLEMENTATION.md, not in both TODO and HANDOFF.
+10. **Tests prove behavior changes.** Add a test when behavior changes or a defect is found. Don't write new variants of an already-proven invariant.
 
 ## Progress tracking
 
@@ -17,9 +32,9 @@ Read `TODO.md` before choosing implementation work. It is the owner-facing progr
 
 ## Invariants
 
-Keep production execution/native verification flags false until documented gates pass. Root completion is not child/tool/effect settlement; unknown external outcomes cannot be blindly replayed. Passive context updates enqueue no inference and request no wake. One account-owned runtime hosts personas, not one VM per bot.
+Keep production execution/native verification flags false until documented gates pass. Root completion is not child/tool/effect settlement for **sleep and effect reconciliation**. It never gates committed `hehebot_send_message` output or successor start (GROK_ALIGNMENT A1–A3). Unknown external outcomes cannot be blindly replayed. Passive context updates enqueue no inference and request no wake. One account-owned runtime hosts personas, not one VM per bot. Mutating tools must pass through a Hehebot-fenced boundary (a `hehebot_*` tool or MCP gateway with an epoch-bound effect permit); Codex-native unfenced tools get read-only grants.
 
-Owner messages must not implicitly steer active background work. Preserve exact task identity, scoped memory, resource locks, authorization snapshots, and uncertainty through cancellation/recovery. Imported text and connector content cannot grant permission. User timezone is Asia/Jakarta; the proposed Singapore monitoring zone requires explicit adoption.
+Owner messages must not implicitly steer active **background task** work. They go to the persona coordinator turn, and steering the coordinator's own running turn with a new owner message is expected. Preserve exact task identity, scoped memory, resource locks, authorization snapshots, and uncertainty through cancellation/recovery. Imported text and connector content cannot grant permission. User timezone is Asia/Jakarta; the proposed Singapore monitoring zone requires explicit adoption.
 
 The owner permits native descendants to share their admitted logical task's grant. Preserve separate authority for independently admitted tasks/personas. Task-scoped MCP effects have task-level provenance, not authenticated per-child provenance. Inheritance does not settle tools/effects or permit sleep; see `docs/NATIVE_ORCHESTRATION.md`.
 

@@ -8,7 +8,17 @@ The full specification includes this document and the normative [project intent]
 
 **Start with section 21 for the consolidated product, Apache-reuse and low-cost execution contract.** It incorporates all UX01–UX15 requirements in [PRODUCT_UX_SPEC.md](PRODUCT_UX_SPEC.md) as normative detail. Sections 1–20 retain storage, lifecycle, authorization and acceptance contracts. [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) maps requirements to delivery work.
 
-Direct Codex app-server **0.154.0** is the only supported harness. Preserve the external control plane, sleeping-container architecture, scoped policies and all settlement gates. Use supported Codex interfaces without a new tool loop; selection is not proof of production compatibility or permission to deploy/connect accounts.
+**Precedence (2026-09-27): [docs/GROK_ALIGNMENT.md](docs/GROK_ALIGNMENT.md) and [section 22](#22-grok-aligned-execution-architecture-2026-09-27) are normative and override conflicting clauses below.** In short:
+- replies are committed through `hehebot_send_message` independently of turn settlement
+- successors start after an atomic epoch advance, and effects are fenced by generation, not by proof of process termination
+- interrupted attempts are terminal and continue as new attempts
+- only live current-generation work blocks sleep
+- the coordinator routes with tools
+- the portal uses a durable outbox and a streamed timeline
+
+Superseded clauses are marked inline.
+
+Direct Codex app-server **0.154.0** is the only supported harness. Preserve the external control plane, sleeping-container architecture, scoped policies and the settlement gates that apply to sleep and effect reconciliation. Use supported Codex interfaces without a new tool loop; selection is not proof of production compatibility or permission to deploy/connect accounts.
 
 For Gmail/Google Calendar, prefer Codex's supported plugin/app integrations and verify per-account headless tool availability. [Codex plugins](https://developers.openai.com/codex/plugins) explicitly documents Gmail; [Google Calendar](https://openai.com/business/plugins/google-calendar/) advertises event/availability lookup, not proof of required event mutations. Acceptance must separately demonstrate mail reads, authorized label changes, calendar reads/create/update/cancel, exact calendar selection, reminders/timezones, pagination and effect receipts; sending mail remains outside imported routine authority. Missing capabilities stay visible and block only affected workflows, rather than silently adding broad Google scopes or a paid connector.
 
@@ -86,17 +96,17 @@ Current project: local control-plane and scripted Codex fixtures exist, with no 
 
 Desired: portal always accepts authenticated work; one stopped Machine resumes with the same state; native personas execute with relevant memory; routine occurrences come from the external scheduler; timelines show outcomes, waiting states and recovery actions. WhatsApp disconnects on stop and reconnects from persisted auth, without logout/unpairing.
 
-Grok observation: its visible app has a bot sidebar, a bot conversation with grouped inter-bot activity, and a routine panel. Accessibility exposed little content and UI navigation did not establish an export mechanism. These observations support the presentation model only. Group dispatch, internal memory architecture and export availability are not verified Grok facts. Do not copy private conversation content into test fixtures.
+Grok observation: its visible app has a bot sidebar, a bot conversation with grouped inter-bot activity, and a routine panel. Accessibility exposed little content and UI navigation did not establish an export mechanism. These observations support the presentation model only. Group dispatch, internal memory architecture and export availability are not verified Grok facts. *(2026-09-27:)* A later inspection of the installed Grok Bot desktop client's code and protocol shapes is summarized in [docs/GROK_BOT_REFERENCE.md](docs/GROK_BOT_REFERENCE.md). It is an architecture reference; server internals remain inferred. Do not copy private conversation content into test fixtures.
 
 Compatibility: preserve existing project setup instructions and local state. Reuse native agents, sessions, skills, model auth, task tracking and cancellation where verified; add a thin adapter, not a core fork. Native cron MUST NOT independently fire the same application routine.
 
 ## 6. Rules & Invariants
 
 1. Persist and deduplicate ingress before returning 202 or requesting wake.
-2. At most one active runtime may own the writable state directory. A stale lease is not proof the old process stopped; confirm provider stopped state before replacement execution.
+2. At most one active runtime **generation** may act. *(Superseded 2026-09-27 by GROK_ALIGNMENT A2.)* A stale lease is not proof the old process stopped, so the Worker fences it instead. An atomic epoch advance invalidates the old generation's credentials, message posts and effect permits. On the same machine, the new supervisor acquires the executor flock and kills a live prior holder's process group. Provider stopped-state confirmation is **not** required before replacement.
 3. Every executor claim, heartbeat, acknowledgment and completion carries `epoch` and `boot_id`; reject stale ownership. Acquire an OS lock before starting runtime.
 4. A run lease begins before native submission and lasts through terminal persistence and result-outbox commit. Tool hooks alone do not constitute an activity ledger.
-5. Normal sleep is forbidden while any admitted/running run, inference, tool, child, transfer, effect uncertainty requiring live reconciliation, node operation or flush remains active.
+5. Normal sleep is forbidden while any **current-generation, live** run turn, inference, tool, child, transfer, node operation or flush remains active. *(Clarified 2026-09-27 by GROK_ALIGNMENT A3.)* Interrupted attempts, `outcome_unknown` effects, parked tasks and needs-you items of any generation are durable records, not live work, and never block sleep.
 6. Passive sockets, open portal tabs and data-only updates do not count as work. A blocked job may release compute only when a durable checkpoint or explicit non-resumable failure exists.
 7. Queue receipt is at-least-once; logical IDs are deduplicated. External effects are not promised exactly-once. Unknown effects must be reconciled before retry.
 8. A wait timeout is not cancellation. Cancellation is requested, acknowledged, then verified terminal; UI must distinguish these states.
@@ -132,7 +142,7 @@ Each row is a mandatory automated scenario unless marked staged/manual. Fixtures
 | S05 | Tool, download, child, Mac call or flush active | No chat for 10 minutes | No normal sleep for every operation class |
 | S06 | Empty runnable queue and zero operations | Grace expires | Drain, checkpoint, stop and provider confirmation |
 | S07 | Drain in progress | New message before / after stop commit | Token invalidated and resume / durable wake-after-stop; no loss |
-| S08 | Executor lease lost | Provider state unknown | No second executor; recovery status; queued work retained |
+| S08 | Executor lease lost | Provider state unknown | *(Revised by GROK_ALIGNMENT A2/A3.)* Epoch advances atomically, and prior-generation attempts become `interrupted` with dispatched effects `outcome_unknown`. The old generation's sends, permits and completions are rejected with `STALE_EPOCH`. A successor may start. Queued work is retained. |
 | S09 | Persona Travel | Owner switches to Inbox | Correct distinct instructions/context; authorized global preferences shared |
 | S10 | Routine A private memory | Routine B requests retrieval | Excluded unless explicit shared scope; denial audited |
 | S11 | Existing fact revision 2 | Owner corrects it with expected revision 2 | Revision 3 supersedes; next admitted run uses it; stale write conflicts |
@@ -162,7 +172,10 @@ Each row is a mandatory automated scenario unless marked staged/manual. Fixtures
 
 ### 9.1 Public Interfaces Overview
 
-Portal: left sidebar of bots/rooms, central timeline, contextual routine/memory panel. Owner sends ordinary text, sees durable receipt immediately, and sees queued/waking/running/waiting/completed/failed states. Streaming is optional presentation, never the durable result. Routine status is draft/enabled/paused/error; show next execution in local timezone and UTC, last result and edit/pause/run-now actions. Memory panel shows scopes, provenance, revisions, correction and deletion.
+Portal: left sidebar of bots/rooms, central timeline, contextual routine/memory panel. Owner sends ordinary text, sees durable receipt immediately, and sees queued/waking/running/waiting/completed/failed states. Streaming is optional presentation, never the durable result. *(2026-09-27, GROK_ALIGNMENT A5–A7:)*
+- Sends go through a durable client outbox: nonce = Idempotency-Key, persisted before POST, optimistic bubble, reconciliation by key after reload.
+- Committed events stream over a hibernating Durable Object WebSocket (`/v1/stream`), with the cursor long poll below as fallback.
+- Only `owner.message` and `bot.message` render as bubbles. Tool and progress activity is collapsed, and notices are always visible. Routine status is draft/enabled/paused/error; show next execution in local timezone and UTC, last result and edit/pause/run-now actions. Memory panel shows scopes, provenance, revisions, correction and deletion.
 
 No thread creation requirement. Bot timeline links each routine result to a collapsible run detail. Changing bots preserves unsent drafts per bot locally; do not place message bodies in URLs. Mobile below 768 px uses one pane with explicit back navigation; desktop uses two/three panes. Keyboard navigation, named controls, focus restoration after dialogs, visible focus and WCAG 2.2 AA contrast are required. Errors remain readable without color. Offline drafts are local-only until server receipt and labelled unsent.
 
@@ -186,7 +199,16 @@ complete(run_id, attempt, epoch, result_ref, effect_receipts[]) -> acknowledgmen
 prepareSleep(epoch, boot_id, queue_sequence, activity_snapshot) -> stop_token | DENIED
 commitSleep(stop_token, epoch, queue_sequence, checkpoint_ref) -> STOP_COMMITTED | DENIED
 publishContext(room_id, recipient_ids, revisions, summary, cause_id) -> event_sequence
+# Added 2026-09-27 (GROK_ALIGNMENT A1/A4); every call is epoch/boot fenced
+postBotMessage(run_id, attempt, epoch, boot_id, message_key, text, reply_to?) -> {event_id, seq}
+startTask(coordinator_run_id, attempt, epoch, boot_id, call_key, title, brief, capability_ids[]) -> {task_id}
+listTasks / taskDetail(persona_id, task_id?) -> task ledger rows
+steerTask(task_id, call_key, text) -> {steered | not_running}
+queueFollowup(task_id, call_key, text) -> {queued}
+cancelTask(task_id, call_key) -> {requested | already_terminal}
 ```
+
+`GET /v1/receipts?idempotency_key=` returns the original receipt or `not_found` (A5). `GET /v1/stream` upgrades to a hibernating WebSocket (A6).
 
 Implement runtime envelopes in the adapter milestone before integration, with strict JSON Schema validation and fixture coverage. A canceled or stale native submission must not be re-admitted merely because a transport request timed out. Native RPC discovery, auth scopes and cancel acknowledgment semantics are compatibility-gate deliverables; no code should assume hashed bundled JS filenames are APIs.
 
@@ -260,7 +282,7 @@ Migration: create v1 tables in development, validate foreign keys/uniqueness, ba
 
 Instance: `STOPPED → START_REQUESTED → BOOTING → READY → DRAINING → STOP_COMMITTED → STOPPING → STOPPED`; unresolved provider/executor state enters `RECOVERY_REQUIRED`. Desired run/stop state is independent of observed provider phase. One serialized controller issues lifecycle operations with operation IDs; duplicate triggers coalesce. Wake API failures retry after 1, 5, 15 and 60 seconds, then enter recovery-required with durable queued work and a 5-minute reconciliation alarm; owner retry uses the same lifecycle operation identity where supported. Never infer a failed start is absent without querying provider state. No provider proxy autostop: request traffic cannot see background model work.
 
-Supervisor heartbeats every 15 seconds, lease 90 seconds. If renewal fails, stop new admission immediately; cancel root inference, active tools, node calls and all child/subprocess groups before expiry with a 15-second safety margin. If cancellation cannot settle, terminate the owning executor process group; preserve uncertain effects for reconciliation. Controller does not start another executor until provider confirms old stopped. Local OS lock prevents two runtime processes in one Machine. Epochs reject late callbacks; they do not undo website actions.
+Supervisor heartbeats every 15 seconds, lease 90 seconds. If renewal fails, stop new admission immediately; cancel root inference, active tools, node calls and all child/subprocess groups before expiry with a 15-second safety margin. If cancellation cannot settle, terminate the owning executor process group; preserve uncertain effects for reconciliation. *(Superseded 2026-09-27, GROK_ALIGNMENT A2:)* The controller may start a successor as soon as the epoch advance commits. It does not wait for provider confirmation that the old executor stopped. The old generation is fenced at the Worker, and on the same machine the flock holder is killed. Local OS lock prevents two runtime processes in one Machine. Epochs reject late callbacks; they do not undo website actions.
 
 Sleep predicate: no runnable/claimed runs, no live operations, no uncertain live effects, no pending state/outbox commit, all waits parked durably, idle grace elapsed. First close admission, then collect snapshot; prepare stop token binds epoch and queue sequence. Flush native state/browser and persist checkpoint before commit. New work before commit invalidates token and resumes; after commit it sets wake-after-stop. Controller completes stop before issuing next start. A failed drain has a 30-second deadline, then reopens admission or enters recovery; do not force normal sleep through an unknown active operation.
 
@@ -268,7 +290,7 @@ Job: `queued → claimed → running → finishing → completed`; alternatives 
 
 One DO alarm tracks the earliest due schedule, wake retry or external watchdog deadline. Durable alarm delivery is at-least-once; re-arm after processing. Every public request also reconciles overdue alarms. Idle daily reconciliation is permitted for schedule health and does not wake the runtime. No perpetual 15-second alarm while stopped. Claimed occurrences pin revision. Schedule edits atomically invalidate unclaimed old occurrences and recompute next due. DST: skip nonexistent local times; repeated local times fire once at earliest UTC instant. Coalescing records count/range of missed ticks, chooses latest eligible nominal tick, and never hides discarded ticks from run detail. `queue_one` retains only newest eligible pending occurrence during overlap; `skip` records skipped; v1 disallows parallel same-routine execution.
 
-Watchdog: heartbeat absence 45 seconds triggers probe, not immediate retry; quiet inference deadline 5 minutes by default, tool deadline 2 minutes except explicitly declared transfer/shell up to 10 minutes; run hard deadline 20 minutes. Progress may extend phase deadlines only inside hard deadline. Cancellation grace 15 seconds then verify for another 15; if still live, stop owning process group/Machine through fenced recovery. External effects become outcome_unknown where needed. Read-only/idempotent attempts retry at most twice after 10 and 60 seconds; external mutations require matching provider idempotency key or verified receipt. A human wait can park only at restartable checkpoint; ephemeral page/modal waits get a bounded 5-minute hold, then explicit restart-required state.
+Watchdog: heartbeat absence 45 seconds triggers probe, not immediate retry; quiet inference deadline 5 minutes by default, tool deadline 2 minutes except explicitly declared transfer/shell up to 10 minutes; run hard deadline 20 minutes. Progress may extend phase deadlines only inside hard deadline. Cancellation grace 15 seconds then verify for another 15; if still live, kill the owning process group and mark the attempt `interrupted` (terminal; GROK_ALIGNMENT A3). Continuation, if any, is a new attempt seeded from durable state. External effects become outcome_unknown where needed. Read-only/idempotent attempts retry at most twice after 10 and 60 seconds; external mutations require matching provider idempotency key or verified receipt. A human wait can park only at restartable checkpoint; ephemeral page/modal waits get a bounded 5-minute hold, then explicit restart-required state.
 
 Bot collaboration: one default responder, at most 3 bot contributions per owner message, hop depth 2, fan-out 2, total run hard deadline shared across the chain. Deduplicate `(cause_id, sender, recipient, request_digest)`; prohibit self-dispatch and repeated causal edges. When a parent requests another bot, persist its continuation and yield the sole execution slot before dispatching the child. The workflow lease remains a sleep blocker while a child or runnable continuation exists. Capacity=1 counts active native execution, not parked parents; a synchronous parent wait holding the slot is forbidden. Owner can explicitly authorize a larger bounded collaboration in a new command. Other bot messages are attributed data, not higher-priority instructions. Room membership grants room visibility, not automatic access to every member's private memory.
 
@@ -371,7 +393,8 @@ Implementation is done only when all core S01–S27 and S29–S32 scenarios pass
 - **Authentication evidence could be overgeneralized.** Use the supported Codex route in the executing environment. Do not copy unrelated credentials.
 - **$5 could exclude disk/backups or assume continuous free infrastructure.** Price full footprint and actual active time; free quotas can reject requests; surface budget-blocked work.
 - **WhatsApp reauthentication could be mistaken for complete history.** Measure message-level cold-start retrieval separately and display gaps/unknowns.
-- **Epoch fencing could be mistaken for website fencing.** Stop old process/provider before replacement; reconcile side-effect destination.
+- **Epoch fencing could be mistaken for website fencing.** *(Revised 2026-09-27.)* Fence at the effect-permit boundary: a stale generation cannot obtain a dispatch permit, and effects it already dispatched become `outcome_unknown` and are reconciled at the destination. Mutating tools that bypass the permit boundary are unfenced and get read-only grants.
+- **Recovery hardening could crowd out the product.** *(Added 2026-09-27.)* Don't make replies, successor start or alpha use wait on proving a third-party process's state. See AGENTS.md "Traps".
 - **Memory deletion could leave prompt copies.** Tombstone, invalidate, cancel/rebuild affected context, expire backups, and distinguish canonical deletion from transcript cleanup.
 - **Grok exporter could require unsupported extraction.** Treat discovery as optional gate; user-supplied archive first; explicit unsupported-schema failure.
 
@@ -422,7 +445,7 @@ The owner selected Fly Sprites on 2026-09-10. Cloudflare remains the portal/API/
 
 ## 20. Native-first local implementation additions (2026-09-10)
 
-See [NATIVE_ORCHESTRATION.md](docs/NATIVE_ORCHESTRATION.md) for Codex contracts and O01–O09. Codex owns its thread/turn/tool loop; the application adds durable child links, task cards, locks and exact-task follow-ups. Complete recursive event/settlement coverage remains unproved, so execution stays disabled.
+See [NATIVE_ORCHESTRATION.md](docs/NATIVE_ORCHESTRATION.md) for Codex contracts and O01–O09. Codex owns its thread/turn/tool loop; the application adds durable child links, task cards, locks and exact-task follow-ups. Complete recursive event/settlement coverage remains unproved, so **automatic sleep** stays gated. *(Revised 2026-09-27:)* That coverage is not a prerequisite for committed replies, successor start or a supervised alpha (section 22).
 
 Owner decision (2026-09-14): a root and its native descendants share the admitted logical task's approved tool/policy/memory grant; separate child grants are not required. Inheritance never expands that grant or crosses independently admitted tasks/personas. Task-scoped MCP may supply inherited tools where supported, with task-level effect provenance rather than invented per-child caller authentication. Root dynamic-tool non-inheritance is a transport limitation, not a requirement for child isolation. Descendant/tool/effect accounting, exact cancellation and fail-closed sleep remain mandatory; see the shared-authority contract above.
 
@@ -534,3 +557,21 @@ All rows are **pending**, even where upstream code or existing synthetic tests c
 Delivery order: (1) Apache provenance/dependency audit and bounded client/adapter comparison; (2) one retained-control-plane chat/task/result/restart path; (3) supervisor and sleep correctness before automatic idle; (4) full skill/routine, memory, artifact and collaboration UX; (5) desktop/handoff/teaching, templates and setup polish; (6) provider/account/hardware acceptance, measured cost and staged release. Client work can use synthetic backends while execution remains gated, but must not redefine backend truth to match upstream UI assumptions.
 
 For full product completion, require this combined scope, not only the older core Definition of Done. Keep each failure classified as implementation work, upstream unsupported capability, external authorization/hardware blocker or explicit product difference. Do all reproducible debugging in orbs first; a Mac-only or provider-specific check is a final acceptance boundary, not an excuse to defer integration debugging. This document completes planning only and does not claim an operational assistant or authorize implementation to begin automatically.
+
+## 22. Grok-aligned execution architecture (2026-09-27)
+
+Owner decision, normative. [docs/GROK_ALIGNMENT.md](docs/GROK_ALIGNMENT.md) holds the full contract (A1–A9), acceptance rows G-A1–G-A7 and the list of superseded clauses. Summary:
+
+| ID | Requirement |
+| --- | --- |
+| A1 | Agents speak only through `hehebot_send_message`. The Worker commits each call as an attributed `bot.message`, deduped by `(attempt, tool-call id)`. A committed message is final whatever happens to its turn afterwards. A turn that completes with only final text publishes it as `origin: final_text`. |
+| A2 | Generations `(epoch, boot_id)` are fenced at the Worker: stale sends, effect permits and completions get `STALE_EPOCH`. A successor starts after an atomic epoch advance plus the same-machine flock kill, with no provider termination proof. Mutating tools must pass through the fenced permit boundary. |
+| A3 | A turn is atomic. Crash, lease loss, deadline or epoch advance makes the attempt `interrupted` (terminal). Continuation is a new seeded attempt: automatic for read-only tasks without unknown effects, needs-you otherwise. Only live current-generation work blocks sleep. |
+| A4 | Owner messages enter a per-persona inbox and a coordinator turn; a running coordinator turn is steered. The coordinator routes with task tools (`start_task`, `list_tasks`, `task_detail`, `steer_task`, `queue_followup`, `cancel_task`). Task events wake the coordinator, within the existing loop bounds. |
+| A5 | The portal keeps a durable outbox: nonce = Idempotency-Key, optimistic bubble, receipt lookup by key, draft restored on rejection. |
+| A6 | Timeline events stream over a hibernating DO WebSocket with cursor resume and `snapshot_required`. Long poll is the fallback. Idle sockets cause zero wake or inference. |
+| A7 | Only owner and bot messages are bubbles. Task cards update in place, activity is collapsed and notices are always visible. |
+| A8 | Rooms run as a bounded turn scheduler (deadline, PASS, winding down, root cause id). |
+| A9 | The paired Mac pulls queued node requests over an outbound socket and parks when offline. |
+
+S/O/UX acceptance still applies where not superseded. G-A1–G-A7 are added acceptance.

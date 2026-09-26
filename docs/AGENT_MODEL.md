@@ -66,16 +66,20 @@ The initial concurrency target is one reserved interactive model turn plus at mo
 
 ## Messages go to the coordinator, not automatically into active work
 
+Routing follows [GROK_ALIGNMENT.md](GROK_ALIGNMENT.md) A4. The owner message enters the persona's coordinator turn, or steers it if one is already running. The coordinator chooses a tool, and everything it says goes through `hehebot_send_message`.
+
 While Travel is filling form A:
 
-| Owner message | Intended behavior |
-| --- | --- |
-| “How's it going?” | Read durable status and answer without altering A's input or cancelling it. |
-| “Also research hotels.” | Create independent task B; dispatch when capacity and resources permit. |
-| “Use tomorrow instead for form A.” | Steer A through a supported safe boundary, preserving task identity and leaving B unchanged. |
-| “After A finishes, check its receipt.” | Record a deferred follow-up rather than steering A now. |
-| “Cancel B.” | Cancel only B; distinguish requested cancellation from confirmed settlement. |
-| “Change the time,” when several tasks fit | Clarify without changing either task. |
+| Owner message | Intended behavior | Coordinator tool |
+| --- | --- | --- |
+| “How's it going?” | Read durable status and answer without altering A's input or cancelling it. | `hehebot_list_tasks` / `task_detail`, then `send_message` |
+| “Also research hotels.” | Create independent task B; dispatch when capacity and resources permit. | `hehebot_start_task` |
+| “Use tomorrow instead for form A.” | Steer A's running turn, preserving task identity and leaving B unchanged. | `hehebot_steer_task` (or `queue_followup` if A is between turns) |
+| “After A finishes, check its receipt.” | Record a deferred follow-up rather than steering A now. | `hehebot_queue_followup` |
+| “Cancel B.” | Cancel only B; distinguish requested cancellation from confirmed settlement. | `hehebot_cancel_task` |
+| “Change the time,” when several tasks fit | Clarify without changing either task. | `send_message` with a question |
+
+When A finishes, fails or needs input, the Worker wakes Travel's coordinator with a task event, and the coordinator relays the result. A may also post attributed progress itself.
 
 The owner does not need to choose native threads or know run IDs. Task cards provide optional exact controls. Closing a card, switching personas, or sending another message cancels nothing. Steering cannot undo completed effects or blindly replay uncertain ones. Unsupported active steering must be shown as unavailable, not silently implemented as cancellation/restart or an after-completion follow-up.
 

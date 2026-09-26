@@ -1,5 +1,15 @@
 # Bot orchestration clarification — 2026-09-10
 
+> **2026-09-27 supersession ([GROK_ALIGNMENT.md](GROK_ALIGNMENT.md) A4):** the coordinator resolves intent **by choosing tools**. There is no separate classification step.
+> - `hehebot_start_task` creates independent work.
+> - `hehebot_steer_task` steers an identified running task.
+> - `hehebot_queue_followup` defers an instruction to a task's next turn.
+> - `hehebot_cancel_task` cancels one task.
+> - Status questions use `hehebot_list_tasks` / `hehebot_task_detail`.
+> - Every reply goes through `hehebot_send_message`.
+>
+> A new owner message may steer the **coordinator's own** running turn. It never reaches a task thread without an explicit steer or follow-up call. Task completion wakes the coordinator through the persona inbox. O01–O09 still apply, interpreted through these tools.
+
 Status: normative user clarification to SPEC.md. Takes precedence over its single-model-run default and any interpretation that one visible bot equals one serial native session. The implementation thread owns integration into SPEC.md, contracts, implementation and setup guides.
 
 ## Native-first implementation constraint

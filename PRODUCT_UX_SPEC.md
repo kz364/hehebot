@@ -51,6 +51,11 @@ These sources were inspected, not benchmarked as a deployed alternative. Source 
 
 ### UX04 — Quiet chat with truthful live status
 
+*2026-09-27 ([GROK_ALIGNMENT.md](docs/GROK_ALIGNMENT.md) A1, A5–A7):*
+- Bot bubbles are committed `bot.message` events from `hehebot_send_message`. They are final once shown, even if the turn later fails. Streamed text is an ephemeral live preview only.
+- Owner sends use a durable outbox with an optimistic bubble, reconciled by idempotency key after reload.
+- The timeline streams over a hibernating WebSocket.
+
 - Use readable chat bubbles and a compact working indicator. Collapse routine tool/reasoning detail by default, with an Activity disclosure for available execution events; do not require exposing private model reasoning.
 - Never hide approvals, failures, waiting reasons, uncertain outcomes, or bot-to-bot attribution behind the quiet mode.
 - Stream available assistant text and typed activity through authenticated application interfaces. A partial stream is not a committed final reply; reconnect must recover committed events without duplicates or crossing conversation boundaries.
@@ -60,7 +65,7 @@ These sources were inspected, not benchmarked as a deployed alternative. Source 
 
 - Place a compact task strip near the composer, with title, owner, status, and an expandable detail view. Read authoritative application task records, not DOM snapshots or CSS-derived status.
 - Offer exact task follow-up, steer/interrupt when supported, and cancellation. Distinguish request accepted, queued, applied, cancellation requested, and definitively settled.
-- Ordinary owner messages must not automatically interrupt work. The coordinator resolves status questions, new independent work, intentional steering, and deferred follow-up; ambiguous targets require clarification rather than guessing.
+- Ordinary owner messages must not automatically interrupt work. The coordinator resolves status questions, new independent work, intentional steering, and deferred follow-up **by choosing task tools** (GROK_ALIGNMENT A4); ambiguous targets require clarification rather than guessing. Task cards show `interrupted` and needs-you states with owner choices, not a hidden recovery custody.
 - A needs-you indicator aggregates unresolved approvals, questions, and recovery items. Clearing one reason must not clear unrelated attention.
 - Acceptance: with tasks A and B present, steering/cancelling A never changes B; a status request changes neither. Lost acknowledgments retain uncertainty and never cause blind resubmission. Task-strip state survives reload.
 
