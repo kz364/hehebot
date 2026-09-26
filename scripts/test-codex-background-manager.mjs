@@ -149,13 +149,21 @@ try {
     await browser('fill', '#message', text);
     await browser('click', '#send');
     assert.ok(await waitFor(() => browserJson('document.querySelector("#message").value === ""')), 'composer receipt not confirmed');
+    // The G5 durable outbox (GROK_ALIGNMENT A5) sends via an async drain loop,
+    // so the composer clearing no longer guarantees the server has the POST.
+    assert.ok(await waitFor(() => fixture.browserCommands.length >= ordinal), 'browser send did not reach the server');
     assert.equal(fixture.browserCommands.length, ordinal, 'passive or duplicate browser command');
     const sent = fixture.browserCommands[ordinal - 1];
     assert.deepEqual(JSON.parse(sent.body), { schema_version: 1, type: 'message.send', payload: { conversation_id: persona, text } });
     assert.match(sent.headers['idempotency-key'], uuidPattern);
     assert.equal(sent.headers.origin, fixture.origin);
     assert.equal(sent.headers['sec-fetch-site'], 'same-origin');
-    assert.equal(await browserJson(`localStorage.getItem("personal.pending.${persona}")`), null);
+    // No unconfirmed outbox record remains once the real timeline echo
+    // reconciles it. window.__hehebotOutbox() (nonce/conversation_id/text/
+    // phase only) is the G5 outbox's read-only test hook, replacing the old
+    // single 'personal.pending.<conversation>' localStorage key.
+    assert.ok(await waitFor(() => browserJson(`!window.__hehebotOutbox().some(r=>r.conversation_id==="${persona}")`)),
+      'outbox record for this conversation did not reconcile after the real send');
     // Exact-byte replay recovers the stored receipt; it cannot admit another task.
     return { method: 'POST', headers: { ...ownerHeaders, Origin: fixture.origin,
       'Content-Type': sent.headers['content-type'], 'Idempotency-Key': sent.headers['idempotency-key'] }, body: sent.body };

@@ -146,9 +146,13 @@ try {
       `composer never admitted the turn-${turn} send`);
     await browser('fill', '#message', text);
     await browser('click', '#send');
-    // The composer clears the textarea only after its receipt is confirmed.
+    // The G5 durable outbox (GROK_ALIGNMENT A5) clears the composer as soon as
+    // the send is queued, via an async drain loop — no longer only once the
+    // receipt is confirmed. Wait for the real POST to land at the server
+    // before counting commands.
     assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),
       'composer did not confirm the sent message');
+    assert.ok(await waitFor(() => fixture.browserCommands.length >= turn), 'browser send did not reach the server');
     assert.equal(fixture.browserCommands.length, turn, 'unexpected command count after composer send');
     const sent = fixture.browserCommands[turn - 1];
     assert.deepEqual(JSON.parse(sent.body), { schema_version: 1, type: 'message.send',
@@ -324,8 +328,11 @@ try {
     assert.equal(fixture.browserCommands.length, 2, 'reload sent or duplicated a command');
     assert.equal(report.nativeStarts, 2, 'reload launched another native runtime');
     assert.equal(report.modelRequests, 2, 'reload reached a model');
-    assert.equal(await browserJson(`localStorage.getItem("personal.pending.${persona}")`), null,
-      'composer left an unconfirmed pending message');
+    // window.__hehebotOutbox() (nonce/conversation_id/text/phase only) is the
+    // G5 durable outbox's read-only test hook (GROK_ALIGNMENT A5), replacing
+    // the old single 'personal.pending.<conversation>' localStorage key.
+    assert.equal(await browserJson(`window.__hehebotOutbox().filter(r=>r.conversation_id==="${persona}").length`), 0,
+      'composer left an unconfirmed outbox record');
     assert.equal((await browser('errors')).stdout.trim(), '', 'portal reported page errors');
     // Absolute path: the CLI resolves relative screenshot names against its own
     // working directory, not this script's. Enlarge the viewport and scroll the

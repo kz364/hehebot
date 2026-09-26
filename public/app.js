@@ -309,6 +309,10 @@ async function command(type,payload,key=crypto.randomUUID()){
 // states: rejected (bubble removed, text restored to that conversation's
 // draft) and unknown (kept, retried under the same key with backoff).
 const outboxRecords=new Map(); // nonce -> record; mirrors durable storage
+// Read-only test hook: exposes only the fields fixtures need to assert on
+// (never the full record, and never a mutator), so browser fixtures can wait
+// on and inspect outbox state instead of the old single localStorage key.
+window.__hehebotOutbox=()=>[...outboxRecords.values()].map(r=>({nonce:r.nonce,conversation_id:r.conversation_id,text:r.text,phase:r.phase}));
 const outboxSending=new Set(); // conversation_id currently draining
 let outboxDb=null,outboxDbAttempted=false;
 function outboxOpenDb(){
@@ -382,7 +386,9 @@ async function outboxDrain(conversationId){
    try{
     const response=await fetch('/v1/commands',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':head.nonce},body:JSON.stringify({schema_version:1,type:'message.send',payload:{conversation_id:head.conversation_id,text:head.text}})});
     let body=null;try{body=await response.json();}catch{}
-    if(response.ok&&body?.status!=='rejected'){await outboxSetPhase(head,'accepted');render();continue;}
+    // Fetch the committed echo promptly instead of waiting on the 15s
+    // fallback poll or a live /v1/stream push that may not exist yet.
+    if(response.ok&&body?.status!=='rejected'){await outboxSetPhase(head,'accepted');render();refresh();continue;}
     if(response.status>=400&&response.status<500){outboxRestoreDraft(head,body?.error?.message??'This message could not be saved.');render();continue;}
     head.tries++;await outboxSetPhase(head,'unknown');render();
     await new Promise(resolve=>setTimeout(resolve,outboxBackoffMs(head.tries)));
@@ -411,14 +417,22 @@ function reconcileOutboxEchoes(conversationId,list){
 async function outboxReconcileOnLoad(){
  let records=[];try{records=await outboxLoadAll();}catch{}
  for(const record of records)if(record&&typeof record.nonce==='string'&&typeof record.conversation_id==='string')outboxRecords.set(record.nonce,record);
+ let foundAccepted=false;
  for(const record of outboxRecords.values()){
   try{
    const response=await fetch('/v1/receipts?idempotency_key='+encodeURIComponent(record.nonce));
-   if(response.status===200)await outboxSetPhase(record,'accepted');
+   if(response.status===200){await outboxSetPhase(record,'accepted');foundAccepted=true;}
    else if(response.status===404){record.tries=0;await outboxSetPhase(record,'queued');}
   }catch{/* offline: leave the persisted phase; outboxDrain retries once a drain runs. */}
  }
  render();
+ // A record found already-accepted here needs its committed event fetched
+ // promptly: without a live /v1/stream push, the only other trigger is the
+ // 15s fallback poll, which would leave an accepted-but-unechoed bubble on
+ // screen far longer than a reload should. Only fires when reconciliation
+ // actually found something, so a page with no outbox history never issues
+ // an extra read. Bug found while making G-A5 pass (GROK_ALIGNMENT A5).
+ if(foundAccepted)refresh();
  for(const conversationId of new Set([...outboxRecords.values()].map(r=>r.conversation_id)))outboxDrain(conversationId);
 }
 function items(kind){return snapshot?.objects?.filter(x=>x.kind===kind)??[];}
