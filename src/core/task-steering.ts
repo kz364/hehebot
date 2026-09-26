@@ -1,6 +1,7 @@
 import { Store } from './store';
 import { requireThat } from './errors';
 import type { Identity, LifecycleCore } from './lifecycle';
+import type { Run } from './types';
 
 export type SteeringTarget={run_id:string;attempt:number};
 export type SteeringOutcome='accepted'|'outcome_unknown'|'not_delivered';
@@ -37,7 +38,8 @@ export class TaskSteering {
   });
  }
  private current(target:SteeringTarget){
-  const run=this.store.run(target.run_id);
+  const run=this.store.db.all<Pick<Run,'id'|'current_attempt'|'status'>>('SELECT id,current_attempt,status FROM runs WHERE id=?',target.run_id)[0];
+  requireThat(run,'NOT_FOUND','Run unavailable.',404);
   requireThat(run.current_attempt===target.attempt,'REVISION_CONFLICT','The selected task attempt changed.');
   const attempt=this.store.db.all<{epoch:number;boot_id:string;native_run_ref:string|null;deadline_at:string}>('SELECT epoch,boot_id,native_run_ref,deadline_at FROM attempts WHERE run_id=? AND attempt=?',target.run_id,target.attempt)[0];
   requireThat(attempt?.native_run_ref,'TASK_NOT_RUNNING','The task has no acknowledged native identity.');

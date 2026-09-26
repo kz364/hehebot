@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {afterEach,beforeEach,expect,it} from 'vitest';
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {fixture,bot} from './helpers';
 import {LifecycleCore,type Identity} from '../src/core/lifecycle';
 import {NativeTaskLedger} from '../src/core/native-tasks';
@@ -24,6 +24,25 @@ beforeEach(()=>{
  a=spawn('A');b=spawn('B');
 });
 afterEach(()=>f.close());
+
+it.each(['accepted','outcome_unknown','not_delivered'] as const)('records late %s steering without historical snapshots',status=>{
+ const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+ f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,a);
+ const read=vi.spyOn(f.db,'all');
+ const returned=()=>read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[index].value:[]);
+ try{
+  const receipt=f.accept(command());expect(receipt.status).toBe('applied');
+  expect(returned()).toEqual([{id:a,current_attempt:1,status:'running'}]);
+  life.complete(identity,a,1,{status:'completed',text:'Settled A'});
+  const before=f.store.run(a),attempts=f.db.all('SELECT * FROM attempts WHERE run_id=?',a);
+  read.mockClear();
+  ledger.result(identity,target(),receipt.id,status,life);ledger.result(identity,target(),receipt.id,status,life);
+  expect(returned()).toEqual(Array.from({length:2},()=>({id:a,current_attempt:1,status:'completed'})));
+  expect(f.store.run(a)).toEqual(before);expect(f.db.all('SELECT * FROM attempts WHERE run_id=?',a)).toEqual(attempts);
+  expect(ledger.receipts(target())).toMatchObject([{command_id:receipt.id,status}]);
+  expect(f.store.run(a).context_json).toBe(context);
+ }finally{read.mockRestore();}
+});
 
 it('keeps ordinary messages and deferred followups separate from exact owner steering without touching task state',()=>{
  f.accept({schema_version:1,type:'message.send',payload:{conversation_id:bot,text:'Independent question, not steering'}});

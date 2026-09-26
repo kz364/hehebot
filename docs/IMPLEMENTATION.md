@@ -4,6 +4,18 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Steering metadata projection (2026-09-26 Asia/Jakarta): TaskSteering.current reads
+id/current_attempt/status only, retaining missing-run, attempt and native-identity
+checks and call order. Admission still requires live custody; late result recording
+does not gain a terminal-status restriction. Three oversized-history regressions fail
+before implementation, then preserve accepted/outcome_unknown/not_delivered receipts
+and identical replay after completion without touching the run or attempt. Focused159/
+backend2359/typecheck/dry-build pass;1554681 exited0. Logs retained under
+.local/steering-projection-red.log, -focused.log and -integrated.log. No total bounds.
+Next remaining skill-provenance/campaign historical reads and storage/native recovery.
+Full runtime/HTTP/workerd/browser/native-service/shutdown/desktop matrix not rerun;
+original intermittency/advisories/gates unchanged. Local only.
+
 Approval-resolution projection (2026-09-26 Asia/Jakarta): select id/status and
 checkpoint_json IS NOT NULL AND checkpoint_json<>'' instead of full run snapshots.
 This retains stored-text JS truthiness, including NUL and false-valued JSON text;

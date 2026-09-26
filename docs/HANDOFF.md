@@ -4,6 +4,12 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+TaskSteering.current now reads metadata only. Red3/focused159/backend2359/typecheck/
+build pass;1554681 exited0. All three late outcomes and identical terminal replay
+retain exact custody. Next skill.propose_from_task and test-campaign historical reads,
+then remaining storage/native recovery. No active checks/children/delivery; schedule
+enabled. Full matrix not rerun; original intermittency/advisories/gates unchanged.
+
 Approval resolution returns metadata/presence flag, retaining stored checkpoint text
 truthiness (including NUL) and rollback. Red6/focused165/backend2356/HTTP31/existing
 workerd/typecheck/build pass;1551124 exit0. No new authority or snapshot rewrite.
