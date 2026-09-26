@@ -152,7 +152,10 @@ try {
     // before counting commands.
     assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),
       'composer did not confirm the sent message');
-    assert.ok(await waitFor(() => fixture.browserCommands.length >= turn), 'browser send did not reach the server');
+    // waitFor's timeoutMs must be passed explicitly: without it, `Date.now() + undefined`
+    // is NaN, so the loop's `Date.now() < end` is false immediately and this degrades to
+    // a single racy check instead of actually waiting.
+    assert.ok(await waitFor(() => fixture.browserCommands.length >= turn, 15000), 'browser send did not reach the server');
     assert.equal(fixture.browserCommands.length, turn, 'unexpected command count after composer send');
     const sent = fixture.browserCommands[turn - 1];
     assert.deepEqual(JSON.parse(sent.body), { schema_version: 1, type: 'message.send',

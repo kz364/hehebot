@@ -17,7 +17,12 @@ const browser=(...args)=>promisify(execFile)('agent-browser',['--session',sessio
 const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
 const wait=code=>browser('wait','--fn',code);
 const server=createServer(async(req,res)=>{
- const url=new URL(req.url,'http://fixture');requests.push(`${req.method} ${url.pathname}${url.search}`);
+ const url=new URL(req.url,'http://fixture');
+ // GROK_ALIGNMENT A6: the portal always attempts a same-origin WebSocket at /v1/stream.
+ // This fixture is plain HTTP with no upgrade handling, so answer with 426 and keep it
+ // out of the request log the assertions below check — it is not one of the reads under test.
+ if(url.pathname==='/v1/stream'){res.writeHead(426);return res.end();}
+ requests.push(`${req.method} ${url.pathname}${url.search}`);
  const json=value=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(value));};
  if(url.pathname==='/v1/state')return json(state);
  if(url.pathname.endsWith('/tasks')||url.pathname.endsWith('/recovery'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
@@ -62,7 +67,11 @@ try{
  assert.equal(await evaluate('document.querySelector("#conversation-search").maxLength'),200);
  assert.equal(await evaluate('document.querySelector("#conversation-search-status").getAttribute("role")'),'status');
  await search('  TrAiN  ',['Train 71','TRAIN result 103']);
- assert.equal(await evaluate('document.querySelector("#conversation-search-status").textContent'),'2 of 100 loaded messages shown.');
+ // run.result is a notice, not a search-filtered bubble (GROK_ALIGNMENT A7): the "N of M
+ // loaded messages" count only covers message.user/bot.message, so the run.result event
+ // among `recent` (rendered separately, via its own always-shown notice plus a legacy-text
+ // bot article) is excluded from both the denominator and this count's numerator.
+ assert.equal(await evaluate('document.querySelector("#conversation-search-status").textContent'),'1 of 99 loaded messages shown.');
  await browser('click','#conversation-search-panel details > summary');
  assert.match((await browser('get','text','#conversation-search-help')).stdout,/Only loaded sent messages/);
  await browser('click','#conversation-search-panel details > summary');

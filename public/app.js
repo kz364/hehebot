@@ -605,9 +605,10 @@ function render(){
     const outcome=['completed','failed','cancelled','waiting'].includes(event.payload.status)?statuses[event.payload.status]:'Unavailable';
     const e=node('div',undefined,'event');
     const label=node('span',`Recorded outcome: ${outcome}${event.payload.error_code?` · ${event.payload.error_code}`:''}`,'result-outcome');
-    label.style.overflowWrap='anywhere';e.append(label);
-    if(event.payload.title)e.append(node('span',` · ${event.payload.title}`));
-    else if(event.payload.role==='background')e.append(node('span',' · Background task'));
+    label.style.overflowWrap='anywhere';
+    if(event.payload.title)label.append(node('span',` · ${event.payload.title}`));
+    else if(event.payload.role==='background')label.append(node('span',' · Background task'));
+    e.append(label);
     timeline.append(e);
     // Legacy fallback only: a completed result with retained text but no
     // bot.message for this run predates G1 and would otherwise be silent.

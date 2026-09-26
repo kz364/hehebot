@@ -210,11 +210,20 @@ try {
     assert.ok(await waitFor(() => browserJson('!document.querySelector("#send").disabled && !document.querySelector("#message").readOnly'), 30000),
       'warm persona composer never admitted the first send');
     // Passive-read custody: portal load, roster selection, state polling and
-    // the 5-second refresh timer caused zero commands, launches, model
-    // requests, Sprite contacts or staged sessions.
+    // the streamed timeline caused zero commands, launches, model requests,
+    // Sprite contacts or staged sessions.
+    // GROK_ALIGNMENT A6: the portal is stream-primary — a same-origin /v1/stream
+    // WebSocket carries live events, with a 15s fallback poll that only runs
+    // while that stream isn't open (and never while hidden), plus a debounced
+    // refresh on incoming stream frames. This replaced the old fixed 5s full
+    // refresh. Whether or not this harness's WebSocket handshake completes,
+    // the portal must still be reading /v1/state again within one fallback-poll
+    // cycle while idle and visible — so the wait only needs to grow past the
+    // new 15s interval (from the old 5s-derived 10s) to keep proving the same
+    // "passive reads still happen, and stay read-only" invariant.
     const stateReadCount = 'performance.getEntriesByType("resource").filter(entry => new URL(entry.name).pathname === "/v1/state").length';
     const priorStateReads = await browserJson(stateReadCount);
-    assert.ok(await waitFor(async () => await browserJson(stateReadCount) > priorStateReads, 10000),
+    assert.ok(await waitFor(async () => await browserJson(stateReadCount) > priorStateReads, 20000),
       'passive portal refresh never completed another state read');
     assert.equal(report.nativeStarts, 0, 'passive portal load launched a native runtime');
     assert.equal(report.modelRequests, 0, 'passive portal load reached a model');
@@ -488,11 +497,14 @@ try {
     // receipt is confirmed. Wait for the real POST to land before counting.
     assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),
       'composer did not confirm the first message');
-    assert.ok(await waitFor(() => fixture.browserCommands.length >= 1), 'browser send did not reach the server');
+    assert.ok(await waitFor(() => fixture.browserCommands.length >= 1, 15000), 'browser send did not reach the server');
     // window.__hehebotOutbox() (nonce/conversation_id/text/phase only) is the
     // outbox's read-only test hook, replacing the old single
     // 'personal.pending.<conversation>' localStorage key.
-    assert.ok(await waitFor(() => browserJson(`!window.__hehebotOutbox().some(r=>r.conversation_id==="${persona}")`)),
+    // waitFor's timeoutMs must be passed explicitly: without it, `Date.now() + undefined`
+    // is NaN, so the loop's `Date.now() < end` is false immediately and this degrades to
+    // a single racy check instead of actually waiting.
+    assert.ok(await waitFor(() => browserJson(`!window.__hehebotOutbox().some(r=>r.conversation_id==="${persona}")`), 15000),
       'composer left an unconfirmed outbox record for the first message');
     assert.equal(fixture.browserCommands.length, 1, 'composer send was not recorded exactly once');
     const sent1 = fixture.browserCommands[0];
@@ -567,8 +579,8 @@ try {
     await browser('click', '#send');
     assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),
       'composer did not confirm the second message');
-    assert.ok(await waitFor(() => fixture.browserCommands.length >= 2), 'browser send did not reach the server');
-    assert.ok(await waitFor(() => browserJson(`!window.__hehebotOutbox().some(r=>r.conversation_id==="${persona}")`)),
+    assert.ok(await waitFor(() => fixture.browserCommands.length >= 2, 15000), 'browser send did not reach the server');
+    assert.ok(await waitFor(() => browserJson(`!window.__hehebotOutbox().some(r=>r.conversation_id==="${persona}")`), 15000),
       'composer left an unconfirmed outbox record for the second message');
     assert.equal(fixture.browserCommands.length, 2, 'second composer send was not recorded exactly once');
     const sent2 = fixture.browserCommands[1];
