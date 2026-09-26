@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** offline inspector uses exact
+**Current checkpoint (2026-09-26, verified locally):** offline inspector allocates
+validated file size plus one overflow byte, retaining size/timestamp and security
+checks. Red1 detects four full-limit buffers; related63/typecheck pass, exact small
+allocations and no-write/unknown custody verified. This is not a peak-memory or
+total I/O bound. Next restoration/recursive settlement and historical/storage/
+existing-key bounds. Full matrix not rerun; external gates unchanged. Local only.
+
+**Previous checkpoint (2026-09-26, verified locally):** offline inspector uses exact
 turn-key/thread-ID sets instead of repeated inventory membership scans. Regression
 rejects old65792 visits; related62/typecheck pass with unchanged orphan/missing-child
 diagnostics, exhaustive custody and no writes. Full matrix not rerun; file reads/

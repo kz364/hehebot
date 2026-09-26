@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Offline reads allocate validated size+1, preserving overflow and second-stat checks.
+Red1 catches four full-limit allocations; related63/typecheck1670421 exit0,
+.local/inspect-allocation-{red,final}.log. Exact small buffers, unchanged disk and
+unknown custody verified. No peak-memory/total I/O bound or recovery permission.
+No active checks/children/delivery; schedule reread/enabled. Continue restoration/
+recursive settlement and historical/storage/existing-key bounds. Full matrix not
+rerun for this localized change; gates/intermittency/advisories unchanged.
+
 Offline inventory membership now uses exact turn-key/thread sets. Red1 at65792
 visits; related62/typecheck1669810 exit0, .local/inspect-membership-{red,final}.log.
 Orphan/missing-child/cycle diagnostics, exhaustive custody and no-write behavior

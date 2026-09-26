@@ -33,7 +33,7 @@ export async function inspectCodexRecovery(directory, attemptId = undefined) {
       fd = await open(join(directory, `${key}.json`), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       const before = await fd.stat();
       require(before.isFile() && before.uid === process.getuid() && (before.mode & 0o077) === 0 && before.size > 0 && before.size <= maxBytes);
-      const buffer = Buffer.alloc(maxBytes + 1); let size = 0;
+      const buffer = Buffer.alloc(before.size + 1); let size = 0;
       while (size < buffer.length) {
         const { bytesRead } = await fd.read(buffer, size, buffer.length - size, null);
         if (!bytesRead) break;

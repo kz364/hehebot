@@ -4,6 +4,17 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Offline read allocation (2026-09-26 Asia/Jakarta): allocate validated file size+1
+instead of admission ceiling+1. The extra byte still detects growth; exact bytes
+read and second-stat size/mtime/ctime checks, owner/mode/no-symlink protections and
+refusal limits are unchanged. Regression fails before the change with four1048577-
+byte buffers versus110/189/388/688 bytes, then passes with exact requested sizes,
+accepted child cancellation diagnostic, resume/sleep denied and unchanged disk.
+Inspector/question63 and typecheck pass (1670421 exit0); logs
+.local/inspect-allocation-{red,final}.log. This measures requested buffers, not peak
+heap or total inspection I/O/storage. Full matrix not rerun for localized offline
+inspection change; restoration/existing-key bounds and external gates remain open.
+
 Offline inventory membership (2026-09-26 Asia/Jakarta): exact turn-key and child-
 thread sets replace repeated array membership scans. Validation order, canonical
 keys, orphan refusal, missing-child diagnostic, output order and all custody remain

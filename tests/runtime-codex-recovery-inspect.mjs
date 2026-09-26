@@ -80,6 +80,23 @@ test('private real journal projects asymmetric identities and obligations withou
   assert.deepEqual(await snapshot(f.directory), before);
 });
 
+test('inspection allocates each validated file size plus one overflow byte, not the admission ceiling', async t => {
+  const f = await fixture(t), before = await snapshot(f.directory);
+  const expected = before.filter(row => row.body !== null).map(row => Buffer.byteLength(row.body) + 1).sort((a, b) => a - b);
+  const allocations = [], alloc = Buffer.alloc;
+  const spy = t.mock.method(Buffer, 'alloc', (size, ...args) => {
+    allocations.push(size); return alloc(size, ...args);
+  });
+  let report;
+  try { report = await inspectCodexRecovery(f.directory); }
+  finally { spy.mock.restore(); }
+  assert.deepEqual(report.issues, []);
+  assert.deepEqual(allocations.sort((a, b) => a - b), expected);
+  assert.equal(report.native.children[0].cancelAcknowledgement, 'accepted');
+  assert.equal(report.sleepAllowed, false); assert.equal(report.resumeAllowed, false);
+  assert.deepEqual(await snapshot(f.directory), before);
+});
+
 test('deep reverse-order ancestry is checked once without truncation or cycle acceptance', async t => {
   const f = await fixture(t), childTurns = {}, childObligations = {};
   const thread = i => `deep-thread-${i}`, key = i => JSON.stringify([thread(i), `turn-${i}`]);
