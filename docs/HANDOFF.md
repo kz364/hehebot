@@ -72,8 +72,10 @@ still couldn't chat with a bot during a background task. See the traps in
 
 ### State
 
-- G0 (docs and guardrails) is done. G1 onward is in progress; see TODO for the
-  per-row state.
+- G0–G2 and G4–G7 are done locally on `grok-alignment` (not pushed). G3 is merged but needs
+  Linux evidence for the lock takeover. Next is **G8** (hosted alpha on the new path), which
+  needs owner authorization: Worker deploy, live Codex calls, and Fly credentials (owner approved
+  ≤ $10 Fly spend on 2026-09-27). `coordinatorInbox` is off by default until G8 enables it.
 - The deployed portal and the Sprite are unchanged. The hosted trial work from
   2026-09-17 is still `recovery_required`: don't replay it.
 - Production execution and native-verification flags remain false.
