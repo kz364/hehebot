@@ -134,13 +134,15 @@ export class CodexTaskControl {
       const mapped = await this.mapping();
       const selected = new Set(runIds);
       // Propagate only down the persisted task tree, never to parents or siblings.
-      let changed;
-      do {
-        changed = false;
-        for (const child of Object.values(mapped.children)) if (child.runId && selected.has(child.receipt.parent_run_id) && !selected.has(child.runId)) {
-          selected.add(child.runId); changed = true;
-        }
-      } while (changed);
+      const childrenByParent = new Map();
+      for (const child of Object.values(mapped.children)) if (child.runId) {
+        const parentId = child.receipt.parent_run_id;
+        const children = childrenByParent.get(parentId) ?? [];
+        children.push(child.runId); childrenByParent.set(parentId, children);
+      }
+      // Set iteration visits newly added descendants once, including cyclic
+      // restored mappings. Keep dispatch below in the original journal order.
+      for (const runId of selected) for (const childId of childrenByParent.get(runId) ?? []) selected.add(childId);
       const outcomes = [];
       for (const [key, child] of Object.entries(mapped.children)) if (child.runId && selected.has(child.runId)) {
         this.assertLease();

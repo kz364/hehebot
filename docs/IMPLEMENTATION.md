@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native cancellation traversal (2026-09-26 Asia/Jakarta): CodexTaskControl indexes
+registered parent edges once and expands the selected Set without repeated scans.
+Dispatch still follows journal order with unchanged lease checks. Two disk-reopen
+regressions use a reverse-ordered 96-node chain, with and without a synthetic cycle;
+both fail before the change at 6305 parent reads and pass within two scans afterward.
+Selecting run-32 twice and a missing ID dispatches exactly run-96 through run-32;
+ancestors, sibling and unacknowledged child remain untouched. Unknown cancellation
+responses, pending usage publications and persisted mapping remain unchanged.
+The synthetic cycle is not evidence of reachable admission. No traversal cap or
+settlement inference was added; whole-record journal reads and storage remain unbounded.
+Red2/focused6/runtime686/typecheck/dry-build pass (1614267 exit0), logs
+.local/native-cancel-{red,focused,runtime,build}.log. Backend unchanged since2388;
+full browser/native-service/timed-shutdown/desktop matrix not rerun. Original
+intermittency/advisories and external gates unchanged. Local-only work; remaining
+native restoration and historical/storage/existing-key bounds stay open.
+
 Native history lookup (2026-09-26 Asia/Jakarta): reconciliation indexes only message
 and already-recorded tool IDs, counting duplicate matches across all item types.
 It preserves string identity (including numeric-looking and prototype-named IDs),

@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Native cancellation now indexes parent edges once, preserving exhaustive selected
+descendants and journal dispatch order with unchanged lease checks. Red2/focused6/
+runtime686/typecheck/dry-build pass (1614267 exit0); disk-reopen tests preserve
+unknown responses and pending publications. Synthetic cyclic mapping is not claimed
+reachable through admission. Logs .local/native-cancel-*.log. No active checks/
+children/delivery; existing schedule reread/enabled. Next remaining native restoration
+and historical/storage/existing-key bounds. Journal reads remain whole-record;
+no total time/storage bound. Full matrix not rerun; gates/advisories unchanged.
+
 Native history reconciliation now indexes relevant IDs once, preserving duplicate
 refusal, exact types/identity, omitted custody and unknown effects. Red2/focused34/
 runtime684/typecheck/build pass; final empty-set refinement focused34/runtime684

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { CodexTaskControl } from '../runtime/codex-tasks.mjs';
+import { FileJournal } from '../runtime/file-journal.mjs';
 
 const identity = { epoch: 7, boot_id: 'boot-usage' };
 const parent = { runId: 'root-run', personaId: 'persona-a', attempt: 3 };
@@ -30,6 +34,43 @@ async function fixture(native, request, assertLease = () => {}) {
   await control.mapping();
   return { control, journal };
 }
+
+for (const cycle of [false, true]) test(`restored reverse-order cancellation walks each edge once (synthetic cycle=${cycle})`, async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'hehe-task-cancel-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const f = await fixture({}, () => assert.fail('Cancellation must not admit control work'));
+  const journal = new FileJournal(directory), before = await f.control.mapping();
+  for (let i = 96; i >= 1; i--) before.children[JSON.stringify([`thread-${i}`, `turn-${i}`])] = {
+    runId: `run-${i}`, started: true, receipt: { parent_run_id: i === 1 ? parent.runId : `run-${i - 1}` },
+  };
+  before.children['["sibling","turn"]'] = { runId: 'sibling', receipt: { parent_run_id: 'run-31' } };
+  before.children['["unacknowledged","turn"]'] = { runId: null, receipt: { parent_run_id: 'run-32' } };
+  if (cycle) before.children['["thread-32","turn-32"]'].receipt.parent_run_id = 'run-96';
+  before.usagePublications = { 'run-32': { version: 1, pending: { identity, run_id: 'run-32',
+    attempt: 1, native_ref: 'child-native', version: 1, usage: usage(7) } } };
+  await journal.write(f.control.key, before);
+  const calls = [], restored = new CodexTaskControl({ ...f.control, journal: new FileJournal(directory),
+    adapter: { ...f.control.adapter, cancelChild: async (attempt, target) => {
+      assert.equal(attempt, 'attempt-native'); calls.push(target); return { status: 'unknown' };
+    } },
+  });
+  let reads = 0;
+  const mapping = restored.mapping.bind(restored);
+  restored.mapping = async () => {
+    const row = await mapping();
+    for (const child of Object.values(row.children)) {
+      const parentId = child.receipt.parent_run_id;
+      Object.defineProperty(child.receipt, 'parent_run_id', { get() { reads++; return parentId; } });
+    }
+    return row;
+  };
+  const outcomes = await restored.cancel(['run-32', 'run-32', 'missing']);
+  const ids = Array.from({ length: 65 }, (_, i) => 96 - i);
+  assert.deepEqual(calls, ids.map(i => ({ threadId: `thread-${i}`, turnId: `turn-${i}` })));
+  assert.deepEqual(outcomes, ids.map(i => ({ runId: `run-${i}`, status: 'unknown' })));
+  assert.deepEqual(await new FileJournal(directory).get(restored.key), before);
+  assert.ok(reads <= 2 * 97, `Parent edge reads ${reads} exceed two passes over registered children`);
+});
 
 test('publishes exact root and registered-child snapshots independently and skips absent usage', async () => {
   const childKey = '["child-thread","child-turn"]';

@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** native history
+**Current checkpoint (2026-09-26, verified locally):** native cancellation indexes
+persisted parent edges once instead of repeatedly scanning reverse-ordered trees.
+Red2/focused6/runtime686/typecheck/dry-build pass. Exact subtree and journal dispatch
+order retained; unknown outcomes and pending publications remain unchanged after
+disk reopen. Synthetic cycle coverage is not a reachable-admission claim. No total
+journal/storage/time bound. Next remaining native restoration and historical/storage/
+existing-key bounds; full matrix not rerun, external gates false.
+
+**Previous checkpoint (2026-09-26, verified locally):** native history
 reconciliation indexes relevant item IDs instead of repeated full-history scans.
 Red2/focused34/runtime684/typecheck/build and pinned Codex abrupt-crash readback pass.
 Duplicate/type/omitted obligations and unknown effects retained; no inference replay.
