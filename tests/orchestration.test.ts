@@ -110,7 +110,7 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(JSON.parse(f.store.run(nested.id).context_json).native_child_context_unavailable).toBe('CONTEXT_PREPARATION_LIMIT');
     finish(p);expect(()=>life.prepareSleep(identity)).toThrowError(expect.objectContaining({code:'SLEEP_DENIED'}));
     f.setNow('2026-09-10T00:00:31.000Z');life.watchdog();
-    expect(f.store.run(nested.id)).toMatchObject({status:'recovery_required',error_code:'CANCEL_UNCONFIRMED'});
+    expect(f.store.run(nested.id)).toMatchObject({status:'interrupted',error_code:'CANCEL_UNCONFIRMED'});
     expect(()=>life.prepareSleep(identity)).toThrowError(expect.objectContaining({code:'SLEEP_DENIED'}));
     life.complete(identity,nested.id,1,{status:'cancelled',text:''});
     expect(f.store.run(p).context_json).toBe(source);
@@ -327,9 +327,12 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     f.accept({schema_version:1,type:'run.cancel',payload:{run_id:b.id,reason:'Stop B'}});
     f.setNow('2026-09-10T00:00:31.000Z');life.watchdog();
     expect(life.get().phase).toBe('READY');expect(f.store.run(a.id)).toEqual(beforeA);
-    expect(f.store.run(b.id).status).toBe('recovery_required');
+    expect(f.store.run(b.id).status).toBe('interrupted');
     expect(life.heartbeat(identity,[]).cancellations).toContain(b.id);
-    expect(f.accept({schema_version:1,type:'run.retry',payload:{run_id:b.id,expected_attempt:1}}).error?.code).toBe('CANCEL_UNCONFIRMED');
+    // G2 (GROK_ALIGNMENT A2/A3): interrupted needs no confirmed native
+    // settlement before retry -- the still-held resource lock is now the
+    // genuine, more specific blocker.
+    expect(f.accept({schema_version:1,type:'run.retry',payload:{run_id:b.id,expected_attempt:1}}).error?.code).toBe('RESOURCE_BUSY');
     resources.release(b.id,1,['browser:tab:b']);life.complete(identity,b.id,1,{status:'cancelled',text:''});
     expect(f.store.run(a.id)).toEqual(beforeA);expect(f.store.run(p).status).toBe('claimed');
   });
@@ -423,7 +426,10 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
       f.setNow(mode==='lease-expiry'?'2026-09-10T00:00:11.000Z':'2026-09-10T00:00:31.000Z');
       life.watchdog();
     }
-    expect(f.store.run(child.id)).toMatchObject({status:'recovery_required',context_json:original,
+    // G2 (GROK_ALIGNMENT A2/A3): only observeStopped's confirmed provider
+    // termination still lands in recovery_required; the watchdog's own
+    // unconfirmed-cancel/lease-loss fences now produce 'interrupted'.
+    expect(f.store.run(child.id)).toMatchObject({status:mode==='provider-stop'?'recovery_required':'interrupted',context_json:original,
       error_code:mode==='provider-stop'?'OUTCOME_UNKNOWN':mode==='lease-expiry'?'STALE_EPOCH':'CANCEL_UNCONFIRMED'});
     expect(f.db.all('SELECT value_json FROM runtime_metadata WHERE key=?',key)).toEqual([{value_json:JSON.stringify('MEMORY_PREPARATION_LIMIT')}]);
     expect(f.db.all('SELECT key FROM runtime_metadata WHERE key=?',`native_context_unavailable:${p}:1`)).toEqual([]);
@@ -457,7 +463,7 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(tasks.register(identity,{...receipt(other.id),persona_id:otherBot},true).status).toBe('running');
   });
 
-  it.each(['cancelling','recovery_required'])('preserves known legacy memory refusal through descendant settlement (%s)',status=>{
+  it.each(['cancelling','recovery_required','interrupted'])('preserves known legacy memory refusal through descendant settlement (%s)',status=>{
     const p=parent();f.core.options.delegations={[bot]:[otherBot]};
     const child=tasks.register(identity,{...receipt(p),persona_id:otherBot},true);
     // Old versions retained a complete-looking snapshot with memory omitted.
@@ -524,8 +530,11 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     finish(p);
     expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
     f.setNow('2026-09-10T00:00:31.000Z'); life.watchdog();
-    expect(f.store.run(child.id)).toMatchObject({ status: 'recovery_required', error_code: 'CANCEL_UNCONFIRMED' });
-    expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: child.id, expected_attempt: 1 } }).error?.code).toBe('CANCEL_UNCONFIRMED');
+    expect(f.store.run(child.id)).toMatchObject({ status: 'interrupted', error_code: 'CANCEL_UNCONFIRMED' });
+    // G2 (GROK_ALIGNMENT A2/A3): interrupted needs no confirmed native
+    // settlement before retry -- this native (background-role) task's own
+    // capability restriction is now the genuine, more specific blocker.
+    expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: child.id, expected_attempt: 1 } }).error?.code).toBe('CAPABILITY_UNAVAILABLE');
     expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
     expect(f.db.all('SELECT status,settled_at FROM attempts WHERE run_id=?', child.id)).toEqual([{ status: 'claimed', settled_at: null }]);
     life.complete(identity, child.id, 1, { status: 'cancelled', text: '' });
@@ -584,7 +593,7 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(tasks.register(identity, input, true)).toEqual(started);
     if (expired) {
       f.setNow('2026-09-10T00:01:00.000Z'); life.watchdog();
-      expect(f.store.run(child.id).status).toBe('recovery_required');
+      expect(f.store.run(child.id).status).toBe('interrupted');
     }
   });
 

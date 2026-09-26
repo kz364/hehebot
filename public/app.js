@@ -277,7 +277,7 @@ async function reviewAlphaSession(){
  },'Adopt session');
 }
 const names={IDLE_PERMITTED:'Idle — hibernation permitted',STOPPED:'Sleeping',START_REQUESTED:'Waking',BOOTING:'Starting',READY:'Awake',DRAINING:'Finishing up',STOP_COMMITTED:'Stopping',STOPPING:'Stopping',RECOVERY_REQUIRED:'Recovery needed'};
-const statuses={queued:'Queued',claimed:'Starting',running:'Working',finishing:'Saving result',completed:'Completed',waiting:'Waiting',failed:'Failed',cancelling:'Cancelling',cancelled:'Cancelled',recovery_required:'Needs recovery'};
+const statuses={queued:'Queued',claimed:'Starting',running:'Working',finishing:'Saving result',completed:'Completed',waiting:'Waiting',failed:'Failed',cancelling:'Cancelling',cancelled:'Cancelled',recovery_required:'Needs recovery',interrupted:'Interrupted'};
 const node=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 const tokenCounters=[['inputTokens','Input tokens'],['cachedInputTokens','Cached input tokens'],['cacheWriteInputTokens','Cache-write input tokens'],['outputTokens','Output tokens'],['reasoningOutputTokens','Reasoning output tokens'],['totalTokens','Total tokens']];
 function renderTokenUsage(container,run,source){
@@ -602,11 +602,21 @@ function render(){
      const m=node('article',undefined,'message bot');const h=node('div',undefined,'message-head');h.append(node('strong',object?.body.name??'Assistant'),node('time',time(event.created_at)),node('span','(legacy)','status'));
      m.append(h,node('div',legacyText,'message-body'));timeline.append(m);
     }
+   }else if(event.type==='notice'&&event.payload.kind==='needs_you'){
+    // G2: a needs_you notice is owner-visible uncertainty, not a search-filtered
+    // bubble -- it must always render, even when a text query is active.
+    const run=runs.find(x=>x.id===event.payload.run_id);
+    const e=node('div',undefined,'event');e.setAttribute('role','status');
+    e.append(node('span','Needs you','status'),node('span',`Interrupted (${event.payload.reason}). Reconcile, retry or abandon this attempt.`));
+    for(const effectId of event.payload.effect_ids??[])e.append(button('Reconcile',()=>act(()=>command('effect.reconcile',{run_id:event.payload.run_id,effect_id:effectId,expected_attempt:run?.current_attempt,outcome:'confirmed'}))));
+    if(run&&snapshot.summary.execution_enabled)e.append(button('Retry',()=>act(()=>command('run.retry',{run_id:run.id,expected_attempt:run.current_attempt}))));
+    if(run)e.append(button('Abandon',()=>cancelTask(run,'Owner abandoned the interrupted attempt.')));
+    timeline.append(e);
    }else if(['run.accepted','run.cancellation_requested'].includes(event.type)){
     const run=runs.find(x=>x.id===event.payload.run_id);if(!run)continue;const e=node('div',undefined,'event');e.append(node('span',statuses[run.status]??run.status,'status'));
     if(run.status==='waiting')e.append(node('span',run.error_code==='CAPABILITY_UNAVAILABLE'?'Runtime connection required':run.error_code??'Input required'));
     if(['queued','claimed','running','waiting'].includes(run.status))e.append(button('Cancel',()=>cancelTask(run,'Owner requested cancellation.')));
-    if(['failed','cancelled','recovery_required','waiting'].includes(run.status)&&snapshot.summary.execution_enabled)e.append(button('Retry',()=>act(()=>command('run.retry',{run_id:run.id,expected_attempt:run.current_attempt}))));timeline.append(e);
+    if(['failed','cancelled','recovery_required','interrupted','waiting'].includes(run.status)&&snapshot.summary.execution_enabled)e.append(button('Retry',()=>act(()=>command('run.retry',{run_id:run.id,expected_attempt:run.current_attempt}))));timeline.append(e);
    }else if(event.type==='effect.owner_reconciled'||event.type==='run.owner_recovered'){
     const e=node('div',undefined,'event');e.setAttribute('role','status');
     e.append(node('span',event.type==='effect.owner_reconciled'?`Owner recorded effect outcome: ${event.payload.outcome}. This is not provider-verified evidence.`:`Recovery closed as ${event.payload.status}. This did not retry the native task.`));timeline.append(e);

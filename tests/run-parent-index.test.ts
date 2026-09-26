@@ -17,7 +17,7 @@ it('migrates the parent index atomically without changing custody and reruns wit
   f.db.exec('DROP TRIGGER reject_v15');migrateApplication(f.db,f.core.now());
   expect(f.db.all("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name")).toEqual(canonical);
   expect(f.db.all('SELECT * FROM runs')).toEqual(rows);
-  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:17}]);
+  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:18}]);
   const changes=f.db.all('SELECT total_changes() AS n');migrateApplication(f.db,'later');
   expect(f.db.all('SELECT total_changes() AS n')).toEqual(changes);
   expect(f.db.all('PRAGMA foreign_key_check')).toEqual([]);
@@ -34,7 +34,7 @@ it.each([false,true])('adopts only the exact existing parent index (conflicting=
    expect(f.db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='runs_parent'")[0].sql).toBe('CREATE INDEX runs_parent ON runs(id,parent_run_id)');
   }else{
    migrateApplication(f.db,f.core.now());
-   expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:17}]);
+   expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:18}]);
   }
  }finally{f.close();}
 });

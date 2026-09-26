@@ -3,7 +3,7 @@ import type { Store } from './store';
 import type { RoomPublish, TimelineEvent } from './types';
 
 // Inputs/results retain 90 days; metadata audit and derived room updates retain 30.
-const longLived = "'message.user','room.message','room.action_request','trigger.event','task.followup_queued','run.result','bot.message'";
+const longLived = "'message.user','room.message','room.action_request','trigger.event','task.followup_queued','run.result','bot.message','notice'";
 export const timelineExpirySql = `strftime('%Y-%m-%dT%H:%M:%fZ',created_at,CASE WHEN type IN (${longLived}) THEN '+90 days' ELSE '+30 days' END)`;
 export class TimelineRetention {
  constructor(private store: Store, private now: () => string) {}

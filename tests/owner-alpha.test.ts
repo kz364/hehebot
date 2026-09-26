@@ -289,7 +289,7 @@ it.each(['OWNER_CANCELLED','CONTEXT_INVALIDATED'] as const)('permits deadline-ex
  const revoke=reason==='OWNER_CANCELLED'?await command('run.cancel',{run_id:claim.run.id,reason:'Owner revoked access'}):await command('memory.delete',{id:memory,expected_revision:1,purge_transcripts:false});
  expect(revoke).toMatchObject({status:'applied'});
  expect(db.all('SELECT status,error_code FROM runs WHERE id=?',claim.run.id)).toEqual([{status:'cancelling',error_code:reason}]);
- for(const status of ['cancelling','recovery_required']){
+ for(const status of ['cancelling','interrupted']){
   expect(db.all('SELECT status FROM runs WHERE id=?',claim.run.id)).toEqual([{status}]);
   for(const [type,payload] of [['agent-routines',scope],['agent-skill',{...scope,skill_id:skill}]] as const){
    const response=await request('/internal/'+type,payload);expect(response.status).toBe(409);
@@ -307,7 +307,7 @@ it('preserves unknown operation custody after deadlines and never retries an adm
  await runtime('heartbeat',{identity,operations:[operation]});
  vi.setSystemTime(new Date('2026-09-10T00:00:45.000Z'));await control.alarm();
  vi.setSystemTime(new Date('2026-09-10T00:01:15.000Z'));await control.alarm();
- expect(db.all('SELECT status,error_code FROM runs')).toEqual([{status:'recovery_required',error_code:'CANCEL_UNCONFIRMED'}]);
+ expect(db.all('SELECT status,error_code FROM runs')).toEqual([{status:'interrupted',error_code:'CANCEL_UNCONFIRMED'}]);
  expect(db.all('SELECT status FROM operations')).toEqual([{status:'unknown'}]);
  expect(await runtime('heartbeat',{identity,operations:[operation]})).toMatchObject({cancellations:[claim.run.id]});
  expect(await command('run.retry',{run_id:claim.run.id,expected_attempt:1})).toMatchObject({status:'rejected',error:{code:'CANCEL_UNCONFIRMED'}});

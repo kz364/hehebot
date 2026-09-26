@@ -89,7 +89,7 @@ it.each(['expiry', 'delete'])('later memory %s purges context without extending 
     expect(f.store.list('memory')).toEqual([]);
     f.setNow('2026-09-10T00:00:39.999Z'); life.watchdog(); expect(f.store.run(runId).status).toBe('cancelling');
     f.setNow('2026-09-10T00:00:40.000Z'); life.watchdog();
-    expect(f.store.run(runId)).toMatchObject({ status: 'recovery_required', error_code: 'CONTEXT_INVALIDATED' });
+    expect(f.store.run(runId)).toMatchObject({ status: 'interrupted', error_code: 'CONTEXT_INVALIDATED' });
     expect(f.db.all('SELECT status FROM attempts WHERE run_id=?', runId)).toEqual([{ status: 'running' }]);
     expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
   } finally { f.close(); }

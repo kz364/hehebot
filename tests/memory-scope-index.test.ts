@@ -170,7 +170,7 @@ it('refuses a new memory index above 10000 entries without changing rows or sche
   f.db.exec("UPDATE objects SET deleted_at='t1' WHERE id='legacy-10001'");
   migrateApplication(f.db,f.core.now());
   expect(f.db.all("SELECT COUNT(*) AS n FROM objects WHERE kind='memory'")).toEqual([{n:10001}]);
-  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:17}]);
+  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:18}]);
  }finally{f.close();}
 });
 
@@ -187,7 +187,7 @@ it('refuses one byte above 64 MiB of index JSON and admits the exact byte limit'
   f.db.exec("UPDATE objects SET body_json=? WHERE id='large'",body);
   migrateApplication(f.db,f.core.now());
   expect(f.db.all("SELECT body_json=? AS intact FROM objects WHERE id='large'",body)).toEqual([{intact:1}]);
-  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:17}]);
+  expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:18}]);
  }finally{f.close();}
 });
 

@@ -184,5 +184,49 @@ export function migrateApplication(db:Database,now:string):void {
    'SCHEMA_MISMATCH','Bot message index needs explicit reconciliation.',503);
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(17,?)',now);
  });
- requireThat([16,17].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===16)version=17;
+ if(version===17)db.transaction(()=>{
+  // G2 (GROK_ALIGNMENT A3): 'interrupted' is a new terminal run status. SQLite
+  // cannot ALTER a CHECK constraint, so rebuild the table like the v12/v13
+  // rebuilds did. Existing hosted rows in recovery_required are NOT rewritten:
+  // only new interruptions use the new status.
+  db.exec('PRAGMA defer_foreign_keys=ON');
+  try{
+   db.exec(`CREATE TABLE runs_v18 (
+ id TEXT PRIMARY KEY, command_id TEXT REFERENCES commands(id), occurrence_id TEXT UNIQUE REFERENCES occurrences(id),
+ persona_id TEXT NOT NULL REFERENCES objects(id), routine_id TEXT REFERENCES objects(id),
+ context_json TEXT NOT NULL CHECK(json_valid(context_json)),
+ role TEXT NOT NULL DEFAULT 'coordinator' CHECK(role IN ('coordinator','background')),
+ parent_run_id TEXT REFERENCES runs_v18(id), title TEXT,
+ status TEXT NOT NULL CHECK(status IN ('queued','claimed','running','finishing','completed','waiting','failed','cancelling','cancelled','recovery_required','interrupted')),
+ current_attempt INTEGER NOT NULL DEFAULT 0, error_code TEXT, checkpoint_json TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+)`);
+   db.exec(`INSERT INTO runs_v18 SELECT id,command_id,occurrence_id,persona_id,routine_id,context_json,role,parent_run_id,title,status,current_attempt,error_code,checkpoint_json,created_at,updated_at FROM runs`);
+   db.exec('DROP TABLE runs');
+   db.exec('ALTER TABLE runs_v18 RENAME TO runs');
+   db.exec('CREATE INDEX runs_status_created ON runs(status,created_at)');
+   db.exec('CREATE INDEX runs_parent ON runs(parent_run_id,id)');
+   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(18,?)',now);
+   requireThat(db.all('PRAGMA foreign_key_check').length===0,'SCHEMA_MISMATCH','Run interruption migration must preserve foreign keys.',503);
+   const tableSql=`CREATE TABLE "runs" (
+ id TEXT PRIMARY KEY, command_id TEXT REFERENCES commands(id), occurrence_id TEXT UNIQUE REFERENCES occurrences(id),
+ persona_id TEXT NOT NULL REFERENCES objects(id), routine_id TEXT REFERENCES objects(id),
+ context_json TEXT NOT NULL CHECK(json_valid(context_json)),
+ role TEXT NOT NULL DEFAULT 'coordinator' CHECK(role IN ('coordinator','background')),
+ parent_run_id TEXT REFERENCES "runs"(id), title TEXT,
+ status TEXT NOT NULL CHECK(status IN ('queued','claimed','running','finishing','completed','waiting','failed','cancelling','cancelled','recovery_required','interrupted')),
+ current_attempt INTEGER NOT NULL DEFAULT 0, error_code TEXT, checkpoint_json TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+)`;
+   requireThat(db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='runs'")[0]?.sql===tableSql,
+    'SCHEMA_MISMATCH','Run schema needs explicit reconciliation.',503);
+  }finally{
+   // Mirror the v12 pattern: OFF clears SQLite's deferred violation counter
+   // after a valid rebuild; the mandatory scan above already ran inside the try.
+   db.exec('PRAGMA defer_foreign_keys=OFF');
+  }
+ });
+ if(version===17)version=18;
+ requireThat([16,17,18].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

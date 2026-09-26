@@ -665,7 +665,7 @@ it('fails closed when the configuration is removed and settles only via manager 
   expect(after.status).toBe('rejected');
   expect(after.error?.code).toBe('CAPABILITY_UNAVAILABLE');
   // The unsettled first root keeps its durable state; no completion exists for it.
-  expect(['claimed','recovery_required']).toContain(h.core().store.run(m1.run_id).status);
+  expect(['claimed','recovery_required','interrupted']).toContain(h.core().store.run(m1.run_id).status);
  }finally{h.db.close();vi.useRealTimers();}
 });
 

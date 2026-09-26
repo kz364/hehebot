@@ -99,7 +99,7 @@ export class NativeQuestionLedger {
       AND json_extract(m.value_json,'$.boot_id')=a.boot_id
       AND json_extract(m.value_json,'$.params.turnId')=a.native_run_ref
       AND a.status IN ('claimed','running')
-      AND r.status IN ('running','finishing','cancelling','recovery_required')
+      AND r.status IN ('running','finishing','cancelling','recovery_required','interrupted')
       ORDER BY m.key LIMIT 65`);
     requireThat(keys.length <= 64, 'NATIVE_QUESTION_CAPACITY', 'Too many active native questions.');
     return keys.map(({ key }) => this.get(key.slice(NATIVE_QUESTION_PREFIX.length)));

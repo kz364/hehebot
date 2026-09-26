@@ -158,14 +158,27 @@ it.each(['intent', 'dispatched'] as const)('never replays a %s mutation after lo
     destinationWrites.push('synthetic-mail-17 restored'); // Fake destination succeeded; receipt deliberately lost.
   }
   reconstruct(); f.setNow('2026-09-10T00:01:31.000Z'); life.watchdog();
-  expect(f.db.all('SELECT status FROM effects')).toEqual([{ status: 'outcome_unknown' }]);
+  // G2 (GROK_ALIGNMENT A3): a never-dispatched intent is abandoned outright
+  // (it can be neither owner-visible-unknown nor replayed); only a dispatched
+  // effect's outcome is genuinely unknown to the owner.
+  expect(f.db.all('SELECT status FROM effects')).toEqual([{ status: crashAt === 'dispatched' ? 'outcome_unknown' : 'failed' }]);
   life.observeStopped({ phase: 'stopped', executionStopped: true, persistentState: 'retained', observedAt: Date.now() });
   reconstruct(); f.setNow('2026-09-10T01:00:00.000Z'); life.retryDue(); life.retryDue();
-  expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: run, expected_attempt: 1 } })).toMatchObject({ status: 'rejected', error: { code: 'OUTCOME_UNKNOWN' } });
+  const retry = f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: run, expected_attempt: 1 } });
+  if (crashAt === 'dispatched') {
+    // A dispatched-then-unknown effect is a genuine uncertain external outcome:
+    // it must be reconciled by the owner before any replay is possible.
+    expect(retry).toMatchObject({ status: 'rejected', error: { code: 'OUTCOME_UNKNOWN' } });
+    expect(f.store.run(run).status).toBe('interrupted');
+  } else {
+    // A never-dispatched intent that was abandoned never reached the
+    // destination; nothing external is uncertain, so a fresh attempt may proceed.
+    expect(retry).toMatchObject({ status: 'applied' });
+    expect(f.store.run(run)).toMatchObject({ status: 'queued', current_attempt: 1 });
+  }
   expect(() => effects.transition(input.id, run, 'dispatched', null)).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
   expect(() => effects.intent(input)).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
-  expect(f.store.run(run).status).toBe('recovery_required');
-  expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0); expect(f.db.all('SELECT * FROM outbox')).toHaveLength(0);
+  expect(f.db.all('SELECT * FROM outbox')).toHaveLength(0);
   expect(destinationWrites).toEqual(crashAt === 'dispatched' ? ['synthetic-mail-17 restored'] : []);
 });
 

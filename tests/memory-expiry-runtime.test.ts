@@ -142,7 +142,7 @@ it.each(['acknowledged', 'reply-lost'] as const)(
       f.setNow('2026-09-10T00:00:39.999Z'); life.watchdog();
       expect(f.store.run(runId).status).toBe('cancelling');
       f.setNow('2026-09-10T00:00:40.000Z'); life.watchdog();
-      expect(f.store.run(runId)).toMatchObject({ status: 'recovery_required', error_code: 'CONTEXT_INVALIDATED', current_attempt: 1 });
+      expect(f.store.run(runId)).toMatchObject({ status: 'interrupted', error_code: 'CONTEXT_INVALIDATED', current_attempt: 1 });
       life.retryDue();
       // Even a full idle-grace interval after the first interrupt is not settlement.
       f.setNow('2026-09-10T00:01:10.000Z');

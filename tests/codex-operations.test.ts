@@ -47,7 +47,7 @@ it.each(['message', 'plan'])('overlapping streams preserve the remaining %s dead
     f.setNow(new Date(Date.parse(deadline) + 29999).toISOString()); await heartbeat(); life.watchdog();
     expect(f.store.run(claim.run.id)).toMatchObject({ status: 'cancelling', updated_at: deadline });
     f.setNow(new Date(Date.parse(deadline) + 30000).toISOString()); life.watchdog();
-    expect(f.store.run(claim.run.id)).toMatchObject({ status: 'recovery_required', error_code: 'CANCEL_UNCONFIRMED' });
+    expect(f.store.run(claim.run.id)).toMatchObject({ status: 'interrupted', error_code: 'CANCEL_UNCONFIRMED' });
     expect(f.db.all("SELECT status FROM attempts WHERE run_id=?", claim.run.id)).toEqual([{ status: 'running' }]);
     expect(f.db.all("SELECT id FROM operations WHERE status='active'")).toHaveLength(2);
     expect(f.db.all("SELECT id FROM operations WHERE status='unknown'")).toHaveLength(1);

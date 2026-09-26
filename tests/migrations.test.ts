@@ -9,14 +9,14 @@ function legacy(){
  CREATE TABLE schema_versions(version INTEGER PRIMARY KEY,applied_at TEXT NOT NULL);
  INSERT INTO schema_versions VALUES(1,'2026-09-01T00:00:00Z');
  CREATE TABLE commands(id TEXT PRIMARY KEY,payload_json TEXT,accepted_at TEXT DEFAULT '2026-09-01T00:00:00.000Z',status TEXT DEFAULT 'applied');
- CREATE TABLE runs(id TEXT PRIMARY KEY,status TEXT,context_json TEXT,command_id TEXT REFERENCES commands(id));
+ CREATE TABLE runs(id TEXT PRIMARY KEY,status TEXT,context_json TEXT,command_id TEXT REFERENCES commands(id),occurrence_id TEXT,persona_id TEXT,routine_id TEXT,current_attempt INTEGER DEFAULT 0,error_code TEXT,checkpoint_json TEXT,created_at TEXT DEFAULT '2026-09-01T00:00:00.000Z',updated_at TEXT DEFAULT '2026-09-01T00:00:00.000Z');
  CREATE TABLE attempts(run_id TEXT REFERENCES runs(id),attempt INTEGER,status TEXT,settled_at TEXT,result_json TEXT);
  CREATE TABLE operations(id TEXT PRIMARY KEY,run_id TEXT,status TEXT);
  CREATE TABLE effects(id TEXT PRIMARY KEY,run_id TEXT,status TEXT);
  CREATE TABLE objects(id TEXT PRIMARY KEY,body_json TEXT,kind TEXT DEFAULT 'persona',deleted_at TEXT,created_at TEXT DEFAULT 't1');
  CREATE TABLE events(sequence INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT NOT NULL UNIQUE,conversation_id TEXT,type TEXT NOT NULL,actor_id TEXT NOT NULL,cause_id TEXT,payload_json TEXT NOT NULL,created_at TEXT NOT NULL);
  INSERT INTO commands(id,payload_json) VALUES('command-1','{"text":"synthetic preserved command"}');
- INSERT INTO runs VALUES('run-1','waiting','{"synthetic":"preserve context"}','command-1');
+ INSERT INTO runs(id,status,context_json,command_id,persona_id) VALUES('run-1','waiting','{"synthetic":"preserve context"}','command-1','object-1');
  INSERT INTO objects(id,body_json) VALUES('object-1','{"synthetic":"preserve object"}');`);
  sqlite.exec(legacyOccurrencesSql);
  const db:Database={all:<T>(sql:string,...values:SqlValue[])=>sqlite.prepare(sql).all(...values) as T[],exec:(sql:string,...values:SqlValue[])=>{sqlite.prepare(sql).run(...values);},transaction:<T>(fn:()=>T)=>{sqlite.exec('BEGIN');try{const value=fn();sqlite.exec('COMMIT');return value;}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
@@ -28,10 +28,10 @@ describe('application v1 migration',()=>{
    const commands=db.all('SELECT * FROM commands'),objects=db.all('SELECT * FROM objects');
    migrateApplication(db,'2026-09-10T00:00:00Z');
    expect(db.all('SELECT * FROM commands')).toEqual(commands);expect(db.all('SELECT * FROM objects')).toEqual(objects);
-   expect(db.all('SELECT * FROM runs')).toEqual([{id:'run-1',status:'waiting',context_json:'{"synthetic":"preserve context"}',command_id:'command-1',role:'coordinator',parent_run_id:null,title:null}]);
+   expect(db.all('SELECT * FROM runs')).toEqual([{id:'run-1',status:'waiting',context_json:'{"synthetic":"preserve context"}',command_id:'command-1',occurrence_id:null,persona_id:'object-1',routine_id:null,current_attempt:0,error_code:null,checkpoint_json:null,created_at:'2026-09-01T00:00:00.000Z',updated_at:'2026-09-01T00:00:00.000Z',role:'coordinator',parent_run_id:null,title:null}]);
    expect(db.all("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('native_task_links','resource_locks','task_followups','skill_proposals','skill_enablements')")).toHaveLength(5);
    expect(db.all('SELECT * FROM room_publications')).toEqual([]);
-   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(17);
+   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(18);
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=2')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=3')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=4')[0].applied_at).toBe('2026-09-10T00:00:00Z');
@@ -59,7 +59,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual(before);
    sqlite.exec('DROP INDEX room_publications_cause');
    migrateApplication(db,'2026-09-12T00:00:00Z');
-   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:17}]);
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:18}]);
   }finally{sqlite.close();}
  });
  it('preserves v7 followups and foreign keys, and rolls back a failed table replacement',()=>{
@@ -115,7 +115,7 @@ describe('application v1 migration',()=>{
  it('rolls back v11 replacement on version failure, then preserves old links and permits only distinct turns',()=>{
   const {db,sqlite}=legacy();try{
    migrateApplication(db,'2026-09-10T00:00:00Z');
-   sqlite.exec("ALTER TABLE attempts DROP COLUMN captured_routine_revision; DELETE FROM schema_versions WHERE version>=11; DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE); INSERT INTO runs(id) VALUES('child-17'),('child-83'),('child-97'); INSERT INTO native_task_links VALUES('child-17','run-1',3,'turn-401','thread-29'); CREATE TRIGGER reject_v11 BEFORE INSERT ON schema_versions WHEN NEW.version=11 BEGIN SELECT RAISE(ABORT,'synthetic v11 failure'); END");
+   sqlite.exec("ALTER TABLE attempts DROP COLUMN captured_routine_revision; DELETE FROM schema_versions WHERE version>=11; DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE); INSERT INTO runs(id,status,persona_id,context_json,created_at,updated_at) VALUES('child-17','queued','object-1','{}','2026-09-01T00:00:00.000Z','2026-09-01T00:00:00.000Z'),('child-83','queued','object-1','{}','2026-09-01T00:00:00.000Z','2026-09-01T00:00:00.000Z'),('child-97','queued','object-1','{}','2026-09-01T00:00:00.000Z','2026-09-01T00:00:00.000Z'); INSERT INTO native_task_links VALUES('child-17','run-1',3,'turn-401','thread-29'); CREATE TRIGGER reject_v11 BEFORE INSERT ON schema_versions WHEN NEW.version=11 BEGIN SELECT RAISE(ABORT,'synthetic v11 failure'); END");
    const before=db.all('SELECT * FROM native_task_links'),schema=db.all('SELECT * FROM sqlite_schema ORDER BY name');
    expect(()=>migrateApplication(db,'2026-09-11T00:00:00Z')).toThrow('synthetic v11 failure');
    expect(db.all('SELECT * FROM sqlite_schema ORDER BY name')).toEqual(schema);
@@ -168,7 +168,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM sqlite_schema ORDER BY name')).toEqual(schema);
    expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:16}]);
    sqlite.exec('DROP TRIGGER reject_v17');migrateApplication(db,'2026-09-12T00:00:00Z');
-   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:17}]);
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:18}]);
    db.exec("INSERT INTO bot_messages VALUES('run-1:1:key','run-1',1,7,'tool','2026-09-01T00:00:00.000Z')");
    expect(()=>db.exec("INSERT INTO bot_messages VALUES('run-1:1:key','run-1',1,8,'final_text','2026-09-01T00:00:00.000Z')")).toThrow();
    expect(()=>db.exec("INSERT INTO bot_messages VALUES('other-key','run-1',1,9,'unexpected','2026-09-01T00:00:00.000Z')")).toThrow();
