@@ -26,14 +26,38 @@ let reads=0,deniedReads=0,botReads=0,offline=false,failMessage=false;
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
 const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
 const wait=code=>browser('wait','--fn',code);
+// The G5 durable outbox (GROK_ALIGNMENT A5) sends via an async drain loop, so
+// a click no longer guarantees the server has the POST by the time the
+// composer clears; poll the Node-side `commands` array instead of asserting
+// its length immediately after a UI wait.
+const waitForCommands=async(n,timeoutMs=5000)=>{const start=Date.now();while(commands.length<n){if(Date.now()-start>timeoutMs)throw new Error(`Timed out waiting for ${n} commands (have ${commands.length})`);await new Promise(r=>setTimeout(r,25));}};
+// window.__hehebotOutbox() is the read-only test hook the outbox exposes
+// (nonce/conversation_id/text/phase only) in place of the old single
+// 'personal.pending.<conversation>' localStorage key.
+const outboxRecordFor=async conversationId=>(await evaluate('window.__hehebotOutbox()')).find(r=>r.conversation_id===conversationId);
+// A static /events fixture would leave every accepted send's outbox record
+// forever unechoed, wedging `sending` (and #send.disabled) permanently true
+// from the first message on. Echo real sends alongside the fixed
+// 'Retained synthetic history' entry so reconciliation actually completes.
+let historySeq=1;const sentEvents=[];
 const server=createServer(async(req,res)=>{
  const json=(data,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(data));};
  const path=new URL(req.url,'http://fixture').pathname;
- if(path==='/v1/commands'){let raw='';for await(const part of req)raw+=part;commands.push(JSON.parse(raw));commandKeys.push(req.headers['idempotency-key']);return failMessage?json({error:{message:'Synthetic lost response'}},503):json({status:'applied'});}
+ if(path==='/v1/commands'){
+  let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw);
+  commands.push(body);commandKeys.push(req.headers['idempotency-key']);
+  if(failMessage)return json({error:{message:'Synthetic lost response'}},503);
+  if(body.type==='message.send')sentEvents.push({sequence:++historySeq,conversation_id:body.payload.conversation_id,type:'message.user',created_at:new Date().toISOString(),payload:{text:body.payload.text,idempotency_key:req.headers['idempotency-key']}});
+  return json({status:'applied'});
+ }
  if(path==='/v1/state'){reads++;return json(offline?{error:{message:'Synthetic offline'}}:state,offline?503:200);}
  if(path.startsWith(`/v1/conversations/${bot}/`))botReads++;
  if(state.summary.owner_alpha_warm&&path.startsWith('/v1/conversations/')&&!path.startsWith(`/v1/conversations/${bot}/`)){deniedReads++;return json({error:{message:'Conversation unavailable in warm generation'}},403);}
- if(path.endsWith('/events'))return json({events:[{sequence:1,conversation_id:bot,type:'message.user',created_at:new Date().toISOString(),payload:{text:'Retained synthetic history'}}]});
+ if(path.endsWith('/events')){
+  const id=path.split('/')[3];
+  const fixed=id===bot?[{sequence:1,conversation_id:bot,type:'message.user',created_at:new Date().toISOString(),payload:{text:'Retained synthetic history'}}]:[];
+  return json({events:[...fixed,...sentEvents.filter(e=>e.conversation_id===id)]});
+ }
  if(path.endsWith('/tasks')||path.endsWith('/recovery'))return json({runs:[],counts:{total:0,waiting:0,recovery:0},next_cursor:null});
  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
  if(!file){res.writeHead(404);return res.end();}
@@ -56,7 +80,7 @@ const resetPage=async()=>{await evaluate('sessionStorage.clear()');await open();
 try{
  // Phase 0 — ordinary default mode before any warm summary.
  await open();await enabled();
- await browser('fill','#message','Ordinary saved message');await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,1);
+ await browser('fill','#message','Ordinary saved message');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(1);assert.equal(commands.length,1);
  // Phase A — pre-first availability: two of two, generation:null, passive reads send nothing.
  warm('warm-1');await refresh();await enabled();
  assert.match(await banner(),/2 of 2 messages remaining/);assert.match(await banner(),/One fixed generation starts with your first Send/);
@@ -66,14 +90,14 @@ try{
  await browser('set','viewport','390','844','2');await browser('screenshot',new URL('portal-alpha-warm-pre-first-narrow.png',artifacts).pathname);await browser('set','viewport','1280','900','2');
  // Phase B — first message starts the generation; unavailable while the first task runs;
  // canonical completion reopens the SECOND admission in the SAME generation; then exhaustion.
- await browser('fill','#message','Warm first message');await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,2);
+ await browser('fill','#message','Warm first message');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(2);assert.equal(commands.length,2);
  const generation=gen();warm('warm-1',{admissions_used:1,generation,available:false}); // first task not canonically complete
  await refresh();await blocked();
  assert.match(await banner(),/No message admission is available in this warm revision/);assert.match(await banner(),/1 of 2 messages remaining/);assert.match(await banner(),/Generation 2 deadline/);
  state.summary.owner_alpha_warm.message_admission_available=true; // canonical completion observed server-side
  await refresh();await enabled();
  assert.match(await banner(),/1 of 2 messages remaining/);assert.match(await banner(),/second message reuses this generation only after the first task completes canonically/);
- await browser('fill','#message','Warm second message');await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,3);
+ await browser('fill','#message','Warm second message');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(3);assert.equal(commands.length,3);
  warm('warm-1',{admissions_used:2,generation,available:false});
  await refresh();await blocked();assert.match(await banner(),/Both warm messages have been used/);assert.match(await banner(),/0 of 2 messages remaining/);
  await capture('exhausted');
@@ -127,16 +151,24 @@ try{
  await rollbackClock();await refresh();await blocked(); // in-page rollback
  await open();await blocked();await rollbackClock();await refresh();await blocked(); // rollback after reload
  assert.match(await banner(),/Warm generation expired/);await restoreClock();
- // Phase H — drafts and uncertain pending bytes/keys are preserved; explicit retry reuses the key.
+ // Phase H — drafts and uncertain pending bytes/keys are preserved. The G5
+ // durable outbox (GROK_ALIGNMENT A5) retries automatically under the same
+ // Idempotency-Key with backoff; there is no manual retry click, and the
+ // composer clears immediately rather than holding the unsent text.
  await resetPage();warm('warm-9');await open();await enabled();
- failMessage=true;await browser('fill','#message','Uncertain warm message');await browser('click','#send');
- await wait('document.querySelector("#draft-status").textContent.includes("Not confirmed")');
- const pending=await evaluate(`localStorage.getItem('personal.pending.${bot}')`);
- assert.equal(JSON.parse(pending).text,'Uncertain warm message');
- failMessage=false;warm('warm-9',{admissions_used:1,generation:gen(),available:true});await refresh();await enabled();
- await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,5);
- assert.equal(commandKeys.at(-1),JSON.parse(pending).key); // same idempotency key, no replay with a fresh key
+ failMessage=true;const beforeUncertain=commands.length;
+ await browser('fill','#message','Uncertain warm message');await browser('click','#send');
+ await wait('document.querySelector(".outbox-status")?.textContent.includes("Not delivered")');
+ await waitForCommands(beforeUncertain+1);
+ const uncertainKey=commandKeys[beforeUncertain];
+ let uncertainRecord=await outboxRecordFor(bot);
+ assert.equal(uncertainRecord?.text,'Uncertain warm message');assert.equal(uncertainRecord?.nonce,uncertainKey);assert.equal(uncertainRecord?.phase,'unknown');
+ assert.equal(await evaluate('document.querySelector("#message").value'),'','the composer clears immediately; the unsent text lives only in the optimistic outbox bubble');
+ failMessage=false;warm('warm-9',{admissions_used:1,generation:gen(),available:true});
+ await waitForCommands(beforeUncertain+2,15000); // the outbox's own backoff retries automatically, no click needed
+ assert.ok(commandKeys.slice(beforeUncertain).every(k=>k===uncertainKey),'automatic retry reuses the same Idempotency-Key, no replay with a fresh key');
  assert.deepEqual(commands.at(-1).payload,{conversation_id:bot,text:'Uncertain warm message'});
+ await refresh();await enabled();
  // Draft survives a blocked generation and reload restores it.
  await evaluate(`document.querySelector("#message").value="Preserved warm draft";document.querySelector("#message").dispatchEvent(new Event("input"))`);
  assert.equal(await evaluate(`localStorage.getItem('personal.draft.${bot}')`),'Preserved warm draft');
@@ -241,7 +273,7 @@ try{
  assert.ok(afterScroll.sendTop>=0&&afterScroll.sendBottom<=afterScroll.innerHeight,'narrow composer reachable after scroll: '+JSON.stringify({beforeScroll,afterScroll}));
  await narrowCapture('narrow-composer');
  await browser('fill','#message','Narrow viewport warm message');await browser('click','#send');
- await wait('document.querySelector("#message").value===""');assert.equal(commands.length,6);
+ await wait('document.querySelector("#message").value===""');await waitForCommands(6);assert.equal(commands.length,6);
  warm('warm-O',{admissions_used:2,generation:gen(),available:false});await refresh();
  await blocked();
  assert.match(await banner(),/Both warm messages have been used/);

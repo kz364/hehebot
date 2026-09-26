@@ -13,13 +13,40 @@ const commands=[],commandKeys=[];let reads=0,deniedReads=0,offline=false,failMes
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
 const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
 const wait=code=>browser('wait','--fn',code);
+// The G5 durable outbox (GROK_ALIGNMENT A5) sends via an async drain loop
+// instead of a synchronous command() call, so a click no longer guarantees
+// the server has the POST by the time the composer clears. Poll the
+// Node-side `commands` array (populated by the fixture's own HTTP handler)
+// instead of asserting its length immediately after a UI wait.
+const waitForCommands=async(n,timeoutMs=5000)=>{const start=Date.now();while(commands.length<n){if(Date.now()-start>timeoutMs)throw new Error(`Timed out waiting for ${n} commands (have ${commands.length})`);await new Promise(r=>setTimeout(r,25));}};
+// window.__hehebotOutbox() is the read-only test hook the outbox exposes
+// (nonce/conversation_id/text/phase only) in place of the old single
+// 'personal.pending.<conversation>' localStorage key.
+const outboxRecordFor=async conversationId=>(await evaluate('window.__hehebotOutbox()')).find(r=>r.conversation_id===conversationId);
+// The G5 outbox only clears its optimistic bubble once the timeline echoes
+// the command's Idempotency-Key on a message.user event (GROK_ALIGNMENT A5).
+// A static /events fixture would leave every send's outbox record forever
+// in 'accepted' phase, wedging `sending` (and #send.disabled) permanently
+// true from the first message on. Echo real sends alongside the fixed
+// 'Retained synthetic history' entry so reconciliation actually completes.
+let historySeq=1;const sentEvents=[];
 const server=createServer(async(req,res)=>{
  const json=(data,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(data));};
  const path=new URL(req.url,'http://fixture').pathname;
- if(path==='/v1/commands'){let raw='';for await(const part of req)raw+=part;commands.push(JSON.parse(raw));commandKeys.push(req.headers['idempotency-key']);return failMessage?json({error:{message:'Synthetic lost response'}},503):json({status:'applied'});}
+ if(path==='/v1/commands'){
+  let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw);
+  commands.push(body);commandKeys.push(req.headers['idempotency-key']);
+  if(failMessage)return json({error:{message:'Synthetic lost response'}},503);
+  if(body.type==='message.send')sentEvents.push({sequence:++historySeq,conversation_id:body.payload.conversation_id,type:'message.user',created_at:new Date().toISOString(),payload:{text:body.payload.text,idempotency_key:req.headers['idempotency-key']}});
+  return json({status:'applied'});
+ }
  if(path==='/v1/state'){reads++;return json(offline?{error:{message:'Synthetic offline'}}:state,offline?503:200);}
  if(state.summary.owner_alpha&&path.startsWith('/v1/conversations/')&&!path.startsWith(`/v1/conversations/${bot}/`)){deniedReads++;return json({error:{message:'Conversation unavailable in session'}},403);}
- if(path.endsWith('/events'))return json({events:[{sequence:1,conversation_id:bot,type:'message.user',created_at:new Date().toISOString(),payload:{text:'Retained synthetic history'}}]});
+ if(path.endsWith('/events')){
+  const id=path.split('/')[3];
+  const fixed=id===bot?[{sequence:1,conversation_id:bot,type:'message.user',created_at:new Date().toISOString(),payload:{text:'Retained synthetic history'}}]:[];
+  return json({events:[...fixed,...sentEvents.filter(e=>e.conversation_id===id)]});
+ }
  if(path.endsWith('/tasks')||path.endsWith('/recovery'))return json({runs:[],counts:{total:0,waiting:0,recovery:0},next_cursor:null});
  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
  if(!file){res.writeHead(404);return res.end();}
@@ -39,12 +66,12 @@ const capture=async name=>{
 const blocked=async()=>{assert.equal(await evaluate('document.querySelector("#send").disabled'),true);const n=commands.length;await evaluate('document.querySelector("#message").value="Blocked draft"; document.querySelector("#composer").dispatchEvent(new Event("submit",{cancelable:true}))');assert.equal(commands.length,n);};
 try{
  await open();assert.equal(await evaluate('document.querySelector("#send").disabled'),false);await capture('default');
- await browser('fill','#message','Ordinary saved message');await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,1);
+ await browser('fill','#message','Ordinary saved message');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(1);assert.equal(commands.length,1);
  state.summary.owner_alpha=true;state.summary.owner_alpha_session={persona_id:bot,expires_at:new Date(Date.now()+120000).toISOString(),max_runs:2,admitted_runs:1,max_task_seconds:43};await refresh();
  state.runs=[run];state.output_previews=[{run_id:run.id,attempt:1,text:'Synthetic provisional reply, not a completed result',version:1}];await refresh();
  await evaluate('document.querySelector(".task-card").open=true');
  assert.equal(await evaluate('document.querySelector("#send").disabled'),false);assert.match(await evaluate('document.querySelector("#runtime-banner").textContent'),/1 of 2 admissions remaining/);await capture('available');
- await browser('fill','#message','Alpha request');await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,2);
+ await browser('fill','#message','Alpha request');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(2);assert.equal(commands.length,2);
  offline=true;await evaluate('document.querySelector("#refresh").click()');await wait('document.querySelector("#connection").textContent==="Offline"');await blocked();offline=false;await refresh();await wait('!document.querySelector("#send").disabled');
  await evaluate(`document.querySelector('[data-persona-id="${other}"]').click()`);await blocked();await capture('wrong-persona');
  await refresh();assert.equal(await evaluate('document.querySelector("#connection").textContent'),'Connected');assert.match(await evaluate('document.querySelector("#timeline").textContent'),/History and task pages are unavailable/);
@@ -73,7 +100,7 @@ try{
  await evaluate(`document.querySelector('[data-persona-id="${bot}"]').click()`);await wait('!document.querySelector("#send").disabled');
  assert.equal(commands.length,3);assert.match(await evaluate('document.querySelector("#runtime-banner").textContent'),/Portal visits and history do not start the runtime/);
  await capture('bootstrap-available');
- await browser('fill','#message','Start one new bounded session');await browser('click','#send');await wait('document.querySelector("#message").value===""');
+ await browser('fill','#message','Start one new bounded session');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(4);
  assert.equal(commands.length,4);assert.deepEqual(commands[3].payload,{conversation_id:bot,text:'Start one new bounded session'});
  state.summary.owner_alpha_bootstrap.message_admission_available=false;await refresh();await blocked();await capture('bootstrap-unavailable');
  state.summary.owner_alpha_bootstrap.message_admission_available=true;await refresh();await wait('!document.querySelector("#send").disabled');
@@ -129,11 +156,35 @@ try{
  offline=true;await evaluate('document.querySelector("#refresh").click()');await wait('document.querySelector("#connection").textContent==="Offline"');await confirm();
  await wait('!document.querySelector("#editor-error").hidden');assert.match(await evaluate('document.querySelector("#editor-error").textContent'),/connection changed/);
  offline=false;await dismiss();await refresh();await review();await confirm();await wait('!document.querySelector("#editor").open&&!document.querySelector("#send").disabled');
- failMessage=true;await browser('fill','#message','Unconfirmed exact request');await browser('click','#send');await wait('document.querySelector("#draft-status").textContent.includes("Not confirmed")');
- const pending=await evaluate(`localStorage.getItem('personal.pending.${bot}')`);assert.equal(JSON.parse(pending).key,commandKeys.at(-1));assert.equal(JSON.parse(pending).text,'Unconfirmed exact request');
- state.summary.owner_alpha_bootstrap=nextPolicy('synthetic-policy-7');await refresh();await clickReview();
- await wait('document.querySelector("#error").textContent.includes("unconfirmed outcome")');
- assert.equal(await evaluate(`localStorage.getItem('personal.pending.${bot}')`),pending);assert.equal(await evaluate('document.querySelector("#message").value'),'Unconfirmed exact request');assert.equal(commands.length,5);
+ // A lost/failed response (5xx) is neither an outright rejection (4xx, which
+ // restores the draft) nor a confirmed send: the G5 outbox keeps retrying
+ // under the same Idempotency-Key (GROK_ALIGNMENT A5) instead of the old
+ // single 'personal.pending.<conversation>' localStorage record.
+ failMessage=true;const beforeUnconfirmed=commands.length;
+ await browser('fill','#message','Unconfirmed exact request');await browser('click','#send');
+ await wait('document.querySelector(".outbox-status")?.textContent.includes("Not delivered")');
+ await waitForCommands(beforeUnconfirmed+1);
+ const unconfirmedKey=commandKeys[beforeUnconfirmed];
+ assert.ok(commandKeys.slice(beforeUnconfirmed).every(k=>k===unconfirmedKey),'every retry under a lost response reuses the same Idempotency-Key');
+ let pendingOutbox=await outboxRecordFor(bot);
+ assert.equal(pendingOutbox?.text,'Unconfirmed exact request');assert.equal(pendingOutbox?.nonce,unconfirmedKey);assert.equal(pendingOutbox?.phase,'unknown');
+ assert.equal(await evaluate('document.querySelector("#message").value'),'','the composer clears immediately; the unsent text lives only in the optimistic outbox bubble, not the draft');
+ state.summary.owner_alpha_bootstrap=nextPolicy('synthetic-policy-7');await refresh();
+ // One unconfirmed send blocks alpha-session review at the control itself
+ // (GROK_ALIGNMENT A5) — the button is disabled outright, unlike the old
+ // pending-key check which only threw once a click reached the handler.
+ // reviewAlphaSession() still refuses it when invoked directly too.
+ assert.equal(await evaluate('document.querySelector("#review-alpha-session").disabled'),true,'review stays disabled while a send is unconfirmed');
+ // reviewAlphaSession()'s assertReady() checks the broader `sending` flag
+ // (now derived from outbox non-emptiness) before its own outbox-specific
+ // check, so a direct invocation reports the generic "changed" refusal
+ // rather than reaching the more specific "unconfirmed outcome" message;
+ // either way, nothing is adopted and the outbox record survives untouched.
+ await evaluate('document.querySelector("#review-alpha-session").onclick()');
+ await wait('document.querySelector("#error").textContent.includes("Close and review the session again")');
+ pendingOutbox=await outboxRecordFor(bot);
+ assert.equal(pendingOutbox?.text,'Unconfirmed exact request');assert.equal(pendingOutbox?.nonce,unconfirmedKey);
+ assert.ok(commandKeys.slice(beforeUnconfirmed).every(k=>k===unconfirmedKey),'still no new Idempotency-Key introduced while review is blocked');
  assert.equal(await evaluate('document.querySelector("#send").disabled'),true);assert.equal(await evaluate('document.querySelector("#editor").open'),false);await capture('session-pending-blocked');
  console.log('PASS explicit session adoption: no reload/commands, reviewed identity+fresh recheck, cancel/stale/persona/offline/monotonic expiry/old revision refusal, draft preservation, and uncertain message bytes/key retained without replay.');
 }catch(error){

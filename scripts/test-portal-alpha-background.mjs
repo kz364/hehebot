@@ -31,14 +31,38 @@ let reads=0,deniedReads=0,botReads=0,offline=false,failMessage=false;
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
 const evaluate=async code=>JSON.parse((await browser('eval',code).then(r=>r.stdout.trim()||'null')).trim());
 const wait=code=>browser('wait','--fn',code);
+// The G5 durable outbox (GROK_ALIGNMENT A5) sends via an async drain loop, so
+// a click no longer guarantees the server has the POST by the time the
+// composer clears; poll the Node-side `commands` array instead of asserting
+// its length immediately after a UI wait.
+const waitForCommands=async(n,timeoutMs=5000)=>{const start=Date.now();while(commands.length<n){if(Date.now()-start>timeoutMs)throw new Error(`Timed out waiting for ${n} commands (have ${commands.length})`);await new Promise(r=>setTimeout(r,25));}};
+// window.__hehebotOutbox() is the read-only test hook the outbox exposes
+// (nonce/conversation_id/text/phase only) in place of the old single
+// 'personal.pending.<conversation>' localStorage key.
+const outboxRecordFor=async conversationId=>(await evaluate('window.__hehebotOutbox()')).find(r=>r.conversation_id===conversationId);
+// A static /events fixture would leave every accepted send's outbox record
+// forever unechoed, wedging `sending` (and #send.disabled) permanently true
+// from the first message on. Echo real sends alongside the fixed
+// 'Retained synthetic history' entry so reconciliation actually completes.
+let historySeq=1;const sentEvents=[];
 const server=createServer(async(req,res)=>{
  const json=(data,status=200)=>{res.writeHead(status,{'content-type':'application/json'});res.end(JSON.stringify(data));};
  const path=new URL(req.url,'http://fixture').pathname;
- if(path==='/v1/commands'){let raw='';for await(const part of req)raw+=part;commands.push(JSON.parse(raw));commandKeys.push(req.headers['idempotency-key']);return failMessage?json({error:{message:'Synthetic lost response'}},503):json({status:'applied'});}
+ if(path==='/v1/commands'){
+  let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw);
+  commands.push(body);commandKeys.push(req.headers['idempotency-key']);
+  if(failMessage)return json({error:{message:'Synthetic lost response'}},503);
+  if(body.type==='message.send')sentEvents.push({sequence:++historySeq,conversation_id:body.payload.conversation_id,type:'message.user',created_at:new Date().toISOString(),payload:{text:body.payload.text,idempotency_key:req.headers['idempotency-key']}});
+  return json({status:'applied'});
+ }
  if(path==='/v1/state'){reads++;return json(offline?{error:{message:'Synthetic offline'}}:state,offline?503:200);}
  if(path.startsWith(`/v1/conversations/${bot}/`))botReads++;
  if(state.summary.owner_alpha_background&&path.startsWith('/v1/conversations/')&&!path.startsWith(`/v1/conversations/${bot}/`)){deniedReads++;return json({error:{message:'Conversation unavailable in background generation'}},403);}
- if(path.endsWith('/events'))return json({events:[{sequence:1,conversation_id:bot,type:'message.user',created_at:new Date().toISOString(),payload:{text:'Retained synthetic history'}}]});
+ if(path.endsWith('/events')){
+  const id=path.split('/')[3];
+  const fixed=id===bot?[{sequence:1,conversation_id:bot,type:'message.user',created_at:new Date().toISOString(),payload:{text:'Retained synthetic history'}}]:[];
+  return json({events:[...fixed,...sentEvents.filter(e=>e.conversation_id===id)]});
+ }
  if(path.endsWith('/tasks')||path.endsWith('/recovery'))return json({runs:[],counts:{total:0,waiting:0,recovery:0},next_cursor:null});
  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
  if(!file){res.writeHead(404);return res.end();}
@@ -60,7 +84,7 @@ const resetPage=async()=>{await evaluate('sessionStorage.clear()');await open();
 try{
  // Phase 0 — ordinary default mode before any background summary.
  await open();await enabled();
- await browser('fill','#message','Ordinary saved message');await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,1);
+ await browser('fill','#message','Ordinary saved message');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(1);assert.equal(commands.length,1);
  // Phase A — pre-first A admission: three of three, generation:null, next role background, passive reads send nothing.
  background('bg-1');await refresh();await enabled();
  assert.match(await banner(),/Background owner generation/);
@@ -78,7 +102,7 @@ try{
  // Phase B — first message starts the background root; S blocked until the
  // coordinator releases A (an A child may remain active; the portal only
  // trusts message_admission_available and never infers release itself).
- await browser('fill','#message','Background first message');await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,2);
+ await browser('fill','#message','Background first message');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(2);assert.equal(commands.length,2);
  assert.deepEqual(commands.at(-1).payload,{conversation_id:bot,text:'Background first message'});
  const generation=gen(110000);
  background('bg-1',{admissions_used:1,generation,available:false}); // A root inference still occupies the lane
@@ -96,7 +120,7 @@ try{
  assert.match(await banner(),/Next message role: status \(admitted only after the background root releases its coordinator lane\)/);
  assert.match(await banner(),/Status and independent replies do not prove the background root or its children completed or settled/);
  await capture('status-available');
- await browser('fill','#message','Background status message');await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,3);
+ await browser('fill','#message','Background status message');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(3);assert.equal(commands.length,3);
  // Phase C — B blocked until S settles canonically, then the independent admission; exhaustion.
  background('bg-1',{admissions_used:2,generation,available:false}); // S not settled yet
  await refresh();await blocked();
@@ -107,7 +131,7 @@ try{
  assert.match(await banner(),/1 of 3 messages remaining/);
  assert.match(await banner(),/Next message role: independent \(admitted only after the status answer settles\)/);
  await capture('independent-available');
- await browser('fill','#message','Background independent message');await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,4);
+ await browser('fill','#message','Background independent message');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(4);assert.equal(commands.length,4);
  background('bg-1',{admissions_used:3,generation,available:false}); // generation admits nothing further, ever
  await refresh();await blocked();
  assert.match(await banner(),/All three background messages have been used/);
@@ -184,7 +208,7 @@ try{
   policy_expires_at:new Date(Date.now()+120000).toISOString(),max_admissions:2,admissions_used:0,message_admission_available:true,generation:null};
  await open();await enabled();
  assert.match(await banner(),/Warm owner generation/);
- await browser('fill','#message','Warm coexistence message');await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,5);
+ await browser('fill','#message','Warm coexistence message');await browser('click','#send');await wait('document.querySelector("#message").value===""');await waitForCommands(5);assert.equal(commands.length,5);
  delete state.summary.owner_alpha_warm;
  background('bg-after-warm');await refresh();await blocked(); // no same-page successor from latched terminal warm custody
  // Phase I — offline blocks; reconnect restores the same bounded state.
@@ -194,14 +218,22 @@ try{
  offline=false;await refresh();await wait('!document.querySelector("#send").disabled');
  // Phase J — uncertain send preserves pending bytes/key; explicit retry reuses the same key.
  await resetPage();background('bg-12');await open();await enabled();
- failMessage=true;await browser('fill','#message','Uncertain background message');await browser('click','#send');
- await wait('document.querySelector("#draft-status").textContent.includes("Not confirmed")');
- const pending=await evaluate(`localStorage.getItem('personal.pending.${bot}')`);
- assert.equal(JSON.parse(pending).text,'Uncertain background message');
- failMessage=false;background('bg-12',{admissions_used:1,generation:gen(),available:true});await refresh();await enabled();
- await browser('click','#send');await wait('document.querySelector("#message").value===""');assert.equal(commands.length,7);
- assert.equal(commandKeys.at(-1),JSON.parse(pending).key); // same idempotency key, no replay with a fresh key
+ // The G5 durable outbox (GROK_ALIGNMENT A5) retries automatically under the
+ // same Idempotency-Key with backoff; there is no manual retry click, and
+ // the composer clears immediately rather than holding the unsent text.
+ failMessage=true;const beforeUncertain=commands.length;
+ await browser('fill','#message','Uncertain background message');await browser('click','#send');
+ await wait('document.querySelector(".outbox-status")?.textContent.includes("Not delivered")');
+ await waitForCommands(beforeUncertain+1);
+ const uncertainKey=commandKeys[beforeUncertain];
+ let uncertainRecord=await outboxRecordFor(bot);
+ assert.equal(uncertainRecord?.text,'Uncertain background message');assert.equal(uncertainRecord?.nonce,uncertainKey);assert.equal(uncertainRecord?.phase,'unknown');
+ assert.equal(await evaluate('document.querySelector("#message").value'),'','the composer clears immediately; the unsent text lives only in the optimistic outbox bubble');
+ failMessage=false;background('bg-12',{admissions_used:1,generation:gen(),available:true});
+ await waitForCommands(beforeUncertain+2,15000); // the outbox's own backoff retries automatically, no click needed
+ assert.ok(commandKeys.slice(beforeUncertain).every(k=>k===uncertainKey),'automatic retry reuses the same Idempotency-Key, no replay with a fresh key');
  assert.deepEqual(commands.at(-1).payload,{conversation_id:bot,text:'Uncertain background message'});
+ await refresh();await enabled();
  // Draft survives a blocked generation and reload restores it.
  await evaluate(`document.querySelector("#message").value="Preserved background draft";document.querySelector("#message").dispatchEvent(new Event("input"))`);
  assert.equal(await evaluate(`localStorage.getItem('personal.draft.${bot}')`),'Preserved background draft');

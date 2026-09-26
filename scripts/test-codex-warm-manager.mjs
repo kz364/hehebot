@@ -483,11 +483,17 @@ try {
     await browser('fill', '#message', text1);
     await browser('click', '#send');
     if (wakeFirst) await wakeFirstGate();
-    // The composer clears the textarea only after its receipt is confirmed.
+    // The G5 durable outbox (GROK_ALIGNMENT A5) clears the composer as soon as
+    // the send is queued, via an async drain loop — no longer only once the
+    // receipt is confirmed. Wait for the real POST to land before counting.
     assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),
       'composer did not confirm the first message');
-    assert.equal(await browserJson(`localStorage.getItem("personal.pending.${persona}")`), null,
-      'composer left an unconfirmed pending first message');
+    assert.ok(await waitFor(() => fixture.browserCommands.length >= 1), 'browser send did not reach the server');
+    // window.__hehebotOutbox() (nonce/conversation_id/text/phase only) is the
+    // outbox's read-only test hook, replacing the old single
+    // 'personal.pending.<conversation>' localStorage key.
+    assert.ok(await waitFor(() => browserJson(`!window.__hehebotOutbox().some(r=>r.conversation_id==="${persona}")`)),
+      'composer left an unconfirmed outbox record for the first message');
     assert.equal(fixture.browserCommands.length, 1, 'composer send was not recorded exactly once');
     const sent1 = fixture.browserCommands[0];
     assert.deepEqual(JSON.parse(sent1.body), { schema_version: 1, type: 'message.send',
@@ -561,8 +567,9 @@ try {
     await browser('click', '#send');
     assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),
       'composer did not confirm the second message');
-    assert.equal(await browserJson(`localStorage.getItem("personal.pending.${persona}")`), null,
-      'composer left an unconfirmed pending second message');
+    assert.ok(await waitFor(() => fixture.browserCommands.length >= 2), 'browser send did not reach the server');
+    assert.ok(await waitFor(() => browserJson(`!window.__hehebotOutbox().some(r=>r.conversation_id==="${persona}")`)),
+      'composer left an unconfirmed outbox record for the second message');
     assert.equal(fixture.browserCommands.length, 2, 'second composer send was not recorded exactly once');
     const sent2 = fixture.browserCommands[1];
     assert.deepEqual(JSON.parse(sent2.body), { schema_version: 1, type: 'message.send',
@@ -650,8 +657,8 @@ try {
     assert.equal(await browserJson('document.querySelector("#send").disabled'), true, 'reloaded composer is not disabled');
     assert.equal(await browserJson('document.querySelector("#message").readOnly'), true, 'reloaded composer textarea is not readOnly');
     assert.match(await browserJson('document.querySelector("#runtime-banner-text")?.textContent ?? ""'), /Both warm messages have been used/);
-    assert.equal(await browserJson(`localStorage.getItem("personal.pending.${persona}")`), null,
-      'reloaded composer left an unconfirmed pending message');
+    assert.equal(await browserJson(`window.__hehebotOutbox().filter(r=>r.conversation_id==="${persona}").length`), 0,
+      'reloaded composer left an unconfirmed outbox record');
     assert.equal(fixture.browserCommands.length, 2, 'reload sent or duplicated a browser command');
     assert.equal(report.nativeStarts, 1, 'reload launched another native runtime');
     assert.equal(report.modelRequests, 2, 'reload reached a model');
