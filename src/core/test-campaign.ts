@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import {requireThat} from './errors';
 import type {ControlCore} from './control';
-import type {Command,ContextSnapshot,PersonaPut,StoredObject} from './types';
+import type {Command,ContextSnapshot,PersonaPut,StoredObject,Run} from './types';
 
 export type TestCampaignGrant={campaign_id:string;actor_id:string;persona_id:string;owner_binding_sha256:string;issued_at:string;expires_at:string;max_submissions:number};
 const text='Reply exactly: HEHEBOT_NATIVE_TEST_OK. Do not use tools or access other data.';
@@ -71,7 +71,9 @@ export class TestCampaign {
  });}
  receipt(actor:string,id:string){this.owned(actor,id);return this.core.receipt(id);}
  run(actor:string,id:string){
-  const r=this.core.store.run(id);requireThat(r.command_id,'NOT_FOUND','Test run unavailable.',404);const {c,p}=this.owned(actor,r.command_id);
+  const r=this.core.store.db.all<Pick<Run,'id'|'command_id'|'persona_id'|'parent_run_id'|'routine_id'|'occurrence_id'|'status'|'current_attempt'|'created_at'|'updated_at'>>('SELECT id,command_id,persona_id,parent_run_id,routine_id,occurrence_id,status,current_attempt,created_at,updated_at FROM runs WHERE id=?',id)[0];
+  requireThat(r,'NOT_FOUND','Run unavailable.',404);
+  requireThat(r.command_id,'NOT_FOUND','Test run unavailable.',404);const {c,p}=this.owned(actor,r.command_id);
   requireThat(c.resource_id===id&&r.persona_id===p.grant.persona_id&&!r.parent_run_id&&!r.routine_id&&!r.occurrence_id,'NOT_FOUND','Test run unavailable.',404);
   const event=this.core.store.db.all<{payload_json:string}>("SELECT payload_json FROM events WHERE type='run.result' AND actor_id='runtime' AND cause_id=? AND json_extract(payload_json,'$.run_id')=? ORDER BY sequence DESC LIMIT 1",c.id,id)[0];
   const result=event?JSON.parse(event.payload_json):null;

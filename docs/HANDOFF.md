@@ -4,6 +4,12 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Task-sourced skill provenance and campaign run readback now select metadata only.
+Red2/focused55/backend2361/typecheck/build pass;1558025 exit0. Exact source provenance,
+foreign-actor refusal and snapshots retained. Campaign submission status reads remain
+next, then historical/storage/native recovery. No active checks/children/delivery;
+schedule enabled. Full matrix not rerun; original intermittency/advisories/gates unchanged.
+
 TaskSteering.current now reads metadata only. Red3/focused159/backend2359/typecheck/
 build pass;1554681 exited0. All three late outcomes and identical terminal replay
 retain exact custody. Next skill.propose_from_task and test-campaign historical reads,

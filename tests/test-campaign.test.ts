@@ -1,5 +1,5 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {expect,it} from 'vitest';
+import {expect,it,vi} from 'vitest';
 import {fixture,bot} from './helpers';
 import {ControlCore} from '../src/core/control';
 import {LifecycleCore} from '../src/core/lifecycle';
@@ -30,6 +30,23 @@ function finish(f:ReturnType<typeof setup>){
  f.lifecycle.complete(id,claim.run.id,1,{status:'completed',text:'HEHEBOT_NATIVE_TEST_OK'},{...m.text_only,thread_id:'thread-exact',turn_id:'native-exact',output_sha256:createHash('sha256').update('HEHEBOT_NATIVE_TEST_OK').digest('hex')});
  f.setNow(m.expires_at);f.lifecycle.watchdog();f.core.bootstrap.recordRetirement({...id,session_id:m.session_id,transition_id:m.transition_id,observed_at:m.expires_at,direct_child_stopped:true,execution_lock_free:true,session_lock_free:true,source:'test-observer'});
 }
+it('campaign run readback excludes historical snapshots and preserves actor fencing',()=>{
+ const f=setup();try{
+  f.retire();const receipt=f.submit(),id=receipt.resource_id!;
+  const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+  f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,id);
+  const before=f.store.run(id),read=vi.spyOn(f.db,'all');
+  try{
+   expect(f.campaign.run(f.grant.actor_id,id)).toEqual({id,command_id:receipt.id,status:'queued',current_attempt:0,created_at:before.created_at,updated_at:before.updated_at,result:null});
+   expect(()=>f.campaign.run('test-service:foreign',id)).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
+   const returned=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[index].value:[]);
+   expect(returned).toHaveLength(2);
+   for(const row of returned){expect(row).not.toHaveProperty('context_json');expect(row).not.toHaveProperty('checkpoint_json');}
+  }finally{read.mockRestore();}
+  expect(f.store.run(id)).toEqual(before);
+ }finally{f.close();}
+});
+
 it('strictly parses bounded grants and canonicalizes property order',()=>{
  const f=setup();try{
   expect(parseTestCampaignGrant(undefined)).toBeUndefined();expect(parseTestCampaignGrant('')).toBeUndefined();

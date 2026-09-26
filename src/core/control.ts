@@ -164,7 +164,8 @@ export class ControlCore {
    case 'skill.propose_from_task':{
     requireThat(!this.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Task-sourced skill drafts are unavailable in owner-alpha sessions.');
     requireThat(!/^(runtime|trigger):/.test(owner),'FORBIDDEN','Only the owner may select a task as a skill draft source.',403);
-    const p=command.payload,run=this.store.run(p.source_run_id);
+    const p=command.payload,run=this.store.db.all<Pick<Run,'id'|'persona_id'|'current_attempt'>>('SELECT id,persona_id,current_attempt FROM runs WHERE id=?',p.source_run_id)[0];
+    requireThat(run,'NOT_FOUND','Run unavailable.',404);
     requireThat(run.current_attempt===p.expected_attempt,'REVISION_CONFLICT','The source task attempt changed. Review it before staging this draft.');
     requireThat(this.store.db.all('SELECT run_id FROM attempts WHERE run_id=? AND attempt=?',run.id,p.expected_attempt).length===1,'NOT_FOUND','The source attempt record is unavailable.',404);
     // Record identity only: task input/output may be private, provisional or

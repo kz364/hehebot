@@ -4,6 +4,18 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Provenance/readback metadata projections (2026-09-26 Asia/Jakarta): task-sourced
+skill proposal selects id/persona_id/current_attempt; TestCampaign.run selects only
+identity/scope/status/timestamps consumed by its existing checks and response.
+Missing-run behavior and authorization order unchanged. Two oversized-history tests
+fail before implementation and verify exact skill provenance, campaign readback,
+foreign-actor refusal and unchanged snapshots/custody. Focused55 (including campaign
+HTTP boundary)/backend2361/typecheck/dry-build pass;1558025 exited0. Logs retained as
+.local/provenance-projection-red.log, -focused.log and -integrated.log. Campaign
+submission's separate status reads remain unchanged and next; no total bounds claimed.
+Full runtime/local-Worker/browser/native-service/shutdown/desktop matrix not rerun;
+original intermittency/advisories/gates unchanged. Local only.
+
 Steering metadata projection (2026-09-26 Asia/Jakarta): TaskSteering.current reads
 id/current_attempt/status only, retaining missing-run, attempt and native-identity
 checks and call order. Admission still requires live custody; late result recording

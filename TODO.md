@@ -12,7 +12,13 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** steering admission and late
+**Current checkpoint (2026-09-26, verified locally):** task-sourced skill provenance
+and campaign run readback omit historical snapshots, retaining exact provenance and
+actor checks. Red2/focused55/backend2361/typecheck/dry-build pass. Campaign submission
+status reads remain next, then historical/storage/native recovery. Full matrix not
+rerun; original intermittency/advisories/gates unchanged. No total bounds claimed.
+
+**Previous checkpoint (2026-09-26, verified locally):** steering admission and late
 receipt checks read run metadata only. Accepted/unknown/not-delivered regressions
 fail3 before implementation; focused159/backend2359/typecheck/dry-build pass. Exact
 attempt/executor authority and terminal late receipts retained. Next remaining skill

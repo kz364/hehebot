@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {afterEach,beforeEach,expect,it} from 'vitest';
+import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {ControlCore} from '../src/core/control';
 import {LifecycleCore} from '../src/core/lifecycle';
 import {AgentCommandBoundary,SKILL_PROPOSE_POLICY} from '../src/core/agent-commands';
@@ -17,6 +17,19 @@ afterEach(()=>f.close());
 const draft=()=>({schema_version:1 as const,type:'skill.propose_from_task' as const,payload:{proposal_id:randomUUID(),skill_id:randomUUID(),expected_skill_revision:0,source_run_id:source,expected_attempt:1,body}});
 const custody=()=>['runs','attempts','lifecycle','effects','outbox','resource_locks','skill_enablements'].map(table=>f.db.all(`SELECT * FROM ${table}`));
 const proposals=()=>f.db.all<{body_json:string;provenance_json:string;status:string;command_id:string}>('SELECT body_json,provenance_json,status,command_id FROM skill_proposals');
+it('stages task provenance without hydrating historical snapshots',()=>{
+ const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+ f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,source);
+ const before=custody(),read=vi.spyOn(f.db,'all');
+ try{
+  expect(f.accept(draft()).status).toBe('applied');
+  const returned=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[index].value:[]);
+  expect(returned).toEqual([{id:source,persona_id:bot,current_attempt:1}]);
+ }finally{read.mockRestore();}
+ expect(custody()).toEqual(before);
+ expect(proposals()[0].provenance_json).toBe(JSON.stringify({kind:'task',source_ref:`task:${bot}/${source}/1`}));
+});
+
 it('stages only owner procedure text with exact source identity, preserves custody and deduplicates after reconstruction',()=>{
  const command=draft(),key=randomUUID(),before=custody(),receipt=f.accept(command,key);
  expect(receipt.status).toBe('applied');expect(proposals()).toEqual([{body_json:JSON.stringify(body),provenance_json:JSON.stringify({kind:'task',source_ref:`task:${bot}/${source}/1`}),status:'pending',command_id:receipt.id}]);
