@@ -4,6 +4,18 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Stopped retry candidates (2026-09-26 Asia/Jakarta): SQL applies scheduleRetry's
+role/attempt/reason exclusions before returning metadata. No limit truncates
+eligible candidates; question/effect/operation and alpha checks remain in the
+scheduler. Synthetic mixed history returns four eligible rows instead of nine;
+all four reasons,10/60-second delays, excluded records and checkpoints verified.
+Initial regression red1; first backend run failed three existing tests because
+they locate a query by contiguous FROM/WHERE text. Preserved that layout without
+altering tests. Final focused130/backend2410/typecheck/dry-build pass (1693770
+exit0), .local/stop-retry-candidates-{red,focused,backend,final,backend-final,build}.log.
+This reduces returned metadata, not SQL scans or total eligible work. Full matrix
+not rerun; restoration/storage acceptance and external gates remain open.
+
 Stopped read/idempotent uncertainty (2026-09-26 Asia/Jakarta): watchdog expires
 the executor lease with a dispatched read_only/idempotent effect and present
 receipt; repeated observeStopped retains outcome_unknown and its resource lock,

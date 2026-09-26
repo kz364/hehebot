@@ -600,7 +600,10 @@ export class LifecycleCore {
    this.store.db.exec("UPDATE effects SET status='outcome_unknown',updated_at=? WHERE status IN ('intent','dispatched')",this.core.now());
    this.retainNativeMemoryRefusals();
    this.store.db.exec("UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'OUTCOME_UNKNOWN' END,updated_at=? WHERE status IN ('claimed','running','finishing','cancelling')",this.core.now());
-   for(const run of this.store.db.all<Pick<Run,'id'|'role'|'current_attempt'|'error_code'>>("SELECT id,role,current_attempt,error_code FROM runs WHERE status='recovery_required'"))this.scheduleRetry(run,run.error_code??'OUTCOME_UNKNOWN');
+   // Mirror scheduleRetry's metadata exclusions before returning historical rows.
+   for(const run of this.store.db.all<Pick<Run,'id'|'role'|'current_attempt'|'error_code'>>(`SELECT id,role,current_attempt,error_code FROM runs WHERE status='recovery_required'
+    AND role!='background' AND current_attempt<3
+    AND error_code IN ('TEMPORARY_UNAVAILABLE','DEADLINE_EXCEEDED','STALE_EPOCH','CANCEL_UNCONFIRMED')`))this.scheduleRetry(run,run.error_code??'OUTCOME_UNKNOWN');
   });
  }
  private async requestWake(provider:RuntimeProvider,ref:RuntimeRef,state:Lifecycle):Promise<void> {

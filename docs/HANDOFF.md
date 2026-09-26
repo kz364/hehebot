@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Stop recovery returns metadata-eligible retry candidates only, keeping all later
+custody checks and excluded records. Four reasons/10-and60-second delays/checkpoints
+verified. Red1/focused130/backend2410/typecheck/build1693770 exit0; initial query-
+layout test failures fixed by retaining contiguous FROM/WHERE. Logs
+.local/stop-retry-candidates-*.log. No fixed SQL-scan/eligible-work bound. No active
+checks/children/delivery; schedule enabled. Continue restoration/recursive settlement
+and historical/storage work; full matrix not rerun, external gates unchanged.
+
 Stopped read_only/idempotent uncertainty tests preserve unknown effects/receipts
 and locks despite process-termination observation; no automatic retry. Unknown-
 status omission mutant fails2; production restored unchanged, lifecycle106/typecheck

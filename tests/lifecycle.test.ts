@@ -29,6 +29,35 @@ function unknownEffect(runId: string) {
   f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','outcome_unknown','synthetic-authorization','synthetic-digest',?)", randomUUID(), runId, randomUUID(), f.core.now());
 }
 describe('executor leases and attempts', () => {
+  it('stop recovery loads only metadata-eligible automatic retry candidates without discarding other custody', () => {
+    const cases = [
+      ['coordinator',1,'TEMPORARY_UNAVAILABLE',true], ['coordinator',2,'DEADLINE_EXCEEDED',true],
+      ['coordinator',1,'STALE_EPOCH',true], ['coordinator',1,'CANCEL_UNCONFIRMED',true],
+      ['background',1,'STALE_EPOCH',false], ['coordinator',3,'STALE_EPOCH',false],
+      ['coordinator',1,null,false], ['coordinator',1,'OWNER_CANCELLED',false],
+      ['coordinator',1,'OUTCOME_UNKNOWN',false],
+    ] as const;
+    const ids = cases.map(([role, attempt, reason]) => {
+      const id = enqueue();
+      f.db.exec("UPDATE runs SET status='recovery_required',role=?,current_attempt=?,error_code=?,checkpoint_json=? WHERE id=?", role, attempt, reason, JSON.stringify({ cursor: id }), id);
+      return id;
+    });
+    const before = ids.map(id => f.store.run(id));
+    f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED'");
+    const read = vi.spyOn(f.db, 'all');
+    try {
+      life.observeStopped({ phase: 'stopped', executionStopped: true, persistentState: 'retained', observedAt: Date.now() });
+      const rows = read.mock.calls.flatMap(([sql], index) => sql.includes('SELECT id,role,current_attempt,error_code FROM runs')
+        ? read.mock.results[index].value as Array<{id:string}> : []);
+      expect(rows.map(row => row.id).sort()).toEqual(ids.slice(0,4).sort());
+    } finally { read.mockRestore(); }
+    for (const [i, [, attempt, reason, eligible]] of cases.entries()) {
+      expect(f.store.run(ids[i])).toEqual({ ...before[i], status: eligible ? 'waiting' : 'recovery_required' });
+      expect(f.db.all('SELECT due_at,reason FROM retry_queue WHERE run_id=?', ids[i])).toEqual(eligible
+        ? [{ due_at: attempt === 2 ? '2026-09-10T00:01:00.000Z' : '2026-09-10T00:00:10.000Z', reason }] : []);
+    }
+  });
+
   it.each([
     ['idempotent', null, false], ['idempotent', 'null', true], ['idempotent', 'false', true],
     ['idempotent', '0', true], ['idempotent', '""', true], ['mutation', '{}', false],
