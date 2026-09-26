@@ -294,6 +294,7 @@ export class PersonalControl extends DurableObject<Env> {
   return {scope:'bundled-diagnostic-baseline',runtime_inventory:'unobserved',authority:'not-granted',catalog:structuredClone(connectorCatalog)};
  });}
  getReceipt(owner:string,id:string){return this.rpc(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receipt(id);});}
+ getReceiptByIdempotencyKey(owner:string,key:string){return this.rpc(async()=>{await this.beforeRequest(owner+':read',120);return this.core.receiptByIdempotencyKey(owner,key);});}
  getSchedulePreview(owner:string,cron:string,timezone:string){return this.rpc(()=>{this.rate(owner+':schedule-preview',30);return this.core.schedulePreview(cron,timezone);});}
  getRoutinePreflight(owner:string,id:string){return this.rpc(()=>{this.rate(owner+':schedule-preview',30);return this.core.routinePreflight(id);});}
  getSkillHistory(owner:string,id:string,before?:number,limit=10){return this.rpc(()=>{this.rate(owner+':read',120);return new SkillCatalog(this.store,()=>this.core.now(),this.core.options.uuid).history(id,before,limit);});}

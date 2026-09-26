@@ -211,6 +211,11 @@ function alphaBlock(){
  return '';
 }
 function renderAlphaSession(){
+ // Busy while the current conversation has any unresolved outbox record
+ // (queued/sending/unknown/accepted-not-yet-echoed); a rejected one is
+ // removed immediately by outboxRestoreDraft, so its mere presence never
+ // holds the composer.
+ sending=Boolean(selected)&&outboxForConversation(selected).length>0;
  const reason=alphaBlock();
  if(backgroundSeen){
   if(backgroundRenderedReason&&$('error').textContent===backgroundRenderedReason&&reason!==backgroundRenderedReason)report(reason||'');
@@ -245,7 +250,7 @@ async function reviewAlphaSession(){
  const conversation=selected,version=selectionVersion;
  const assertReady=()=>{
   if(sending||loading||!navigator.onLine||$('connection').textContent!=='Connected'||selected!==conversation||selectionVersion!==version)throw new Error('Conversation or connection changed. Close and review the session again.');
-  if(localStorage.getItem('personal.pending.'+conversation)!==null)throw new Error('A message has an unconfirmed outcome. Session adoption is blocked; its saved text and retry key are unchanged.');
+  if(outboxForConversation(conversation).length)throw new Error('A message has an unconfirmed outcome. Session adoption is blocked; its saved text and retry key are unchanged.');
  };
  const check=value=>{
   const policy=value?.summary?.owner_alpha_bootstrap,persona=value?.objects?.find(x=>x.id===conversation);
@@ -295,6 +300,126 @@ async function api(path,options={}){const response=await fetch(path,options);let
 async function command(type,payload,key=crypto.randomUUID()){
  const result=await api('/v1/commands',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key},body:JSON.stringify({schema_version:1,type,payload})});
  if(result.status==='rejected')throw new Error(result.error?.message??'This change could not be saved.');return result;
+}
+// --- G5 durable client outbox (GROK_ALIGNMENT A5) --------------------------
+// A send is persisted to storage BEFORE its POST, so a reload or a lost
+// response reconciles through GET /v1/receipts?idempotency_key= instead of
+// silently duplicating or losing an owner message. nonce === Idempotency-Key.
+// Phases: queued -> sending -> accepted -> (deleted once echoed). Failure
+// states: rejected (bubble removed, text restored to that conversation's
+// draft) and unknown (kept, retried under the same key with backoff).
+const outboxRecords=new Map(); // nonce -> record; mirrors durable storage
+const outboxSending=new Set(); // conversation_id currently draining
+let outboxDb=null,outboxDbAttempted=false;
+function outboxOpenDb(){
+ if(outboxDbAttempted)return Promise.resolve(outboxDb);
+ outboxDbAttempted=true;
+ return new Promise(resolve=>{
+  try{
+   if(!('indexedDB' in window)){resolve(null);return;}
+   const request=indexedDB.open('hehebot-outbox',1);
+   request.onupgradeneeded=()=>{try{request.result.createObjectStore('records',{keyPath:'nonce'});}catch{}};
+   request.onsuccess=()=>{outboxDb=request.result;resolve(outboxDb);};
+   request.onerror=()=>resolve(null);
+  }catch{resolve(null);}
+ });
+}
+async function outboxLoadAll(){
+ try{
+  const db=await outboxOpenDb();
+  if(db)return await new Promise((resolve,reject)=>{
+   try{const request=db.transaction('records','readonly').objectStore('records').getAll();request.onsuccess=()=>resolve(request.result??[]);request.onerror=()=>reject(request.error);}
+   catch(e){reject(e);}
+  });
+ }catch{}
+ try{const raw=localStorage.getItem('personal.outbox');return raw?JSON.parse(raw):[];}catch{return [];}
+}
+function outboxSaveLocalStorageMirror(){
+ try{localStorage.setItem('personal.outbox',JSON.stringify([...outboxRecords.values()]));}catch{}
+}
+async function outboxPersist(record){
+ try{
+  const db=await outboxOpenDb();
+  if(db){await new Promise((resolve,reject)=>{try{const tx=db.transaction('records','readwrite');tx.objectStore('records').put(record);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);}catch(e){reject(e);}});return;}
+ }catch{}
+ outboxSaveLocalStorageMirror();
+}
+async function outboxForget(nonce){
+ try{
+  const db=await outboxOpenDb();
+  if(db){await new Promise((resolve,reject)=>{try{const tx=db.transaction('records','readwrite');tx.objectStore('records').delete(nonce);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);}catch(e){reject(e);}});return;}
+ }catch{}
+ outboxSaveLocalStorageMirror();
+}
+function outboxForConversation(id){return [...outboxRecords.values()].filter(r=>r.conversation_id===id).sort((a,b)=>a.created_at.localeCompare(b.created_at)||a.nonce.localeCompare(b.nonce));}
+async function outboxSetPhase(record,phase,extra={}){
+ Object.assign(record,extra,{phase});
+ if(phase==='echoed'){outboxRecords.delete(record.nonce);await outboxForget(record.nonce);return;}
+ outboxRecords.set(record.nonce,record);await outboxPersist(record);
+}
+async function outboxEnqueue(conversationId,text){
+ const record={nonce:crypto.randomUUID(),conversation_id:conversationId,text,phase:'queued',created_at:new Date().toISOString(),tries:0};
+ outboxRecords.set(record.nonce,record);await outboxPersist(record);render();outboxDrain(conversationId);return record;
+}
+function outboxBackoffMs(tries){return Math.min(30000,1000*2**Math.max(0,tries-1));}
+function outboxRestoreDraft(record,message){
+ outboxRecords.delete(record.nonce);outboxForget(record.nonce);
+ try{if(!localStorage.getItem('personal.draft.'+record.conversation_id))localStorage.setItem('personal.draft.'+record.conversation_id,record.text);}catch{}
+ if(selected===record.conversation_id&&!$('message').value.trim()){$('message').value=record.text;$('draft-status').textContent='Not sent — restored to your draft';}
+ report(message);
+}
+// Per-conversation FIFO: record N+1 never sends before N reaches 'accepted'
+// (the server has durably committed it) or is removed (rejected/echoed).
+async function outboxDrain(conversationId){
+ if(outboxSending.has(conversationId))return;outboxSending.add(conversationId);
+ try{
+  for(;;){
+   const queue=outboxForConversation(conversationId);
+   const head=queue.find(r=>r.phase!=='accepted');
+   if(!head)break;
+   if(queue.some(r=>r!==head&&r.phase!=='accepted'&&(r.created_at<head.created_at||(r.created_at===head.created_at&&r.nonce<head.nonce))))break;
+   await outboxSetPhase(head,'sending');render();
+   try{
+    const response=await fetch('/v1/commands',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':head.nonce},body:JSON.stringify({schema_version:1,type:'message.send',payload:{conversation_id:head.conversation_id,text:head.text}})});
+    let body=null;try{body=await response.json();}catch{}
+    if(response.ok&&body?.status!=='rejected'){await outboxSetPhase(head,'accepted');render();continue;}
+    if(response.status>=400&&response.status<500){outboxRestoreDraft(head,body?.error?.message??'This message could not be saved.');render();continue;}
+    head.tries++;await outboxSetPhase(head,'unknown');render();
+    await new Promise(resolve=>setTimeout(resolve,outboxBackoffMs(head.tries)));
+   }catch{
+    head.tries++;await outboxSetPhase(head,'unknown');render();
+    await new Promise(resolve=>setTimeout(resolve,outboxBackoffMs(head.tries)));
+   }
+  }
+ }finally{outboxSending.delete(conversationId);}
+}
+// Recognize this page's own committed sends as they arrive back on the
+// timeline (the message.user echo carries the same Idempotency-Key), and
+// retire the optimistic bubble in favor of the committed event.
+function reconcileOutboxEchoes(conversationId,list){
+ for(const event of list){
+  if(event.type!=='message.user')continue;
+  const key=event.payload?.idempotency_key;if(typeof key!=='string')continue;
+  const record=outboxRecords.get(key);
+  if(record&&record.conversation_id===conversationId)outboxSetPhase(record,'echoed').then(render);
+ }
+}
+// On load, storage may hold records from a session that never learned its
+// outcome (network killed mid-send, tab closed). Ask the server directly:
+// found -> accepted (wait for the echo, never resend); not_found -> resend
+// under the same key. Any other failure (offline) leaves it to outboxDrain.
+async function outboxReconcileOnLoad(){
+ let records=[];try{records=await outboxLoadAll();}catch{}
+ for(const record of records)if(record&&typeof record.nonce==='string'&&typeof record.conversation_id==='string')outboxRecords.set(record.nonce,record);
+ for(const record of outboxRecords.values()){
+  try{
+   const response=await fetch('/v1/receipts?idempotency_key='+encodeURIComponent(record.nonce));
+   if(response.status===200)await outboxSetPhase(record,'accepted');
+   else if(response.status===404){record.tries=0;await outboxSetPhase(record,'queued');}
+  }catch{/* offline: leave the persisted phase; outboxDrain retries once a drain runs. */}
+ }
+ render();
+ for(const conversationId of new Set([...outboxRecords.values()].map(r=>r.conversation_id)))outboxDrain(conversationId);
 }
 function items(kind){return snapshot?.objects?.filter(x=>x.kind===kind)??[];}
 function current(){return snapshot?.objects?.find(x=>x.id===selected);}
@@ -357,7 +482,7 @@ async function refresh(force=false){
   // property leaves legacy/default behavior.
   if(value.summary.owner_alpha||'owner_alpha_warm' in value.summary||'owner_alpha_background' in value.summary)alphaBlock();
   if(!selected||!managedSelected()&&!value.objects.some(x=>x.id===selected))selected=items('persona').find(x=>!x.body.archived)?.id;
-  const conversationId=selected,readable=!managedSelected()&&alphaConversationAvailable(conversationId);if(readable){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId&&acceptHistory(conversationId,history)){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);}}
+  const conversationId=selected,readable=!managedSelected()&&alphaConversationAvailable(conversationId);if(readable){const history=await api('/v1/conversations/'+conversationId+'/events');if(selected===conversationId&&acceptHistory(conversationId,history)){const combined=[...(olderEvents.get(conversationId)??[]),...history.events];events=[...new Map(combined.map(x=>[x.sequence,x])).values()].sort((a,b)=>a.sequence-b.sequence);reconcileOutboxEchoes(conversationId,history.events);}}
   if(readable){
    try{const page=await api('/v1/conversations/'+conversationId+'/tasks');if(!page.counts||!Array.isArray(page.runs))throw new Error('Invalid task page');if(selected===conversationId)taskFeed={conversationId,page,error:false};}
    catch{if(selected===conversationId)taskFeed={conversationId,page:taskFeed?.conversationId===conversationId?taskFeed.page:null,error:true};}
@@ -407,7 +532,8 @@ function render(){
  const view=recoveryView?.conversationId===selected?recoveryView:null;
  const conversation=view?[]:events.filter(x=>x.conversation_id===selected);const runs=view?(view.page?.runs??[]):snapshot.runs.filter(x=>x.persona_id===selected||conversation.some(e=>e.payload?.run_id===x.id));
  const query=$('conversation-search').value.slice(0,200).trim().toLowerCase();
- const messages=conversation.filter(event=>event.type==='message.user'||event.type==='run.result');
+ const pendingOutbox=managedSelected()||view?[]:outboxForConversation(selected);
+ const messages=conversation.filter(event=>event.type==='message.user'||event.type==='bot.message');
  const matches=new Set(messages.filter(event=>!query||(event.payload.text??'').toLowerCase().includes(query)));
  $('conversation-search-status').textContent=`${matches.size} of ${messages.length} loaded messages shown.${query&&!matches.size?' No loaded messages match.':''}`;
  $('conversation-search-panel').querySelector('summary').textContent=`Search loaded messages${query?` · Filter active (${matches.size}/${messages.length})`:''}`;
@@ -416,7 +542,7 @@ function render(){
  const recovery=(view?(view.page?.recovery??[]):snapshot.recovery??[]).filter(x=>runs.some(run=>run.id===x.run_id));
  const previews=(view?.kind==='tasks'?view.page?.output_previews??[]:snapshot.output_previews??[]).filter(x=>runs.some(run=>run.id===x.run_id&&run.current_attempt===x.attempt&&(snapshot.summary.owner_alpha?['running','finishing','cancelling','recovery_required']:['running','finishing','recovery_required']).includes(run.status)&&!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code)));
  const questions=(snapshot.questions??[]).filter(q=>q.conversation_id===selected||q.persona_id===selected);
- const signature=JSON.stringify([selected,query,conversation,runs,steering,recovery,previews,questions,$('connection').textContent,navigator.onLine,alphaSeen,snapshot.summary.owner_alpha,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.token_usage_snapshots,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
+ const signature=JSON.stringify([selected,query,conversation,runs,steering,recovery,previews,questions,pendingOutbox,$('connection').textContent,navigator.onLine,alphaSeen,snapshot.summary.owner_alpha,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.token_usage_snapshots,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;const expanded=new Set([...timeline.querySelectorAll('.task-card[open]')].map(card=>card.dataset.runId));timeline.replaceChildren();
   if(view){
    const taskMode=view.kind==='tasks',label=taskMode?'task':'recovery';
@@ -436,25 +562,43 @@ function render(){
    if(selected!==conversationId)return;
    events=olderEvents.get(conversationId);lastSignature='';render();
   }catch(e){if(selected===conversationId)report(e.message);}},'quiet'));}
-  if(!view&&!conversation.length&&!questions.length&&alphaConversationAvailable(selected)){const empty=node('div',undefined,'empty');empty.append(node('h2',`A place to work with ${object?.body.name??'your assistant'}`),node('p','Ask for help, share an update, or describe something you’d like done on a schedule.'));timeline.append(empty);}
+  if(!view&&!conversation.length&&!questions.length&&!pendingOutbox.length&&alphaConversationAvailable(selected)){const empty=node('div',undefined,'empty');empty.append(node('h2',`A place to work with ${object?.body.name??'your assistant'}`),node('p','Ask for help, share an update, or describe something you’d like done on a schedule.'));timeline.append(empty);}
   for(const question of questions)renderQuestion(timeline,question);
+  // G7 clean thread (GROK_ALIGNMENT A7): only owner.message (message.user) and
+  // bot.message are chat bubbles. A run.result stays a non-bubble recorded
+  // outcome once a bot.message exists for its run (G1 emits one final_text
+  // bot.message per completed attempt); a completed run with retained text
+  // and no such event is legacy data, shown once as a bubble marked (legacy).
+  const botMessageRunIds=new Set(conversation.filter(e=>e.type==='bot.message').map(e=>e.payload?.run_id));
   for(const event of conversation){
-   if(event.type==='message.user'||event.type==='run.result'){
+   if(event.type==='message.user'||event.type==='bot.message'){
     if(!matches.has(event))continue;
     const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot'));const h=node('div',undefined,'message-head');h.append(node('strong',event.type==='message.user'?'You':object?.body.name??'Assistant'),node('time',time(event.created_at)));m.append(h);
-    if(event.type==='run.result'){
-     const outcome=['completed','failed','cancelled','waiting'].includes(event.payload.status)?statuses[event.payload.status]:'Unavailable';
-     const label=node('p',`Recorded outcome: ${outcome}${event.payload.error_code?` · ${event.payload.error_code}`:''}`,'hint result-outcome');
-     label.style.overflowWrap='anywhere';
-     if(event.payload.title)label.append(node('span',` · ${event.payload.title}`));
-     else if(event.payload.role==='background')label.append(node('span',' · Background task'));
-     m.append(label);
+    if(event.type==='bot.message'&&event.payload.task_run_id){
+     const task=runs.find(x=>x.id===event.payload.task_run_id);
+     h.append(node('span',`task: ${task?.title??String(event.payload.task_run_id).slice(0,8)}`,'status'));
     }
     if(event.type==='message.user'&&event.payload.skill_invocation){
      const invocation=event.payload.skill_invocation;
      m.append(node('p',`Run once · ${invocation.skill_name??invocation.skill_id} · captured revision ${invocation.skill_revision}`,'hint result-outcome'));
     }
     m.append(node('div',event.payload.text??'','message-body'));timeline.append(m);
+   }else if(event.type==='run.result'){
+    // Recorded outcomes are notices, not search-filtered bubbles: always shown.
+    const outcome=['completed','failed','cancelled','waiting'].includes(event.payload.status)?statuses[event.payload.status]:'Unavailable';
+    const e=node('div',undefined,'event');
+    const label=node('span',`Recorded outcome: ${outcome}${event.payload.error_code?` · ${event.payload.error_code}`:''}`,'result-outcome');
+    label.style.overflowWrap='anywhere';e.append(label);
+    if(event.payload.title)e.append(node('span',` · ${event.payload.title}`));
+    else if(event.payload.role==='background')e.append(node('span',' · Background task'));
+    timeline.append(e);
+    // Legacy fallback only: a completed result with retained text but no
+    // bot.message for this run predates G1 and would otherwise be silent.
+    const legacyText=event.payload.status==='completed'&&event.payload.text&&!botMessageRunIds.has(event.payload.run_id)?event.payload.text:null;
+    if(legacyText&&(!query||legacyText.toLowerCase().includes(query))){
+     const m=node('article',undefined,'message bot');const h=node('div',undefined,'message-head');h.append(node('strong',object?.body.name??'Assistant'),node('time',time(event.created_at)),node('span','(legacy)','status'));
+     m.append(h,node('div',legacyText,'message-body'));timeline.append(m);
+    }
    }else if(['run.accepted','run.cancellation_requested'].includes(event.type)){
     const run=runs.find(x=>x.id===event.payload.run_id);if(!run)continue;const e=node('div',undefined,'event');e.append(node('span',statuses[run.status]??run.status,'status'));
     if(run.status==='waiting')e.append(node('span',run.error_code==='CAPABILITY_UNAVAILABLE'?'Runtime connection required':run.error_code??'Input required'));
@@ -469,6 +613,16 @@ function render(){
     const e=node('div',undefined,'event');e.setAttribute('role','status');const skillRun=Boolean(event.payload?.skill_id||event.payload?.skill_invocation);e.append(node('span','Request expired','status'),node('span',skillRun?'An unstarted Run once request expired after 30 days. Open the current approved skill and supply fresh input.':'A queued request expired after 90 days without starting. Send a fresh request if it is still needed.'));timeline.append(e);
    }else if(event.type.startsWith('room.')){const e=node('div',undefined,'event');e.append(node('span',event.type==='room.context_update'?'Context update':'Room update'),node('span',event.payload.text??''));timeline.append(e);}
   }
+  // G5 outbox (GROK_ALIGNMENT A5): unresolved sends render as owner bubbles,
+  // optimistic until echoed, never search-filtered since they aren't committed.
+  const outboxLabels={queued:'Queued to send…',sending:'Sending…',accepted:'Sent — waiting for confirmation…',unknown:'Not delivered yet — retrying…'};
+  for(const record of pendingOutbox){
+   const m=node('article',undefined,'message user outbox-pending outbox-'+record.phase);
+   const h=node('div',undefined,'message-head');h.append(node('strong','You'),node('time',time(record.created_at)));m.append(h);
+   m.append(node('div',record.text,'message-body'));
+   const status=node('p',outboxLabels[record.phase]??'','hint outbox-status');status.setAttribute('role','status');m.append(status);
+   timeline.append(m);
+  }
   for(const run of runs.filter(x=>view?.kind==='tasks'||x.role==='background'||['running','finishing','recovery_required'].includes(x.status)||previews.some(preview=>preview.run_id===x.id)||steering.some(receipt=>receipt.run_id===x.id))){
    const title=run.title??(run.role==='background'?'Background task':'Conversation task');
    const card=node('details',undefined,'task-card');card.dataset.runId=run.id;card.open=expanded.has(run.id)||view?.focusRun===run.id;card.append(node('summary',`${title} · ${statuses[run.status]??run.status}`));
@@ -481,9 +635,12 @@ function render(){
    renderTokenUsage(card,run,view?.kind==='tasks'?view.page:view?null:snapshot);
    const preview=previews.find(item=>item.run_id===run.id);
    if(preview){
-    card.querySelector('summary').append(node('span',' · Provisional output','status'));
-    const section=node('section',undefined,'output-preview');section.setAttribute('aria-label','Provisional task output');
-    section.append(node('p','Latest native message — provisional. This is not a completed result; children, tools or effects may still be unresolved.','hint'),node('div',preview.text,'message-body'));
+    // G7 clean thread (A7): provisional text is an ephemeral, visually
+    // distinct "working" line, never a chat bubble and never given the
+    // persisted look of a committed message.
+    card.querySelector('summary').append(node('span',' · Working…','status'));
+    const section=node('section',undefined,'output-preview provisional-typing');section.setAttribute('aria-label','Provisional task output');section.setAttribute('role','status');section.setAttribute('aria-live','polite');
+    section.append(node('p','Working — provisional, not a completed result; children, tools or effects may still be unresolved.','hint'),node('div',preview.text,'provisional-text'));
     if(preview.truncated)section.append(node('p','Preview shortened. This is not the complete native message.','hint'));
     card.append(section);
    }
@@ -991,10 +1148,10 @@ $('message').oninput=()=>{if(selected)localStorage.setItem('personal.draft.'+sel
 $('composer').onsubmit=async event=>{
  event.preventDefault();if(!selected||!$('message').value.trim())return;const text=$('message').value,conversation=selected;
  const blocked=alphaBlock();if(blocked||sending){renderAlphaSession();if(blocked)report(blocked);return;}
- const pendingKey='personal.pending.'+conversation;let pending;try{pending=JSON.parse(localStorage.getItem(pendingKey));}catch{}
- if(!pending||pending.text!==text)pending={text,key:crypto.randomUUID()};localStorage.setItem(pendingKey,JSON.stringify(pending));sending=true;$('send').disabled=true;
- try{report('');await command('message.send',{conversation_id:conversation,text},pending.key);localStorage.removeItem(pendingKey);localStorage.removeItem('personal.draft.'+conversation);if(selected===conversation)$('message').value='';$('draft-status').textContent='Saved to your conversation';await refresh(true);}
- catch(e){report(e.message);$('draft-status').textContent='Not confirmed — Send retries the same message';}finally{sending=false;renderAlphaSession();}
+ report('');$('message').value='';try{localStorage.removeItem('personal.draft.'+conversation);}catch{}
+ $('draft-status').textContent='Queued to send';
+ await outboxEnqueue(conversation,text);
+ renderAlphaSession();
 };
 function field(label,name,value='',type='text'){const l=node('label',label,'field');let input;if(type==='textarea')input=node('textarea');else{input=node('input');input.type=type;}input.name=name;input.value=value;input.required=true;l.append(input);return l;}
 function selectField(label,name,options,value){const l=node('label',label,'field');const select=node('select');select.name=name;for(const [v,text]of options){const o=node('option',text);o.value=v;select.append(o);}select.value=value;l.append(select);return l;}
@@ -1197,7 +1354,70 @@ $('export-control').onclick=async()=>{
  }catch(error){status.textContent=error instanceof TypeError?'Connection failed. No download was requested.':error.message;}
  finally{trigger.disabled=false;}
 };
+// --- G6 streamed timeline, portal client (GROK_ALIGNMENT A6) ---------------
+// Primary transport is a same-origin WebSocket at /v1/stream. It is only ever
+// opened while the page is visible, never wakes or infers anything by
+// itself, and any close/error backs off (1,2,4…30s) and reconnects. While it
+// is not open, a slower visibility-gated poll (not the old fixed 5s) is the
+// fallback; a 404/426 on the upgrade (the feature not deployed) is
+// indistinguishable from a transient failure in the browser WebSocket API,
+// so it is handled the same way — capped backoff, with fallback polling
+// covering the gap the whole time.
+let wsSocket=null,wsReconnectDelay=1000,wsReconnectTimer=null,wsCursor=null,wsPingTimer=null,streamActive=false;
+function stopStream(){
+ streamActive=false;
+ if(wsPingTimer){clearInterval(wsPingTimer);wsPingTimer=null;}
+ if(wsSocket){try{wsSocket.onclose=null;wsSocket.close();}catch{}wsSocket=null;}
+}
+function scheduleStreamReconnect(){
+ if(wsReconnectTimer)return;
+ wsReconnectTimer=setTimeout(()=>{wsReconnectTimer=null;if(document.visibilityState==='visible')connectStream();},wsReconnectDelay);
+ wsReconnectDelay=Math.min(30000,wsReconnectDelay*2);
+}
+function connectStream(){
+ if(document.visibilityState!=='visible'||wsSocket)return;
+ let socket;
+ try{socket=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/v1/stream');}catch{scheduleStreamReconnect();return;}
+ wsSocket=socket;
+ socket.onopen=()=>{
+  wsReconnectDelay=1000;streamActive=true;
+  try{socket.send(JSON.stringify({type:'subscribe',cursor:wsCursor}));}catch{}
+  if(wsPingTimer)clearInterval(wsPingTimer);
+  wsPingTimer=setInterval(()=>{try{socket.send('ping');}catch{}},25000);
+ };
+ socket.onmessage=event=>{
+  let frame;try{frame=JSON.parse(event.data);}catch{return;} // "pong" and other non-JSON frames are ignored.
+  if(!frame||typeof frame!=='object')return;
+  if(frame.type==='events'&&Array.isArray(frame.events)){
+   if(Number.isFinite(frame.cursor))wsCursor=frame.cursor;
+   const relevant=frame.events.filter(e=>e&&e.conversation_id===selected);
+   if(relevant.length){
+    const combined=[...events,...relevant];
+    events=[...new Map(combined.map(e=>[e.sequence,e])).values()].sort((a,b)=>a.sequence-b.sequence);
+    reconcileOutboxEchoes(selected,relevant);lastSignature='';render();
+   }
+  }else if(frame.type==='snapshot_required'){
+   // A full resync is required; the next subscribe starts from "now" since
+   // this client does not otherwise track a global cross-conversation cursor.
+   wsCursor=null;refresh(true).then(()=>{try{socket.send(JSON.stringify({type:'subscribe',cursor:wsCursor}));}catch{}});
+  }
+  // "runtime" and "live" frames are presentation-only observations with no
+  // committed state of their own; neither is required to show a reply.
+ };
+ socket.onerror=()=>{};
+ socket.onclose=()=>{streamActive=false;if(wsPingTimer){clearInterval(wsPingTimer);wsPingTimer=null;}wsSocket=null;scheduleStreamReconnect();};
+}
+document.addEventListener('visibilitychange',()=>{
+ if(document.hidden)stopStream();
+ else{wsReconnectDelay=1000;connectStream();refresh(true);}
+});
 installImportSetup({trigger:$('import-setup'),api,command,onAdopted:()=>refresh(true)});
 setInterval(()=>{if(alphaSeen)renderAlphaSession();},250);
 document.addEventListener('visibilitychange',()=>{if(alphaSeen)renderAlphaSession();});
-await refresh(true);if(selected==='connectors')loadConnectorCatalog();if(selected)$('message').value=localStorage.getItem('personal.draft.'+selected)??'';setInterval(()=>refresh(),5000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(true);});
+await refresh(true);if(selected==='connectors')loadConnectorCatalog();if(selected)$('message').value=localStorage.getItem('personal.draft.'+selected)??'';
+await outboxReconcileOnLoad();
+// Fallback polling only: never while hidden, never while the stream is open.
+// 15s replaces the old fixed 5s full refresh (GROK_ALIGNMENT A6).
+setInterval(()=>{if(!streamActive&&!document.hidden)refresh();},15000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(true);});
+if(!document.hidden)connectStream();

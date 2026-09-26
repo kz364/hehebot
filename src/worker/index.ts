@@ -174,6 +174,11 @@ export default {
    if(recovery&&request.method==='GET')return json(unwrap(await control.getRecovery(owner,recovery[1],url.searchParams.get('after')??undefined,Number(url.searchParams.get('limit')??20))));
    const receipt=path.match(/^\/v1\/receipts\/([0-9a-f-]{36})$/i);
    if(receipt&&request.method==='GET')return json(unwrap(await control.getReceipt(owner,receipt[1])));
+   if(path==='/v1/receipts'&&request.method==='GET'){
+    const key=url.searchParams.get('idempotency_key')??'';
+    requireThat(key.length>=16&&key.length<=128,'INVALID_INPUT','Provide a valid idempotency_key query parameter.',422);
+    return json(unwrap(await control.getReceiptByIdempotencyKey(owner,key)));
+   }
    if(path.startsWith('/v1/')||!['GET','HEAD'].includes(request.method))throw new ControlError('NOT_FOUND','Route unavailable.',404);
    const response=await env.ASSETS.fetch(request);const headers=new Headers(response.headers);
    headers.set('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");

@@ -95,6 +95,14 @@ export class ControlCore {
   requireThat(row,'NOT_FOUND','Receipt unavailable.',404);
   return {id:row.id,status:row.status,accepted_at:row.accepted_at,resource_id:row.resource_id,error:row.error_json?JSON.parse(row.error_json):null};
  }
+ // Owner-scoped lookup by the client's Idempotency-Key, for durable-outbox
+ // reconciliation after a page reload or a lost response (GROK_ALIGNMENT A5).
+ // Only this owner's own commands are visible; an unknown key is NOT_FOUND.
+ receiptByIdempotencyKey(owner:string,key:string):Receipt {
+  const row=this.store.db.all<{id:string}>('SELECT id FROM commands WHERE owner_id=? AND idempotency_key=?',owner,key)[0];
+  requireThat(row,'NOT_FOUND','Receipt unavailable.',404);
+  return this.receipt(row.id);
+ }
  accept(owner:string,key:string,hash:string,input:unknown):Receipt {
   requireThat(key.length>=16 && key.length<=128,'INVALID_INPUT','An idempotency key of 16–128 characters is required.',422);
   const command=parseCommand(input);
@@ -105,7 +113,7 @@ export class ControlCore {
   try {
    this.store.db.transaction(()=>{
     insert('accepted',null,null);
-    const resource=this.apply(owner,id,command);
+    const resource=this.apply(owner,id,command,key);
     if(command.type==='message.send'){this.bootstrap.assignNewMessage(owner,id,resource);this.warm.assignNewMessage(owner,id,resource);this.background.assignNewMessage(owner,id,resource);}
     this.store.db.exec("UPDATE commands SET status='applied',resource_id=? WHERE id=?",resource,id);
    });
@@ -115,7 +123,7 @@ export class ControlCore {
   }
   return this.receipt(id);
  }
- private apply(owner:string,commandId:string,command:Command):string {
+ private apply(owner:string,commandId:string,command:Command,idempotencyKey:string):string {
   const now=this.now();
   const skills=new SkillCatalog(this.store,()=>this.now(),this.options.uuid);
   switch(command.type){
@@ -193,7 +201,7 @@ export class ControlCore {
     for(const item of p.commands){
      if(item.type==='persona.put')requireThat(!item.payload.tool_policy_ids.length&&!item.payload.archived,'FORBIDDEN','Import cannot grant tools or archive a bot.',403);
      else requireThat(!item.payload.enabled&&!item.payload.action_policy_ids.length&&item.payload.schedule?.timezone===p.monitoring_timezone,'FORBIDDEN','Adopt only disabled routines with the reviewed timezone and no action grants.',403);
-     this.apply(owner,commandId,item);
+     this.apply(owner,commandId,item,idempotencyKey);
     }
     this.store.event(this.options.uuid(),null,'setup.adopted',owner,commandId,{count:p.commands.length,reviewed_hash:p.reviewed_hash,monitoring_timezone:p.monitoring_timezone,enabled:false},now);return commandId;
    }
@@ -222,7 +230,9 @@ export class ControlCore {
     if(!this.options.ownerAlphaWarm&&!this.options.executionEnabled&&target.kind==='persona')this.warm.assertMessageAdmissible(owner,commandId,target.id);
     // Retained background custody denies candidate owner messages the same way.
     if(!this.options.ownerAlphaBackground&&!this.options.executionEnabled&&target.kind==='persona')this.background.assertMessageAdmissible(owner,commandId,target.id);
-    this.store.event(commandId,target.id,'message.user',owner,null,{text:command.payload.text},now);
+    // Carries the client's own Idempotency-Key so the portal's durable outbox
+    // can recognize its own committed message as an echo (GROK_ALIGNMENT A5).
+    this.store.event(commandId,target.id,'message.user',owner,null,{text:command.payload.text,idempotency_key:idempotencyKey},now);
     // With a warm generation configured, a candidate owner message either
     // admits or the whole command is rejected; no orphan unassigned run.
     if(this.options.ownerAlphaWarm&&!this.options.executionEnabled&&target.kind==='persona')this.warm.assertMessageAdmissible(owner,commandId,target.id);
