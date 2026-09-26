@@ -200,6 +200,27 @@ describe('task.event coordinator wake',()=>{
   expect(wakeContext.instruction).toContain('Research hotels');
   expect(wakeContext.instruction).toContain('completed');
  });
+ // G2 follow-up (GROK_ALIGNMENT A3/A4): a coordinator task fenced into
+ // 'interrupted' (epoch advance, boot-lease loss, unconfirmed cancellation --
+ // never a native-reported completion) owes its coordinator the same
+ // task.event + bounded wake a normal settlement fires via complete().
+ it('an interrupted task appends task.event and wakes its coordinator, same as a normal settlement',()=>{
+  const a=start('Research hotels','Find hotels.').resource_id!;runTask(a);
+  life.watchdog(); // lease intact; nothing happens yet.
+  expect(f.db.all("SELECT id FROM events WHERE type='task.event'")).toEqual([]);
+  f.db.exec("UPDATE lifecycle SET lease_until=? WHERE singleton=1",'2026-09-10T00:00:00.000Z');
+  f.setNow('2026-09-10T00:00:01.000Z');
+  life.watchdog();
+  expect(f.store.run(a).status).toBe('interrupted');
+  const events=f.db.all<{type:string;payload_json:string}>("SELECT type,payload_json FROM events WHERE type='task.event'");
+  expect(events).toHaveLength(1);
+  expect(JSON.parse(events[0].payload_json)).toMatchObject({task_run_id:a,status:'interrupted',title:'Research hotels'});
+  const wakes=f.db.all<{id:string}>("SELECT id FROM runs WHERE role='coordinator' AND id!=? AND parent_run_id IS NULL",coordinatorId);
+  expect(wakes).toHaveLength(1);
+  const wakeContext=JSON.parse(f.store.run(wakes[0].id).context_json) as ContextSnapshot;
+  expect(wakeContext.instruction).toContain('Research hotels');
+  expect(wakeContext.instruction).toContain('interrupted');
+ });
  it('a native-child completion never appends a task.event',()=>{
   const other=randomUUID();
   f.db.exec("INSERT INTO runs(id,persona_id,context_json,role,parent_run_id,status,current_attempt,created_at,updated_at) VALUES(?,?,?,'background',?,'running',1,?,?)",
