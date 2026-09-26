@@ -67,12 +67,12 @@ export class RootChildEffects {
   requireThat(root.role === 'coordinator' && root.parent_run_id === null && child.id !== root.id, 'FORBIDDEN', 'Select a descendant of the coordinator root.', 403);
   requireThat(root.context_json!==null,'CONTEXT_PREPARATION_LIMIT','New effects require authority context of at most 1MiB per run and 4MiB across authority reads. Stored context and effects were retained.');
   const rootContext = JSON.parse(root.context_json) as ContextSnapshot;
-  const lineage: AuthorityRun[] = [], seen = new Set<string>();
+  const lineage: Pick<Run,'id'|'current_attempt'|'status'>[] = [], seen = new Set<string>();
   let childContext!: ContextSnapshot;
   let current = child;
   while (true) {
    requireThat(!seen.has(current.id), 'FORBIDDEN', 'Native ancestry contains a cycle.', 403);
-   seen.add(current.id); lineage.push(current);
+   seen.add(current.id); lineage.push({id:current.id,current_attempt:current.current_attempt,status:current.status});
    this.lifecycle.authorizeAttempt(identity, current.id, current.current_attempt);
    requireThat(current.context_json!==null,'CONTEXT_PREPARATION_LIMIT','New effects require authority context of at most 1MiB per run and 4MiB across authority reads. Stored context and effects were retained.');
    const context = JSON.parse(current.context_json) as ContextSnapshot;

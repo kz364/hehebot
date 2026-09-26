@@ -4,6 +4,22 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Effect lineage retention (2026-09-26 Asia/Jakarta): admitted lineage now stores
+id/current_attempt/status only, the three fields consumed by subsequent status and
+deadline checks. Every ancestor still undergoes the same exhaustive identity/scope/
+attempt validation and JS parsing in the same order. Root/selected-child context
+references and parsed authority remain; this only removes extra ancestor-body
+references from lineage, not SQL scans, parsing work, peak heap or total bounds.
+Regression injects oversized duplicate-scope contexts after effect admission,
+checks the exact retained lineage shape, records outcome_unknown and retains locks.
+Old implementation fails the shape test; synthetic historical injection is not a
+reachable oversized-admission claim. Focused113 pass, then initial typecheck found
+an implicit-any test callback. Annotation corrected; backend2389/typecheck/dry-build
+pass (1663058 exit0). Logs .local/effect-lineage-*.log. Full runtime/browser/native/
+shutdown/desktop matrix not rerun for this localized core change. Original
+intermittency/advisories and external gates unchanged; remaining recovery/storage
+work remains open. No publication or live action.
+
 Post-RPC custody regression (2026-09-26 Asia/Jakarta): root and child fixtures hold
 thread/read pending, observe a new command and MCP invocation through the adapter,
 then return terminal history for only an older command. Late obligations remain

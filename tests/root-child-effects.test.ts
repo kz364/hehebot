@@ -48,6 +48,27 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it('retains only consumed lineage metadata after existing effect authority validation',()=>{
+ const input=intent(grandchild);boundary.intent(input);
+ for(const id of [root,child,grandchild]){
+  const original=f.store.run(id).context_json;
+  const snapshot=original.slice(0,-1)+`,"scope_key":${JSON.stringify(JSON.parse(original).scope_key)},"padding":"${'界'.repeat(400000)}"}`;
+  f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
+ }
+ const held=locks();
+ // Inspect retained lineage, not SQL hydration: full ambiguous authority still
+ // must be parsed before this metadata-only result can be trusted.
+ const admitted=vi.spyOn(boundary as unknown as {admitted(...args:unknown[]):{lineage:unknown[]}},'admitted');
+ try{
+  boundary.transition(result(input,'outcome_unknown'));
+  expect(admitted.mock.results[0].value.lineage.map((row:unknown)=>Object.keys(row as object).sort()))
+   .toEqual(Array.from({length:3},()=>['current_attempt','id','status']));
+  expect(admitted.mock.results[0].value.lineage).toEqual([grandchild,child,root].map(id=>({id,current_attempt:1,status:'running'})));
+ }finally{admitted.mockRestore();}
+ expect(effects()).toEqual([expect.objectContaining({id:input.effect.id,status:'outcome_unknown'})]);
+ expect(locks()).toEqual(held);
+});
+
 it.each(['intent','replay','outcome'] as const)('hydrates root authority once but parses independently during %s',mode=>{
  const input=intent(grandchild);if(mode!=='intent')boundary.intent(input);
  const original=f.store.run(root).context_json;

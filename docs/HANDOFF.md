@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Effect lineage retains only id/current_attempt/status after unchanged exhaustive
+authority validation. Red1/focused113/backend2389/typecheck/dry-build pass1663058;
+initial test callback annotation fixed. Synthetic oversized historical contexts
+prove retained shape, not peak memory or reachable admission. Logs .local/effect-
+lineage-*.log. No active checks/children/delivery; existing schedule enabled. Next
+remaining native restoration and historical/storage/existing-key bounds. Root/child
+contexts, JS parsing and SQL work remain; no total bounds. Full matrix not rerun for
+this localized core change; external gates/intermittency/advisories unchanged.
+
 Post-RPC root/child race tests now cover late command/MCP starts while history is
 pending, exact disk reopen and unchanged unknown/sibling custody. Cached pre-RPC
 snapshot mutant fails2; restored production zero diff, adapter36/typecheck pass

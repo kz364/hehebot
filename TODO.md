@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** root/child pending-readback
+**Current checkpoint (2026-09-26, verified locally):** effect ancestry retains only
+id/attempt/status in its returned lineage, not each ancestor context body. Full JS
+authority parsing/order and exhaustive custody walk unchanged. Red1/focused113/
+backend2389/typecheck/dry-build pass after fixing a test callback annotation.
+Synthetic oversized-context test proves retained shape and unknown-outcome/lock
+custody, not peak heap or total storage/time bounds. Next remaining native restoration
+and historical/storage/existing-key bounds. Full matrix not rerun; gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** root/child pending-readback
 race tests preserve newly observed command/MCP obligations across disk reopen.
 Stale-snapshot mutant fails2 by dropping the late command; restored production has
 zero diff. Focused36/typecheck pass. Full matrix remains the preceding ab33f12
