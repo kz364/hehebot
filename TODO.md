@@ -12,7 +12,13 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** native-question authority reads
+**Current checkpoint (2026-09-26, verified locally):** WhatsApp read ancestry selects
+metadata instead of historical bodies; selected-task JS grant parsing remains intact.
+Red1/focused10/backend2370/typecheck/dry-build pass. Shorter parent deadline and exact
+chat grants retained. Remaining ancestry/context/storage/native recovery bounds next.
+Full matrix not rerun; original intermittency/advisories/gates unchanged. Local only.
+
+**Previous checkpoint (2026-09-26, verified locally):** native-question authority reads
 metadata; only live scope checks load context, and no question check loads checkpoint.
 Red2/focused49/backend2369/runtime682/typecheck/dry-build pass. Late resolution/replay
 preserve locks and unknown effects. Next remaining historical/storage/native recovery

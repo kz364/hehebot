@@ -4,6 +4,20 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+WhatsApp read ancestry projection (2026-09-26 Asia/Jakarta): WhatsAppReadAccess loads
+metadata for the selected run and ancestors, then only the selected context for the
+unchanged JS grant checks. Checkpoints and ancestor contexts are not consumed here.
+Attempt/link/status/deadline order, cycle detection and minimum deadline preserved.
+Inspected intervening authorizeAttempt/owner-alpha cancellation propagation: those
+paths do not mutate context. Oversized-history regression fails before implementation,
+then verifies shorter parent deadline, foreign-chat denial and unchanged run rows.
+Red1/focused10/backend2370/typecheck/dry-build pass;1574760 exit0. Logs retained as
+.local/whatsapp-projection-{red,focused,backend,build}.log. No ancestry-depth, selected-
+context, aggregate or SQL-work bound claimed; delegated authority checks remain.
+Full runtime/HTTP/local-Worker/browser/native-service/shutdown/desktop matrix not
+rerun; original intermittency/advisories/external gates unchanged. No live connector
+calls or activation; local only. Remaining storage/native recovery work continues.
+
 Native-question authority read split (2026-09-26 Asia/Jakarta): authority selects
 seven metadata fields, retaining attempt/coordinator/native-turn/live checks in order.
 Scope loads context only when its existing live consumer needs it; JSON.parse and

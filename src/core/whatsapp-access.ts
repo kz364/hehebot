@@ -1,7 +1,7 @@
 import { requireThat } from './errors';
 import type { ControlCore } from './control';
 import type { Identity, LifecycleCore } from './lifecycle';
-import type { ContextSnapshot, Options, PersonaPut, RoutinePut } from './types';
+import type { ContextSnapshot, Options, PersonaPut, RoutinePut, Run } from './types';
 
 export const WHATSAPP_READ_TOOLS = ['whatsapp_get_chat_messages', 'whatsapp_search_messages'] as const;
 export type WhatsAppReadPolicy = { chatIds: string[]; tools: (typeof WHATSAPP_READ_TOOLS)[number][] };
@@ -35,9 +35,14 @@ export type WhatsAppReadRequest = { identity: Identity; run_id: string; attempt:
 /** Read-only authority query. Does not dispatch a connector, renew a lease or settle work. */
 export class WhatsAppReadAccess {
  constructor(private core: ControlCore, private lifecycle: LifecycleCore) {}
+ private run(id: string) {
+  const run = this.core.store.db.all<Pick<Run,'id'|'current_attempt'|'status'|'parent_run_id'|'persona_id'|'routine_id'>>(
+   'SELECT id,current_attempt,status,parent_run_id,persona_id,routine_id FROM runs WHERE id=?', id)[0];
+  requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404); return run;
+ }
  authorize(input: WhatsAppReadRequest): { allowed: true; deadline_at: string } {
   this.lifecycle.authorizeAttempt(input.identity, input.run_id, input.attempt);
-  const run = this.core.store.run(input.run_id);
+  const run = this.run(input.run_id);
   requireThat(run.current_attempt === input.attempt && ['running', 'finishing'].includes(run.status), 'REVISION_CONFLICT', 'The task is no longer active.');
   const attempt = this.core.store.db.all<{ deadline_at: string }>('SELECT deadline_at FROM attempts WHERE run_id=? AND attempt=?', run.id, input.attempt)[0];
   requireThat(Date.parse(attempt.deadline_at) > Date.parse(this.core.now()), 'DEADLINE_EXCEEDED', 'The task deadline expired.');
@@ -47,14 +52,15 @@ export class WhatsAppReadAccess {
    requireThat(!seen.has(ancestor.id), 'FORBIDDEN', 'Invalid task ancestry.', 403); seen.add(ancestor.id);
    const link = this.core.store.db.all<{ parent_run_id: string; parent_attempt: number }>('SELECT parent_run_id,parent_attempt FROM native_task_links WHERE run_id=?', ancestor.id)[0];
    requireThat(link?.parent_run_id === ancestor.parent_run_id, 'FORBIDDEN', 'Task ancestry is unavailable.', 403);
-   ancestor = this.core.store.run(link.parent_run_id);
+   ancestor = this.run(link.parent_run_id);
    this.lifecycle.authorizeAttempt(input.identity, ancestor.id, link.parent_attempt);
    requireThat(ancestor.current_attempt === link.parent_attempt && ['running', 'finishing', 'completed'].includes(ancestor.status), 'REVISION_CONFLICT', 'The parent task is no longer active.');
    const parent = this.core.store.db.all<{ deadline_at: string }>('SELECT deadline_at FROM attempts WHERE run_id=? AND attempt=?', ancestor.id, link.parent_attempt)[0];
    requireThat(Date.parse(parent.deadline_at) > Date.parse(this.core.now()), 'DEADLINE_EXCEEDED', 'The parent task deadline expired.');
    if (parent.deadline_at < attempt.deadline_at) attempt.deadline_at = parent.deadline_at;
   }
-  const snapshot = JSON.parse(run.context_json) as ContextSnapshot;
+  const context = this.core.store.db.all<{ context_json: string }>('SELECT context_json FROM runs WHERE id=?', run.id)[0];
+  const snapshot = JSON.parse(context.context_json) as ContextSnapshot;
   requireThat(snapshot.persona.id === run.persona_id && (snapshot.routine?.id ?? null) === run.routine_id, 'FORBIDDEN', 'The task scope does not match.', 403);
   const pinned = parseWhatsAppReadPolicies(snapshot.whatsapp_read_policies ?? {});
   const current = captureWhatsAppReadPolicies(this.core.options, snapshot.persona.body, snapshot.routine?.body ?? null);

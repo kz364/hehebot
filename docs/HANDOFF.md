@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+WhatsApp read ancestry projects metadata, loading only selected-task context for
+unchanged grant parsing. Red1/focused10/backend2370/typecheck/build pass;1574760 exit0.
+Shorter parent deadline and exact chat grants preserved, historical rows untouched.
+Next ancestry/context/storage/SQL-work/existing-key and native recovery bounds.
+No active checks/children/delivery; schedule enabled. Full matrix not rerun; original
+intermittency/advisories/gates unchanged. No connector calls or activation.
+
 Native-question authority now reads metadata; scope alone loads live context.
 Late resolve/replay and resolved takeAnswer avoid both historical bodies. Red2/
 focused49/backend2369/runtime682/typecheck/build pass;1568849 exit0. Exact authority,

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { fixture, bot, otherBot, routine } from './helpers';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import { NativeTaskLedger } from '../src/core/native-tasks';
@@ -102,6 +102,28 @@ it('native descendants retain the original scope after root completion but not a
  expect(access.authorize(childInput).allowed).toBe(true);
  f.db.exec("UPDATE runs SET status='cancelling' WHERE id=?", input.run_id);
  expect(() => access.authorize(childInput)).toThrowError(expect.objectContaining({ code: 'REVISION_CONFLICT' }));
+});
+
+it('reads descendant scope without hydrating ancestor bodies or checkpoints', () => {
+ const input = admit();
+ const child = new NativeTaskLedger(f.store, f.core, life).register(identity, { parent_run_id: input.run_id, parent_attempt: 1,
+  persona_id: bot, native_run_ref: 'projection-child', native_session_key: 'projection-session', title: 'Child read' }, true);
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?', JSON.stringify({ padding: '界'.repeat(400000) }), input.run_id);
+ f.db.exec('UPDATE runs SET checkpoint_json=?', 'x'.repeat(1100000));
+ f.db.exec('UPDATE attempts SET deadline_at=? WHERE run_id=?', '2026-09-10T00:05:00.000Z', input.run_id);
+ const before = f.db.all('SELECT * FROM runs ORDER BY id'), read = vi.spyOn(f.db, 'all');
+ try {
+  expect(access.authorize({ ...input, run_id: child.id })).toEqual({ allowed: true, deadline_at: '2026-09-10T00:05:00.000Z' });
+  const rows = read.mock.calls.flatMap(([sql, runId], i) => sql.includes('FROM runs WHERE id=?')
+   ? read.mock.results[i].value.map((row: object) => ({ row, runId })) : []);
+  expect(rows.length).toBeGreaterThan(1);
+  for (const { row, runId } of rows) {
+   expect(row).not.toHaveProperty('checkpoint_json');
+   if (runId === input.run_id) expect(row).not.toHaveProperty('context_json');
+  }
+ } finally { read.mockRestore(); }
+ expect(f.db.all('SELECT * FROM runs ORDER BY id')).toEqual(before);
+ expect(() => access.authorize({ ...input, run_id: child.id, chatId: 'foreign@g.us' })).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
 });
 
 it('rejects malformed registry entries and mutation tools; empty scope grants nothing', () => {
