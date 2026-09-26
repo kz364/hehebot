@@ -564,7 +564,9 @@ export class ControlCore {
   const admitted=this.options.executionEnabled||(!this.bootstrap.assignedManifest()&&this.ownerAlpha.available()&&this.ownerAlpha.directMessage(personaId,commandId,routineId,occurrenceId,roomId))||this.warmMessageAdmitted(personaId,commandId,routineId,occurrenceId,roomId)||this.backgroundMessageAdmitted(personaId,commandId,routineId,occurrenceId,roomId);
   let status=admitted&&!memoryBlocked?'queued':'waiting',reason:string|null=memoryBlocked?'MEMORY_PREPARATION_LIMIT':admitted?null:'CAPABILITY_UNAVAILABLE';
   this.store.db.exec('INSERT INTO runs(id,command_id,occurrence_id,persona_id,routine_id,context_json,status,error_code,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',id,commandId,occurrenceId,personaId,routineId,JSON.stringify(context),status,reason,now,now);
-  if(this.budget.blocks(this.store.run(id))){
+  const run=this.store.db.all<Pick<Run,'id'|'role'|'parent_run_id'|'current_attempt'|'status'|'occurrence_id'|'routine_id'>>(
+   'SELECT id,role,parent_run_id,current_attempt,status,occurrence_id,routine_id FROM runs WHERE id=?',id)[0];
+  if(this.budget.blocks(run)){
    status='waiting';reason=this.budget.summary().status;
    this.store.db.exec('UPDATE runs SET status=?,error_code=? WHERE id=?',status,reason,id);
   }

@@ -4,6 +4,19 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Enqueue budget admission projection (2026-09-26 Asia/Jakarta): reload only the seven
+metadata fields consumed by BudgetLedger.blocks after inserting the run; its input
+type now states that contract. Database defaults, budget predicates, status updates
+and wake ordering remain unchanged. Two oversized-context internal enqueue fixtures
+fail before the change and verify blocked/allowed status, preserved stored context
+and STOP/RUN wake state afterward. This demonstrates read shape, not reachable
+oversized public command admission or bounded context construction/storage.
+Focused29/backend2380/typecheck/dry-build pass;1591776 exit0. Logs retained at
+.local/enqueue-budget-{red,focused,backend,build}.log. Full runtime/HTTP/workerd/
+browser/native-service/shutdown/desktop matrix not rerun; original intermittency,
+advisories and external gates unchanged. Historical/storage/SQL-work/native recovery
+bounds remain open.
+
 Flight integration authority projection (2026-09-26 Asia/Jakarta): select four
 metadata fields and context_json, excluding unused checkpoint/history columns.
 Routine/attempt authority, missing-run errors, context parsing before run-policy

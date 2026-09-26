@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** flight integration authority
+**Current checkpoint (2026-09-26, verified locally):** enqueue budget admission
+reads seven metadata fields instead of reloading context/checkpoint. Red2/focused29/
+backend2380/typecheck/dry-build pass. Blocked/allowed status and wake state preserved.
+Context construction/storage remains unbounded; no whole-request bound claimed.
+Next remaining historical/storage/SQL-work/native recovery bounds. Full matrix not
+rerun; original intermittency/advisories/gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** flight integration authority
 omits unused checkpoints while retaining context parsing and check order. Red1/
 focused23/backend2378/typecheck/dry-build pass. No routine activation or live calls.
 Next remaining historical/storage/SQL-work/native recovery bounds. Full matrix not

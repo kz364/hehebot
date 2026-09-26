@@ -10,6 +10,23 @@ function optional(){const r=routine();expect(f.accept({schema_version:1,type:'ro
 function policy(ids:string[],expected_revision=0){return f.accept({schema_version:1,type:'budget.set',payload:{expected_revision,enabled:true,monthly_cap_cents:500,optional_routine_ids:ids}});}
 function due(){f.setNow('2026-09-10T00:15:00.000Z');f.core.tick();return f.db.all<{id:string}>('SELECT id FROM runs')[0].id;}
 function ready(){const life=new LifecycleCore(f.store,f.core);f.db.exec("UPDATE lifecycle SET phase='BOOTING',epoch=1,lease_until=?",new Date(f.core.options.now().getTime()+90000).toISOString());const identity=life.registerBoot(randomUUID());life.ready(identity);return {life,identity};}
+it.each([false,true])('enqueue budget admission reads only metadata: allowed=%s',allowed=>{
+ const r=optional();policy([r.id]);
+ if(allowed)f.core.budget.report({period:'2026-09',projected_cents:499,observed_at:f.core.now(),source_ref:'synthetic:enqueue'});
+ const occurrence=randomUUID(),instruction='界'.repeat(400000);
+ f.db.exec("INSERT INTO occurrences(id,routine_id,routine_version,nominal_due_at,status,created_at) VALUES(?,?,1,?,'queued',?)",occurrence,r.id,f.core.now(),f.core.now());
+ const read=vi.spyOn(f.db,'all');let id:string;
+ try{
+  id=f.core.enqueue(bot,instruction,null,r.id,occurrence);
+  const rows=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[index].value:[]);
+  expect(rows).toEqual([{id,role:'coordinator',parent_run_id:null,current_attempt:0,status:'queued',occurrence_id:occurrence,routine_id:r.id}]);
+ }finally{read.mockRestore();}
+ const run=f.store.run(id!);
+ expect(run).toMatchObject({status:allowed?'queued':'waiting',error_code:allowed?null:'BUDGET_UNKNOWN',current_attempt:0,checkpoint_json:null});
+ expect(JSON.parse(run.context_json).instruction).toBe(instruction);
+ expect(f.db.all('SELECT queue_sequence,desired_state FROM lifecycle')).toEqual([{queue_sequence:allowed?1:0,desired_state:allowed?'RUN':'STOP'}]);
+});
+
 it.each([false,true])('budget maintenance returns metadata without historical snapshots: allowed=%s',allowed=>{
  const r=optional();policy([r.id]);const id=due();
  const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});

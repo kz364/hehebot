@@ -4,6 +4,12 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Enqueue budget checks now reload seven metadata fields, not context/checkpoint.
+Red2/focused29/backend2380/typecheck/build pass;1591776 exit0. Status/wake predicates
+unchanged; context construction/storage still unbounded. Next remaining historical/
+storage/SQL-work/native recovery bounds. No active checks/children/delivery; existing
+schedule enabled. Full matrix not rerun; original intermittency/advisories unchanged.
+
 Flight integration authority now omits unused checkpoint data, preserving context
 parsing and check order. Red1/focused23/backend2378/typecheck/build pass;1588128 exit0.
 No live calls, routine activation or timezone adoption. Next remaining historical/

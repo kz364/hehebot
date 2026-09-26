@@ -175,7 +175,7 @@ export class BudgetLedger {
     return { sql: `NOT ((${eligible.sql}) AND NOT (${exception.sql}))`, bindings: [...eligible.bindings, ...exception.bindings] };
   }
 
-  blocks(run: Omit<Run,'context_json'|'checkpoint_json'>): boolean {
+  blocks(run: Pick<Run,'id'|'role'|'parent_run_id'|'current_attempt'|'status'|'occurrence_id'|'routine_id'>): boolean {
     return !this.matches(run, this.admissionPredicate());
   }
 
