@@ -4,6 +4,15 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Completion now reads metadata only and reuses id/role/current_attempt for retry;
+settlement and flushFollowups/enqueue leave those fields unchanged. Red3/focused383/
+backend2337/runtime682/HTTP/workerd/typecheck/dry-build pass;1529339 exit0. Exact
+result replay/conflict, output, context and replacement checkpoint/retry time retained.
+Next output-preview.ts and token-usage.ts metadata reads, then storage/native recovery.
+No total bounds claimed; no active checks/children/delivery; schedule enabled.
+Prior browser/native-service/timed-shutdown/desktop matrix not rerun; original
+intermittency/advisories/gates unchanged.
+
 Coordinator release now reads current_attempt/role/status only; authorization and
 receipt semantics unchanged. Red3/focused380/backend2334/typecheck/dry-build pass;
 1526121 exited0. Oversized fixtures retain snapshots, children and unknown effects

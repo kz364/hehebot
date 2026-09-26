@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** coordinator release reads
+**Current checkpoint (2026-09-26, verified locally):** completion reads metadata
+only and reuses unchanged id/role/attempt for retry scheduling. Oversized completed,
+failed and waiting cases preserve result replay/conflicts, output, context and exact
+replacement checkpoint/retry deadline. Red3/focused383/backend2337/runtime682/HTTP/
+workerd/typecheck/dry-build pass. Next preview/usage historical reads and remaining
+storage/native recovery; no total bounds claimed. Prior browser/native-service/
+timed-shutdown/desktop matrix not rerun; original intermittency/advisories/gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** coordinator release reads
 only current attempt/role/status, without historical context/checkpoint hydration.
 Oversized running/cancelling/recovery-required fixtures preserve exact replay,
 conflict refusal, child custody and unknown effects. Red3/focused380/backend2334/

@@ -29,6 +29,27 @@ function unknownEffect(runId: string) {
   f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','outcome_unknown','synthetic-authorization','synthetic-digest',?)", randomUUID(), runId, randomUUID(), f.core.now());
 }
 describe('executor leases and attempts', () => {
+  it.each(['completed','failed','waiting'] as const)('completes %s without historical snapshot hydration',status=>{
+    const id=claimed().run.id;life.submitted(identity,id,1,'completion-native');
+    const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});
+    f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,id);
+    const result={status,text:'Exact result',...(status==='failed'?{error_code:'TEMPORARY_UNAVAILABLE'}:{}),...(status==='waiting'?{checkpoint:{cursor:'next-page'}}:{})};
+    const read=vi.spyOn(f.db,'all');
+    try{
+      life.complete(identity,id,1,result);
+      life.complete(identity,id,1,result);
+      expect(()=>life.complete(identity,id,1,{...result,text:'Different result'})).toThrowError(expect.objectContaining({code:'RESULT_CONFLICT'}));
+      const rows=read.mock.calls.flatMap(([sql],index)=>sql.includes('FROM runs WHERE id=?')?read.mock.results[index].value:[]);
+      expect(rows.length).toBeGreaterThanOrEqual(3);
+      for(const row of rows){expect(row).not.toHaveProperty('context_json');expect(row).not.toHaveProperty('checkpoint_json');}
+    }finally{read.mockRestore();}
+    expect(f.store.run(id)).toMatchObject({context_json:context,status:status==='failed'?'waiting':status,
+      checkpoint_json:status==='failed'?JSON.stringify({retry_at:'2026-09-10T00:00:10.000Z'}):status==='waiting'?JSON.stringify({cursor:'next-page'}):null});
+    expect(f.db.all('SELECT status,result_json FROM attempts WHERE run_id=?',id)).toEqual([{status,result_json:JSON.stringify(result)}]);
+    expect(f.db.all('SELECT payload_json FROM outbox WHERE run_id=?',id)).toEqual([{payload_json:JSON.stringify(result)}]);
+    expect(f.db.all('SELECT run_id,due_at,reason FROM retry_queue WHERE run_id=?',id)).toEqual(status==='failed'?[{run_id:id,due_at:'2026-09-10T00:00:10.000Z',reason:'TEMPORARY_UNAVAILABLE'}]:[]);
+  });
+
   it.each(['running','cancelling','recovery_required'] as const)('heartbeats %s operation custody without historical snapshot hydration',status=>{
     const id=claimed().run.id;life.submitted(identity,id,1,'heartbeat-native');
     const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});

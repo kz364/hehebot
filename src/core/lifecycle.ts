@@ -416,7 +416,9 @@ export class LifecycleCore {
   requireThat(!backgroundReceipt||backgroundSettling,'CAPABILITY_UNAVAILABLE','Background completion is unavailable for this attempt.');
   requireThat(!textOnlyReceipt||!backgroundReceipt,'INVALID_INPUT','Choose exactly one completion receipt.',422);
   this.store.db.transaction(()=>{
-   this.authorizeAttempt(identity,runId,attempt);const run=this.store.run(runId);
+   this.authorizeAttempt(identity,runId,attempt);
+   const run=this.store.db.all<Pick<Run,'id'|'current_attempt'|'role'|'parent_run_id'|'status'|'error_code'|'persona_id'|'command_id'|'title'|'occurrence_id'>>('SELECT id,current_attempt,role,parent_run_id,status,error_code,persona_id,command_id,title,occurrence_id FROM runs WHERE id=?',runId)[0];
+   requireThat(run,'NOT_FOUND','Run unavailable.',404);
    requireThat(run.current_attempt===attempt,'REVISION_CONFLICT','Attempt has changed.');
    const proofKey=`text_only_receipt:${runId}:${attempt}`;
    let proof:string|undefined;
@@ -485,7 +487,8 @@ export class LifecycleCore {
    this.store.event(this.core.options.uuid(),run.persona_id,'run.result','runtime',run.command_id,{run_id:runId,role:run.role,title:run.title,...result},now);
    if(['completed','failed','cancelled'].includes(result.status))this.core.flushFollowups(runId);
    if(run.occurrence_id&&result.status!=='waiting')this.store.db.exec('UPDATE occurrences SET status=? WHERE id=?',result.status==='completed'?'completed':'failed',run.occurrence_id);
-   if(result.status==='failed'&&result.error_code)this.scheduleRetry(this.store.run(runId),result.error_code);
+   // Settlement and follow-up enqueueing do not change id, role or current_attempt.
+   if(result.status==='failed'&&result.error_code)this.scheduleRetry(run,result.error_code);
    this.touch();
   });
  }

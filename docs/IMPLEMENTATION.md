@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Completion metadata projection (2026-09-26 Asia/Jakarta): no full historical
+context/checkpoint read in complete(); retry scheduling reuses id/role/current_attempt.
+Inspected settlement updates and flushFollowups/enqueue: none changes those fields
+on the completed run inside the synchronous transaction. Authorization, NOT_FOUND,
+result receipts, refusal provenance, cancellation and effect predicates unchanged.
+Three regressions fail before the change; completed/failed/waiting results preserve
+context, exact output/receipt, conflict refusal and replacement checkpoint/retry time.
+Focused383/backend2337/runtime682/HTTP/workerd/typecheck/dry-build pass;1529339 exit0.
+No whole-request/SQL/storage bound claimed. Next preview/usage historical reads and
+remaining storage/native recovery. Browser/native-service/timed-shutdown/desktop
+matrix not repeated; original intermittency/advisories/gates unchanged. Local only.
+- .local/completion-projection-red.log SHA256: `9f633b096c89f5fec9a0211a394c0f7c7e298712543a8677e764dac0c009c76d`
+- .local/completion-projection-focused.log SHA256: `3b97e05915577550e78284c3fa60baeee36875768b1928210d92543d8fd0bfb2`
+- .local/completion-projection-integrated.log SHA256: `1e11da1358a0b26d6f49212ae37fd26ef342396dfbae532963272258761e6b45`
+
 Coordinator-release metadata projection (2026-09-26 Asia/Jakarta): select only
 current_attempt/role/status rather than full historical context/checkpoint bodies.
 Authorization order, NOT_FOUND code/message/404 and receipt validation are unchanged.
