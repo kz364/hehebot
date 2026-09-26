@@ -4,6 +4,19 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Budget override metadata projection (2026-09-26 Asia/Jakarta): override reads only
+the eight run fields consumed by its eligibility, exception and provenance checks.
+The matches type now names its seven inputs; predicate SQL/order is unchanged.
+Oversized-history admission/replay regression fails before implementation; stored
+snapshots and protected custody rows remain identical after both calls. A second
+test pins command authority before missing-run NOT_FOUND/404, with no writes.
+Focused27/backend2367/typecheck/dry-build pass;1565684 exited0. Evidence retained in
+.local/budget-override-projection-{red,focused,backend,build}.log. No truncation or
+new storage/SQL-work bound. Remaining historical/storage/existing-key and native
+recovery work remains. Full runtime/HTTP/local-Worker/browser/native-service/shutdown/
+desktop matrix not rerun; original intermittency/advisories/external gates unchanged.
+Local only.
+
 Campaign submission status projections (2026-09-26 Asia/Jakarta): both prior-command
 settlement and fresh-manifest admission select only status, preserving read order,
 short-circuiting, missing-run NOT_FOUND/404 and null-resource RESOURCE_BUSY/409.

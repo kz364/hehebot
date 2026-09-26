@@ -12,7 +12,13 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** campaign submission reads only
+**Current checkpoint (2026-09-26, verified locally):** budget overrides omit historical
+snapshots during admission/replay while preserving exact run/revision authority and
+command-before-run errors. Red1/focused27/backend2367/typecheck/dry-build pass. Next
+remaining historical/storage/SQL-work and native recovery bounds. Full matrix not
+rerun; original intermittency/advisories/gates unchanged. Local only; no total bounds.
+
+**Previous checkpoint (2026-09-26, verified locally):** campaign submission reads only
 run status at prior-settlement and fresh-admission checks. Red2/focused24/backend2365/
 typecheck/dry-build pass; null/missing resource errors and rollback preserved. Next
 remaining historical/storage/SQL-work and native recovery bounds. Full matrix not

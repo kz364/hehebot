@@ -161,7 +161,7 @@ export class BudgetLedger {
     bindings: [BUDGET_OVERRIDE_PREFIX, revision] };
   }
 
-  private matches(run: Omit<Run,'context_json'|'checkpoint_json'>, predicate: BudgetAdmissionPredicate): boolean {
+  private matches(run: Pick<Run,'id'|'role'|'parent_run_id'|'current_attempt'|'status'|'occurrence_id'|'routine_id'>, predicate: BudgetAdmissionPredicate): boolean {
     return Boolean(this.store.db.all<{ matched: number }>(`WITH r AS (SELECT ? AS id,? AS role,? AS parent_run_id,? AS current_attempt,
       ? AS status,? AS occurrence_id,? AS routine_id) SELECT COALESCE((${predicate.sql}),0) AS matched FROM r`,
     run.id, run.role, run.parent_run_id, run.current_attempt, run.status, run.occurrence_id, run.routine_id, ...predicate.bindings)[0].matched);
@@ -182,7 +182,10 @@ export class BudgetLedger {
   override(owner: string, commandId: string, runId: string): string {
     return this.store.db.transaction(() => {
       this.command(owner, commandId, 'budget.override', runId);
-      const run = this.store.run(runId), summary = this.summary();
+      const run = this.store.db.all<Pick<Run,'id'|'role'|'parent_run_id'|'current_attempt'|'status'|'occurrence_id'|'routine_id'|'error_code'>>(
+        'SELECT id,role,parent_run_id,current_attempt,status,occurrence_id,routine_id,error_code FROM runs WHERE id=?', runId)[0];
+      requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404);
+      const summary = this.summary();
       requireThat(run.status === 'waiting' && ['BUDGET_UNKNOWN', 'BUDGET_BLOCKED'].includes(run.error_code ?? '') &&
         this.matches(run, this.eligibility(summary)) && ['BUDGET_UNKNOWN', 'BUDGET_BLOCKED'].includes(summary.status),
       'REVISION_CONFLICT', 'Only an unstarted budget-waiting optional occurrence can be overridden.');

@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Store, type Database, type SqlValue } from '../src/core/store';
 import { BudgetLedger, BUDGET_POLICY_ID, BUDGET_REPORT_KEY, BUDGET_OVERRIDE_PREFIX, MAX_BUDGET_CENTS, type BudgetPolicy, type BudgetReport } from '../src/core/budget';
 import type { Run } from '../src/core/types';
@@ -166,6 +166,28 @@ it('creates exact-run revision-bound overrides without renewing input age, mutat
   rejects(() => ledger.override('owner', cmd, target.id), 'REVISION_CONFLICT');
   ledger.override('owner', another, target.id); expect(ledger.blocks(store.run(target.id))).toBe(false);
   expect(store.run(target.id).created_at).toBe(target.created_at); expect(store.run(target.id).command_id).toBe(target.command_id);
+});
+
+it('keeps budget override admission and replay independent of historical snapshot hydration', () => {
+  set(); const target = waiting(scheduled()), cmd = command('budget.override', { run_id: target.id });
+  db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?', JSON.stringify({ padding: '界'.repeat(400000) }), 'x'.repeat(1100000), target.id);
+  const before = protectedRows(), read = vi.spyOn(db, 'all');
+  try {
+    expect(ledger.override('owner', cmd, target.id)).toBe(target.id);
+    expect(ledger.override('owner', cmd, target.id)).toBe(target.id);
+    const rows = read.mock.calls.flatMap(([sql], i) => sql.includes('FROM runs WHERE id=?') ? read.mock.results[i].value : []);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) { expect(row).not.toHaveProperty('context_json'); expect(row).not.toHaveProperty('checkpoint_json'); }
+  } finally { read.mockRestore(); }
+  expect(protectedRows()).toEqual(before);
+  expect(ledger.blocks(store.run(target.id))).toBe(false);
+});
+
+it('preserves command authority before missing-run errors for budget overrides', () => {
+  set(); const id = randomUUID(), cmd = command('budget.override', { run_id: id }), before = protectedRows();
+  expect(() => ledger.override('other-owner', cmd, id)).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
+  expect(() => ledger.override('owner', cmd, id)).toThrowError(expect.objectContaining({ code: 'NOT_FOUND', message: 'Run unavailable.', status: 404 }));
+  expect(protectedRows()).toEqual(before);
 });
 
 it('requires matching accepted owner receipts and rejects other waits, unselected runs and started override targets', () => {
