@@ -241,7 +241,7 @@ export function createCodexService(config, dependencies) {
         if (persona.allowedTools.includes('hehebot_search_skills') &&
             (alpha || !persona.allowedTools.includes('hehebot_propose_skill'))) fail('INVALID_SERVICE_CONFIGURATION');
         if (alpha && persona.allowedTools.includes('hehebot_read_memory')) fail('INVALID_SERVICE_CONFIGURATION');
-        if (config.restrictedPermissions && persona.allowedTools.some(tool => !['hehebot_list_routines', 'hehebot_read_skill'].includes(tool))) fail('INVALID_SERVICE_CONFIGURATION');
+        if (config.restrictedPermissions && persona.allowedTools.some(tool => !['hehebot_list_routines', 'hehebot_read_skill', 'hehebot_send_message'].includes(tool))) fail('INVALID_SERVICE_CONFIGURATION');
       }
       phase = 'starting';
       try {

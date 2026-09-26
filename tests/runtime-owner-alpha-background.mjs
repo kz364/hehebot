@@ -23,7 +23,7 @@ execFileSync('bash', [new URL('../scripts/build-codex-service.sh', import.meta.u
 const id = n => `${String(n).padStart(8, '0')}-1111-4111-8111-111111111111`;
 const sha = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const token = kind => [Buffer.from(JSON.stringify({ typ: `${kind}+jwt`, alg: 'HS256' })).toString('base64url'), 'e30', 'c2ln'].join('.');
-const readOnlyTools = Object.freeze(['hehebot_list_routines', 'hehebot_read_skill']);
+const readOnlyTools = Object.freeze(['hehebot_list_routines', 'hehebot_read_skill', 'hehebot_send_message']);
 const now = Date.now();
 const backgroundProfile = { profile_version: 'codex-background-v2-restricted-v1', profile_sha256: 'ab'.repeat(32),
   max_resident_child_threads: 2, wait_agent_enabled: false, multi_agent_v1: false };

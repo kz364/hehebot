@@ -141,7 +141,7 @@ export async function serveOwnerAlphaSession(input, { signal, report = value => 
     const nativeConfig = { stateDirectory: runtimeDirectory, ownerAlpha, nativeHome: session.nativeHome,
       binary: join(root, '.local/codex-runtime/node_modules/.bin/codex'), portalOrigin: upstreamOrigin + '/',
       runtimeTokenFile: session.runtimeTokenFile, tlsCAFile: cert, installationId: 'owner-alpha-session',
-      personas: { [persona.id]: { agentId: 'assistant', model: session.model, allowedTools: ['hehebot_list_routines', 'hehebot_read_skill'] } } };
+      personas: { [persona.id]: { agentId: 'assistant', model: session.model, allowedTools: ['hehebot_list_routines', 'hehebot_read_skill', 'hehebot_send_message'] } } };
     const nativeConfigFile = join(state, 'native-session.json');
     await writeFile(nativeConfigFile, JSON.stringify(nativeConfig), { flag: 'wx', mode: 0o600 });
     // One active session per native home; never race credential-refresh owners.

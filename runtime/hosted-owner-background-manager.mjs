@@ -16,7 +16,9 @@ const digest = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const lockScript = fileURLToPath(new URL('../scripts/with-executor-lock.sh', import.meta.url));
 const self = fileURLToPath(import.meta.url);
-const readOnlyTools = Object.freeze(['hehebot_list_routines', 'hehebot_read_skill']);
+// Read-only task reads plus committed messaging: posting a message is not an
+// external effect (GROK_ALIGNMENT A1), so it stays inside the restricted floor.
+const readOnlyTools = Object.freeze(['hehebot_list_routines', 'hehebot_read_skill', 'hehebot_send_message']);
 
 async function privateDirectory(path) {
   if (typeof path !== 'string' || !isAbsolute(path)) fail();

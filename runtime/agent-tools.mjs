@@ -4,12 +4,16 @@ import { once } from 'node:events';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
-import { ControlClient } from './control-client.mjs';
+import { ControlClient, ControlClientError } from './control-client.mjs';
 import { prepareMemoryDelivery, deferMemoryResponse, materializeMemoryResponse } from './memory-read.mjs';
 
-export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills', 'hehebot_read_memory']);
+export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills', 'hehebot_read_memory', 'hehebot_send_message']);
+// Minted once per agent-tools process; part of the deterministic message_key so
+// retries of the same JSON-RPC call within one process dedupe at the Worker.
+const SERVER_INSTANCE_ID = randomUUID();
 const COMMAND_TYPES = Object.freeze({ hehebot_propose_skill: 'skill.propose', hehebot_save_routine: 'routine.put', hehebot_run_routine: 'routine.run', hehebot_delete_routine: 'routine.delete' });
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_OUTSTANDING = 16;
@@ -70,6 +74,11 @@ export function buildToolDefinitions(contracts) {
         memory_id: resolveRefs(contracts.$defs.uuid, contracts), revision: { type: 'integer', minimum: 1 },
         offset: { type: 'integer', minimum: 0, maximum: 16000 }, limit: { type: 'integer', minimum: 1, maximum: 2000 },
       }, required: ['memory_id', 'revision', 'offset', 'limit'],
+    } },
+    { name: AGENT_TOOL_NAMES[8], description: 'This is the only way to say something to the owner. Call it for every reply, question or progress update; plain assistant text is not shown. Optionally set reply_to_event_id to reference an earlier timeline event.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: {
+        text: { type: 'string', minLength: 1, maxLength: 32768 }, reply_to_event_id: resolveRefs(contracts.$defs.uuid, contracts),
+      }, required: ['text'],
     } },
   ]);
 }
@@ -132,6 +141,25 @@ export function createAgentToolsHandler({ controlClient, config, contracts, memo
               text: 'Memory read delivery denied. The read budget remains reserved; no source content was returned.' }] } };
           }
         });
+      }
+      if (name === 'hehebot_send_message') {
+        const messageKey = `${config.runId}:${config.attempt}:${SERVER_INSTANCE_ID}:${message.id}`;
+        try {
+          const result = await controlClient.request('bot-message', {
+            identity: clone(config.identity), run_id: config.runId, attempt: config.attempt, message_key: messageKey,
+            text: args.text, ...(args.reply_to_event_id !== undefined ? { reply_to_event_id: args.reply_to_event_id } : {}),
+          });
+          if (!result || typeof result.event_id !== 'string' || !Number.isSafeInteger(result.sequence)) throw new Error('INVALID_MESSAGE_RECEIPT');
+          return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify({ delivered: true, event_id: result.event_id, sequence: result.sequence }) }] } };
+        } catch (error) {
+          // A Worker rejection (stale epoch, terminal attempt, rate limit, key
+          // conflict, oversized text) is a tool error to the model, not a crash;
+          // the turn continues and may retry or say something different.
+          const code = error instanceof ControlClientError ? error.code : 'AGENT_TOOL_FAILED';
+          const status = error instanceof ControlClientError ? error.status : undefined;
+          return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text',
+            text: `hehebot_send_message failed: ${code}${status ? ` (${status})` : ''}. No message was committed for this call; retry or reword.` }] } };
+        }
       }
       if (name === 'hehebot_search_skills') {
         const result = await controlClient.request('agent-skill-search', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });

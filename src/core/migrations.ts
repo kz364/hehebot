@@ -165,5 +165,24 @@ export function migrateApplication(db:Database,now:string):void {
   for(const sql of pending)db.exec(sql);
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(16,?)',now);
  });
- requireThat([15,16].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===15)version=16;
+ if(version===16)db.transaction(()=>{
+  // Guarded/idempotent like the v13-v15 index migrations: a downstream test or
+  // deployment may re-run this step while the table already exists.
+  // Exact text match with DB/schema.sql's bot_messages definition: fresh bootstrap
+  // and migration must produce byte-identical sqlite_schema for the export pin.
+  const tableSql=`CREATE TABLE bot_messages (
+ message_key TEXT PRIMARY KEY, run_id TEXT NOT NULL, attempt INTEGER NOT NULL,
+ event_sequence INTEGER NOT NULL, origin TEXT NOT NULL CHECK(origin IN ('tool','final_text')), created_at TEXT NOT NULL
+)`;
+  db.exec(tableSql.replace('CREATE TABLE','CREATE TABLE IF NOT EXISTS'));
+  requireThat(db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='bot_messages'")[0]?.sql===tableSql,
+   'SCHEMA_MISMATCH','Bot message schema needs explicit reconciliation.',503);
+  const indexSql='CREATE INDEX bot_messages_run_attempt ON bot_messages(run_id,attempt)';
+  db.exec(indexSql.replace('CREATE INDEX','CREATE INDEX IF NOT EXISTS'));
+  requireThat(db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='bot_messages_run_attempt'")[0]?.sql===indexSql,
+   'SCHEMA_MISMATCH','Bot message index needs explicit reconciliation.',503);
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(17,?)',now);
+ });
+ requireThat([16,17].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }
