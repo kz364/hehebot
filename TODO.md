@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** nested lost-registration
+**Current checkpoint (2026-09-26, verified locally):** native task sync no longer
+rejects already observed families above100 turns; steering queries use101-target
+batches with exact batch authority and four commands per request. Final native
+steer/interrupt dispatch rechecks the lease after durable intent I/O, retaining
+unknown receipts on fencing. Red7/backend2391/runtime699/service80/native child/
+typecheck/dry-build pass; final batch13 passes. No total storage/I/O/lease-time or
+safe-resume proof. Next restoration/recursive settlement and historical/storage
+bounds. Full combined matrix not rerun; external gates unchanged. Local only.
+
+**Previous checkpoint (2026-09-26, verified locally):** nested lost-registration
 replay after root completion survives journal/adapter reopen. Exact grandchild
 identity, parent, unresolved command and unchanged Worker custody retained; replay
 does not duplicate registration or send native RPCs. Root-terminal shortcut mutant

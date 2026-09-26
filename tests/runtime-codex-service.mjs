@@ -339,6 +339,30 @@ test('assembly synchronizes exact child mapping before delivering a selected can
   assert.equal((await f.service.observe()).childTurns['["child-thread","child-turn"]'], 'inProgress');
 });
 
+for (const method of ['turn/steer', 'turn/interrupt']) test(`lease expiry during durable intent fences final ${method} dispatch`, async t => {
+  const f = await fixture(t), row = await f.service.start();
+  await f.service.adapter.observe(row.attemptId, { method: 'item/completed', params: {
+    threadId: 'native-thread', turnId: 'native-turn', item: { id: 'spawn', type: 'collabAgentToolCall',
+      tool: 'spawnAgent', status: 'completed', senderThreadId: 'native-thread', receiverThreadIds: ['child-thread'] } } });
+  await f.service.adapter.observe(row.attemptId, { method: 'turn/started', params: {
+    threadId: 'child-thread', turn: { id: 'child-turn', status: 'inProgress' } } });
+  const put = f.service.journal.putIfAbsent.bind(f.service.journal);
+  let intent;
+  f.service.journal.putIfAbsent = async (key, value) => {
+    const result = await put(key, value);
+    if (key.startsWith('steer-') || key.startsWith('cancel-child-')) { intent = key; f.advance(60001); }
+    return result;
+  };
+  const target = { threadId: 'child-thread', turnId: 'child-turn' };
+  const result = method === 'turn/steer'
+    ? await f.service.adapter.steerChild(row.attemptId, target, { commandId: 'command-71', text: 'Synthetic instruction' })
+    : await f.service.adapter.cancelChild(row.attemptId, target);
+  assert.equal(result.status, 'unknown');
+  assert.equal((await f.service.journal.get(intent)).status, 'unknown');
+  assert.deepEqual(f.calls.filter(call => call.method === method), []);
+  await assert.rejects(f.service.maintain(), { code: 'EXECUTOR_FENCED' });
+});
+
 test('assembly delivers explicit steering during maintenance and replays only its durable receipt', async t => {
   const f = await fixture(t), control = f.dependencies.control.request, native = f.transport.request;
   const command = { command_id: '77777777-0000-4000-8000-000000000019', run_id: 'run', attempt: 1,

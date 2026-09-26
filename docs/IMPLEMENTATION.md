@@ -4,6 +4,32 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Observed-family census and final-send fencing (2026-09-26 Asia/Jakarta): remove
+sync's100-turn rejection, which conflicted with the adapter's4096 observed-turn
+capacity and stopped maintenance before cancellation. An adapter/FileJournal/Worker
+fixture observes101 turns on one child thread, loses a committed registration ack,
+reopens, reconciles all exact receipts, skips replay writes and cancels only the
+selected turn. This is protocol-fixture reachability, not a live model census.
+Steering polls every101-target batch, preserving the Worker's four-command request
+cap and validating all pages before mutation: exact batch membership, attempt,
+native ref and global command-ID uniqueness. More than four commands may now be
+processed per family maintenance pass; regression exercises four plus one across
+two pages and refuses five in one response. Lease loss between pages dispatches
+nothing. A separate regression exposed lease expiry during durable steering/cancel
+intent writes; the service RPC boundary now rechecks immediately before native
+turn/steer or turn/interrupt, preserving unknown intent rather than replaying it.
+Red4 runtime plus1 integrated census and2 final-send regressions failed before
+their fixes. Backend2391/runtime699/build pass (1672895 exit0), service/task80 and
+typecheck pass (1675806), native child fixture plus batch13 pass (1677122); final
+strengthened batch13 rerun passes. Logs .local/child-census-{red-runtime,red-core,
+fence-red,focused,backend,runtime,build,service-final,native,batches-final}.log.
+Native fixture reports one interrupt, child cancelling, root running and sleep
+denied; no /etc/codex or /.sprite residue. Oracle advised the paired census/batch
+correction and final-send fencing after parent investigation. Whole-record journal
+I/O and aggregate mapping work remain unbounded; no claim that a backlog finishes
+within a lease or permits resume/sleep. Full combined browser/shutdown/desktop
+matrix not rerun; production gates, intermittency and advisories unchanged.
+
 Nested registration reopen (2026-09-26 Asia/Jakarta): integrated adapter/FileJournal/
 Worker-core fixture loses the grandchild response after SQL registration, records
 root completion with an unresolved grandchild command, then recreates journal,

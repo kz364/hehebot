@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Observed families above100 turns now reconcile; steering polls every101-target
+batch, validating all pages before dispatch. Four commands is a per-request cap,
+not per-maintenance maximum. Service rechecks lease at native steer/interrupt send
+after durable intent I/O; unknown receipts retained. Red7/backend2391/runtime699/
+service80/native child/typecheck/dry-build pass, final batch13 pass. Logs
+.local/child-census-*.log; no host fixture residue or active check/child/delivery.
+No total mapping/storage/I/O/lease-time or safe-resume proof. Continue restoration/
+recursive settlement and historical/storage/existing-key bounds. Schedule enabled;
+full combined matrix not rerun, gates/intermittency/advisories unchanged.
+
 Nested grandchild registration now has combined lost-response/root-completion/
 journal-reopen coverage. Exact replay identity and parent, unresolved command and
 Worker custody survive; no duplicate registration/native RPC, sleep denied.

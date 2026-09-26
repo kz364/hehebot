@@ -429,7 +429,11 @@ export function createCodexService(config, dependencies) {
           }
         }
         assertStarting();
-        adapter = new CodexAdapter({ journal, cwd: workspace, rpc: (method, params) => transport.request(method, params),
+        adapter = new CodexAdapter({ journal, cwd: workspace, rpc: (method, params) => {
+          // Durable intent writes may outlive the controller's prior lease check.
+          if (method === 'turn/steer' || method === 'turn/interrupt') supervisor.assertLease();
+          return transport.request(method, params);
+        },
           testMode: !alpha, ownerAlpha: alpha, now, permissionsProfile: permissions?.name, textOnlyProfile });
         const native = {
           admissionReadiness: () => adapter.admissionReadiness(),

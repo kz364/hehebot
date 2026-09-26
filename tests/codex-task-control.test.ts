@@ -134,6 +134,35 @@ it('reconciles lost registration acknowledgements with identical receipts and pr
   await expect(mapper({ runId: randomUUID(), personaId: bot, attempt: 1 }).sync()).rejects.toMatchObject({ code: 'TASK_GRANT_CONFLICT' });
 });
 
+it('reconciles more than 100 observed sequential turns before cancellation and steering', async () => {
+  life.submitted(identity, parentId, 1, 'turn');
+  await spawn('root', 'child-a');
+  for (let i = 1; i <= 100; i++) await adapter.observe('native', { method: 'turn/completed',
+    params: { threadId: 'child-a', turn: { id: `historical-${i}`, status: 'completed' } } });
+  lostAck = true;
+  await expect(mapper().sync()).rejects.toThrow('lost acknowledgement');
+  journal = new FileJournal(directory);
+  adapter = new CodexAdapter({ journal, cwd: directory,
+    rpc: async (method: string, params: any) => { interrupts.push({ method, params }); return {}; } });
+  const restored = mapper(), mapped = await restored.sync();
+  expect(Object.keys(mapped)).toHaveLength(101);
+  expect(f.db.all('SELECT * FROM native_task_links')).toHaveLength(101);
+  expect(registrations).toHaveLength(102);
+  expect(registrations[0]).toEqual(registrations[1]);
+  const before = await journal.get(restored.key);
+  await restored.sync();
+  expect(await journal.get(restored.key)).toEqual(before);
+  expect(registrations).toHaveLength(102);
+  const childId = mapped['["child-a","turn"]'].runId;
+  f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: childId, reason: 'Stop exact turn' } });
+  await restored.cancel([childId]);
+  expect(interrupts).toEqual([{ method: 'turn/interrupt', params: { threadId: 'child-a', turnId: 'turn' } }]);
+  expect(await restored.steer()).toEqual([]);
+  expect(f.store.run(childId).status).toBe('cancelling');
+  expect(f.store.run(mapped['["child-a","historical-100"]'].runId).status).toBe('running');
+  expect(adapter.sleepReadiness().allowed).toBe(false);
+});
+
 it('reopens a lost grandchild registration after root completion without settling descendant custody', async () => {
   life.submitted(identity, parentId, 1, 'turn');
   await spawn('root', 'child-a'); await spawn('root', 'child-b'); await spawn('child-a', 'grandchild');

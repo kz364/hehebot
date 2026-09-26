@@ -35,6 +35,50 @@ async function fixture(native, request, assertLease = () => {}) {
   return { control, journal };
 }
 
+for (const mode of ['normal', 'foreign-batch', 'duplicate', 'lease-loss', 'overfull']) test(`steering visits every bounded target batch (${mode})`, async () => {
+  const calls = [], steers = [], command = n => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
+  let leased = true, pages = 0;
+  const f = await fixture({ nativeRunId: 'root-native' }, async (method, payload) => {
+    calls.push({ method, payload });
+    if (method === 'steer-result') return { ok: true };
+    assert.equal(method, 'steer-pending');
+    pages++;
+    assert.ok(payload.targets.length <= 101);
+    if (pages === 2 && mode === 'lease-loss') leased = false;
+    const child = pages === 2 || mode === 'foreign-batch';
+    const row = { command_id: command(mode === 'duplicate' ? 1 : pages),
+      run_id: child ? 'run-101' : parent.runId, attempt: child ? 1 : parent.attempt,
+      native_ref: child ? 'native-101' : 'root-native', text: `Instruction ${pages}` };
+    if (mode === 'normal') return pages === 1
+      ? Array.from({ length: 4 }, (_, i) => ({ ...row, command_id: command(i + 1) }))
+      : [{ ...row, command_id: command(5) }];
+    return mode === 'overfull' ? Array.from({ length: 5 }, (_, i) => ({ ...row, command_id: command(i + 1) })) : [row];
+  }, () => { if (!leased) throw Object.assign(new Error('fenced'), { code: 'EXECUTOR_FENCED' }); });
+  const children = {};
+  for (let i = 1; i <= 101; i++) children[JSON.stringify([`thread-${i}`, `turn-${i}`])] = {
+    runId: `run-${i}`, started: true, receipt: { native_run_ref: `native-${i}` },
+  };
+  await f.journal.update(f.control.key, { children });
+  f.control.adapter.steer = async (id, instruction) => { steers.push({ id, instruction }); return { status: 'unknown' }; };
+  f.control.adapter.steerChild = async (id, target, instruction) => { steers.push({ id, target, instruction }); return { status: 'accepted' }; };
+  if (mode !== 'normal') {
+    await assert.rejects(f.control.steer(), { code: mode === 'lease-loss' ? 'EXECUTOR_FENCED' : 'INVALID_STEERING_RECEIPT' });
+    assert.deepEqual(steers, []);
+    assert.ok(calls.every(row => row.method === 'steer-pending'));
+    return;
+  }
+  assert.deepEqual(await f.control.steer(), [
+    ...Array.from({ length: 4 }, (_, i) => ({ command_id: command(i + 1), status: 'outcome_unknown' })),
+    { command_id: command(5), status: 'accepted' },
+  ]);
+  assert.deepEqual(calls.filter(row => row.method === 'steer-pending').map(row => row.payload.targets.length), [101, 1]);
+  assert.deepEqual(steers, [
+    ...Array.from({ length: 4 }, (_, i) => ({ id: 'attempt-native', instruction: { commandId: command(i + 1), text: 'Instruction 1' } })),
+    { id: 'attempt-native', target: { threadId: 'thread-101', turnId: 'turn-101' },
+      instruction: { commandId: command(5), text: 'Instruction 2' } },
+  ]);
+});
+
 test('reverse-order registration resolves each thread origin only once per snapshot', async () => {
   const key = i => JSON.stringify([`thread-${i}`, `turn-${i}`]);
   const native = { childTurns: {}, spawns: { root: { receiverThreadIds: ['thread-1'] } }, childObligations: {} };

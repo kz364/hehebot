@@ -40,7 +40,6 @@ export class CodexTaskControl {
       const native = await this.adapter.requireRun(this.attemptId);
       let mapped = await this.mapping();
       const pending = Object.keys(native.childTurns ?? {}).filter(key => !mapped.children[key]?.runId || mapped.children[key]?.started !== true);
-      if (Object.keys(native.childTurns ?? {}).length > 100) fail('CHILD_TASK_TRACKING_LIMIT');
       const owners = [[null, native], ...Object.entries(native.childObligations ?? {})];
       // Origins belong to this captured snapshot, not to the evolving mapping.
       // Resolve lazily to retain validation order, and never cache across syncs.
@@ -172,14 +171,22 @@ export class CodexTaskControl {
         known.set(child.runId, { attempt: 1, nativeRef: child.receipt.native_run_ref, target: { threadId, turnId } });
         targets.push({ run_id: child.runId, attempt: 1 });
       }
-      if (targets.length > 101) fail('CHILD_TASK_TRACKING_LIMIT');
-      this.assertLease();
-      const pending = await this.control.request('steer-pending', { identity: this.identity, targets });
-      this.assertLease();
-      if (!Array.isArray(pending) || pending.length > 4 || new Set(pending.map(row => row?.command_id)).size !== pending.length ||
-          pending.some(row => !row || !/^[0-9a-f-]{36}$/i.test(row.command_id ?? '') ||
+      const pending = [], commandIds = new Set();
+      // The Worker limits one lookup, not the observed family's lifetime census.
+      // Validate all pages before dispatch; four commands remains a per-request cap.
+      for (let offset = 0; offset < targets.length; offset += 101) {
+        const batch = targets.slice(offset, offset + 101), batchIds = new Set(batch.map(row => row.run_id));
+        this.assertLease();
+        const rows = await this.control.request('steer-pending', { identity: this.identity, targets: batch });
+        this.assertLease();
+        if (!Array.isArray(rows) || rows.length > 4 || rows.some(row => !row || !/^[0-9a-f-]{36}$/i.test(row.command_id ?? '') ||
             typeof row.text !== 'string' || !row.text.trim() || Buffer.byteLength(row.text) > 32768 ||
-            !known.has(row.run_id) || known.get(row.run_id).attempt !== row.attempt || known.get(row.run_id).nativeRef !== row.native_ref)) fail('INVALID_STEERING_RECEIPT');
+            !batchIds.has(row.run_id) || known.get(row.run_id).attempt !== row.attempt || known.get(row.run_id).nativeRef !== row.native_ref)) fail('INVALID_STEERING_RECEIPT');
+        for (const row of rows) {
+          if (commandIds.has(row.command_id)) fail('INVALID_STEERING_RECEIPT');
+          commandIds.add(row.command_id); pending.push(row);
+        }
+      }
       const outcomes = [];
       for (const row of pending) {
         const selected = known.get(row.run_id), instruction = { commandId: row.command_id, text: row.text };
