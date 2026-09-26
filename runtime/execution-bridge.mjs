@@ -2,6 +2,26 @@ import { createHash } from 'node:crypto';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+// G4 (GROK_ALIGNMENT A4, docs/AGENT_MODEL.md routing table): concise coordinator
+// routing guidance, composed into the turn only for a coordinator run (never a
+// background task, which has no task tools) and only naming tools this persona
+// actually has. There is no separate base-instructions prompt string in this
+// codebase; context (including persona.body.instructions) is delivered as this
+// JSON message, so this is where turn guidance is assembled.
+const TASK_TOOL_GUIDANCE = Object.freeze({
+  hehebot_start_task: 'For work that would block the conversation, call hehebot_start_task to run it independently in the background; it returns immediately and never waits.',
+  hehebot_list_tasks: 'For a status question, call hehebot_list_tasks (and hehebot_task_detail) and answer from that; do not start or change a task just to answer a question.',
+  hehebot_task_detail: null,
+  hehebot_steer_task: 'To redirect a task while it is actively running, call hehebot_steer_task; if it reports not_running, queue a hehebot_queue_followup instead.',
+  hehebot_queue_followup: 'hehebot_queue_followup delivers as the task\'s next turn once its current turn ends.',
+  hehebot_cancel_task: 'Call hehebot_cancel_task to stop a task the owner no longer wants.',
+});
+function coordinatorGuidance(allowedTools = []) {
+  const lines = allowedTools.map(name => TASK_TOOL_GUIDANCE[name]).filter(Boolean);
+  if (!lines.length) return undefined;
+  return ['You are the coordinator for this conversation. Reply to the owner only through hehebot_send_message.',
+    ...lines, 'When a background task completes, fails, is cancelled or needs input, you are woken with its result; relay it to the owner via hehebot_send_message.'].join(' ');
+}
 
 /** Claim-to-result custody, not an agent loop. The native driver owns tools and children.
  * One fenced, single-writer supervisor owns this journal. No process takeover or sleep
@@ -149,7 +169,10 @@ export class ExecutionBridge {
           load_with: 'hehebot_read_skill',
         })), ...(claim.role === 'status' ? { background_status_summary: claim.status_summary } : {}),
           ...(claim.run.current_attempt > 1 && claim.run.checkpoint_json
-            ? { durable_checkpoint: JSON.parse(claim.run.checkpoint_json) } : {}) }),
+            ? { durable_checkpoint: JSON.parse(claim.run.checkpoint_json) } : {}),
+          ...(claim.run.role !== 'background' && claim.role === undefined
+            ? (guidance => guidance ? { coordinator_guidance: guidance } : {})(coordinatorGuidance(persona.allowedTools))
+            : {}) }),
       };
       await this.journal.update(this.cursor, { phase: 'submission_unknown', attemptId: input.attemptId });
       let submitted;

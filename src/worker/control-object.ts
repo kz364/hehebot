@@ -393,7 +393,7 @@ export class PersonalControl extends DurableObject<Env> {
   }
   const alpha=this.core.ownerAlpha.policy;
   if(command.type==='status')return this.statusSummary();
-  return this.execute(command,!!alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','bot-message','token-usage','steer-pending','agent-routines','agent-skill'].includes(command.type)||!!(alpha.text_only&&command.type==='complete')||!!(alpha.background_first_root&&command.type==='native-child')));
+  return this.execute(command,!!alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','bot-message','token-usage','steer-pending','agent-routines','agent-skill','agent-task-list','agent-task-detail'].includes(command.type)||!!(alpha.text_only&&command.type==='complete')||!!(alpha.background_first_root&&command.type==='native-child')));
  });}
  private statusSummary(){
   const state=this.lifecycle.get(),alpha=this.core.ownerAlpha.policy,generation=this.core.ownerAlpha.activeGeneration();
@@ -495,6 +495,8 @@ export class PersonalControl extends DurableObject<Env> {
    case 'agent-routines':result=new AgentCommandBoundary(this.core,this.lifecycle).routines(command.payload);break;
    case 'agent-skill':result=new AgentCommandBoundary(this.core,this.lifecycle).skill(command.payload);break;
    case 'agent-skill-search':result=new AgentCommandBoundary(this.core,this.lifecycle).searchSkills(command.payload);break;
+   case 'agent-task-list':result=new AgentCommandBoundary(this.core,this.lifecycle).taskList(command.payload);break;
+   case 'agent-task-detail':result=new AgentCommandBoundary(this.core,this.lifecycle).taskDetail(command.payload);break;
    case 'memory-read-prepare':result=new AgentCommandBoundary(this.core,this.lifecycle).prepareMemoryRead(command.payload);break;
    case 'memory-read-reserve':result=new AgentCommandBoundary(this.core,this.lifecycle).reserveMemoryRead(command.payload);break;
   }

@@ -1003,6 +1003,22 @@
       ]
     },
     {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "schema_version": { "const": 1 }, "type": { "const": "task.start" },
+        "payload": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "brief": { "type": "string", "minLength": 1, "maxLength": 32768 },
+            "capabilities": { "type": "array", "items": { "$ref": "#/$defs/uuid" }, "maxItems": 64, "uniqueItems": true }
+          },
+          "required": ["title", "brief"]
+        }
+      },
+      "required": ["schema_version", "type", "payload"]
+    },
+    {
       "type": "object",
       "additionalProperties": false,
       "properties": {
