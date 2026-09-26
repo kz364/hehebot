@@ -435,7 +435,7 @@
               "type": "object", "additionalProperties": false,
               "properties": {
                 "schema_version": { "const": 1 },
-                "type": { "enum": ["skill.propose", "routine.put", "routine.run", "routine.delete"] },
+                "type": { "enum": ["skill.propose", "routine.put", "routine.run", "routine.delete", "task.start", "run.steer", "run.followup", "run.cancel"] },
                 "payload": { "type": "object", "maxProperties": 16 }
               },
               "required": ["schema_version", "type", "payload"]
@@ -445,6 +445,34 @@
         }
       },
       "required": ["type", "payload"]
+    },
+    {
+      "type":"object", "additionalProperties":false,
+      "properties": {
+        "type":{"const":"agent-task-list"},
+        "payload": {
+          "type":"object", "additionalProperties":false,
+          "properties": {
+            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
+            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
+            "state":{"enum":["active","completed","failed","cancelled","waiting"]},"after":{"type":"string","format":"uuid"}
+          },"required":["identity","run_id","attempt"]
+        }
+      },"required":["type","payload"]
+    },
+    {
+      "type":"object", "additionalProperties":false,
+      "properties": {
+        "type":{"const":"agent-task-detail"},
+        "payload": {
+          "type":"object", "additionalProperties":false,
+          "properties": {
+            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
+            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
+            "task_run_id":{"type":"string","format":"uuid"}
+          },"required":["identity","run_id","attempt","task_run_id"]
+        }
+      },"required":["type","payload"]
     },
     {
       "type": "object",

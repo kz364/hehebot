@@ -221,6 +221,14 @@ export class ControlCore {
     if(['completed','failed','cancelled'].includes(run.status))this.flushFollowups(run.id);
     return id;
    }
+   case 'task.start': {
+    // Only reachable through AgentCommandBoundary.accept(), which stamps this
+    // actor tag with the calling coordinator run's own id (GROK_ALIGNMENT A4).
+    // A direct owner (or any other) call cannot fabricate a parent coordinator.
+    const match=/^runtime-task:([0-9a-f-]{36})$/i.exec(owner);
+    requireThat(match,'FORBIDDEN','Only a coordinator turn may start a task.',403);
+    return this.taskStart(match![1],command.payload.title,command.payload.brief,command.payload.capabilities);
+   }
    case 'message.send': {
     const target=this.store.get<PersonaPut|RoomPut>(command.payload.conversation_id);
     requireThat(target.kind==='persona'||target.kind==='room','INVALID_INPUT','Choose a bot or room.',422);
@@ -239,6 +247,11 @@ export class ControlCore {
     // With a background generation configured, the same all-or-nothing rule
     // applies: the candidate either admits or the whole command is rejected.
     if(this.options.ownerAlphaBackground&&!this.options.executionEnabled&&target.kind==='persona')this.background.assertMessageAdmissible(owner,commandId,target.id);
+    // G4 per-persona inbox (GROK_ALIGNMENT A4). Gated: executionEnabled is
+    // mutually exclusive with owner-alpha/bootstrap/warm/background by
+    // construction, and this flag defaults off, so every pre-existing
+    // message.send test keeps its prior one-run-per-message behavior.
+    if(this.options.coordinatorInbox&&this.options.executionEnabled&&target.kind==='persona')return this.routeInboxMessage(target.id,commandId,command.payload.text,now);
     return this.enqueue(persona,command.payload.text,commandId,null,null,target.kind==='room'?target.id:null);
    }
    case 'persona.put': {
@@ -582,6 +595,111 @@ export class ControlCore {
   }
   this.store.event(this.options.uuid(),roomId??personaId,'run.accepted','system',commandId,{run_id:id,status,reason:reason==='CAPABILITY_UNAVAILABLE'?'Runtime execution is not configured and verified yet.':reason},now);
   if(status==='queued')this.noteRunnable();return id;
+ }
+ /** G4 (GROK_ALIGNMENT A4): create a `role='background'` task run under an
+  * admitted coordinator turn. Reuses the shared budget/run-accepted/wake
+  * plumbing from `enqueue()`, but is a distinct admission path: no
+  * ownerAlpha/warm/background/bootstrap candidate logic applies to a task a
+  * coordinator explicitly starts, and its context is a restricted per-task
+  * snapshot (capabilities only), not the coordinator's full persona grant. */
+ private taskStart(parentRunId:string,title:string,brief:string,capabilities:string[]|undefined):string {
+  const parent=this.store.db.all<Pick<Run,'id'|'persona_id'|'role'|'status'>>('SELECT id,persona_id,role,status FROM runs WHERE id=?',parentRunId)[0];
+  requireThat(parent&&parent.role!=='background',"NOT_FOUND",'Coordinator run unavailable.',404);
+  const persona=this.activePersona(parent.persona_id);
+  const id=this.options.uuid(),now=this.now(),grant=capabilities??[];
+  const context:ContextSnapshot={schema_version:1,persona:{...persona,body:{...persona.body,tool_policy_ids:grant}},routine:null,memories:[],skills:[],
+   scope_key:`${parent.persona_id}/task/${id}`,instruction:brief,room_id:null,context_events:[],authorization_policy_ids:[],coordinator_task:true};
+  const status=this.options.executionEnabled?'queued':'waiting',reason=this.options.executionEnabled?null:'CAPABILITY_UNAVAILABLE';
+  this.store.db.exec('INSERT INTO runs(id,command_id,occurrence_id,persona_id,routine_id,context_json,role,parent_run_id,title,status,error_code,created_at,updated_at) VALUES(?,NULL,NULL,?,NULL,?,\'background\',?,?,?,?,?,?)',
+   id,parent.persona_id,JSON.stringify(context),parentRunId,title,status,reason,now,now);
+  const run=this.store.db.all<Pick<Run,'id'|'role'|'parent_run_id'|'current_attempt'|'status'|'occurrence_id'|'routine_id'>>(
+   'SELECT id,role,parent_run_id,current_attempt,status,occurrence_id,routine_id FROM runs WHERE id=?',id)[0];
+  let finalStatus=status,finalReason=reason;
+  if(this.budget.blocks(run)){
+   finalStatus='waiting';finalReason=this.budget.summary().status;
+   this.store.db.exec('UPDATE runs SET status=?,error_code=? WHERE id=?',finalStatus,finalReason,id);
+  }
+  this.store.event(this.options.uuid(),parent.persona_id,'run.accepted','system',null,{run_id:id,status:finalStatus,reason:finalReason==='CAPABILITY_UNAVAILABLE'?'Runtime execution is not configured and verified yet.':finalReason},now);
+  if(finalStatus==='queued')this.noteRunnable();
+  return id;
+ }
+ /** G4: per-persona coordinator inbox. A live (running) coordinator turn —
+  * direct DM only, not room, not routine — gets this message delivered as a
+  * steer of that turn via the existing owner run.steer mechanism (a synthetic
+  * run.steer command row is minted so TaskSteering.queue's normal provenance
+  * check is satisfied); otherwise a fresh coordinator run is enqueued,
+  * batching every owner message since the last inbox delivery to this
+  * persona so no un-consumed message is silently dropped. A run that is only
+  * 'claimed' (native ack pending) is not yet steerable and falls through to
+  * the batched-enqueue path, same as an idle inbox. */
+ private routeInboxMessage(personaId:string,commandId:string,text:string,now:string):string {
+  const consumerId=`coordinator-inbox:${personaId}`;
+  const advanceCursor=(sequence:number)=>this.store.db.exec(
+   'INSERT INTO consumer_cursors(consumer_id,conversation_id,delivered_sequence,consumed_sequence) VALUES(?,?,?,?) ON CONFLICT(consumer_id,conversation_id) DO UPDATE SET delivered_sequence=MAX(consumer_cursors.delivered_sequence,excluded.delivered_sequence),consumed_sequence=MAX(consumer_cursors.consumed_sequence,excluded.consumed_sequence)',
+   consumerId,personaId,sequence,sequence);
+  const live=this.store.db.all<Pick<Run,'id'|'current_attempt'>>(
+   "SELECT id,current_attempt FROM runs WHERE persona_id=? AND role='coordinator' AND parent_run_id IS NULL AND routine_id IS NULL AND json_extract(context_json,'$.room_id') IS NULL AND status='running' ORDER BY created_at DESC,id DESC LIMIT 1",
+   personaId)[0];
+  if(live){
+   const steerId=this.options.uuid(),payload={run_id:live.id,expected_attempt:live.current_attempt,text};
+   const hash=createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+   this.store.db.exec('INSERT INTO commands(id,owner_id,idempotency_key,body_hash,type,payload_json,status,accepted_at,resource_id,error_json) VALUES(?,?,?,?,\'run.steer\',?,\'accepted\',?,NULL,NULL)',
+    steerId,`system:inbox-steer:${personaId}`,commandId,hash,JSON.stringify(payload),now);
+   try{
+    const resource=new TaskSteering(this.store,()=>now).queue(steerId,{run_id:live.id,attempt:live.current_attempt});
+    this.store.db.exec("UPDATE commands SET status='applied',resource_id=? WHERE id=?",resource,steerId);
+    const own=this.store.db.all<{sequence:number}>('SELECT sequence FROM events WHERE id=?',commandId)[0];
+    if(own)advanceCursor(own.sequence);
+    return resource;
+   }catch(error){
+    if(!(error instanceof ControlError))throw error;
+    this.store.db.exec('UPDATE commands SET status=?,error_json=? WHERE id=?','rejected',JSON.stringify(safeError(error)),steerId);
+    // Fall through: the turn stopped being steerable between the SELECT above
+    // and this attempt. Treat the message like an idle inbox instead of
+    // failing the owner's message.send command.
+   }
+  }
+  const since=this.store.db.all<{consumed_sequence:number}>('SELECT consumed_sequence FROM consumer_cursors WHERE consumer_id=? AND conversation_id=?',consumerId,personaId)[0]?.consumed_sequence??0;
+  const rows=this.store.db.all<{sequence:number;text:string}>(
+   "SELECT sequence,json_extract(payload_json,'$.text') AS text FROM events WHERE conversation_id=? AND type='message.user' AND sequence>? ORDER BY sequence",personaId,since);
+  const instruction=rows.length?rows.map(row=>row.text).join('\n\n---\n\n'):text;
+  const id=this.enqueue(personaId,instruction,commandId,null,null,null);
+  if(rows.length)advanceCursor(rows.at(-1)!.sequence);
+  return id;
+ }
+ /** G4: append a `task.event` for a settled child task and, within a bounded
+  * causal chain, enqueue (or join a 2s-batched pending) coordinator wake so
+  * the coordinator can relay the result via hehebot_send_message. Depth is
+  * carried on the coordinator run's own context, not a separate ledger, so a
+  * chain of automatic wakes cannot recurse unboundedly. Runnable regardless
+  * of the `coordinatorInbox` flag: an owner-visible task needs its result
+  * relayed even when message.send itself still uses the legacy routing. */
+ enqueueTaskEvent(task:Pick<Run,'id'|'persona_id'|'parent_run_id'|'title'>,status:string,summary:string):void {
+  const now=this.now();
+  this.store.event(this.options.uuid(),task.persona_id,'task.event','system',null,{task_run_id:task.id,status,title:task.title,summary},now);
+  if(!task.parent_run_id)return;
+  const parent=this.store.db.all<{context_json:string}>('SELECT context_json FROM runs WHERE id=?',task.parent_run_id)[0];
+  if(!parent)return;
+  const parentDepth=(JSON.parse(parent.context_json) as ContextSnapshot).causal_depth??0;
+  const depth=parentDepth+1;
+  if(depth>3)return; // Loop bound (GROK_ALIGNMENT A4): no further automatic wake.
+  const line=`Task "${task.title??task.id}" is now ${status}. ${summary}`.slice(0,4000);
+  const wakeKey=`task_wake:${task.persona_id}`;
+  const pending=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',wakeKey)[0];
+  if(pending){
+   const value=JSON.parse(pending.value_json) as {run_id:string;at:string};
+   const run=this.store.db.all<{status:string;context_json:string}>('SELECT status,context_json FROM runs WHERE id=?',value.run_id)[0];
+   // 2s batching: only join a still-queued (unclaimed) wake minted moments ago.
+   if(run&&run.status==='queued'&&Date.parse(now)-Date.parse(value.at)<=2000){
+    const context=JSON.parse(run.context_json) as ContextSnapshot;
+    context.instruction=`${context.instruction}\n\n${line}`;
+    this.store.db.exec('UPDATE runs SET context_json=? WHERE id=?',JSON.stringify(context),value.run_id);
+    return;
+   }
+  }
+  const runId=this.enqueue(task.persona_id,line,null,null,null,null);
+  this.store.db.exec('UPDATE runs SET context_json=json_set(context_json,\'$.causal_depth\',?) WHERE id=?',depth,runId);
+  this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json',wakeKey,JSON.stringify({run_id:runId,at:now}));
  }
  private noteRunnable(){
   this.store.db.exec("UPDATE lifecycle SET queue_sequence=queue_sequence+1,desired_state='RUN',stop_token=CASE WHEN phase='DRAINING' THEN NULL ELSE stop_token END,wake_after_stop=CASE WHEN phase IN ('STOP_COMMITTED','STOPPING') THEN 1 ELSE wake_after_stop END,phase=CASE WHEN phase='DRAINING' THEN 'READY' ELSE phase END WHERE singleton=1");

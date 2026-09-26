@@ -492,6 +492,19 @@ export class LifecycleCore {
    if(result.status==='completed'&&result.text.length>0&&!this.store.db.all('SELECT 1 FROM bot_messages WHERE run_id=? AND attempt=? LIMIT 1',runId,attempt).length)
     appendBotMessageEvent(this.store,this.core.options.uuid,now,{id:runId,persona_id:run.persona_id,role:run.role},attempt,result.text,'final_text',null,`${runId}:${attempt}:final_text`);
    if(['completed','failed','cancelled'].includes(result.status))this.core.flushFollowups(runId);
+   // G4 (GROK_ALIGNMENT A4): a task the coordinator started (hehebot_start_task,
+   // marked coordinator_task in its context — distinct from the pre-existing
+   // native-child parent/child hierarchy, which also uses role='background'
+   // with a parent_run_id but must never wake a coordinator) wakes it on
+   // settlement. 'interrupted' is a distinct terminal status introduced by G2
+   // and is not reachable from this result union yet; wire it here too once
+   // that status exists on this code path.
+   if(run.role==='background'&&run.parent_run_id&&['completed','failed','cancelled','waiting'].includes(result.status)){
+    const marker=this.store.db.all<{context_json:string}>('SELECT context_json FROM runs WHERE id=?',runId)[0];
+    if(marker&&(JSON.parse(marker.context_json) as ContextSnapshot).coordinator_task)
+     this.core.enqueueTaskEvent({id:run.id,persona_id:run.persona_id,parent_run_id:run.parent_run_id,title:run.title},result.status,
+      result.status==='completed'?result.text.slice(0,2000):result.status==='waiting'?'The task is waiting for input.':`Reason: ${result.error_code??'unknown'}.`);
+   }
    if(run.occurrence_id&&result.status!=='waiting')this.store.db.exec('UPDATE occurrences SET status=? WHERE id=?',result.status==='completed'?'completed':'failed',run.occurrence_id);
    // Settlement and follow-up enqueueing do not change id, role or current_attempt.
    if(result.status==='failed'&&result.error_code)this.scheduleRetry(run,result.error_code);

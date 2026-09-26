@@ -10,11 +10,16 @@ import addFormats from 'ajv-formats';
 import { ControlClient, ControlClientError } from './control-client.mjs';
 import { prepareMemoryDelivery, deferMemoryResponse, materializeMemoryResponse } from './memory-read.mjs';
 
-export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills', 'hehebot_read_memory', 'hehebot_send_message']);
+export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills', 'hehebot_read_memory', 'hehebot_send_message', 'hehebot_start_task', 'hehebot_list_tasks', 'hehebot_task_detail', 'hehebot_steer_task', 'hehebot_queue_followup', 'hehebot_cancel_task']);
 // Minted once per agent-tools process; part of the deterministic message_key so
 // retries of the same JSON-RPC call within one process dedupe at the Worker.
 const SERVER_INSTANCE_ID = randomUUID();
-const COMMAND_TYPES = Object.freeze({ hehebot_propose_skill: 'skill.propose', hehebot_save_routine: 'routine.put', hehebot_run_routine: 'routine.run', hehebot_delete_routine: 'routine.delete' });
+const COMMAND_TYPES = Object.freeze({ hehebot_propose_skill: 'skill.propose', hehebot_save_routine: 'routine.put', hehebot_run_routine: 'routine.run', hehebot_delete_routine: 'routine.delete', hehebot_start_task: 'task.start' });
+// G4 (GROK_ALIGNMENT A4): task_run_id/text-only tool shapes that must be
+// remapped to their underlying run.steer/run.followup/run.cancel command
+// payloads. The Worker binds run.steer's live attempt itself; the model
+// never supplies or sees expected_attempt.
+const TASK_MANAGE_TYPES = Object.freeze({ hehebot_steer_task: 'run.steer', hehebot_queue_followup: 'run.followup', hehebot_cancel_task: 'run.cancel' });
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_OUTSTANDING = 16;
 const CONFIG_ENV = 'HEHEBOT_AGENT_TOOLS_CONFIG';
@@ -79,6 +84,32 @@ export function buildToolDefinitions(contracts) {
       type: 'object', additionalProperties: false, properties: {
         text: { type: 'string', minLength: 1, maxLength: 32768 }, reply_to_event_id: resolveRefs(contracts.$defs.uuid, contracts),
       }, required: ['text'],
+    } },
+    { name: AGENT_TOOL_NAMES[9], description: 'Start an independent background task with its own native turn. Returns immediately; it never waits for the task. Use this for work that would otherwise block the conversation. capabilities must be a subset of this bot\'s own authorized tool policies; omit for none.', inputSchema: wrap(commandSchema(contracts, 'task.start')) },
+    { name: AGENT_TOOL_NAMES[10], description: 'List background tasks started from this conversation, optionally filtered by state (active, completed, failed, cancelled, waiting). Follow next_cursor with after for more results. Does not change any task.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: {
+        state: { enum: ['active', 'completed', 'failed', 'cancelled', 'waiting'] }, after: resolveRefs(contracts.$defs.uuid, contracts),
+      },
+    } },
+    { name: AGENT_TOOL_NAMES[11], description: 'Read the current status and, once available, the result of one of this conversation\'s own background tasks.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: { task_run_id: resolveRefs(contracts.$defs.uuid, contracts) }, required: ['task_run_id'],
+    } },
+    { name: AGENT_TOOL_NAMES[12], description: 'Steer a currently running background task with new instructions. Only works while the task\'s native turn is actually running; if it returns not_running, queue a follow-up instead.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: {
+        idempotency_key: resolveRefs(contracts.$defs.uuid, contracts), task_run_id: resolveRefs(contracts.$defs.uuid, contracts),
+        text: { type: 'string', minLength: 1, maxLength: 32768 },
+      }, required: ['idempotency_key', 'task_run_id', 'text'],
+    } },
+    { name: AGENT_TOOL_NAMES[13], description: 'Queue a follow-up instruction for one of this conversation\'s own background tasks. Delivered as that task\'s next turn once its current native turn ends.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: {
+        idempotency_key: resolveRefs(contracts.$defs.uuid, contracts), task_run_id: resolveRefs(contracts.$defs.uuid, contracts),
+        text: { type: 'string', minLength: 1, maxLength: 32768 },
+      }, required: ['idempotency_key', 'task_run_id', 'text'],
+    } },
+    { name: AGENT_TOOL_NAMES[14], description: 'Cancel one of this conversation\'s own background tasks.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: {
+        idempotency_key: resolveRefs(contracts.$defs.uuid, contracts), task_run_id: resolveRefs(contracts.$defs.uuid, contracts),
+      }, required: ['idempotency_key', 'task_run_id'],
     } },
   ]);
 }
@@ -160,6 +191,30 @@ export function createAgentToolsHandler({ controlClient, config, contracts, memo
           return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text',
             text: `hehebot_send_message failed: ${code}${status ? ` (${status})` : ''}. No message was committed for this call; retry or reword.` }] } };
         }
+      }
+      if (name === 'hehebot_list_tasks') {
+        const result = await controlClient.request('agent-task-list', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
+        if (!result || !Array.isArray(result.tasks) || !(result.next_cursor === null || typeof result.next_cursor === 'string')) throw new Error('INVALID_QUERY_RESULT');
+        return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify(result) }] } };
+      }
+      if (name === 'hehebot_task_detail') {
+        const result = await controlClient.request('agent-task-detail', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
+        if (!result || !result.task || result.task.id !== args.task_run_id) throw new Error('INVALID_QUERY_RESULT');
+        return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify(result) }] } };
+      }
+      if (Object.hasOwn(TASK_MANAGE_TYPES, name)) {
+        const type = TASK_MANAGE_TYPES[name];
+        const payload = type === 'run.steer' ? { run_id: args.task_run_id, expected_attempt: 1, text: args.text }
+          : type === 'run.followup' ? { run_id: args.task_run_id, text: args.text }
+          : { run_id: args.task_run_id, reason: 'Coordinator requested cancellation.' };
+        const result = await controlClient.request('agent-command', {
+          identity: clone(config.identity), run_id: config.runId, attempt: config.attempt,
+          idempotency_key: args.idempotency_key, command: { schema_version: 1, type, payload },
+        });
+        if (!result || !['applied', 'rejected', 'pending'].includes(result.status)) throw new Error('INVALID_COMMAND_RECEIPT');
+        // run.steer specifically reports "not running" as a rejection the model
+        // should read as a signal to queue a follow-up instead of retrying.
+        return { jsonrpc: '2.0', id: message.id, result: { isError: result.status === 'rejected', content: [{ type: 'text', text: JSON.stringify(result) }] } };
       }
       if (name === 'hehebot_search_skills') {
         const result = await controlClient.request('agent-skill-search', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });

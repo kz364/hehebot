@@ -11,12 +11,14 @@ export const SKILL_PROPOSE_POLICY='46b2cbdd-d227-4f54-bffa-33148aad0134';
 export const ROUTINE_MANAGE_POLICY='f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 export {MEMORY_READ_POLICY} from './memory-context';
 
-export type AgentCommand=Extract<Command,{type:'skill.propose'|'routine.put'|'routine.run'|'routine.delete'}>;
+export type AgentCommand=Extract<Command,{type:'skill.propose'|'routine.put'|'routine.run'|'routine.delete'|'task.start'|'run.steer'|'run.followup'|'run.cancel'}>;
 export type AgentScope={identity:Identity;run_id:string;attempt:number};
 export type AgentCommandRequest=AgentScope & {idempotency_key:string;command:AgentCommand};
 export type AgentRoutineQuery=AgentScope & {id?:string;after?:string};
 export type AgentSkillQuery=AgentScope & {skill_id:string};
 export type AgentSkillSearch=AgentScope & {query:string;after?:string};
+export type AgentTaskList=AgentScope & {state?:'active'|'completed'|'failed'|'cancelled'|'waiting';after?:string};
+export type AgentTaskDetail=AgentScope & {task_run_id:string};
 export type AgentMemoryRead=AgentScope & {read_id:string;memory_id:string;revision:number;offset:number;limit:number};
 export type AgentMemoryReserve=AgentMemoryRead & {sha256:string;selected_model:string;tokenizer:typeof MEMORY_TOKENIZER;tokens:number};
 type MemoryReadLedger={version:1;baseline:string;global:number;scoped:number;reads:Array<{id:string;fingerprint:string}>};
@@ -26,8 +28,8 @@ export class AgentCommandBoundary {
  constructor(private core:ControlCore,private lifecycle:LifecycleCore){}
  private admitted(request:AgentScope){
   this.lifecycle.authorizeAttempt(request.identity,request.run_id,request.attempt);
-  const run=this.core.store.db.all<Pick<Run,'id'|'persona_id'|'routine_id'|'current_attempt'|'status'|'error_code'|'context_json'>>(
-   'SELECT id,persona_id,routine_id,current_attempt,status,error_code,context_json FROM runs WHERE id=?',request.run_id)[0];
+  const run=this.core.store.db.all<Pick<Run,'id'|'persona_id'|'routine_id'|'current_attempt'|'status'|'error_code'|'context_json'|'role'>>(
+   'SELECT id,persona_id,routine_id,current_attempt,status,error_code,context_json,role FROM runs WHERE id=?',request.run_id)[0];
   requireThat(run,'NOT_FOUND','Run unavailable.',404);
   const alpha=!!this.core.ownerAlpha.policy;
   requireThat(!alpha||!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code??''),'REVISION_CONFLICT','The owner revoked this admitted context.');
@@ -125,6 +127,31 @@ export class AgentCommandBoundary {
   requireThat(skill,'NOT_FOUND','This skill is not enabled in the admitted task snapshot.',404);
   return {skill};
  }
+ /** G4: coordinator-only task ledger reads, scoped to this run's own children.
+  * A background task (no admitted persona coordinator role) gets FORBIDDEN;
+  * this is the "no recursive fan-out" boundary for every task tool. */
+ taskList(request:AgentTaskList){
+  const {run}=this.admitted(request);
+  requireThat(run.role!=='background','FORBIDDEN','A background task may not inspect tasks.',403);
+  requireThat(request.after===undefined||/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(request.after),'INVALID_INPUT','Invalid task cursor.',422);
+  const activeStatuses=['queued','claimed','running','finishing','cancelling','recovery_required'];
+  const stateFilter=request.state==='active'?activeStatuses:request.state?[request.state]:null;
+  const rows=this.core.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>(
+   `SELECT id,title,status,updated_at FROM runs WHERE parent_run_id=? AND role='background' ${stateFilter?`AND status IN (${stateFilter.map(()=>'?').join(',')})`:''} AND id>? ORDER BY id LIMIT 21`,
+   run.id,...(stateFilter??[]),request.after??'');
+  return {tasks:rows.slice(0,20),next_cursor:rows.length>20?rows[19].id:null};
+ }
+ taskDetail(request:AgentTaskDetail){
+  const {run}=this.admitted(request);
+  requireThat(run.role!=='background','FORBIDDEN','A background task may not inspect tasks.',403);
+  const target=this.core.store.db.all<Pick<Run,'id'|'title'|'status'|'current_attempt'|'error_code'|'created_at'|'updated_at'>&{parent_run_id:string|null}>(
+   'SELECT id,title,status,current_attempt,error_code,created_at,updated_at,parent_run_id FROM runs WHERE id=?',request.task_run_id)[0];
+  requireThat(target&&target.parent_run_id===run.id,'NOT_FOUND','Task unavailable.',404);
+  const attempt=this.core.store.db.all<{result_json:string|null}>('SELECT result_json FROM attempts WHERE run_id=? AND attempt=?',target.id,target.current_attempt)[0];
+  let result:{status:string;text:string}|null=null;
+  if(attempt?.result_json){const parsed=JSON.parse(attempt.result_json) as {status:string;text?:string};if(typeof parsed.text==='string')result={status:parsed.status,text:parsed.text};}
+  return {task:{id:target.id,title:target.title,status:target.status,error_code:target.error_code,created_at:target.created_at,updated_at:target.updated_at,result}};
+ }
  routines(request:AgentRoutineQuery){
   const {run,snapshot}=this.admitted(request);
   requireThat(snapshot.persona.body.tool_policy_ids.includes(ROUTINE_MANAGE_POLICY),'FORBIDDEN','The admitted persona cannot inspect routines.',403);
@@ -139,13 +166,35 @@ export class AgentCommandBoundary {
   // Validate before narrowing so owner-only or malformed commands cannot be smuggled
   // through the runtime envelope.
   const supplied=parseCommand(request.command);
-  requireThat(supplied.type==='skill.propose'||supplied.type==='routine.put'||supplied.type==='routine.run'||supplied.type==='routine.delete','FORBIDDEN','This command is not available to a model.',403);
+  requireThat(supplied.type==='skill.propose'||supplied.type==='routine.put'||supplied.type==='routine.run'||supplied.type==='routine.delete'||
+   supplied.type==='task.start'||supplied.type==='run.steer'||supplied.type==='run.followup'||supplied.type==='run.cancel','FORBIDDEN','This command is not available to a model.',403);
   const policies=snapshot.persona.body.tool_policy_ids;
-  let command:AgentCommand;
+  let command:AgentCommand,actor=`runtime:${run.persona_id}`;
   if(supplied.type==='skill.propose'){
    requireThat(policies.includes(SKILL_PROPOSE_POLICY),'FORBIDDEN','The admitted persona snapshot cannot propose skills.',403);
    requireThat(!supplied.payload.executable_files_changed,'CAPABILITY_UNAVAILABLE','Executable skill files require separate review.');
    command={...supplied,payload:{...supplied.payload,provenance:{kind:'model',source_ref:request.run_id}}};
+  }else if(supplied.type==='task.start'){
+   // G4 (GROK_ALIGNMENT A4): coordinator-only, and never fanned out recursively
+   // from within an already-running background task.
+   requireThat(run.role!=='background','FORBIDDEN','A background task may not start another task.',403);
+   const capabilities=supplied.payload.capabilities??[];
+   requireThat(capabilities.every(id=>policies.includes(id)),'FORBIDDEN','Task capabilities must be a subset of the persona grant.',403);
+   command=supplied;
+   // Carries the parent coordinator run identity to control.ts's task.start
+   // handler without adding a model-writable field to the public command schema.
+   actor=`runtime-task:${run.id}`;
+  }else if(supplied.type==='run.steer'||supplied.type==='run.followup'||supplied.type==='run.cancel'){
+   requireThat(run.role!=='background','FORBIDDEN','A background task may not manage tasks.',403);
+   const target=this.core.store.db.all<{id:string;role:string;parent_run_id:string|null;current_attempt:number;context_json:string}>('SELECT id,role,parent_run_id,current_attempt,context_json FROM runs WHERE id=?',supplied.payload.run_id)[0];
+   // Scoped to hehebot_start_task's own children only — never the pre-existing
+   // native-child parent/child hierarchy, which also uses role='background'
+   // with a parent_run_id but is not a coordinator-managed task.
+   const isOwnTask=!!target&&target.role==='background'&&target.parent_run_id===run.id&&!!(JSON.parse(target.context_json) as ContextSnapshot).coordinator_task;
+   requireThat(isOwnTask,'FORBIDDEN','A coordinator may only manage its own tasks.',403);
+   // The model cannot know the task's current native attempt; the tool only
+   // supplies task_run_id/text, and the Worker binds the live attempt here.
+   command=supplied.type==='run.steer'?{...supplied,payload:{...supplied.payload,expected_attempt:target.current_attempt}}:supplied;
   }else{
    requireThat(policies.includes(ROUTINE_MANAGE_POLICY),'FORBIDDEN','The admitted persona snapshot cannot manage routines.',403);
    if(supplied.type==='routine.put')requireThat(supplied.payload.persona_id===run.persona_id,'FORBIDDEN','A model may manage only its admitted persona routines.',403);
@@ -160,7 +209,6 @@ export class AgentCommandBoundary {
    }
    command=supplied;
   }
-  const actor=`runtime:${run.persona_id}`;
   const hash=createHash('sha256').update(JSON.stringify(command)).digest('hex');
   return this.core.accept(actor,request.idempotency_key,hash,command);
  }
