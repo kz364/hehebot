@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Schema v16 settlement run-key indexes are locally verified. Joint missing-index
+construction caps: 100000 rows and 4 MiB UTF-8 key input with rowid reserve. Oversized
+pre-v16 storage fails closed without deleting custody; shared migration not authorized.
+Older backup/export/import pins retained. Red2/focused218/backend2388/runtime682/
+HTTP31/workerd migration/reopen/plans/backup drill/typecheck/build pass; final cross-
+table key test4 and workerd rerun pass. No active checks/children/delivery; schedule
+enabled. Next remaining native restoration, historical/storage/existing-key bounds
+and broader acceptance. Traversal remains exhaustive; no total storage/time bound.
+Full browser/native-service/timed-shutdown/desktop matrix not rerun. Gates false.
+
 Export summary row visits now stop at remaining allowance+1. Red1/focused143/
 backend2381/typecheck/build pass;1595312 exit0. Exact10000/10001 total rows and typed
 exports retained. No whole-request byte/time bound. Next native settlement run-key

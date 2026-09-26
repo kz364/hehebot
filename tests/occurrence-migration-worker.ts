@@ -7,7 +7,7 @@ import {MemoryReadRetention} from '../src/core/memory-read-retention';
 import {runRoomCases,runFalsyRoomCases} from './run-room-cases';
 import {ControlCore,DEFAULT_BOTS} from '../src/core/control';
 import {LifecycleCore} from '../src/core/lifecycle';
-import {NativeTaskLedger} from '../src/core/native-tasks';
+import {NativeTaskLedger,nativeDescendantsSettledSql} from '../src/core/native-tasks';
 import {RootChildEffects} from '../src/core/root-child-effects';
 import {createHash} from 'node:crypto';
 
@@ -20,7 +20,7 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
   ctx.blockConcurrencyWhile(async()=>{
    if(!this.db.all("SELECT name FROM sqlite_schema WHERE name='schema_versions'").length){
     if(env.PHASE!=='seed')throw Error('Expected retained v12 storage');
-    this.db.exec(schema.replace('PRAGMA foreign_keys = ON;','').replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (15,','VALUES (12,').replace(/^CREATE INDEX (objects_memory_scope|runs_parent) .*\n/gm,''));
+    this.db.exec(schema.replace('PRAGMA foreign_keys = ON;','').replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (16,','VALUES (12,').replace(/^CREATE INDEX (objects_memory_scope|runs_parent|operations_run_status|effects_run_status|resource_locks_run) .*\n/gm,''));
     this.db.exec(`INSERT INTO objects VALUES('routine-19','routine',73,'{}',NULL,'t1','t2'),('persona-31','persona',2,'{}',NULL,'t1','t2');
      INSERT INTO occurrences VALUES('occurrence-43','routine-19',7,'2026-09-17T03:15:00.000Z','claimed',5,'t3');
      INSERT INTO runs(id,occurrence_id,persona_id,routine_id,context_json,status,current_attempt,created_at,updated_at)
@@ -33,6 +33,7 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
  }
  async fetch(request:Request){
   const db=this.db,path=new URL(request.url).pathname;
+  if(path==='/settlement-plan')return Response.json(db.all(`EXPLAIN QUERY PLAN SELECT id FROM runs r WHERE ${nativeDescendantsSettledSql}`));
   if(path==='/child-authority'){
    const store=new Store(db),now='2026-09-10T00:00:00.000Z',persona=DEFAULT_BOTS[0].id;
    // The earlier migration assertions deliberately retain a live coordinator.
@@ -224,7 +225,7 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
    reset();
    const key='界'.repeat(349523)+'x'; // 1048570 bytes, plus six-byte ID.
    for(let i=0;i<4;i++)db.exec("INSERT INTO objects(id,kind,revision,body_json,created_at,updated_at) VALUES(?,'memory',1,'{}',?,'t0')",`key0-${i}`,key);
-   migrateApplication(db,'fixture');const exactKeys=version()===15;
+   migrateApplication(db,'fixture');const exactKeys=version()===16;
    reset();db.exec("UPDATE objects SET created_at=? WHERE id='key0-3'",key+'x');
    const keys=refused(),keysIntact=db.all<{ok:number}>("SELECT created_at=? AS ok FROM objects WHERE id='key0-3'",key+'x')[0].ok===1;
    db.exec("UPDATE objects SET deleted_at='fixture-retired' WHERE kind='memory'");
@@ -232,7 +233,7 @@ export class OccurrenceMigration extends DurableObject<{PHASE:string}> {
    db.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<?)
     INSERT INTO objects(id,kind,revision,body_json,created_at,updated_at)
     SELECT 'foreign-'||i,'persona',1,'{}','t0','t0' FROM n`,100000-count);
-   migrateApplication(db,'fixture');const exactRows=version()===15;
+   migrateApplication(db,'fixture');const exactRows=version()===16;
    reset();db.exec("INSERT INTO objects(id,kind,revision,body_json,created_at,updated_at) VALUES('extra','persona',1,'{}','t0','t0')");
    const rows=refused(),retainedRows=db.all<{n:number}>('SELECT COUNT(*) AS n FROM objects')[0].n;
    return Response.json({exactKeys,keys,keysIntact,exactRows,rows,retainedRows});

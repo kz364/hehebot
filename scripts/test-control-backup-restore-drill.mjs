@@ -149,7 +149,7 @@ try {
     join(backups, 'inventory.json'), join(staging, 'control.sqlite'), join(staging, 'manifest.json'), identity, unrelated];
   const before = await fingerprint(guarded);
   const report = await inspectControlRestore(staging);
-  const expectedReport = { version: 1, snapshot_verified: true, schema_version: 15,
+  const expectedReport = { version: 1, snapshot_verified: true, schema_version: 16,
     semantic_status: 'no_detected_inconsistency', inconsistencies: {},
     blockers: { RECOVERY_RUN: 1, RETAINED_LOCK: 1, UNRESOLVED_EFFECT: 1, UNRESOLVED_OPERATION: 1 },
     external_readiness: 'unverified', coordinated_restore_ready: false };

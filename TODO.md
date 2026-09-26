@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** export summary scans stop
+**Current checkpoint (2026-09-26, verified locally):** schema v16
+adds run-key settlement indexes with aggregate migration construction limits of
+100000 rows and 4 MiB of key input. Red2/focused218/backend2388/typecheck/build,
+workerd migration/reopen/query plans, HTTP31 and encrypted backup drill pass.
+Final aggregate-byte regression and runtime682 pass. Legacy
+backup/export/import schemas remain supported. No shared migration or publication.
+Next remaining native restoration, historical/storage/existing-key bounds and
+broader acceptance. Full matrix not rerun; original intermittency/advisories remain.
+
+**Previous checkpoint (2026-09-26, verified locally):** export summary scans stop
 at the remaining row allowance plus one overflow witness. Red1/focused143/backend2381/
 typecheck/dry-build pass; measured rate-limit row visits fall from19963 to9964.
 Exact10000/one-over export boundaries retained; no writes or schema changes.

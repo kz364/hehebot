@@ -9,7 +9,7 @@ import { snapshotControl, verifyControl } from './backup-control.mjs';
 
 export const MAX_EXPORT_BYTES = 4 * 1024 * 1024;
 export const MAX_EXPORT_ROWS = 10000;
-const sqlHash = 'd760d97d5e400a0d7e2ab3f2d5a2230fa354503d34a531304f02e780eabbd306';
+const sqlHash = '0b6b7b223f3088aa93eeb4a43e2808d1e028e90ac782c0acb8829b72aedec3bc';
 const schemaPins = {
   9: '15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c',
   10: '682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4',
@@ -18,6 +18,7 @@ const schemaPins = {
   13: '0eaf3801cdd090fbeeb7d2d362f19c1e7157ae01bb7a09264409bbf504a17d2f',
   14: '1fe0bfe3a7be6a29c66dc3b73bb3b8974de03fbda7773fe921c50e7b19558ddb',
   15: '327be864123d24d2aa574a9bddb9b333948b7311e2eb0ea9363d4b37b3799c5c',
+  16: 'ce7ce5e8bf6f0d2574a42eb90653900e79b67c240b55bdd8b12acea29874cb80',
 };
 const hash = value => createHash('sha256').update(value).digest('hex');
 /** @returns {never} */
@@ -113,7 +114,7 @@ export async function importControlExport(exportFile, snapshotDirectory) {
     const input = parseExport(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, size)));
     keys(input, ['format', 'version', 'createdAt', 'schemaSha256', 'schemaVersions', 'tables']);
     const latest = Array.isArray(input.schemaVersions) ? input.schemaVersions.at(-1) : null;
-    if (input.format !== 'hehebot-control-export' || input.version !== 1 || ![9, 10, 11, 12, 13, 14, 15].includes(latest) || input.schemaSha256 !== schemaPins[latest] ||
+    if (input.format !== 'hehebot-control-export' || input.version !== 1 || ![9, 10, 11, 12, 13, 14, 15, 16].includes(latest) || input.schemaSha256 !== schemaPins[latest] ||
         input.schemaVersions.length < 1 || input.schemaVersions.length > latest || !input.schemaVersions.every((version, i) =>
           Number.isInteger(version) && version >= 1 && version <= latest && (!i || version > input.schemaVersions[i - 1])) ||
         typeof input.createdAt !== 'string' ||
@@ -129,6 +130,7 @@ export async function importControlExport(exportFile, snapshotDirectory) {
       db.exec(sql.toString('utf8'));
       // Reconstruct legacy snapshots without inventing receipts or upgrading
       // their history. Only this disposable, empty local staging DB is changed.
+      if (latest < 16) db.exec('DROP INDEX operations_run_status; DROP INDEX effects_run_status; DROP INDEX resource_locks_run');
       if (latest < 15) db.exec('DROP INDEX runs_parent');
       if (latest < 14) db.exec('DROP INDEX objects_memory_scope');
       if (latest < 13) db.exec(`DROP TABLE occurrences; CREATE TABLE occurrences (

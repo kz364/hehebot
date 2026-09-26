@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (15, '2026-09-24T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (16, '2026-09-26T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -87,6 +87,7 @@ CREATE TABLE operations (
  FOREIGN KEY(run_id,attempt) REFERENCES attempts(run_id,attempt)
 );
 CREATE INDEX operations_status ON operations(status);
+CREATE INDEX operations_run_status ON operations(run_id,status);
 CREATE TABLE effects (
  id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(id), action_key TEXT NOT NULL UNIQUE,
  classification TEXT NOT NULL CHECK(classification IN ('read_only','idempotent','mutation')),
@@ -94,6 +95,7 @@ CREATE TABLE effects (
  authorization_ref TEXT NOT NULL, request_digest TEXT NOT NULL, provider_idempotency_key TEXT,
  receipt_json TEXT CHECK(receipt_json IS NULL OR json_valid(receipt_json)), updated_at TEXT NOT NULL
 );
+CREATE INDEX effects_run_status ON effects(run_id,status);
 CREATE TABLE lifecycle (
  singleton INTEGER PRIMARY KEY CHECK(singleton=1), provider_ref_json TEXT NOT NULL CHECK(json_valid(provider_ref_json)),
  boot_id TEXT, epoch INTEGER NOT NULL DEFAULT 0, phase TEXT NOT NULL,
@@ -139,6 +141,7 @@ CREATE INDEX retry_due ON retry_queue(due_at);
 CREATE TABLE "native_task_links" (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL);
 CREATE INDEX native_task_links_session ON native_task_links(native_session_key);
 CREATE TABLE resource_locks (resource_id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES runs(id),attempt INTEGER NOT NULL,acquired_at TEXT NOT NULL);
+CREATE INDEX resource_locks_run ON resource_locks(run_id);
 CREATE TABLE task_followups (id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES runs(id),text TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('pending','coordinator_queued','expired')),command_id TEXT NOT NULL REFERENCES commands(id),created_at TEXT NOT NULL,coordinator_run_id TEXT REFERENCES runs(id));
 CREATE INDEX task_followups_expiry ON task_followups(created_at,id) WHERE text!='';
 CREATE TABLE skill_proposals (

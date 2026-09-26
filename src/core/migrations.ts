@@ -141,5 +141,29 @@ export function migrateApplication(db:Database,now:string):void {
    'SCHEMA_MISMATCH','Run parent index needs explicit reconciliation.',503);
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(15,?)',now);
  });
- requireThat([14,15].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===14)version=15;
+ if(version===15)db.transaction(()=>{
+  let rows=0,bytes=0;
+  const pending:string[]=[];
+  for(const [name,table,columns] of [
+   ['operations_run_status','operations','run_id,status'],
+   ['effects_run_status','effects','run_id,status'],
+   ['resource_locks_run','resource_locks','run_id'],
+  ]){
+   const sql=`CREATE INDEX ${name} ON ${table}(${columns})`;
+   const existing=db.all<{sql:string}>('SELECT sql FROM sqlite_schema WHERE name=?',name)[0];
+   if(existing){requireThat(existing.sql===sql,'SCHEMA_MISMATCH','Settlement index needs explicit reconciliation.',503);continue;}
+   // Bound aggregate construction input before any DDL. Eight bytes reserve
+   // the largest rowid key; this is not a bound on SQLite's total allocation.
+   const size=columns.split(',').map(column=>`length(CAST(${column} AS BLOB))`).join('+')+'+8';
+   const work=db.all<{rows:number;bytes:number}>(`SELECT COUNT(*) AS rows,COALESCE(SUM(${size}),0) AS bytes FROM (SELECT ${columns} FROM ${table} LIMIT ?)`,100000-rows+1)[0];
+   rows+=work.rows;bytes+=work.bytes;
+   requireThat(rows<=100000&&bytes<=4194304,'MIGRATION_WORK_LIMIT',
+    'Settlement index construction exceeds 100000 rows or 4 MiB of key input. Explicit reconciliation is required; no custody data was deleted.',503);
+   pending.push(sql);
+  }
+  for(const sql of pending)db.exec(sql);
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(16,?)',now);
+ });
+ requireThat([15,16].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

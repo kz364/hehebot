@@ -214,7 +214,7 @@ it('export rate window is bounded without missed-alarm maintenance or runtime wa
   for (let n = 0; n < 2; n++) {
     const result = await control.getControlExport('owner');
     expect(result.ok).toBe(true);
-    if (result.ok) expect((await new Response(result.value).json() as { schemaVersions: number[] }).schemaVersions).toEqual([15]);
+    if (result.ok) expect((await new Response(result.value).json() as { schemaVersions: number[] }).schemaVersions).toEqual([16]);
   }
   expect(await control.getControlExport('owner')).toMatchObject({ ok: false, status: 429 });
   expect(db.all('SELECT * FROM schedule_state')).toEqual(before);

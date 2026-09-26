@@ -22,7 +22,7 @@ it('exports one read transaction with exact typed values, int64 and deleted-even
   transaction:fn=>f.db.transaction(()=>{transactions++;inside=true;try{return fn();}finally{inside=false;}}),
  };
  const exported=JSON.parse(exportControl(db,now));
- expect(transactions).toBe(1);expect(exported).toMatchObject({format:'hehebot-control-export',version:1,createdAt:now,schemaVersions:[15],schemaSha256:'327be864123d24d2aa574a9bddb9b333948b7311e2eb0ea9363d4b37b3799c5c'});
+ expect(transactions).toBe(1);expect(exported).toMatchObject({format:'hehebot-control-export',version:1,createdAt:now,schemaVersions:[16],schemaSha256:'ce7ce5e8bf6f0d2574a42eb90653900e79b67c240b55bdd8b12acea29874cb80'});
  const table=(name:string)=>exported.tables.find((value:{name:string})=>value.name===name);
  expect(table('rate_limits')).toEqual({name:'rate_limits',columns:['subject','window_start','count'],rows:[[
   {type:'text',value:'huge'},{type:'integer',value:'-9223372036854775808'},{type:'integer',value:'9223372036854775807'},
@@ -72,6 +72,7 @@ it('accepts exactly 10000 total rows and stops summary scans at the remaining al
 });
 
 it.each([9,10,11,12])('keeps v%s exports readable without migration or fabricated attribution',version=>{
+ f.db.exec('DROP INDEX operations_run_status');f.db.exec('DROP INDEX effects_run_status');f.db.exec('DROP INDEX resource_locks_run');
  f.db.exec('DROP INDEX runs_parent');
  f.db.exec('DROP INDEX objects_memory_scope');
  legacyOccurrences(f.db.sqlite);
@@ -81,7 +82,7 @@ it.each([9,10,11,12])('keeps v%s exports readable without migration or fabricate
   f.db.exec('CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');
  }
  if(version===9)f.db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json');
- f.db.exec('UPDATE schema_versions SET version=? WHERE version=15',version);
+ f.db.exec('UPDATE schema_versions SET version=? WHERE version=16',version);
  const before=f.db.all('SELECT total_changes() AS n');
  const exported=JSON.parse(exportControl(f.db,f.core.now()));
  expect(exported).toMatchObject({schemaVersions:[version],schemaSha256:version===9?'15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c':version===10?'682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4':version===11?'8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a':'a333b2b0ca9d5e7572e84d8aa3f8210b99e3b946a831bbd6dd4ff231173d0bf6'});

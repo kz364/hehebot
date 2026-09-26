@@ -4,6 +4,26 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Settlement run-key indexes (2026-09-26 Asia/Jakarta): application schema v16 adds
+operations(run_id,status), effects(run_id,status) and resource_locks(run_id).
+The exhaustive recursive UNION and all custody predicates are unchanged. Node and
+real workerd plans use covering indexes instead of per-descendant full-table probes.
+The versioned migration preflights all missing indexes before DDL with a shared
+100000-row and 4 MiB UTF-8 key-input allowance (including eight bytes per rowid).
+Exact/one-over row and cross-table byte tests, conflicting-index refusal and failed
+version-write rollback pass without deleting unknown effects, operations or locks.
+Oversized pre-v16 storage refuses startup pending explicit reconciliation; this
+is not a bound on total SQLite memory, traversal depth, storage growth or request time.
+Backup/export pins retain all prior supported schemas; imports reconstruct old
+versions without upgrading custody. Fresh and migrated v16 schemas match exactly.
+Red2/focused218/backend2388/typecheck/dry-build pass (1599681 exit0), workerd startup/
+reopen/index plans, HTTP31 and encrypted snapshot/decrypt/inspection drill pass
+(1599808 exit0), final cross-table key test4/typecheck/workerd pass (1604311 exit0),
+runtime682 pass (1602812 exit0). Logs .local/settlement-index-*.log. Full combined
+browser/native-service/timed-shutdown/desktop matrix not rerun. No shared migration,
+deployment, account calls or production-gate changes. Original intermittency and
+desktop advisories unchanged; remaining historical/storage/native recovery is open.
+
 Export summary scan bound (2026-09-26 Asia/Jakarta): the aggregate now consumes a
 subquery limited to the remaining10000-row allowance plus one overflow witness.
 It still rejects the whole export; it never truncates or deletes source data.

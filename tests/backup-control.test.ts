@@ -59,7 +59,7 @@ it('includes committed WAL rows, excludes an uncommitted writer, preserves exact
   const before = await Promise.all(['', '-wal'].map(s => readFile(source + s)));
   db.exec("BEGIN IMMEDIATE; UPDATE objects SET revision=99 WHERE id='persona-a'");
   const manifest = await snapshotControl(source, destination);
-  expect(manifest.schemaVersions).toEqual([15]);
+  expect(manifest.schemaVersions).toEqual([16]);
   expect(manifest.counts).toMatchObject({ objects: 2, object_revisions: 2, runs: 2, attempts: 2, effects: 1, resource_locks: 1, webhook_receipts: 1 });
   // SQLite's shared-memory reader marks are coordination state, not immutable database pages.
   expect(await Promise.all(['', '-wal'].map(async s => digest(await readFile(source + s))))).toEqual(before.map(digest));
@@ -88,7 +88,7 @@ it('includes committed WAL rows, excludes an uncommitted writer, preserves exact
 it('verifies legacy schema8 without migrating the source or snapshot', async () => {
   legacyOccurrences(db);
   legacyLinks();
-  db.exec('DROP INDEX runs_parent; DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=15');
+  db.exec('DROP INDEX operations_run_status; DROP INDEX effects_run_status; DROP INDEX resource_locks_run; DROP INDEX runs_parent; DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=16');
   const before = digest(await readFile(source));
   const manifest = await snapshotControl(source, destination);
   expect(manifest.schemaVersions).toEqual([8]);
@@ -97,14 +97,15 @@ it('verifies legacy schema8 without migrating the source or snapshot', async () 
   expect(digest(await readFile(source))).toBe(before);
 });
 
-it.each([9,10,11,12,13,14])('preserves schema%s flight obligations and original migration history', async version => {
-  db.exec('DROP INDEX runs_parent');
+it.each([9,10,11,12,13,14,15])('preserves schema%s flight obligations and original migration history', async version => {
+  db.exec('DROP INDEX operations_run_status; DROP INDEX effects_run_status; DROP INDEX resource_locks_run');
+  if (version < 15) db.exec('DROP INDEX runs_parent');
   if (version < 14) db.exec('DROP INDEX objects_memory_scope');
   if (version < 13) legacyOccurrences(db);
   if (version < 12) db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision');
   if (version < 11) legacyLinks();
   if (version === 9) db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json');
-  db.prepare('UPDATE schema_versions SET version=? WHERE version=15').run(version);
+  db.prepare('UPDATE schema_versions SET version=? WHERE version=16').run(version);
   db.exec("INSERT INTO schema_versions VALUES(8,'2026-08-17T01:23:45.678Z'); INSERT INTO flight_restore_deadlines VALUES('leg-83',2,'2026-09-20T21:00:00.000Z','Asia/Jakarta','2026-09-19T21:00:00.000Z','routine-29','source-43','outcome_unknown','child-z','{\"receipt\":73}')");
   const manifest = await snapshotControl(source, destination);
   expect(manifest.schemaVersions).toEqual([8, version]);
@@ -118,10 +119,10 @@ it.each([9,10,11,12,13,14])('preserves schema%s flight obligations and original 
   expect(await verifyControl(destination)).toEqual(manifest);
 });
 
-it('backs up migrated v15 with the canonical pin and retains an exact release independently of result', async () => {
+it('backs up migrated v16 with the canonical pin and retains an exact release independently of result', async () => {
   legacyOccurrences(db);
   legacyLinks();
-  db.exec('DROP INDEX runs_parent; DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; UPDATE schema_versions SET version=9 WHERE version=15');
+  db.exec('DROP INDEX operations_run_status; DROP INDEX effects_run_status; DROP INDEX resource_locks_run; DROP INDEX runs_parent; DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; UPDATE schema_versions SET version=9 WHERE version=16');
   migrateApplication({
     all: <T>(sql: string, ...values: SqlValue[]) => db.prepare(sql).all(...values) as T[],
     exec: (sql, ...values) => { db.prepare(sql).run(...values); },
@@ -133,8 +134,8 @@ it('backs up migrated v15 with the canonical pin and retains an exact release in
   const receipt = JSON.stringify({ native_ref: 'native-root-73', outcome: 'interrupted' });
   db.prepare("UPDATE attempts SET coordinator_release_json=? WHERE run_id='root-r'").run(receipt);
   const manifest = await snapshotControl(source, destination);
-  expect(manifest.schemaVersions).toEqual([9, 10, 11, 12, 13, 14, 15]);
-  expect(manifest.schemaSha256).toBe('327be864123d24d2aa574a9bddb9b333948b7311e2eb0ea9363d4b37b3799c5c');
+  expect(manifest.schemaVersions).toEqual([9, 10, 11, 12, 13, 14, 15, 16]);
+  expect(manifest.schemaSha256).toBe('ce7ce5e8bf6f0d2574a42eb90653900e79b67c240b55bdd8b12acea29874cb80');
   expect(await verifyControl(destination)).toEqual(manifest);
   const copy = new DatabaseSync(join(destination, 'control.sqlite'), { readOnly: true });
   try {
@@ -191,7 +192,7 @@ it('pins one transaction when another connection commits paired changes after sn
 it('rejects unsupported versions, schema drift and native-like databases without leaving backups', async () => {
   db.exec('UPDATE schema_versions SET version=99');
   await expect(snapshotControl(source, destination)).rejects.toThrow('UNSUPPORTED_SCHEMA');
-  db.exec('UPDATE schema_versions SET version=15; CREATE TABLE sqliteXauth(secret TEXT)');
+  db.exec('UPDATE schema_versions SET version=16; CREATE TABLE sqliteXauth(secret TEXT)');
   await expect(snapshotControl(source, destination)).rejects.toThrow('UNSUPPORTED_SCHEMA');
   await expect(lstat(destination)).rejects.toMatchObject({ code: 'ENOENT' });
 });
