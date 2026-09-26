@@ -12,6 +12,7 @@ const schemaPins:Record<number,string>={
  15:'327be864123d24d2aa574a9bddb9b333948b7311e2eb0ea9363d4b37b3799c5c',
  16:'ce7ce5e8bf6f0d2574a42eb90653900e79b67c240b55bdd8b12acea29874cb80',
  17:'b66a8db8aa4b008053201a56ea680ff51f628d13619354f75414abec70336664',
+ 18:'6fedcfb0c86cd8efe3a307a73247892408875c7a818f68a777ee93c3a2b97076',
 };
 const maxBytes=4*1024*1024,maxRows=10000;
 const quote=(name:string)=>`"${name.replaceAll('"','""')}"`;

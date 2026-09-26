@@ -136,9 +136,13 @@ export class ControlCore {
    case 'run.recover':{
     const p=command.payload,run=this.store.db.all<Pick<Run,'id'|'current_attempt'|'status'|'error_code'|'occurrence_id'|'persona_id'>>('SELECT id,current_attempt,status,error_code,occurrence_id,persona_id FROM runs WHERE id=?',p.run_id)[0];
     if(!run)throw new ControlError('NOT_FOUND','Run unavailable.',404);
-    requireThat(run.current_attempt===p.expected_attempt&&run.status==='recovery_required','REVISION_CONFLICT','Select the current recovery-required attempt.');
+    // G2 (GROK_ALIGNMENT A2/A3): 'interrupted' is the other terminal attempt
+    // state that can still be sitting on unresolved custody (unreconciled
+    // effects, held locks, or an open stopped-executor question) needing this
+    // same explicit owner recovery close-out.
+    requireThat(run.current_attempt===p.expected_attempt&&(run.status==='recovery_required'||run.status==='interrupted'),'REVISION_CONFLICT','Select the current recovery-required attempt.');
     const attempt=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,p.expected_attempt)[0];
-    requireThat(attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before closing recovery.');
+    requireThat(run.status==='interrupted'||attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before closing recovery.');
     requireThat(!this.questions.list().some(question=>question.run_id===run.id),'CANCEL_UNCONFIRMED','Close unresolved stopped-executor questions before closing recovery.');
     requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length,'CANCEL_UNCONFIRMED','The old execution has not settled.');
     requireThat(!this.store.db.all("SELECT id FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown') LIMIT 1",run.id).length,'OUTCOME_UNKNOWN','Reconcile every external effect before closing recovery.');
@@ -333,7 +337,9 @@ export class ControlCore {
     requireThat(run,'NOT_FOUND','Run unavailable.',404);
     if(['completed','failed','cancelled'].includes(run.status))return run.id;
     // Recovery remains parked; heartbeats already deliver cancellation for it.
-    const status=run.status==='recovery_required'?'recovery_required':['queued','waiting'].includes(run.status)?'cancelled':'cancelling';
+    // G2: an interrupted attempt is already terminal (A3) -- abandoning it via
+    // run.cancel closes it out directly, with no cancellation round-trip to wait for.
+    const status=run.status==='recovery_required'?'recovery_required':run.status==='interrupted'?'cancelled':['queued','waiting'].includes(run.status)?'cancelled':'cancelling';
     // While cancelling, updated_at is the watchdog's original grace anchor.
     this.store.db.exec("UPDATE runs SET status=?,error_code='OWNER_CANCELLED',updated_at=? WHERE id=?",status,run.status==='cancelling'?run.updated_at:now,run.id);
     this.store.event(this.options.uuid(),run.persona_id,'run.cancellation_requested',owner,commandId,{run_id:run.id,status,reason:command.payload.reason},now);
@@ -346,7 +352,7 @@ export class ControlCore {
      FROM runs WHERE id=?`,command.payload.run_id)[0];
     if(!run)throw new ControlError('NOT_FOUND','Run unavailable.',404);
     requireThat(run.current_attempt===command.payload.expected_attempt,'REVISION_CONFLICT','The attempt has changed.');
-    requireThat(['failed','waiting','cancelled','recovery_required'].includes(run.status),'INVALID_INPUT','This run is not eligible for retry.',422);
+    requireThat(['failed','waiting','cancelled','recovery_required','interrupted'].includes(run.status),'INVALID_INPUT','This run is not eligible for retry.',422);
     requireThat(run.error_code!=='MESSAGE_EXPIRED','MESSAGE_EXPIRED','This input expired. Send a fresh request.');
     if(run.current_attempt===0){
      const received=run.command_id?this.store.db.all<{accepted_at:string}>('SELECT accepted_at FROM commands WHERE id=?',run.command_id)[0].accepted_at:run.created_at;
@@ -355,8 +361,12 @@ export class ControlCore {
      requireThat(!JSON.parse(run.context_json).skill_invocation||Date.parse(run.created_at)+30*86400000>this.options.now().getTime(),'MESSAGE_EXPIRED','This unstarted skill snapshot expired. Send a fresh request.');
     }
     requireThat(run.current_attempt<3,'DEADLINE_EXCEEDED','This run has reached its retry limit.');
-    const unsettledAttempt=this.store.db.all("SELECT run_id FROM attempts WHERE run_id=? AND status IN ('claimed','running')",run.id);
-    requireThat(!unsettledAttempt.length,'CANCEL_UNCONFIRMED','The native attempt must settle before retrying.');
+    // G2 (GROK_ALIGNMENT A2/A3): interrupted is already the fenced terminal
+    // state for the attempt; it needs no separate confirmed-native-stop proof.
+    if(run.status!=='interrupted'){
+     const unsettledAttempt=this.store.db.all("SELECT run_id FROM attempts WHERE run_id=? AND status IN ('claimed','running')",run.id);
+     requireThat(!unsettledAttempt.length,'CANCEL_UNCONFIRMED','The native attempt must settle before retrying.');
+    }
     requireThat(!this.questions.list().some(question=>question.run_id===run.id),'CANCEL_UNCONFIRMED','Close unresolved stopped-executor questions before retrying.');
     requireThat(!this.store.db.all('SELECT resource_id FROM resource_locks WHERE run_id=?',run.id).length,'RESOURCE_BUSY','The prior task still owns a shared resource.');
     requireThat(run.role!=='background','CAPABILITY_UNAVAILABLE','Use a task follow-up after native settlement to ask the coordinator for a new background task.');
@@ -425,10 +435,11 @@ export class ControlCore {
   this.store.db.exec("UPDATE objects SET body_json='{}',deleted_at=?,updated_at=?,revision=revision+1 WHERE id IN (SELECT value FROM json_each(?))",now,now,keys);
   this.store.db.exec("UPDATE object_revisions SET body_json='{}' WHERE object_id IN (SELECT value FROM json_each(?))",keys);
   this.store.db.exec("UPDATE commands SET payload_json='{}' WHERE type='memory.put' AND json_extract(payload_json,'$.id') IN (SELECT value FROM json_each(?))",keys);
-  const runs=this.store.db.all<Pick<Run,'id'|'status'|'context_json'|'updated_at'>>("SELECT id,status,context_json,updated_at FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')");
+  const runs=this.store.db.all<Pick<Run,'id'|'status'|'context_json'|'updated_at'>>("SELECT id,status,context_json,updated_at FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required','interrupted')");
   for(const run of runs){const context=JSON.parse(run.context_json) as ContextSnapshot;if(context.memories?.some(x=>selected.has(x.id))){
-   // Purging more context must not restart an existing cancellation grace.
-   this.store.db.exec("UPDATE runs SET status=?,error_code='CONTEXT_INVALIDATED',context_json=?,updated_at=? WHERE id=?",run.status==='recovery_required'?'recovery_required':['claimed','running','finishing','cancelling'].includes(run.status)?'cancelling':'cancelled',JSON.stringify({...context,memories:context.memories.filter(x=>!selected.has(x.id))}),run.status==='cancelling'?run.updated_at:now,run.id);
+   // Purging more context must not restart an existing cancellation grace, and
+   // must not resurrect a terminal recovery_required/interrupted attempt.
+   this.store.db.exec("UPDATE runs SET status=?,error_code='CONTEXT_INVALIDATED',context_json=?,updated_at=? WHERE id=?",['recovery_required','interrupted'].includes(run.status)?run.status:['claimed','running','finishing','cancelling'].includes(run.status)?'cancelling':'cancelled',JSON.stringify({...context,memories:context.memories.filter(x=>!selected.has(x.id))}),run.status==='cancelling'?run.updated_at:now,run.id);
    new OutputPreviews(this.store,()=>now).discard(run.id);
   }}
   for(const id of ids)this.store.event(this.options.uuid(),null,'memory.deleted',owner,commandId,{id,transcript_cleanup_requested:purgeTranscripts,transcript_cleanup_status:purgeTranscripts?'requires_runtime_verification':'not_requested'},now);
@@ -786,8 +797,8 @@ export class ControlCore {
    questions,
    roster:new RosterLedger(this.store,()=>now).summary(),
    roster_activity:{observed_at:now,personas:this.store.db.all<{persona_id:string;unfinished:number;active:number;waiting:number;recovery:number}>(`SELECT persona_id,COUNT(*) AS unfinished,
-    SUM(status IN ('claimed','running','finishing','cancelling')) AS active,SUM(status='waiting') AS waiting,SUM(status='recovery_required') AS recovery
-    FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required') GROUP BY persona_id ORDER BY persona_id`)},
+    SUM(status IN ('claimed','running','finishing','cancelling')) AS active,SUM(status='waiting') AS waiting,SUM(status IN ('recovery_required','interrupted')) AS recovery
+    FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required','interrupted') GROUP BY persona_id ORDER BY persona_id`)},
    monitoring:controlMonitoring(this.store,now,this.budget,this.options.executionEnabled),
    objects:after===undefined?(['persona','room','routine','memory','skill'] as const).flatMap(kind=>this.store.list(kind)):undefined,
    skill_enablements:after===undefined?this.store.db.all<{skill_id:string;persona_id:string;skill_revision:number;enabled:number}>('SELECT skill_id,persona_id,skill_revision,enabled FROM skill_enablements ORDER BY skill_id,persona_id').map(row=>({...row,enabled:Boolean(row.enabled)})):undefined,
@@ -795,9 +806,9 @@ export class ControlCore {
    steering:runs.flatMap(run=>steering.receipts({run_id:run.id,attempt:run.current_attempt})),
    output_previews:runs.flatMap(run=>{const value=previews.read(run.id,run.current_attempt,!!this.ownerAlpha.policy);return value?[value]:[];}),
    token_usage_snapshots:runs.flatMap(run=>{const value=usage.read(run.id,run.current_attempt);return value?[value]:[];}),
-   recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run,questions)),
+   recovery:runs.filter(run=>run.status==='recovery_required'||run.status==='interrupted').map(run=>this.recoveryMetadata(run,questions)),
    runs,
-   summary:{...alphaSummary,...(bootstrap&&!warmActive&&!backgroundActive?{owner_alpha_bootstrap:bootstrap}:{}),...(warm&&!backgroundActive?{owner_alpha_warm:warm}:{}),...(background?{owner_alpha_background:background}:{}),phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required')")[0].n,execution_enabled:this.options.executionEnabled},
+   summary:{...alphaSummary,...(bootstrap&&!warmActive&&!backgroundActive?{owner_alpha_bootstrap:bootstrap}:{}),...(warm&&!backgroundActive?{owner_alpha_warm:warm}:{}),...(background?{owner_alpha_background:background}:{}),phase:this.store.db.all<{phase:string}>('SELECT phase FROM lifecycle WHERE singleton=1')[0]?.phase??'STOPPED',queued_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status='queued'")[0].n,active_background:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='background' AND status IN ('claimed','running','finishing','cancelling')")[0].n,active_coordinators:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE role='coordinator' AND status IN ('claimed','running','finishing','cancelling')")[0].n,blocked_runs:this.store.db.all<{n:number}>("SELECT COUNT(*) AS n FROM runs WHERE status IN ('waiting','recovery_required','interrupted')")[0].n,execution_enabled:this.options.executionEnabled},
    timeline:after===undefined?this.store.latestEvents(now):undefined};
  }
  taskPage(conversationId:string,after?:string,limit=10){
@@ -812,8 +823,8 @@ export class ControlCore {
  private scopedTaskPage(scope:string,id:string,unfinishedOnly:boolean,after?:string,limit=10){
   requireThat(after===undefined||/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(after),'INVALID_INPUT','Invalid task cursor.',422);
   requireThat(Number.isInteger(limit)&&limit>=1&&limit<=10,'INVALID_INPUT','Limit must be 1–10.',422);
-  const eligible=`${scope}=?${unfinishedOnly?" AND r.status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')":''}`;
-  const counts=this.store.db.all<{total:number;waiting:number;recovery:number}>(`SELECT COUNT(*) AS total,COALESCE(SUM(r.status='waiting'),0) AS waiting,COALESCE(SUM(r.status='recovery_required'),0) AS recovery FROM runs r WHERE ${eligible}`,id)[0];
+  const eligible=`${scope}=?${unfinishedOnly?" AND r.status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required','interrupted')":''}`;
+  const counts=this.store.db.all<{total:number;waiting:number;recovery:number}>(`SELECT COUNT(*) AS total,COALESCE(SUM(r.status='waiting'),0) AS waiting,COALESCE(SUM(r.status IN ('recovery_required','interrupted')),0) AS recovery FROM runs r WHERE ${eligible}`,id)[0];
   const rows=this.store.db.all<Omit<Run,'context_json'|'checkpoint_json'> & {request_status:string|null}>(`SELECT r.id,r.command_id,r.occurrence_id,r.persona_id,r.routine_id,r.status,r.current_attempt,r.error_code,r.created_at,r.updated_at,r.role,r.parent_run_id,r.title,c.status AS request_status FROM runs r LEFT JOIN commands c ON c.id=r.command_id WHERE ${eligible} AND r.id>? ORDER BY r.id LIMIT ?`,id,after??'',limit+1);
   const runs=rows.slice(0,limit),previews=new OutputPreviews(this.store,()=>this.now()),steering=new TaskSteering(this.store,()=>this.now());
   const usage=new TokenUsageSnapshots(this.store,()=>this.now());
@@ -832,7 +843,7 @@ export class ControlCore {
    output_previews:runs.flatMap(run=>{const value=previews.read(run.id,run.current_attempt,!!this.ownerAlpha.policy);return value?[value]:[];}),
    token_usage_snapshots:runs.flatMap(run=>{const value=usage.read(run.id,run.current_attempt);return value?[value]:[];}),
    steering:runs.flatMap(run=>steering.receipts({run_id:run.id,attempt:run.current_attempt})),
-   recovery:runs.filter(run=>run.status==='recovery_required').map(run=>this.recoveryMetadata(run,questions)),
+   recovery:runs.filter(run=>run.status==='recovery_required'||run.status==='interrupted').map(run=>this.recoveryMetadata(run,questions)),
    next_cursor:rows.length>limit?runs.at(-1)!.id:null};
  }
  recoveryPage(conversationId:string,after?:string,limit=20){
@@ -842,12 +853,15 @@ export class ControlCore {
   requireThat(['persona','room'].includes(object.kind),'NOT_FOUND','Conversation unavailable.',404);
   // Keyset by immutable ID, independent of timeline retention and newest-run
   // windows. Restart pagination to see concurrent arrivals before the cursor.
-  const rows=this.store.db.all<Omit<Run,'context_json'|'checkpoint_json'>>(`SELECT id,command_id,occurrence_id,persona_id,routine_id,status,current_attempt,error_code,created_at,updated_at,role,parent_run_id,title FROM runs WHERE status='recovery_required' AND ${object.kind==='persona'?'persona_id':"json_extract(context_json,'$.room_id')"}=? AND id>? ORDER BY id LIMIT ?`,conversationId,after??'',limit+1);
+  const rows=this.store.db.all<Omit<Run,'context_json'|'checkpoint_json'>>(`SELECT id,command_id,occurrence_id,persona_id,routine_id,status,current_attempt,error_code,created_at,updated_at,role,parent_run_id,title FROM runs WHERE status IN ('recovery_required','interrupted') AND ${object.kind==='persona'?'persona_id':"json_extract(context_json,'$.room_id')"}=? AND id>? ORDER BY id LIMIT ?`,conversationId,after??'',limit+1);
   const runs=rows.slice(0,limit),questions=this.questions.list();
   return {runs,recovery:runs.map(run=>this.recoveryMetadata(run,questions)),next_cursor:rows.length>limit?runs.at(-1)!.id:null};
  }
- private recoveryMetadata(run:Pick<Run,'id'|'current_attempt'>,unresolvedQuestions:ReadonlyArray<{run_id:string}>){
-  const terminated=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,run.current_attempt)[0]?.status==='terminated';
+ private recoveryMetadata(run:Pick<Run,'id'|'current_attempt'|'status'>,unresolvedQuestions:ReadonlyArray<{run_id:string}>){
+  // G2 (GROK_ALIGNMENT A2/A3): an interrupted attempt is fenced by the epoch
+  // advance itself, not by a confirmed provider stop. Treat it the same as a
+  // provider-confirmed 'terminated' attempt for reconciliation purposes.
+  const terminated=run.status==='interrupted'||this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,run.current_attempt)[0]?.status==='terminated';
   const operations=this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length>0;
   const effects=this.store.db.all<{id:string;status:string;classification:string;action_key:string;request_digest:string}>("SELECT id,status,classification,action_key,request_digest FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown') ORDER BY id LIMIT 21",run.id);
   const descendants=this.store.db.all(`SELECT r.id FROM runs r WHERE r.id=? AND NOT (${nativeDescendantsSettledSql})`,run.id).length>0;

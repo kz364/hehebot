@@ -182,12 +182,27 @@ export class LifecycleCore {
    this.store.db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=? AND value_json=?',JSON.stringify({...intent.value,status:'queued'}),intent.key,intent.valueJson);
   });
  }
+ /** G2 (GROK_ALIGNMENT A3, trap 4): only LIVE current-generation work blocks
+  * sleep. Durable records of a dead (interrupted) generation -- its terminal
+  * run, the locks it still holds pending reconciliation, its outcome_unknown
+  * or already-fenced effects -- are never blockers. `recovery_required` is no
+  * longer itself a blocking run status: an unresolved native question already
+  * blocks via the explicit questions check below, and interrupted attempts
+  * carry their own dead-generation records instead of parking in
+  * recovery_required.
+  */
  private active():boolean{
   const budget=this.core.budget.admissionPredicate();
   // Expiry and answer handoff do not settle the native request. Even stale
   // obligations need explicit reconciliation before the runtime may sleep.
   if(this.core.questions.list().length)return true;
-  return this.store.db.all("SELECT resource_id FROM resource_locks LIMIT 1").length>0 || this.store.db.all(`SELECT r.id FROM runs r WHERE r.status IN ('claimed','running','finishing','cancelling','recovery_required') OR (r.status='queued' AND (${budget.sql})) LIMIT 1`,...budget.bindings).length>0 || this.store.db.all("SELECT id FROM operations WHERE status!='settled' LIMIT 1").length>0 || this.store.db.all("SELECT e.id FROM effects e JOIN runs r ON r.id=e.run_id WHERE e.status IN ('intent','dispatched') OR (e.status='outcome_unknown' AND r.status IN ('claimed','running','finishing','cancelling')) LIMIT 1").length>0;
+  const state=this.get();
+  const live=`r.status IN ('claimed','running','finishing','cancelling') AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?)`;
+  const liveArgs=[state.epoch,state.boot_id];
+  return this.store.db.all(`SELECT l.resource_id FROM resource_locks l JOIN runs r ON r.id=l.run_id WHERE ${live} LIMIT 1`,...liveArgs).length>0 ||
+   this.store.db.all(`SELECT r.id FROM runs r WHERE (${live}) OR (r.status='queued' AND (${budget.sql})) LIMIT 1`,...liveArgs,...budget.bindings).length>0 ||
+   this.store.db.all(`SELECT o.id FROM operations o JOIN runs r ON r.id=o.run_id AND o.attempt=r.current_attempt WHERE o.status!='settled' AND (${live}) LIMIT 1`,...liveArgs).length>0 ||
+   this.store.db.all(`SELECT e.id FROM effects e JOIN runs r ON r.id=e.run_id WHERE e.status IN ('intent','dispatched') AND (${live}) LIMIT 1`,...liveArgs).length>0;
  }
  /** G4b (GROK_ALIGNMENT A4, docs/AGENT_MODEL.md "one reserved interactive model
   * turn plus at most one background model turn installation-wide"): two
@@ -275,7 +290,9 @@ export class LifecycleCore {
     const run=this.store.db.all<Pick<Run,'id'|'current_attempt'|'status'>>('SELECT id,current_attempt,status FROM runs WHERE id=?',op.run_id)[0];
     requireThat(run,'NOT_FOUND','Run unavailable.',404);
     this.core.ownerAlpha.authorize(run.id,op.attempt);
-    requireThat(run.current_attempt===op.attempt&&['claimed','running','finishing','cancelling','recovery_required'].includes(run.status),'STALE_EPOCH','Operation does not belong to an active attempt.');
+    // G2: an interrupted run's stale native operation still reports here so the
+    // runtime keeps hearing (via `cancellations` below) that it must stop.
+    requireThat(run.current_attempt===op.attempt&&['claimed','running','finishing','cancelling','recovery_required','interrupted'].includes(run.status),'STALE_EPOCH','Operation does not belong to an active attempt.');
     const attempt=this.store.db.all<{epoch:number;boot_id:string;deadline_at:string}>('SELECT epoch,boot_id,deadline_at FROM attempts WHERE run_id=? AND attempt=?',run.id,op.attempt)[0];
     requireThat(attempt?.epoch===identity.epoch&&attempt.boot_id===identity.boot_id,'STALE_EPOCH','Attempt belongs to a different executor.');
     requireThat(op.started_at<=op.deadline_at&&op.deadline_at<=operationTime(attempt.deadline_at)&&op.last_progress_at>=op.started_at,'INVALID_INPUT','Operation timing exceeds its attempt or is out of order.',422);
@@ -290,7 +307,10 @@ export class LifecycleCore {
    const lease=new Date(generation?Math.min(Date.parse(generation.policy.expires_at),renewed):renewed).toISOString();
    this.store.db.exec('UPDATE lifecycle SET lease_until=?,last_heartbeat=? WHERE singleton=1',lease,this.core.now());
    if(this.active())this.touch();
-   return {lease_until:lease,cancellations:this.store.db.all<{id:string}>("SELECT id FROM runs WHERE status IN ('cancelling','recovery_required')").map(x=>x.id)};
+   // G2: an interrupted run may still have a live native process that never
+   // got the memo -- keep telling the runtime to stop/ignore it, same as the
+   // pre-G2 recovery_required signal.
+   return {lease_until:lease,cancellations:this.store.db.all<{id:string}>("SELECT id FROM runs WHERE status IN ('cancelling','recovery_required','interrupted')").map(x=>x.id)};
   });
  }
  prepareMemory(identity:Identity,personaModels:Record<string,string>,memoryReadPersonas:string[]=[]) {
@@ -331,8 +351,8 @@ export class LifecycleCore {
    if(lane==='coordinator'){
     // Root inference release is not family settlement. Uncertain roots block;
     // provider-confirmed process termination retains the existing recovery path.
-    if(this.store.db.all(`SELECT r.id FROM runs r WHERE r.role='coordinator' AND r.status IN ('claimed','running','finishing','cancelling','recovery_required')
-    AND NOT (r.status='recovery_required' AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.status='terminated' AND a.settled_at IS NOT NULL)) AND NOT EXISTS(
+    if(this.store.db.all(`SELECT r.id FROM runs r WHERE r.role='coordinator' AND r.status IN ('claimed','running','finishing','cancelling','recovery_required','interrupted')
+    AND NOT (r.status IN ('recovery_required','interrupted') AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.status='terminated' AND a.settled_at IS NOT NULL)) AND NOT EXISTS(
      SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?
      AND json_extract(a.coordinator_release_json,'$.native_ref')=a.native_run_ref
      AND json_extract(a.coordinator_release_json,'$.outcome') IN ('completed','failed','interrupted')
@@ -340,7 +360,7 @@ export class LifecycleCore {
     // Match the runtime's bounded family registry without evicting old custody.
     // Admission only needs the threshold, not a census beyond it.
     const unresolved=this.store.db.all<{count:number}>(`SELECT COUNT(*) AS count FROM (SELECT 1 FROM runs r WHERE r.role='coordinator' AND r.current_attempt>0 AND ${current?'EXISTS(SELECT 1 FROM attempts current_attempt WHERE current_attempt.run_id=r.id AND current_attempt.attempt=r.current_attempt AND current_attempt.epoch=? AND current_attempt.boot_id=?) AND ':''}(
-     r.status IN ('claimed','running','finishing','cancelling','recovery_required')
+     r.status IN ('claimed','running','finishing','cancelling','recovery_required','interrupted')
      OR EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.status IN ('claimed','running'))
      OR EXISTS(SELECT 1 FROM operations o WHERE o.run_id=r.id AND o.status!='settled')
      OR EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=r.id)
@@ -390,6 +410,16 @@ export class LifecycleCore {
     const model=Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
     requireThat(typeof model==='string'&&/^[a-zA-Z0-9._-]{1,128}$/.test(model),'NATIVE_PERSONA_UNMAPPED','The runtime must declare the selected persona model.');
     context.selected_model=model;
+   }
+   // G2 (GROK_ALIGNMENT A3): a run re-seeded after interruptRuns' scheduleRetry
+   // call (error_code CANCEL_UNCONFIRMED/STALE_EPOCH, never a native-reported
+   // failure reason) is a fresh attempt, not a resumption -- but the runtime
+   // still needs to know it is a continuation and what the abandoned attempt
+   // already told the owner, so it can prepend a short preamble instead of
+   // silently repeating or contradicting a committed hehebot_send_message.
+   if(run.current_attempt>0&&run.error_code&&['CANCEL_UNCONFIRMED','STALE_EPOCH'].includes(run.error_code)){
+    const delivered=this.store.db.all<{text:string}>(`SELECT json_extract(e.payload_json,'$.text') AS text FROM bot_messages b JOIN events e ON e.sequence=b.event_sequence WHERE b.run_id=? AND b.attempt=? ORDER BY b.event_sequence`,run.id,run.current_attempt).map(x=>x.text);
+    context.continuation={previous_attempt:run.current_attempt,reason:run.error_code,delivered_messages:delivered};
    }
    const command=run.command_id?this.store.db.all<{type:string}>('SELECT type FROM commands WHERE id=?',run.command_id)[0]:null;
    if(command?.type==='skill.run'||prior.skill_invocation){
@@ -444,7 +474,7 @@ export class LifecycleCore {
     requireThat(row.coordinator_release_json===receipt,'IDEMPOTENCY_CONFLICT','Coordinator release differs from its committed receipt.');
     return;
    }
-   requireThat(['running','finishing','cancelling','recovery_required'].includes(run.status)&&row.status==='running'&&row.result_json===null,'REVISION_CONFLICT','Coordinator attempt is not awaiting root settlement.');
+   requireThat(['running','finishing','cancelling','recovery_required','interrupted'].includes(run.status)&&row.status==='running'&&row.result_json===null,'REVISION_CONFLICT','Coordinator attempt is not awaiting root settlement.');
    // Trusted runtime observation only: do not settle operations, publish a result,
    // touch deadlines/lease/activity, clear cancellation, or revive an old epoch.
    this.store.db.exec('UPDATE attempts SET coordinator_release_json=? WHERE run_id=? AND attempt=?',receipt,runId,attempt);
@@ -510,7 +540,11 @@ export class LifecycleCore {
     requireThat(!backgroundSettling||this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',backgroundProofKey).length===1,'RESULT_CONFLICT','Background completion evidence is missing.');
     return;
    }
-   requireThat(['claimed','running','finishing','cancelling','recovery_required'].includes(run.status),'REVISION_CONFLICT','Run is not active.');
+   // G2 (GROK_ALIGNMENT A2/A3): a late settlement report for an interrupted
+   // attempt is not a resumption -- it may still confirm (and must match, per
+   // the OWNER_CANCELLED/CONTEXT_INVALIDATED coercion above) the outcome the
+   // epoch fence already committed to.
+   requireThat(['claimed','running','finishing','cancelling','recovery_required','interrupted'].includes(run.status),'REVISION_CONFLICT','Run is not active.');
    requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND attempt=? AND status!='settled' LIMIT 1",runId,attempt).length,'CANCEL_UNCONFIRMED','Live operations have not settled.');
    requireThat(!this.core.questions.list().some(question=>question.run_id===runId),'CANCEL_UNCONFIRMED','A native question remains unresolved.');
    requireThat(!this.store.db.all('SELECT resource_id FROM resource_locks WHERE run_id=? LIMIT 1',runId).length,'RESOURCE_BUSY','Release scoped resources after tool settlement before completing.');
@@ -617,6 +651,58 @@ export class LifecycleCore {
     ${runId?'AND r.id=?':''} ${identity?'AND a.epoch=? AND a.boot_id=?':''}
    ON CONFLICT(key) DO NOTHING`,JSON.stringify('MEMORY_PREPARATION_LIMIT'),...(runId?[runId]:[]),...(identity?[identity.epoch,identity.boot_id]:[]));
  }
+ /** G2 (GROK_ALIGNMENT A3): the shared terminal transition for a non-terminal
+  * attempt. Moves the run and its current attempt to 'interrupted', fences its
+  * effects (dispatched -> outcome_unknown; never-dispatched intent -> failed
+  * with receipt abandoned_interrupted), and leaves resource locks held for
+  * owner reconciliation. Idempotent: a run already in a terminal status is
+  * left alone. Callers (watchdog's two sites below, and G3's successor start)
+  * select which runs qualify; this only performs the transition.
+  */
+ private interruptRuns(runIds:Iterable<string>,reason:string):void {
+  const now=this.core.now();
+  for(const id of new Set(runIds)){
+   const run=this.store.db.all<Pick<Run,'current_attempt'|'status'|'role'|'error_code'|'persona_id'|'command_id'>>('SELECT current_attempt,status,role,error_code,persona_id,command_id FROM runs WHERE id=?',id)[0];
+   if(!run||['completed','failed','cancelled','interrupted'].includes(run.status))continue;
+   const errorCode=run.error_code&&['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code)?run.error_code:reason;
+   this.store.db.exec("UPDATE runs SET status='interrupted',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE ? END,updated_at=? WHERE id=?",reason,now,id);
+   // The attempts table's own status stays a native-submission bookkeeping
+   // detail (observeStopped still confirms actual provider termination); only
+   // the run's status is the authoritative terminal record for the attempt.
+   this.store.db.exec("UPDATE effects SET status='failed',receipt_json=?,updated_at=? WHERE run_id=? AND status='intent'",JSON.stringify({kind:'abandoned_interrupted'}),now,id);
+   this.store.db.exec("UPDATE effects SET status='outcome_unknown',updated_at=? WHERE run_id=? AND status='dispatched'",now,id);
+   // G2 (GROK_ALIGNMENT A2/A3, trap 1): the successor continuation needs only
+   // the epoch fence just applied above, not a confirmed provider-termination
+   // proof. A read-only attempt with no unresolved custody (no native
+   // question, no unsettled operation, no mutation/unresolved effect) may be
+   // seeded again immediately; scheduleRetry's existing exclusions already
+   // encode exactly that "no unknowns" bar, so reuse it here unchanged.
+   this.scheduleRetry({id,role:run.role,current_attempt:run.current_attempt},errorCode);
+   // G2 (GROK_ALIGNMENT A3, trap 7): when scheduleRetry declined (an unresolved
+   // question, mutation/unknown effect, unsettled operation, background role or
+   // attempt exhaustion), the run stays 'interrupted' with genuine uncertainty
+   // that no automatic recovery can resolve. Surface it as an owner-visible
+   // notice rather than leaving it silently parked; owner-directed cancellation
+   // already carries clear intent and does not need this prompt.
+   if(this.store.db.all<{status:string}>('SELECT status FROM runs WHERE id=?',id)[0].status==='interrupted'&&!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(errorCode)){
+    const effectIds=this.store.db.all<{id:string}>("SELECT id FROM effects WHERE run_id=? AND status='outcome_unknown'",id).map(x=>x.id);
+    this.store.event(this.core.options.uuid(),run.persona_id,'notice','system',run.command_id,
+     {kind:'needs_you',run_id:id,reason:errorCode,effect_ids:effectIds,choices:['reconcile','retry','abandon']},now);
+   }
+  }
+ }
+ /** Public fence for one generation `(epoch,boot_id)`: every non-terminal run
+  * whose CURRENT attempt belongs to it is interrupted via {@link interruptRuns}.
+  * G3's `advanceGeneration` calls this immediately after its atomic epoch bump,
+  * for the retired (predecessor) generation, with no process-death proof.
+  */
+ interruptGeneration(epoch:number,boot_id:string,reason:string):void {
+  this.store.db.transaction(()=>{
+   const runIds=this.store.db.all<{id:string}>(`SELECT r.id FROM runs r WHERE r.status IN ('claimed','running','finishing','cancelling','recovery_required')
+    AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?)`,epoch,boot_id).map(x=>x.id);
+   this.interruptRuns(runIds,reason);
+  });
+ }
  watchdog():void {
   this.store.db.transaction(()=>{
    const now=this.core.now(),state=this.get();
@@ -630,18 +716,20 @@ export class LifecycleCore {
    const cancelledBefore=new Date(this.core.options.now().getTime()-30000).toISOString();
    const unsettled=this.store.db.all<{id:string}>(`SELECT r.id FROM runs r WHERE r.status='cancelling' AND r.updated_at<=? ${current?'AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?)':''}`,cancelledBefore,...(current?[current.epoch,current.boot_id]:[]));
    if(unsettled.length){
-    for(const run of unsettled){
-     this.retainNativeMemoryRefusals(run.id);
-     this.store.db.exec("UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'CANCEL_UNCONFIRMED' END,updated_at=? WHERE id=?",now,run.id);
-    }
-    // An unconfirmed task cancellation cannot terminate unrelated native work.
-    for(const run of unsettled)this.store.db.exec("UPDATE effects SET status='outcome_unknown',updated_at=? WHERE run_id=? AND status IN ('intent','dispatched')",now,run.id);
+    // G2 (GROK_ALIGNMENT A3): an unconfirmed cancellation is terminal for the
+    // attempt, not a recovery_required detour. Never-dispatched intent effects
+    // are abandoned; dispatched effects become owner-visible unknowns; locks
+    // stay held (A2) until the owner reconciles or releases them.
+    for(const run of unsettled)this.retainNativeMemoryRefusals(run.id);
+    this.interruptRuns(unsettled.map(run=>run.id),'CANCEL_UNCONFIRMED');
    }
    if(state.lease_until&&state.lease_until<=now&&['READY','DRAINING','BOOTING','START_REQUESTED'].includes(state.phase)){
     this.retainNativeMemoryRefusals(undefined,current??undefined);
     this.store.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',desired_state='STOP' WHERE singleton=1");
-    this.store.db.exec(`UPDATE runs SET status='recovery_required',error_code=CASE WHEN error_code IN ('OWNER_CANCELLED','CONTEXT_INVALIDATED') THEN error_code ELSE 'STALE_EPOCH' END,updated_at=? WHERE status IN ('claimed','running','finishing','cancelling') ${current?'AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=runs.id AND a.attempt=runs.current_attempt AND a.epoch=? AND a.boot_id=?)':''}`,now,...(current?[current.epoch,current.boot_id]:[]));
-    this.store.db.exec(`UPDATE effects SET status='outcome_unknown',updated_at=? WHERE status IN ('intent','dispatched') ${current?'AND EXISTS(SELECT 1 FROM runs r JOIN attempts a ON a.run_id=r.id AND a.attempt=r.current_attempt WHERE r.id=effects.run_id AND a.epoch=? AND a.boot_id=?)':''}`,now,...(current?[current.epoch,current.boot_id]:[]));
+    // G2 (GROK_ALIGNMENT A3): a lost boot lease interrupts the generation's
+    // live work in place of the old recovery_required+STALE_EPOCH bulk write.
+    if(current)this.interruptGeneration(current.epoch,current.boot_id,'STALE_EPOCH');
+    else this.interruptRuns(this.store.db.all<{id:string}>("SELECT id FROM runs WHERE status IN ('claimed','running','finishing','cancelling')").map(run=>run.id),'STALE_EPOCH');
    }
   });
  }

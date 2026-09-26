@@ -28,7 +28,7 @@ it('migrates v15 atomically and refuses conflicting index definitions without ad
  expect(()=>migrateApplication(f.db,f.core.now())).toThrow();
  for(const name of indexes)expect(f.db.all('SELECT name FROM sqlite_schema WHERE name=?',name)).toEqual([]);
  f.db.exec('DROP TRIGGER reject_v16');migrateApplication(f.db,f.core.now());
- expect(f.db.all('SELECT version FROM schema_versions ORDER BY version')).toEqual([{version:15},{version:16},{version:17}]);
+ expect(f.db.all('SELECT version FROM schema_versions ORDER BY version')).toEqual([{version:15},{version:16},{version:17},{version:18}]);
  const before=f.db.all('SELECT total_changes() AS n');migrateApplication(f.db,'later');
  expect(f.db.all('SELECT total_changes() AS n')).toEqual(before);
 });
@@ -41,7 +41,7 @@ it('bounds aggregate construction rows across all three tables without losing un
  f.db.exec("INSERT INTO resource_locks VALUES('lock','r',1,'t0')");
  const effects=f.db.all('SELECT * FROM effects'),locks=f.db.all('SELECT * FROM resource_locks');
  migrateApplication(f.db,f.core.now());
- expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:17}]);
+ expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:18}]);
  prior();f.db.exec("INSERT INTO resource_locks VALUES('one-over','r',1,'t0')");
  expect(()=>migrateApplication(f.db,f.core.now())).toThrowError(expect.objectContaining({code:'MIGRATION_WORK_LIMIT'}));
  for(const name of indexes)expect(f.db.all('SELECT name FROM sqlite_schema WHERE name=?',name)).toEqual([]);
@@ -60,7 +60,7 @@ it('admits exactly 4 MiB of UTF-8 key input and refuses one more byte without DD
  f.db.exec("INSERT INTO effects VALUES('e',?,'key','mutation','intent','auth','digest',NULL,NULL,'t0')",id);
  for(let i=0;i<2;i++)f.db.exec('INSERT INTO resource_locks VALUES(?,?,1,?)',`lock-${i}`,id,'t0');
  migrateApplication(f.db,f.core.now());
- expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:17}]);
+ expect(f.db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:18}]);
  prior();f.db.exec("UPDATE resource_locks SET run_id=? WHERE resource_id='lock-1'",id+'x');
  expect(()=>migrateApplication(f.db,f.core.now())).toThrowError(expect.objectContaining({code:'MIGRATION_WORK_LIMIT'}));
  for(const name of indexes)expect(f.db.all('SELECT name FROM sqlite_schema WHERE name=?',name)).toEqual([]);

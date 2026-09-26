@@ -59,7 +59,7 @@ it.each([false, true])('explicit delete with transcript request=%s erases both r
     let receipt:ReturnType<typeof f.accept>;
     try{
       receipt=f.accept(command,key);
-      const rows=read.mock.calls.flatMap(([sql],i)=>sql.includes("FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required')")?read.mock.results[i].value:[]);
+      const rows=read.mock.calls.flatMap(([sql],i)=>sql.includes("FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required','interrupted')")?read.mock.results[i].value:[]);
       expect(rows).toHaveLength(1);
       expect(Object.keys(rows[0]).sort()).toEqual(['context_json','id','status','updated_at']);
     }finally{read.mockRestore();}
@@ -126,7 +126,7 @@ it('two different deletes preserve exact cancellation grace, recovery custody, s
     f.setNow('2026-09-10T00:00:01.000Z');
     f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: uncertain, reason: 'Synthetic unconfirmed cancellation' } });
     f.setNow('2026-09-10T00:00:31.000Z'); life.watchdog();
-    expect(f.store.run(uncertain).status).toBe('recovery_required');
+    expect(f.store.run(uncertain).status).toBe('interrupted');
     const priorSibling = f.store.run(unrelated), priorPreview = previews.read(unrelated, 1);
     const priorEffects = f.db.all('SELECT * FROM effects ORDER BY id'), priorLocks = f.db.all('SELECT * FROM resource_locks ORDER BY resource_id');
     const attempts = f.db.all('SELECT * FROM attempts ORDER BY run_id'), links = f.db.all('SELECT * FROM native_task_links ORDER BY run_id');
@@ -136,7 +136,7 @@ it('two different deletes preserve exact cancellation grace, recovery custody, s
       f.setNow(at);
       expect(f.accept(deletion(memory, 1, true)).status).toBe('applied');
       for (const id of [root, claimed]) expect(f.store.run(id)).toMatchObject({ status: 'cancelling', error_code: 'CONTEXT_INVALIDATED', updated_at: '2026-09-10T00:00:37.000Z' });
-      expect(f.store.run(uncertain)).toMatchObject({ status: 'recovery_required', error_code: 'CONTEXT_INVALIDATED' });
+      expect(f.store.run(uncertain)).toMatchObject({ status: 'interrupted', error_code: 'CONTEXT_INVALIDATED' });
       expect(f.db.all('SELECT * FROM effects ORDER BY id')).toEqual(priorEffects);
       expect(f.db.all('SELECT * FROM resource_locks ORDER BY resource_id')).toEqual(priorLocks);
     }
@@ -155,7 +155,7 @@ it('two different deletes preserve exact cancellation grace, recovery custody, s
     f.setNow('2026-09-10T00:01:06.999Z'); life.watchdog();
     expect(f.store.run(root).status).toBe('cancelling'); expect(f.store.run(claimed).status).toBe('cancelling');
     f.setNow('2026-09-10T00:01:07.000Z'); life.watchdog();
-    for (const id of [root, claimed, uncertain]) expect(f.store.run(id)).toMatchObject({ status: 'recovery_required', error_code: 'CONTEXT_INVALIDATED' });
+    for (const id of [root, claimed, uncertain]) expect(f.store.run(id)).toMatchObject({ status: 'interrupted', error_code: 'CONTEXT_INVALIDATED' });
     expect(f.db.all('SELECT run_id,status FROM effects ORDER BY run_id')).toEqual([
       { run_id: root, status: 'outcome_unknown' }, { run_id: uncertain, status: 'outcome_unknown' }, { run_id: unrelated, status: 'dispatched' },
     ].sort((a, b) => a.run_id.localeCompare(b.run_id)));

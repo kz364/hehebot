@@ -59,7 +59,7 @@ it.each(['pending', 'answered'])('records a restart-required cutoff for %s quest
   f.setNow('2026-09-10T00:05:29.999Z'); lifecycle.watchdog();
   expect(f.store.run(runId).status).toBe('cancelling');
   f.setNow('2026-09-10T00:05:30.000Z'); lifecycle.watchdog();
-  expect(f.store.run(runId).status).toBe('recovery_required');
+  expect(f.store.run(runId).status).toBe('interrupted');
   const reopened = new ControlCore(f.store, f.core.options);
   expect(reopened.questions.get(id)).toMatchObject({ state, restart_required_at: deadline });
   expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
@@ -85,7 +85,10 @@ it.each(['OWNER_CANCELLED', 'CONTEXT_INVALIDATED', 'DEADLINE_EXCEEDED'])('preser
   f.core.questions.resolve(identity, id, connection);
   expect(f.core.questions.get(id)).toMatchObject({ state: 'resolved', restart_required_at: f.core.now() });
   f.setNow('2026-09-10T00:05:20.000Z'); lifecycle.watchdog();
-  expect(f.store.run(runId).status).toBe('recovery_required');
+  // G2 (GROK_ALIGNMENT A2/A3, trap 1): a read-only run interrupted for a
+  // retryable reason (unlike an owner-directed cancellation) with no
+  // remaining unresolved custody is reseeded immediately from the same fence.
+  expect(f.store.run(runId).status).toBe(reason === 'DEADLINE_EXCEEDED' ? 'waiting' : 'interrupted');
 });
 
 it.each(['epoch', 'boot', 'attempt', 'turn', 'terminated'])('never mutates historical or mismatched %s question custody', mismatch => {
@@ -253,7 +256,7 @@ it.each(['pending', 'answered', 'response_unknown'] as const)('explicit stopped 
   expect(f.accept(close(id, original.revision))).toMatchObject({ status: 'rejected', error: { code: 'CANCEL_UNCONFIRMED' } });
   expect(f.core.questions.get(id)).toEqual(original);
   stop();
-  expect(f.store.run(runId).status).toBe('recovery_required'); expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+  expect(f.store.run(runId).status).toBe('interrupted'); expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
   expect(f.core.questions.list()).toMatchObject([{ id, answerable: false, closeable: true }]);
   expect(f.core.recoveryPage(bot).recovery).toMatchObject([{ unresolved_questions: 1, can_recover: false }]);
   expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: runId, expected_attempt: 1 } }))

@@ -567,19 +567,21 @@ describe('executor leases and attempts', () => {
     f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,receipt_json,updated_at) VALUES(?,?,?,?,'dispatched','test','digest',?,?)", effectId, id, randomUUID(), classification, receipt, f.core.now());
     f.setNow('2026-09-10T00:03:00.000Z');
     life.watchdog();
-    expect(f.store.run(id)).toMatchObject({ status: 'recovery_required', error_code: 'STALE_EPOCH' });
+    // G2 (GROK_ALIGNMENT A3): a lost lease interrupts the attempt in place of
+    // the old recovery_required+STALE_EPOCH detour; interrupted is terminal.
+    expect(f.store.run(id)).toMatchObject({ status: 'interrupted', error_code: 'STALE_EPOCH' });
     const effects = f.db.all('SELECT * FROM effects'), locks = f.db.all('SELECT * FROM resource_locks');
     expect(effects).toEqual([expect.objectContaining({ id: effectId, classification, status: 'outcome_unknown', receipt_json: receipt })]);
     const stopped = { phase: 'stopped' as const, executionStopped: true, persistentState: 'retained' as const, observedAt: Date.now() };
     life.observeStopped(stopped); life.observeStopped(stopped);
     expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
-    expect(f.store.run(id)).toMatchObject({ status: 'recovery_required', error_code: 'STALE_EPOCH', current_attempt: 1 });
+    expect(f.store.run(id)).toMatchObject({ status: 'interrupted', error_code: 'STALE_EPOCH', current_attempt: 1 });
     expect(f.db.all('SELECT * FROM effects')).toEqual(effects);
     expect(f.db.all('SELECT * FROM resource_locks')).toEqual(locks);
     expect(f.db.all('SELECT status,settled_at FROM attempts WHERE run_id=?', id))
       .toEqual([{ status: 'terminated', settled_at: f.core.now() }]);
     f.setNow('2026-09-10T00:04:00.000Z'); life.retryDue();
-    expect(f.store.run(id).status).toBe('recovery_required');
+    expect(f.store.run(id).status).toBe('interrupted');
   });
 
   it.each(['intent','dispatched','outcome_unknown'] as const)('retains %s effect locks across confirmed stop and rejects competing work until reconciliation', effectStatus => {
@@ -696,7 +698,7 @@ describe('executor leases and attempts', () => {
     try{
       first=f.core.recoveryPage(bot);
       f.core.recoveryPage(room,undefined,100);
-      const pages=read.mock.calls.flatMap(([sql],index)=>sql.includes("FROM runs WHERE status='recovery_required'")?[read.mock.results[index].value]:[]);
+      const pages=read.mock.calls.flatMap(([sql],index)=>sql.includes("FROM runs WHERE status IN ('recovery_required','interrupted')")?[read.mock.results[index].value]:[]);
       expect(pages).toHaveLength(2);
       expect(pages.map(rows=>rows.length)).toEqual([21,23]);
       for(const rows of pages)for(const row of rows){
@@ -917,7 +919,9 @@ describe('drain, stop and takeover races', () => {
     f.db.exec("UPDATE effects SET status='dispatched'");
     f.setNow('2026-09-10T00:01:31.000Z'); life.watchdog();
     expect(life.get().phase).toBe('RECOVERY_REQUIRED');
-    expect(f.store.run(claim.run.id).status).toBe('recovery_required');
+    // G2 (GROK_ALIGNMENT A3): the lease-loss fence now interrupts the attempt
+    // directly instead of parking it as recovery_required+STALE_EPOCH.
+    expect(f.store.run(claim.run.id).status).toBe('interrupted');
     expect(f.db.all('SELECT status FROM effects')[0]).toEqual({ status: 'outcome_unknown' });
   });
 
@@ -949,7 +953,7 @@ describe('drain, stop and takeover races', () => {
     } finally { read.mockRestore(); }
     runs.forEach((run, i) => {
       expect(f.store.run(run.id)).toMatchObject({ context_json: context, checkpoint_json: checkpoint,
-        status: i === 3 ? 'cancelling' : 'recovery_required', error_code: i === 2 ? 'CANCEL_UNCONFIRMED' : reasons[i] });
+        status: i === 3 ? 'cancelling' : 'interrupted', error_code: i === 2 ? 'CANCEL_UNCONFIRMED' : reasons[i] });
       expect(f.db.all('SELECT status FROM effects WHERE run_id=?', run.id)).toEqual([
         { status: i === 1 ? 'confirmed' : i === 3 ? 'dispatched' : 'outcome_unknown' },
       ]);
@@ -960,7 +964,7 @@ describe('drain, stop and takeover races', () => {
     expect(life.get().phase).toBe('READY');
     expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
     f.setNow('2026-09-10T00:00:30.001Z'); life.watchdog();
-    expect(f.store.run(children[2].id)).toMatchObject({ status: 'recovery_required', error_code: 'OWNER_CANCELLED' });
+    expect(f.store.run(children[2].id)).toMatchObject({ status: 'interrupted', error_code: 'OWNER_CANCELLED' });
     expect(f.db.all('SELECT status FROM effects WHERE run_id=?', children[2].id)).toEqual([{ status: 'outcome_unknown' }]);
   });
 });

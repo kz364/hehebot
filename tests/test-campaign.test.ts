@@ -161,7 +161,7 @@ it('retains an uncertain claimed test and its reservation without replay or refu
  const f=setup();try{
   f.retire();const r=f.submit(),m=f.core.bootstrap.assignedManifest()!,id={epoch:m.epoch,boot_id:m.boot_id};f.lifecycle.registerBoot(id.boot_id);f.lifecycle.ready(id);f.lifecycle.claim(id);
   f.db.exec('INSERT INTO resource_locks VALUES(?,?,1,?)','uncertain-test-resource',r.resource_id!,f.core.now());
-  f.setNow(m.expires_at);f.lifecycle.watchdog();expect(f.store.run(r.resource_id!).status).toBe('recovery_required');
+  f.setNow(m.expires_at);f.lifecycle.watchdog();expect(f.store.run(r.resource_id!).status).toBe('interrupted');
   f.core.bootstrap.recordRetirement({...id,session_id:m.session_id,transition_id:m.transition_id,observed_at:m.expires_at,direct_child_stopped:true,execution_lock_free:true,session_lock_free:true,source:'test-observer'});
   const before=f.snapshot();expect(()=>f.submit()).toThrow(/unsettled/);expect(f.snapshot()).toBe(before);expect(f.db.all("SELECT key FROM runtime_metadata WHERE key GLOB 'owner_alpha_reservation:*'")).toHaveLength(1);
  }finally{f.close();}

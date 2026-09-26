@@ -188,7 +188,7 @@ it.each([7, 29, 113, 2027])('seed %i preserves sibling operations and locks thro
     f.setNow('2026-09-10T00:00:31.000Z'); life.watchdog();
     const store = new Store(f.db), core = new ControlCore(store, f.core.options);
     life = new LifecycleCore(store, core); resources = new ResourceLedger(store, () => core.now());
-    expect(f.store.run(children[target].id).status).toBe('recovery_required');
+    expect(f.store.run(children[target].id).status).toBe('interrupted');
     expect(life.heartbeat(identity, []).cancellations).toEqual([children[target].id]);
     expect(() => resources.release(children[target].id, 1, [`record:${target}`, `record:${sibling}`])).toThrowError(expect.objectContaining({ code: 'FORBIDDEN' }));
     expect(f.db.all('SELECT resource_id FROM resource_locks')).toHaveLength(2); // Earlier deletion rolled back.

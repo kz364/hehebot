@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (17, '2026-09-27T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (18, '2026-09-27T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -59,13 +59,13 @@ CREATE TABLE "occurrences" (
  CHECK((origin='scheduled' AND nominal_due_at IS NOT NULL) OR (origin='manual' AND nominal_due_at IS NULL)),
  UNIQUE(routine_id,routine_version,nominal_due_at)
 );
-CREATE TABLE runs (
+CREATE TABLE "runs" (
  id TEXT PRIMARY KEY, command_id TEXT REFERENCES commands(id), occurrence_id TEXT UNIQUE REFERENCES occurrences(id),
  persona_id TEXT NOT NULL REFERENCES objects(id), routine_id TEXT REFERENCES objects(id),
  context_json TEXT NOT NULL CHECK(json_valid(context_json)),
  role TEXT NOT NULL DEFAULT 'coordinator' CHECK(role IN ('coordinator','background')),
- parent_run_id TEXT REFERENCES runs(id), title TEXT,
- status TEXT NOT NULL CHECK(status IN ('queued','claimed','running','finishing','completed','waiting','failed','cancelling','cancelled','recovery_required')),
+ parent_run_id TEXT REFERENCES "runs"(id), title TEXT,
+ status TEXT NOT NULL CHECK(status IN ('queued','claimed','running','finishing','completed','waiting','failed','cancelling','cancelled','recovery_required','interrupted')),
  current_attempt INTEGER NOT NULL DEFAULT 0, error_code TEXT, checkpoint_json TEXT,
  created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );

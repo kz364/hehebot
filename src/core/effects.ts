@@ -6,11 +6,14 @@ export class EffectLedger {
  constructor(private store:Store,private now:()=>string){}
  reconcileStopped(owner:string,commandId:string,input:PayloadMap['effect.reconcile']):string {
   return this.store.db.transaction(()=>{
-   const run=this.store.db.all<{id:string;current_attempt:number}>('SELECT id,current_attempt FROM runs WHERE id=?',input.run_id)[0];
+   const run=this.store.db.all<{id:string;current_attempt:number;status:string}>('SELECT id,current_attempt,status FROM runs WHERE id=?',input.run_id)[0];
    requireThat(run,'NOT_FOUND','Run unavailable.',404);
    requireThat(run.current_attempt===input.expected_attempt,'REVISION_CONFLICT','The attempt has changed.');
    const attempt=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,input.expected_attempt)[0];
-   requireThat(attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before an owner effect decision.');
+   // G2 (GROK_ALIGNMENT A2/A3): interrupted is the epoch-fenced terminal state
+   // for the attempt. It substitutes for confirmed executor termination; no
+   // process-death proof is required before the owner may reconcile.
+   requireThat(run.status==='interrupted'||attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before an owner effect decision.');
    requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length,'CANCEL_UNCONFIRMED','The old execution has not settled.');
    const effect=this.store.db.all<{run_id:string;request_digest:string;status:string;receipt_json:string|null;receipt_too_large:number|null}>(`SELECT run_id,request_digest,status,
     length(CAST(receipt_json AS BLOB))>1048576 AS receipt_too_large,

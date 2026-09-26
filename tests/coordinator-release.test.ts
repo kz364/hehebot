@@ -115,10 +115,10 @@ it('does not use an earlier attempt release to admit another coordinator', () =>
   ]);
 });
 
-it.each(['cancelling', 'recovery_required'])('preserves %s and owner cancellation anchors, requiring exact release before next claim', status => {
+it.each(['cancelling', 'interrupted'])('preserves %s and owner cancellation anchors, requiring exact release before next claim', status => {
   const id = root();
   f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: id, reason: 'Owner selected task' } });
-  if (status === 'recovery_required') { f.setNow('2026-09-10T00:00:31.000Z'); life.watchdog(); }
+  if (status === 'interrupted') { f.setNow('2026-09-10T00:00:31.000Z'); life.watchdog(); }
   const before = f.store.run(id), next = message(otherBot);
   expect(before.status).toBe(status); expect(life.claim(identity)).toBeNull();
   release(id, 'interrupted'); expect(life.claim(identity)?.run.id).toBe(next);

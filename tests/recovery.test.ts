@@ -131,20 +131,29 @@ describe('bounded recovery',()=>{
   f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','dispatched','policy','digest',?)",randomUUID(),runId,randomUUID(),f.core.now());
   f.accept({schema_version:1,type:'run.cancel',payload:{run_id:runId,reason:'Stop'}});
   f.setNow('2026-09-10T08:00:30.000Z');life.watchdog();
-  expect(f.store.run(runId).status).toBe('recovery_required');
+  expect(f.store.run(runId).status).toBe('interrupted');
   const before=Object.fromEntries(['operations','attempts','effects','resource_locks'].map(table=>[table,f.db.all(`SELECT * FROM ${table}`)]));
   expect(before.effects).toEqual([expect.objectContaining({status:'outcome_unknown'})]);
   f.setNow('2026-09-10T08:00:35.000Z');
+  // Re-issuing cancel against an already-interrupted run resolves the
+  // ambiguity outright: the owner has now explicitly confirmed they want it
+  // stopped, so it moves from interrupted to the stronger 'cancelled'.
   expect(f.accept({schema_version:1,type:'run.cancel',payload:{run_id:runId,reason:'Still stop'}}).status).toBe('applied');
-  expect(f.store.run(runId)).toMatchObject({status:'recovery_required',error_code:'OWNER_CANCELLED'});
-  for(const table of Object.keys(before))expect(f.db.all(`SELECT * FROM ${table}`)).toEqual(before[table]);
-  expect(life.heartbeat(identity,[]).cancellations).toContain(runId);
+  expect(f.store.run(runId)).toMatchObject({status:'cancelled',error_code:'OWNER_CANCELLED'});
+  for(const table of ['operations','attempts','effects','resource_locks'])expect(f.db.all(`SELECT * FROM ${table}`)).toEqual(before[table]);
+  // Cancelled is fully terminal: unlike 'cancelling'/'recovery_required'/
+  // 'interrupted' it needs no further heartbeat-driven cancellation signal.
+  expect(life.heartbeat(identity,[]).cancellations).not.toContain(runId);
   expect(f.accept({schema_version:1,type:'run.retry',payload:{run_id:runId,expected_attempt:1}}))
    .toMatchObject({status:'rejected',error:{code:'CANCEL_UNCONFIRMED'}});
-  expect(()=>life.prepareSleep(identity)).toThrow(expect.objectContaining({code:'SLEEP_DENIED'}));
+  // G2 (GROK_ALIGNMENT A3, trap 4): the run is no longer live current-generation
+  // work, so its still-unreconciled lock/effect/operation records are owner-
+  // visible custody, not a sleep blocker.
+  f.setNow('2026-09-10T08:01:36.000Z');life.heartbeat(identity,[]);
+  life.prepareSleep(identity);
   expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0);
   const events=f.db.all<{payload_json:string}>("SELECT payload_json FROM events WHERE type='run.cancellation_requested' ORDER BY sequence");
-  expect(events.map(event=>JSON.parse(event.payload_json).status)).toEqual(['cancelling','recovery_required']);
+  expect(events.map(event=>JSON.parse(event.payload_json).status)).toEqual(['cancelling','cancelled']);
  });
  it('distinct owner cancel commands do not restart the original cancellation grace',()=>{
   const {life,runId}=running();
@@ -156,45 +165,58 @@ describe('bounded recovery',()=>{
   expect(f.db.all("SELECT id FROM events WHERE type='run.cancellation_requested'")).toHaveLength(2);
   f.setNow('2026-09-10T08:00:29.999Z');life.watchdog();expect(f.store.run(runId).status).toBe('cancelling');
   f.setNow('2026-09-10T08:00:30.000Z');life.watchdog();
-  expect(f.store.run(runId)).toMatchObject({status:'recovery_required',error_code:'OWNER_CANCELLED'});
+  expect(f.store.run(runId)).toMatchObject({status:'interrupted',error_code:'OWNER_CANCELLED'});
   expect(f.db.all('SELECT status FROM attempts WHERE run_id=?',runId)).toEqual([{status:'running'}]);
   expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0);
  });
  it('parks ignored cancellation without globally stopping other tasks',()=>{
   const {life,identity,runId}=running();f.accept({schema_version:1,type:'run.cancel',payload:{run_id:runId,reason:'Stop'}});
   f.setNow('2026-09-10T08:00:20.000Z');life.heartbeat(identity,[]);life.watchdog();expect(life.get().phase).toBe('READY');
-  f.setNow('2026-09-10T08:00:31.000Z');life.watchdog();expect(life.get().phase).toBe('READY');expect(f.store.run(runId).status).toBe('recovery_required');expect(f.store.run(runId).error_code).toBe('OWNER_CANCELLED');
+  f.setNow('2026-09-10T08:00:31.000Z');life.watchdog();expect(life.get().phase).toBe('READY');expect(f.store.run(runId).status).toBe('interrupted');expect(f.store.run(runId).error_code).toBe('OWNER_CANCELLED');
   expect(life.heartbeat(identity,[]).cancellations).toContain(runId);
+  // G2 (GROK_ALIGNMENT A2/A3): a late settlement report for the interrupted
+  // attempt still confirms the fenced outcome; it is not a resumption.
   life.complete(identity,runId,1,{status:'cancelled',text:''});expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0);
  });
- it('waits for confirmed provider stop before scheduling an interrupted read-only retry',()=>{
-  const {life,runId}=running();f.setNow('2026-09-10T08:02:00.000Z');life.watchdog();expect(f.store.run(runId).status).toBe('recovery_required');
-  expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0);
+ // G2 (GROK_ALIGNMENT A2/A3, trap 1): a lost boot lease now interrupts the
+ // generation's live work directly (no recovery_required detour), and a
+ // read-only attempt with no unresolved custody is reseeded from that same
+ // epoch fence -- no confirmed provider-termination proof is required or
+ // awaited first.
+ it('schedules an interrupted read-only retry without waiting for confirmed provider stop',()=>{
+  const {life,runId}=running();f.setNow('2026-09-10T08:02:00.000Z');life.watchdog();
+  expect(f.store.run(runId).status).toBe('waiting');
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual([{run_id:runId,due_at:'2026-09-10T08:02:10.000Z',reason:'STALE_EPOCH'}]);
+  // A later confirmed provider stop observation must not disturb the retry already scheduled.
   life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
-  expect(f.store.run(runId).status).toBe('waiting');f.setNow('2026-09-10T08:02:11.000Z');life.retryDue();expect(f.store.run(runId).status).toBe('queued');
+  expect(f.store.run(runId).status).toBe('waiting');
+  f.setNow('2026-09-10T08:02:11.000Z');life.retryDue();expect(f.store.run(runId).status).toBe('queued');
  });
  it.each([null,'',JSON.stringify({marker:'Retained checkpoint',padding:'界'.repeat(400000)})])('schedules stopped recovery without returning historical bodies (case %#)',checkpoint=>{
   const {life,runId}=running();
   const context=JSON.stringify({...JSON.parse(f.store.run(runId).context_json),padding:'x'.repeat(1100000)});
   f.db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?',context,checkpoint,runId);
-  f.setNow('2026-09-10T08:02:00.000Z');life.watchdog();
   const read=vi.spyOn(f.db,'all');
   try{
-   life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
-   const index=read.mock.calls.findIndex(([sql])=>sql.includes("FROM runs WHERE status='recovery_required'"));
-   expect(index).toBeGreaterThanOrEqual(0);
-   expect(read.mock.results[index].value).toEqual([{id:runId,role:'coordinator',current_attempt:1,error_code:'STALE_EPOCH'}]);
+   f.setNow('2026-09-10T08:02:00.000Z');life.watchdog();
+   // The interrupt-and-reseed path reads runs by id for its retry decision; it
+   // must never pull the (possibly huge) historical context/checkpoint bodies
+   // into JS memory to make that decision.
+   for(let i=0;i<read.mock.calls.length;i++)for(const row of Array.isArray(read.mock.results[i].value)?read.mock.results[i].value:[])
+    if(row&&typeof row==='object'){expect(row).not.toHaveProperty('context_json');expect(row).not.toHaveProperty('checkpoint_json');}
   }finally{read.mockRestore();}
   const due='2026-09-10T08:02:10.000Z';
   expect(f.store.run(runId)).toMatchObject({status:'waiting',current_attempt:1,context_json:context,
    checkpoint_json:checkpoint??JSON.stringify({retry_at:due}),error_code:'STALE_EPOCH'});
   expect(f.db.all('SELECT * FROM retry_queue')).toEqual([{run_id:runId,due_at:due,reason:'STALE_EPOCH'}]);
+  life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
   expect(f.db.all('SELECT status FROM attempts WHERE run_id=?',runId)).toEqual([{status:'terminated'}]);
+  expect(f.store.run(runId).status).toBe('waiting');
  });
  it('never retries an unknown external mutation after process termination',()=>{
   const {life,runId}=running();f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','dispatched','policy','digest',?)",randomUUID(),runId,randomUUID(),f.core.now());
   f.setNow('2026-09-10T08:02:00.000Z');life.watchdog();life.observeStopped({phase:'stopped',executionStopped:true,persistentState:'retained',observedAt:Date.now()});
-  expect(f.store.run(runId).status).toBe('recovery_required');expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0);
+  expect(f.store.run(runId).status).toBe('interrupted');expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0);
  });
  it('discards late output when context was invalidated',()=>{
   const {life,identity,runId}=running();f.db.exec("UPDATE runs SET status='cancelling',error_code='CONTEXT_INVALIDATED' WHERE id=?",runId);

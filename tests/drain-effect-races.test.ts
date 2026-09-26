@@ -56,7 +56,7 @@ describe('seeded effect custody and drain races', () => {
       expect(life.claim(identity)?.run.id).toBe(run); life.submitted(identity, run, 1, 'synthetic-native');
       const lockIds = ['calendar:17', 'mail:93'];
       resources.acquire(run, 1, lockIds);
-      let held = true, cancelled = false, lost = false, stopped = false;
+      let held = true, cancelled = false, lost = false, stopped = false, cancelledAfterLost = false;
       const model: ModelEffect[] = Array.from({ length: 3 }, (_, i) => ({
         input: { id: randomUUID(), run_id: run, attempt: 1, action_key: `seed:${seed}:effect:${i}`,
           classification: i === 1 ? 'idempotent' : 'mutation', authorization_ref: policy,
@@ -111,6 +111,10 @@ describe('seeded effect custody and drain races', () => {
         });
         if (!cancelled) actions.push({ name: 'cancel', run: () => {
           expect(f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: run, reason: 'Synthetic cancel' } }).status).toBe('applied');
+          // G2: cancelling an already-interrupted (unconfirmed) attempt resolves
+          // it straight to 'cancelled'; cancelling before that fence is reached
+          // just marks 'cancelling' and later interrupts preserve OWNER_CANCELLED.
+          if (lost) cancelledAfterLost = true;
           cancelled = true; count('cancel');
         } });
         if (rebuilds) actions.push({ name: 'reconstruct', run: () => { reconstruct(); rebuilds--; } });
@@ -118,7 +122,12 @@ describe('seeded effect custody and drain races', () => {
           f.setNow('2026-09-10T00:01:29.999Z');
           life.authorizeAttempt(identity, run, 1);
           f.setNow('2026-09-10T00:01:30.000Z'); life.watchdog(); lost = true; count('lease-loss');
-          for (const e of model) if (e.status === 'intent' || e.status === 'dispatched') { e.status = 'outcome_unknown'; e.receipt = null; }
+          // G2 (GROK_ALIGNMENT A3): a never-dispatched intent is abandoned
+          // outright; only a dispatched effect's outcome becomes unknown.
+          for (const e of model) {
+            if (e.status === 'intent') { e.status = 'failed'; e.receipt = { kind: 'abandoned_interrupted' }; }
+            else if (e.status === 'dispatched') { e.status = 'outcome_unknown'; e.receipt = null; }
+          }
           denied(() => life.heartbeat(identity, []), 'STALE_EPOCH');
         } });
         if (lost && !stopped) actions.push({ name: 'stop-observation', run: stop });
@@ -145,7 +154,7 @@ describe('seeded effect custody and drain races', () => {
       check();
       if (lost) {
         denied(() => life.complete(identity, run, 1, { status: 'cancelled', text: '' }), 'STALE_EPOCH');
-        expect(f.store.run(run).status).toBe('recovery_required');
+        expect(f.store.run(run).status).toBe(cancelledAfterLost ? 'cancelled' : 'interrupted');
         resources.release(run, 1, lockIds); held = false; check();
         return; // No synthetic successful recovery is inferred from receipts.
       }

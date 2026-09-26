@@ -168,7 +168,7 @@ it('activates one exact successor, delivers one-shot wakes, and retains predeces
   f.setNow('2026-09-10T00:12:00.000Z');lifecycle3.watchdog();
   expect(retained()).toBe(before);
   expect(f.store.run(claim.run.id).status).toBe('completed');
-  expect(f.store.run(epoch3Message.resource_id!).status).toBe('recovery_required');
+  expect(f.store.run(epoch3Message.resource_id!).status).toBe('interrupted');
   f.db.exec("DELETE FROM runtime_metadata WHERE key='owner_alpha_generation:2'");
   expect(()=>core.ownerAlpha.initialize()).toThrow();
  }finally{f.close();}
