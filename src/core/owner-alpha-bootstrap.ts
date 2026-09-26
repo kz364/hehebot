@@ -70,12 +70,16 @@ function recoveryRun(store:Store,id:string){
 /** This corroborates a trusted quarantine marker; it never proves absence of native effects. */
 export function assertClaimedPreTurnQuarantineCustody(store:Store,grant:OwnerAlphaClaimedPreTurnQuarantine,prior:OwnerAlphaManifest,now:string):void {
  const {attempt,submission_key,native_attempt_id:_,native_fingerprint:__,...p}=grant.predecessor,db=store.db,run=recoveryRun(store,p.run_id);
- const attempts=db.all<{run_id:string;attempt:number;epoch:number;boot_id:string;submission_key:string;status:string;deadline_at:string;native_run_ref:string|null;result_json:string|null;coordinator_release_json:string|null;settled_at:string|null}>(
-  'SELECT * FROM attempts WHERE run_id=? OR epoch=? OR boot_id=?',p.run_id,p.epoch,p.boot_id),a=attempts[0];
+ // Only zero/one/multiple matters. Two rows prove a collision without hydrating
+ // the remaining history; retained native outcomes remain strict NULL checks.
+ const attempts=db.all<{run_id:string;attempt:number;epoch:number;boot_id:string;submission_key:string;status:string;deadline_at:string;unresolved_pre_turn:number}>(
+  `SELECT run_id,attempt,epoch,boot_id,submission_key,status,deadline_at,
+   native_run_ref IS NULL AND result_json IS NULL AND coordinator_release_json IS NULL AND settled_at IS NULL AS unresolved_pre_turn
+   FROM attempts WHERE run_id=? OR epoch=? OR boot_id=? LIMIT 2`,p.run_id,p.epoch,p.boot_id),a=attempts[0];
  requireThat(grant.installation_id===prior.installation_id&&grant.owner_binding_sha256===prior.owner_binding_sha256&&Object.entries(p).every(([key,value])=>prior[key as keyof typeof p]===value)&&
   grant.evidence.observed_at>=prior.expires_at&&grant.evidence.observed_at<=now&&now<grant.expires_at&&grant.successor_policy_revision!==prior.policy_revision&&
   run.current_attempt===1&&run.status==='recovery_required'&&run.checkpoint_is_null===1&&attempts.length===1&&a.run_id===p.run_id&&a.attempt===attempt&&a.epoch===p.epoch&&a.boot_id===p.boot_id&&
-  a.submission_key===submission_key&&a.status==='claimed'&&utc(a.deadline_at)&&a.deadline_at<=now&&a.native_run_ref===null&&a.result_json===null&&a.coordinator_release_json===null&&a.settled_at===null,
+  a.submission_key===submission_key&&a.status==='claimed'&&utc(a.deadline_at)&&a.deadline_at<=now&&a.unresolved_pre_turn===1,
   'CAPABILITY_UNAVAILABLE','Claimed quarantine does not match exact unresolved predecessor custody.');
  requireThat(!db.all('SELECT id FROM runs WHERE parent_run_id=? LIMIT 1',p.run_id).length&&
   !db.all('SELECT run_id FROM native_task_links WHERE run_id=? OR parent_run_id=? LIMIT 1',p.run_id,p.run_id).length&&

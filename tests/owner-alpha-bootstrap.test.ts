@@ -395,6 +395,41 @@ it.each(['unused','claimed'] as const)('projects %s recovery checkpoint nullness
  }finally{f.close();}
 });
 
+it('checks quarantine attempt nullness without hydrating retained outcomes',()=>{
+ const {f,prior,config}=quarantined();try{
+  const check=()=>assertClaimedPreTurnQuarantineCustody(f.store,config.claimed_pre_turn_quarantine!,prior,f.core.now());
+  expect(check).not.toThrow();
+  for(const field of ['native_run_ref','result_json','coordinator_release_json','settled_at']){
+   for(const value of ['null',JSON.stringify('界'.repeat(400000))]){
+    f.db.exec(`UPDATE attempts SET ${field}=? WHERE run_id=?`,value,prior.run_id);
+    const before=f.db.all('SELECT * FROM attempts'),read=vi.spyOn(f.db,'all');
+    try{
+     expect(check).toThrowError(expect.objectContaining({code:'CAPABILITY_UNAVAILABLE'}));
+     const rows=read.mock.calls.flatMap(([sql],i)=>sql.includes('FROM attempts WHERE run_id=? OR epoch=? OR boot_id=?')?read.mock.results[i].value:[]);
+     expect(rows).toHaveLength(1);
+     for(const row of rows)for(const key of ['native_run_ref','result_json','coordinator_release_json','settled_at'])expect(row).not.toHaveProperty(key);
+    }finally{read.mockRestore();}
+    expect(f.db.all('SELECT * FROM attempts')).toEqual(before);
+   }
+   f.db.exec(`UPDATE attempts SET ${field}=NULL WHERE run_id=?`,prior.run_id);
+  }
+  expect(check).not.toThrow();
+ }finally{f.close();}
+});
+it.each(['run','epoch','boot'] as const)('bounds quarantine multiplicity reads while detecting %s collisions',kind=>{
+ const {f,prior,config}=quarantined();try{
+  for(let n=2;n<=4;n++)f.db.exec("INSERT INTO attempts(run_id,attempt,submission_key,epoch,boot_id,status,deadline_at) VALUES(?,?,?,?,?,'claimed',?)",
+   kind==='run'?prior.run_id:f.waiting.resource_id!,n,randomUUID(),kind==='epoch'?prior.epoch:999,kind==='boot'?prior.boot_id:randomUUID(),prior.expires_at);
+  const before=f.db.all('SELECT * FROM attempts'),read=vi.spyOn(f.db,'all');
+  try{
+   expect(()=>assertClaimedPreTurnQuarantineCustody(f.store,config.claimed_pre_turn_quarantine!,prior,f.core.now())).toThrowError(expect.objectContaining({code:'CAPABILITY_UNAVAILABLE'}));
+   const rows=read.mock.calls.flatMap(([sql],i)=>sql.includes('FROM attempts WHERE run_id=? OR epoch=? OR boot_id=?')?read.mock.results[i].value:[]);
+   expect(rows).toHaveLength(2);
+  }finally{read.mockRestore();}
+  expect(f.db.all('SELECT * FROM attempts')).toEqual(before);
+ }finally{f.close();}
+});
+
 it('quarantines exact claimed uncertainty without settlement and admits only a fresh independently claimable message',()=>{
  const {f,key,receipt,prior,config,retained}=quarantined();try{
   expect(()=>f.lifecycle.assertOwnerAlphaSettlement(true)).toThrow();const before=retained();
