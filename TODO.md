@@ -12,7 +12,13 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** offline recovery inspection
+**Current checkpoint (2026-09-26, verified locally):** offline inspector uses exact
+turn-key/thread-ID sets instead of repeated inventory membership scans. Regression
+rejects old65792 visits; related62/typecheck pass with unchanged orphan/missing-child
+diagnostics, exhaustive custody and no writes. Full matrix not rerun; file reads/
+cancellation I/O and broader restoration/storage bounds remain. External gates false.
+
+**Previous checkpoint (2026-09-26, verified locally):** offline recovery inspection
 reuses root-connected ancestry paths within one snapshot. Deep reverse-order fixture
 falls from32896 to at most256 edge lookups; all256 children/257 unresolved commands
 retained, synthetic disconnected cycle refused, journal unchanged. Red1/related62/

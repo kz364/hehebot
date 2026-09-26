@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Offline inventory membership now uses exact turn-key/thread sets. Red1 at65792
+visits; related62/typecheck1669810 exit0, .local/inspect-membership-{red,final}.log.
+Orphan/missing-child/cycle diagnostics, exhaustive custody and no-write behavior
+retained. No active checks/children/delivery; existing schedule reread/enabled.
+Continue restoration/recursive settlement and historical/storage/existing-key bounds.
+File reads/cancellation I/O unchanged; full matrix not rerun, external gates unchanged.
+
 Offline inspector reuses proved root-connected ancestry paths within one snapshot;
 reverse-order fixture32896 to at most256 lookups, exhaustive child/command custody
 and synthetic-cycle rejection retained. Red1/related62/typecheck1668684 exit0, logs

@@ -248,11 +248,13 @@ export async function inspectCodexRecovery(directory, attemptId = undefined) {
     };
     items(native, root.threadId, root.turnId);
     const turns = entries(native.childTurns);
+    const turnKeys = new Set(turns.map(([key]) => key)), childThreads = new Set();
     for (const [key, status] of turns) {
       const pair = JSON.parse(key);
       require(Array.isArray(pair) && pair.length === 2 && pair.every(id) && pair[0] !== native.threadId && JSON.stringify(pair) === key);
       require(['inProgress', 'completed', 'failed', 'interrupted'].includes(status));
       children.push({ threadId: pair[0], turnId: pair[1], status });
+      childThreads.add(pair[0]);
       const owner = native.childObligations?.[key] ?? {};
       if (owner.tokenUsage !== undefined) children.at(-1).tokenUsage = projectTokenUsage(owner.tokenUsage);
       if (owner.initialInference !== undefined || owner.initialInferenceAt !== undefined) {
@@ -262,7 +264,7 @@ export async function inspectCodexRecovery(directory, attemptId = undefined) {
       }
       items(owner, pair[0], pair[1]);
     }
-    for (const [key] of entries(native.childObligations)) require(turns.some(([turn]) => turn === key));
+    for (const [key] of entries(native.childObligations)) require(turnKeys.has(key));
     const rootConnected = new Set([root.threadId]);
     for (const child of children) {
       let current = child.threadId; const seen = new Set();
@@ -272,7 +274,7 @@ export async function inspectCodexRecovery(directory, attemptId = undefined) {
     }
     report.native = { root, children, observations: obligations };
     if (!root.threadId || !root.turnId || !dispatch.nativeRunId) issue('NATIVE_ACKNOWLEDGEMENT_UNKNOWN');
-    for (const [receiver] of origins) if (!children.some(child => child.threadId === receiver)) issue('CHILD_TURN_UNKNOWN');
+    for (const [receiver] of origins) if (!childThreads.has(receiver)) issue('CHILD_TURN_UNKNOWN');
     for (const child of children) {
       const cancellation = await read(`cancel-child-${hash([native.attemptId, child.threadId, child.turnId])}`, true);
       if (cancellation) {

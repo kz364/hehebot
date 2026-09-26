@@ -4,6 +4,15 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Offline inventory membership (2026-09-26 Asia/Jakarta): exact turn-key and child-
+thread sets replace repeated array membership scans. Validation order, canonical
+keys, orphan refusal, missing-child diagnostic, output order and all custody remain
+unchanged. Extended reverse-order regression fails before the change at65792
+membership visits; indexed checks pass, along with existing malformed/orphan/missing
+cases. Related62/typecheck1669810 exit0, .local/inspect-membership-{red,final}.log.
+No file-read, cancellation-I/O or total-storage bound claimed. Full matrix not
+rerun for localized offline diagnostic work; gates/intermittency/advisories unchanged.
+
 Offline ancestry inspection (2026-09-26 Asia/Jakarta): inspector memoizes only
 paths fully proved to reach the root in its immutable snapshot. No visited-only
 marking, traversal truncation, journal writes or resume/sleep permission. A synthetic

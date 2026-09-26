@@ -91,20 +91,28 @@ test('deep reverse-order ancestry is checked once without truncation or cycle ac
   const native = { ...f.native, childTurns, childObligations,
     spawns: { first: { status: 'completed', receiverThreadIds: [thread(1)] } } };
   await f.journal.write(attemptId, native);
-  const before = await snapshot(f.directory), get = Map.prototype.get;
-  let visits = 0, report;
+  const before = await snapshot(f.directory), get = Map.prototype.get, some = Array.prototype.some;
+  let visits = 0, membershipVisits = 0, report;
   Map.prototype.get = function(key) {
     if (typeof key === 'string' && key.startsWith('deep-thread-')) visits++;
     return get.call(this, key);
   };
+  Array.prototype.some = function(predicate, receiver) {
+    return some.call(this, function(value, index, array) {
+      if (value?.threadId?.startsWith('deep-thread-') ||
+          Array.isArray(value) && typeof value[0] === 'string' && value[0].startsWith('["deep-thread-')) membershipVisits++;
+      return predicate.call(this, value, index, array);
+    }, receiver);
+  };
   try { report = await inspectCodexRecovery(f.directory); }
-  finally { Map.prototype.get = get; }
+  finally { Map.prototype.get = get; Array.prototype.some = some; }
   assert.deepEqual(report.issues, []);
   assert.deepEqual(report.native.children.map(row => row.threadId), Array.from({ length: 256 }, (_, i) => thread(256 - i)));
   assert.equal(report.native.observations.filter(row => row.kind === 'commands' && row.status === 'inProgress').length, 257);
   assert.equal(report.resumeAllowed, false); assert.equal(report.sleepAllowed, false);
   assert.deepEqual(await snapshot(f.directory), before);
   assert.ok(visits <= 256, `Ancestry lookups ${visits} exceed one per edge`);
+  assert.ok(membershipVisits <= 512, `Inventory membership visits ${membershipVisits} exceed two passes`);
   // A disconnected cycle must not acquire root-connected status merely because
   // its nodes were visited. This is a synthetic contradictory journal, not admission.
   native.spawns = {};
