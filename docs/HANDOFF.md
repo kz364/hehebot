@@ -4,6 +4,12 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Question retry reconstruction tests retain pending/answered/response_unknown
+custody and block wake, while resolved permits one requeue. Pending-only mutant
+fails2; restored production unchanged, related155/typecheck pass. Same retained
+database, not process crash/disk reopen/live recovery. Continue restoration and
+historical/storage bounds. Schedule enabled; no children/delivery; gates unchanged.
+
 Stop recovery returns metadata-eligible retry candidates only, keeping all later
 custody checks and excluded records. Four reasons/10-and60-second delays/checkpoints
 verified. Red1/focused130/backend2410/typecheck/build1693770 exit0; initial query-

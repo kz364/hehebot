@@ -12,7 +12,13 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** stop recovery filters retry
+**Current checkpoint (2026-09-26, verified locally):** reconstructed retry control
+preserves pending, answered and response_unknown questions without waking; resolved
+questions permit one requeue. Pending-only mutant fails two cases; production
+unchanged, related155/typecheck pass. No process-crash or safe-resume claim.
+Restoration/recursive settlement and historical/storage bounds remain next.
+
+**Previous checkpoint (2026-09-26, verified locally):** stop recovery filters retry
 metadata eligibility before returning rows. All four reasons, attempt1/2 delays,
 background/exhausted/nonretryable exclusions and retained checkpoints verified.
 Red1/focused130/backend2410/typecheck/dry-build pass after preserving query layout

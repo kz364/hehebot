@@ -308,13 +308,28 @@ it('stale closure revisions and mismatched owner receipts cannot close another q
   expect(f.core.questions.get(id).state).toBe('answered');
 });
 
-it('a retained due retry cannot bypass a question or request a wake', () => {
-  f.core.questions.record(identity, runId, 1, input()); stop();
+it.each(['pending', 'answered', 'response_unknown', 'resolved'])('a retained due retry preserves %s question custody after control reconstruction', state => {
+  const id = f.core.questions.record(identity, runId, 1, input());
+  if (state === 'answered' || state === 'response_unknown') f.accept(answer(id));
+  if (state === 'response_unknown') f.core.questions.takeAnswer(identity, id, connection);
+  if (state === 'resolved') f.core.questions.resolve(identity, id, connection);
+  const question = f.core.questions.get(id);
+  expect(question.state).toBe(state);
+  stop();
   f.db.exec("UPDATE runs SET status='waiting' WHERE id=?", runId);
-  f.db.exec("INSERT INTO retry_queue(run_id,due_at,reason) VALUES(?,?,'STALE_EPOCH')", runId, f.core.now());
-  const before = lifecycle.get(); lifecycle.retryDue();
-  expect(f.store.run(runId)).toMatchObject({ status: 'recovery_required', error_code: 'NATIVE_QUESTION_UNRESOLVED' });
-  expect(lifecycle.get()).toEqual(before); expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+  f.db.exec("INSERT INTO retry_queue(run_id,due_at,reason) VALUES(?,?,'STALE_EPOCH') ON CONFLICT(run_id) DO UPDATE SET due_at=excluded.due_at", runId, f.core.now());
+  const core = new ControlCore(f.store, f.core.options), restored = new LifecycleCore(f.store, core);
+  const before = restored.get(), run = f.store.run(runId);
+  restored.retryDue();
+  expect(core.questions.get(id)).toEqual(question);
+  expect(f.store.run(runId)).toEqual({ ...run, status: state === 'resolved' ? 'queued' : 'recovery_required',
+    error_code: state === 'resolved' ? run.error_code : 'NATIVE_QUESTION_UNRESOLVED' });
+  if (state === 'resolved') expect(restored.get()).toMatchObject({ queue_sequence: before.queue_sequence + 1, desired_state: 'RUN' });
+  else expect(restored.get()).toEqual(before);
+  expect(f.db.all('SELECT * FROM retry_queue')).toEqual([]);
+  const settled = restored.get(); restored.retryDue();
+  expect(restored.get()).toEqual(settled);
+  expect(core.questions.get(id)).toEqual(question);
 });
 
 it('claim selection skips a retained queued question task before LIMIT without starving fresh work', () => {
