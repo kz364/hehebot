@@ -310,14 +310,15 @@ export class LifecycleCore {
     AND json_extract(a.coordinator_release_json,'$.outcome') IN ('completed','failed','interrupted')
    ) ${current?'AND EXISTS(SELECT 1 FROM attempts current_attempt WHERE current_attempt.run_id=r.id AND current_attempt.attempt=r.current_attempt AND current_attempt.epoch=? AND current_attempt.boot_id=?)':''} LIMIT 1`,identity.epoch,identity.boot_id,...(current?[current.epoch,current.boot_id]:[])).length)return null;
    // Match the runtime's bounded family registry without evicting old custody.
-   const unresolved=this.store.db.all<{count:number}>(`SELECT COUNT(*) AS count FROM runs r WHERE r.role='coordinator' AND r.current_attempt>0 AND ${current?'EXISTS(SELECT 1 FROM attempts current_attempt WHERE current_attempt.run_id=r.id AND current_attempt.attempt=r.current_attempt AND current_attempt.epoch=? AND current_attempt.boot_id=?) AND ':''}(
+   // Admission only needs the threshold, not a census beyond it.
+   const unresolved=this.store.db.all<{count:number}>(`SELECT COUNT(*) AS count FROM (SELECT 1 FROM runs r WHERE r.role='coordinator' AND r.current_attempt>0 AND ${current?'EXISTS(SELECT 1 FROM attempts current_attempt WHERE current_attempt.run_id=r.id AND current_attempt.attempt=r.current_attempt AND current_attempt.epoch=? AND current_attempt.boot_id=?) AND ':''}(
     r.status IN ('claimed','running','finishing','cancelling','recovery_required')
     OR EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.status IN ('claimed','running'))
     OR EXISTS(SELECT 1 FROM operations o WHERE o.run_id=r.id AND o.status!='settled')
     OR EXISTS(SELECT 1 FROM resource_locks l WHERE l.run_id=r.id)
     OR EXISTS(SELECT 1 FROM effects e WHERE e.run_id=r.id AND e.status IN ('intent','dispatched','outcome_unknown'))
     OR NOT (${nativeDescendantsSettledSql})
-   )`,...(current?[current.epoch,current.boot_id]:[]))[0].count;
+   ) LIMIT 32)`,...(current?[current.epoch,current.boot_id]:[]))[0].count;
    if(unresolved>=32)return null;
    const run=this.nextClaimableRun();if(!run)return null;
    if(run.context_json===null){this.blockMemoryPreparation(run,'CONTEXT_PREPARATION_LIMIT');return null;}

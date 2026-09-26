@@ -4,6 +4,21 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Claim family threshold (2026-09-26 Asia/Jakarta): count a subquery limited to32
+qualifying unresolved roots, preserving generation parameters and every run,
+attempt, operation, lock, effect and recursive-descendant predicate. Admission
+only compares against32; no record is removed or descendant traversal truncated.
+SQLite probe fails before the change at40 visits and passes at32 for a dense
+synthetic restored inventory.31 admits,32 blocks;40 settled roots before32 unknown-
+effect roots still blocks, retaining all effects. This does not bound scanning
+nonqualifying history or work within a family. Proposed checkpoint projection was
+rejected after finding execution-bridge.mjs consumes it on retries; unchanged.
+Backend2396/typecheck/dry-build pass (1680601 exit0), native child fixture pass
+(1681030 exit0), earlier focused124/typecheck pass. Logs
+.local/family-count-{red,focused,backend,build,native}.log. Native fixture retains
+child cancelling/root running/unknown coverage and sleep denial. Full matrix not
+rerun; historical/storage/restoration acceptance and external gates remain open.
+
 Post-registration response fence (2026-09-26 Asia/Jakarta): Worker-core registration
 commits, then an injected lease callback loss rejects sync before local receipt
 acknowledgement. Exact pending receipt survives FileJournal/adapter reopen; sibling

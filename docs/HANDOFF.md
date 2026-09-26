@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Claim family census now stops after32 qualifying roots; all custody and generation
+predicates retained. Red1/31-vs32/mixed-history fixtures, backend2396/typecheck/build/
+native child pass (1680601/1681030 exit0); .local/family-count-*.log. Claim checkpoint
+must remain: execution bridge uses it for retry. No total SQL-scan/descendant/storage
+bound. No active checks/children/delivery; schedule enabled. Continue restoration/
+recursive settlement and historical/storage work. Full matrix not rerun; gates and
+known intermittency/advisories unchanged.
+
 Post-response fence regression retains pending local receipt after Worker commit
 and injected lease loss. Reopened sync/cancel/steer remain fenced, sibling/grandchild
 observations and Worker link unchanged, no native RPC and sleep denied. Missing

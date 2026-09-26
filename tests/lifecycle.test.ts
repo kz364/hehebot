@@ -29,6 +29,50 @@ function unknownEffect(runId: string) {
   f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,updated_at) VALUES(?,?,?,'mutation','outcome_unknown','synthetic-authorization','synthetic-digest',?)", randomUUID(), runId, randomUUID(), f.core.now());
 }
 describe('executor leases and attempts', () => {
+  it('does not let settled history consume the unresolved-family threshold', () => {
+    for (let i = 0; i < 40; i++) {
+      const id = enqueue();
+      f.db.exec("UPDATE runs SET status='completed',current_attempt=1 WHERE id=?", id);
+    }
+    for (let i = 0; i < 32; i++) {
+      const id = enqueue();
+      f.db.exec("UPDATE runs SET status='completed',current_attempt=1 WHERE id=?", id);
+      unknownEffect(id);
+    }
+    const next = enqueue(), effects = f.db.all('SELECT * FROM effects');
+    expect(life.claim(identity)).toBeNull();
+    expect(f.store.run(next).current_attempt).toBe(0);
+    expect(f.db.all('SELECT * FROM effects')).toEqual(effects);
+  });
+
+  it.each([31,32,40])('stops unresolved-family counting at its admission threshold (%i retained families)', count => {
+    // Synthetic restored terminal inventory: each root still owns an unknown
+    // effect. The next admission must count custody, not terminal run labels.
+    const ids = Array.from({ length: count }, () => enqueue());
+    for (const id of ids) {
+      f.db.exec("UPDATE runs SET status='completed',current_attempt=1 WHERE id=?", id);
+      unknownEffect(id);
+    }
+    const next = enqueue(), effects = f.db.all('SELECT * FROM effects');
+    let visits = 0, queries = 0;
+    f.db.sqlite.function('family_scan_probe', () => { visits++; return 1; });
+    const all = f.db.all.bind(f.db);
+    const read = vi.spyOn(f.db, 'all').mockImplementation((sql, ...values) => {
+      if (sql.includes('COUNT(*) AS count FROM') && sql.includes("r.role='coordinator' AND r.current_attempt>0")) {
+        queries++;
+        sql = sql.replace("r.role='coordinator' AND r.current_attempt>0", "r.role='coordinator' AND r.current_attempt>0 AND family_scan_probe()");
+      }
+      return all(sql, ...values);
+    });
+    let result;
+    try { result = life.claim(identity); } finally { read.mockRestore(); }
+    expect(queries).toBe(1);
+    expect(visits).toBe(Math.min(count, 32));
+    expect(result?.run.id ?? null).toBe(count < 32 ? next : null);
+    expect(f.store.run(next).current_attempt).toBe(count < 32 ? 1 : 0);
+    expect(f.db.all('SELECT * FROM effects')).toEqual(effects);
+  });
+
   it.each(['running','cancelling','completed'] as const)('cancels %s using metadata without historical bodies or grace renewal',status=>{
     const id=claimed().run.id;life.submitted(identity,id,1,'cancel-native');
     const context=JSON.stringify({padding:'界'.repeat(400000)}),checkpoint=JSON.stringify({padding:'x'.repeat(1100000)});

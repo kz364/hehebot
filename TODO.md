@@ -12,7 +12,15 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** committed child response
+**Current checkpoint (2026-09-26, verified locally):** claim stops counting after32
+qualifying unresolved families without changing custody predicates. Red1 detects40
+visits instead of32;31/32 threshold and mixed settled-history cases pass. Backend2396/
+typecheck/dry-build/native child fixture pass. Checkpoint delivery retained because
+runtime retries consume it. No total SQL-scan/descendant/storage bound; next remaining
+restoration/recursive settlement and historical/storage work. Full matrix not rerun;
+production gates unchanged. Local only.
+
+**Previous checkpoint (2026-09-26, verified locally):** committed child response
 followed by lease-callback loss leaves exact local receipt pending; sibling and
 grandchild observations survive without further dispatch. Reopen cannot bypass
 fencing for sync/cancel/steer. Missing post-response-check mutant fails; restored
