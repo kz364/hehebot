@@ -80,6 +80,13 @@ export class Store {
   type Row={sequence:number;id:string;conversation_id:string|null;type:string;actor_id:string;cause_id:string|null;payload_json:string;created_at:string};
   return this.db.all<Row>(`SELECT * FROM events WHERE conversation_id=? AND sequence<? AND ${timelineExpirySql}>? ORDER BY sequence DESC LIMIT ?`,conversation,before,now,limit).reverse().map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
  }
+ /** Forward pagination for the long-poll/fallback cursor (GROK_ALIGNMENT A6):
+  * the same row shape and expiry filter as conversationEvents, ordered
+  * ascending from (not including) `after`. */
+ conversationEventsAfter(conversation:string,after:number,now:string,limit=100):TimelineEvent[] {
+  type Row={sequence:number;id:string;conversation_id:string|null;type:string;actor_id:string;cause_id:string|null;payload_json:string;created_at:string};
+  return this.db.all<Row>(`SELECT * FROM events WHERE conversation_id=? AND sequence>? AND ${timelineExpirySql}>? ORDER BY sequence LIMIT ?`,conversation,after,now,limit).map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
+ }
  latestEvents(now:string,limit=100):TimelineEvent[] {
   type Row=Omit<TimelineEvent,'payload'>&{payload_json:string};
   return this.db.all<Row>(`SELECT * FROM events WHERE ${timelineExpirySql}>? ORDER BY sequence DESC LIMIT ?`,now,limit).reverse().map(({payload_json,...rest})=>({...rest,payload:JSON.parse(payload_json) as Record<string,unknown>}));
