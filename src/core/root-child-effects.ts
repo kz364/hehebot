@@ -23,7 +23,7 @@ export class RootChildEffects {
   // Existing keys still undergo full identity validation below. Never apply a
   // new-admission preparation ceiling to retained effect custody or outcomes.
   const existingCustody = effectActionKey===undefined || this.store.db.all('SELECT id FROM effects WHERE action_key=? LIMIT 1',effectActionKey).length>0;
-  // Counts returned authority JSON bytes, including repeated root reads. This
+  // Counts returned authority JSON bytes. The root row is reused below. This
   // is not a SQLite-work or JS heap bound; EffectLedger validates independently.
   let remainingAuthorityBytes = 4194304;
   // Only a unique, unescaped string ID can replace a stored persona/routine
@@ -94,7 +94,9 @@ export class RootChildEffects {
     requireThat(this.store.db.all('SELECT id FROM effects WHERE action_key=? LIMIT 1', effectActionKey).length,
      'ANCESTRY_PREPARATION_LIMIT', 'New effects require ancestry of at most 64 runs. Existing task and effect custody were retained.');
    }
-   const parent = readRun(link.parent_run_id);
+   // Authorization can propagate descendant cancellation, but cannot mutate the
+   // root row in this transaction. Reuse its bytes, not its parsed JS object.
+   const parent = link.parent_run_id===root.id?root:readRun(link.parent_run_id);
    requireThat(parent.current_attempt === link.parent_attempt, 'STALE_EPOCH', 'Native ancestry belongs to an older parent attempt.');
    current = parent;
   }

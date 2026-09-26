@@ -48,6 +48,22 @@ beforeEach(() => {
 });
 afterEach(() => f.close());
 
+it.each(['intent','replay','outcome'] as const)('hydrates root authority once but parses independently during %s',mode=>{
+ const input=intent(grandchild);if(mode!=='intent')boundary.intent(input);
+ const original=f.store.run(root).context_json;
+ const snapshot=original.slice(0,-1)+`,"scope_key":${JSON.stringify(JSON.parse(original).scope_key)},"padding":"${'界'.repeat(100000)}"}`;
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,root);
+ const read=vi.spyOn(f.db,'all'),parse=vi.spyOn(JSON,'parse');
+ try{
+  if(mode==='outcome')boundary.transition(result(input,'outcome_unknown'));else boundary.intent(input);
+  const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]) as Array<{id?:string;context_json?:string}>;
+  expect(rows.filter(row=>row.id===root&&'context_json' in row)).toHaveLength(1);
+  // Do not reuse the parsed object: JS reference equality remains independent.
+  expect(parse.mock.calls.filter(([text])=>text===snapshot)).toHaveLength(2);
+ }finally{parse.mockRestore();read.mockRestore();}
+ expect(f.store.run(root).context_json).toBe(snapshot);
+});
+
 it('omits admission byte-count work from existing replay and late-outcome authority SQL',()=>{
  const input=intent(grandchild);boundary.intent(input);boundary.transition(result(input,'outcome_unknown'));
  const snapshots=new Map<string,string>();
@@ -73,11 +89,10 @@ it('omits admission byte-count work from existing replay and late-outcome author
 });
 
 it.each(['x','界'])('bounds aggregate new-action authority hydration at 4MiB (%s) without restricting existing effects',unit=>{
- const leaf=spawn(grandchild),input=intent(leaf);boundary.intent(input);
+ const parent=spawn(grandchild),leaf=spawn(parent),input=intent(leaf);boundary.intent(input);
  const snapshots=new Map<string,string>();
- // Root is read twice: once for comparison, once while validating ancestry.
- // 2*1MiB + 1MiB + (1MiB-2048) + 2048 = 4MiB of boundary reads.
- for(const [id,size] of [[root,1048576],[child,1048576],[grandchild,1046528],[leaf,2048]] as const){
+ // Each of five rows is read once: 3*1MiB + (1MiB-2048) + 2048 = 4MiB.
+ for(const [id,size] of [[root,1048576],[child,1048576],[grandchild,1048576],[parent,1046528],[leaf,2048]] as const){
   const original=f.store.run(id).context_json;
   const empty=original.slice(0,-1)+`,"scope_key":${JSON.stringify(JSON.parse(original).scope_key)},"padding":""}`;
   const remaining=size-Buffer.byteLength(empty),width=Buffer.byteLength(unit);
@@ -86,14 +101,14 @@ it.each(['x','界'])('bounds aggregate new-action authority hydration at 4MiB (%
   f.db.exec('UPDATE runs SET context_json=? WHERE id=?',snapshot,id);
  }
  expect(boundary.intent(intent(leaf)).status).toBe('intent');
- const over=snapshots.get(grandchild)!.slice(0,-2)+'x"}';snapshots.set(grandchild,over);
- f.db.exec('UPDATE runs SET context_json=? WHERE id=?',over,grandchild);
+ const over=snapshots.get(parent)!.slice(0,-2)+'x"}';snapshots.set(parent,over);
+ f.db.exec('UPDATE runs SET context_json=? WHERE id=?',over,parent);
  const before=effects(),held=locks(),read=vi.spyOn(f.db,'all');
  try{
   rejects(()=>boundary.intent(intent(leaf)),'CONTEXT_PREPARATION_LIMIT');
   const rows=read.mock.results.flatMap(entry=>entry.type==='return'?entry.value:[]) as Array<{id?:string;context_json?:string|null}>;
   const bodies=rows.filter(row=>'context_json' in row);
-  expect(bodies.filter(row=>row.context_json===null)).toEqual([expect.objectContaining({id:root})]);
+  expect(bodies.filter(row=>row.context_json===null)).toEqual([expect.objectContaining({id:child})]);
   expect(bodies.reduce((bytes,row)=>bytes+(typeof row.context_json==='string'?Buffer.byteLength(row.context_json):0),0)).toBe(3145729);
  }finally{read.mockRestore();}
  expect(effects()).toEqual(before);expect(locks()).toEqual(held);

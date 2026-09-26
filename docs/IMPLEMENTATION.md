@@ -4,6 +4,27 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Root authority hydration reuse (2026-09-26 Asia/Jakarta): ancestry traversal reuses
+the root row already read in the same synchronous transaction. authorizeAttempt
+performs owner-alpha cancellation propagation, but inspected propagation only updates
+descendant status/error/timestamps; it cannot change the root row or its snapshot.
+The second JSON.parse remains independent, preserving JS object-identity semantics.
+Three regressions fail before implementation and assert one root-body return but
+two parses for intent/replay/outcome. Existing compatibility/scope checks remain.
+Returned-byte accounting now charges root once, so Node/workerd aggregate fixtures
+use five distinct rows:3MiB + (1MiB-2048) +2048. Exact4MiB passes; one byte over
+refuses before the next body, preserving existing replay/outcome/locks/snapshots.
+Focused312/backend2328/typecheck/workerd/dry-build logs pass. Scheduled wake found
+1515779 untracked and absent, with its durable log reaching successful dry-run exit;
+fresh focused312/typecheck1519073 exited0. No duplicate integrated run was started.
+No existing-key total hydration/SQL-work/storage bound claimed. Prior full matrix
+on3815bc3 was not rerun; original intermittency, advisories and gates unchanged.
+- .local/authority-root-reuse-red.log SHA256: `574f24e109726584d6087dc83cfcadc830fe8a80244fe596fca68f7e38a5177b`
+- .local/authority-root-reuse-focused.log SHA256: `0c90ab7932ad0813ef6605e4880864c0cfbd8f06f1d8b8f8a5de1b3bae6430ba`
+- .local/authority-root-reuse-integrated.log SHA256: `3c0486cb813c812520adc7526a5570c3832c082f638f9a4a7e1bcbce2ba22e67`
+- .local/authority-root-reuse-workerd.log SHA256: `de2b91330510c412881409b37d9356716a006024fb70a2c957e55c30a7079e02`
+- .local/authority-root-reuse-final.log SHA256: `75c7a981c4f80f919868ccb28c5449111d57a7221c67494e4b80b32ef5688b35`
+
 Existing-custody SQL byte-work removal (2026-09-26 Asia/Jakarta): the previous
 budget query calculated authority_bytes for existing keys/outcomes despite never
 consuming that value. Those queries now select0 and the original context directly,

@@ -12,7 +12,16 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** existing-key replay and
+**Current checkpoint (2026-09-26, verified locally):** ancestry validation reuses
+the already hydrated root row within the transaction, but parses its JSON twice
+independently to retain JS object-identity semantics. Root bytes now count once
+toward the unchanged4MiB returned-body budget; five-row exact/one-over fixtures
+pass in Node/workerd. Red3/focused312/backend2328/typecheck/build pass. No snapshot
+rewrite or late-outcome restriction. Existing-key hydration/SQL/storage bounds and
+native recovery remain open. Prior full matrix not rerun for this localized unit;
+original intermittency, advisories and external gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** existing-key replay and
 late-outcome authority SQL no longer includes unused admission byte counting or
 budget predicates. Full snapshots/JS authority remain available; new-key1MiB/4MiB
 limits and independent EffectLedger checks are unchanged. Red1/focused309/backend2325/

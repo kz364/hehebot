@@ -4,6 +4,16 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Root authority row is now reused during ancestry traversal in the same synchronous
+transaction; its JS object is still parsed independently for comparison. Inspected
+authorizeAttempt/owner-alpha propagation can update descendants, not the root row.
+Red3/focused312/backend2328/workerd/typecheck/build pass. Aggregate fixtures now
+use five distinct rows because root bytes count once; exact4MiB/one-over still pass.
+After scheduled wake, old process handle1515779 was untracked but logs reached build
+completion; final focused/typecheck1519073 exited0. No active checks/children/delivery;
+schedule reread/enabled. Next existing-key/SQL/storage/native recovery, not a new total
+bound. Prior full matrix not rerun; original intermittency/advisories/gates unchanged.
+
 Existing-key/outcome SQL now omits unused byte inspection entirely (authority_bytes
 is0); new-key queries retain1MiB/4MiB enforcement. Red1/focused309/backend2325/
 workerd/typecheck/build pass; oversized fallback replay/conflict/late outcome/source/
