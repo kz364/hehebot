@@ -4,6 +4,14 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Post-response fence regression retains pending local receipt after Worker commit
+and injected lease loss. Reopened sync/cancel/steer remain fenced, sibling/grandchild
+observations and Worker link unchanged, no native RPC and sleep denied. Missing
+check mutant fails; restored production unchanged; related104/typecheck pass.
+.local/child-response-fence-{mutant,final}.log. No cross-epoch takeover/real expiry
+claim. No active checks/children/delivery; schedule enabled. Continue restoration/
+recursive settlement and historical/storage bounds; production evidence unchanged.
+
 Observed families above100 turns now reconcile; steering polls every101-target
 batch, validating all pages before dispatch. Four commands is a per-request cap,
 not per-maintenance maximum. Service rechecks lease at native steer/interrupt send

@@ -275,6 +275,39 @@ it('maps sequential flat V2 child turns to distinct replay-stable receipts and e
   expect(adapter.sleepReadiness().allowed).toBe(false);
 });
 
+it('lease loss after a committed child response preserves unknown local custody and stops the remaining backlog', async () => {
+  await spawn('root', 'child-a'); await spawn('root', 'child-b'); await spawn('child-a', 'grandchild');
+  const tasks = mapper(), request = tasks.control.request;
+  tasks.control.request = async (method: string, payload: any) => {
+    const reply = await request(method, payload);
+    leased = false;
+    return reply;
+  };
+  await expect(tasks.sync()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  expect(registrations).toHaveLength(1);
+  const links = f.db.all<any>('SELECT * FROM native_task_links');
+  expect(links).toHaveLength(1);
+  expect(links[0]).toMatchObject({ native_session_key: 'child-a', parent_run_id: parentId });
+  const pending = await new FileJournal(directory).get(tasks.key);
+  expect(Object.keys(pending.children)).toEqual(['["child-a","turn"]']);
+  expect(pending.children['["child-a","turn"]']).toMatchObject({ runId: null, started: false,
+    receipt: registrations[0] });
+  const native = await new FileJournal(directory).get('native');
+  expect(Object.keys(native.childTurns).sort()).toEqual(['["child-a","turn"]', '["child-b","turn"]', '["grandchild","turn"]']);
+  journal = new FileJournal(directory);
+  adapter = new CodexAdapter({ journal, cwd: directory,
+    rpc: async (method: string, params: any) => { interrupts.push({ method, params }); return {}; } });
+  const restored = mapper();
+  await expect(restored.sync()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  await expect(restored.cancel([links[0].run_id])).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  await expect(restored.steer()).rejects.toMatchObject({ code: 'EXECUTOR_FENCED' });
+  expect(registrations).toHaveLength(1); expect(interrupts).toEqual([]);
+  expect(await journal.get(tasks.key)).toEqual(pending);
+  expect(await journal.get('native')).toEqual(native);
+  expect(f.db.all('SELECT * FROM native_task_links')).toEqual(links);
+  expect(adapter.sleepReadiness().allowed).toBe(false);
+});
+
 it('lease loss after durable mapping intent prevents control dispatch and cancellation', async () => {
   await spawn('root', 'child-a');
   const tasks = mapper(), update = tasks.journal.update.bind(tasks.journal);

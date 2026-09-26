@@ -4,6 +4,16 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Post-registration response fence (2026-09-26 Asia/Jakarta): Worker-core registration
+commits, then an injected lease callback loss rejects sync before local receipt
+acknowledgement. Exact pending receipt survives FileJournal/adapter reopen; sibling
+and grandchild observations remain intact, further sync/cancel/steer refuse, no
+native RPC and sleep denied. Removing the post-response lease check makes the
+regression fail by acknowledging the fenced receipt. Production restored with zero
+diff; related104/typecheck pass, .local/child-response-fence-{mutant,final}.log.
+This is injected callback fencing, not real expiration or cross-epoch takeover.
+Full matrix not rerun for test-only addition; prior production evidence unchanged.
+
 Observed-family census and final-send fencing (2026-09-26 Asia/Jakarta): remove
 sync's100-turn rejection, which conflicted with the adapter's4096 observed-turn
 capacity and stopped maintenance before cancellation. An adapter/FileJournal/Worker

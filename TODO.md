@@ -12,7 +12,14 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** native task sync no longer
+**Current checkpoint (2026-09-26, verified locally):** committed child response
+followed by lease-callback loss leaves exact local receipt pending; sibling and
+grandchild observations survive without further dispatch. Reopen cannot bypass
+fencing for sync/cancel/steer. Missing post-response-check mutant fails; restored
+production unchanged, related104/typecheck pass. No cross-epoch takeover proof.
+Next restoration/recursive settlement and storage bounds; gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** native task sync no longer
 rejects already observed families above100 turns; steering queries use101-target
 batches with exact batch authority and four commands per request. Final native
 steer/interrupt dispatch rechecks the lease after durable intent I/O, retaining
