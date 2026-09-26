@@ -12,7 +12,13 @@ do not create a competing `todos.md`. This queue supersedes older active-assignm
 and next-priority prose below. Local implementation is authorized; external actions
 still require their applicable approval. Completed fixtures are not live acceptance.
 
-**Current checkpoint (2026-09-26, verified locally):** budget overrides omit historical
+**Current checkpoint (2026-09-26, verified locally):** native-question authority reads
+metadata; only live scope checks load context, and no question check loads checkpoint.
+Red2/focused49/backend2369/runtime682/typecheck/dry-build pass. Late resolution/replay
+preserve locks and unknown effects. Next remaining historical/storage/native recovery
+bounds. Full matrix not rerun; original intermittency/advisories/gates unchanged.
+
+**Previous checkpoint (2026-09-26, verified locally):** budget overrides omit historical
 snapshots during admission/replay while preserving exact run/revision authority and
 command-before-run errors. Red1/focused27/backend2367/typecheck/dry-build pass. Next
 remaining historical/storage/SQL-work and native recovery bounds. Full matrix not

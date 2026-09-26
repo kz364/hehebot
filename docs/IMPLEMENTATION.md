@@ -4,6 +4,20 @@ Hehebot has demonstrated canonically completed hosted text-only replies, includi
 
 **Progress checklist:** [TODO.md](../TODO.md) is the maintained owner-facing view of completed local deliverables, remaining work, next priority and account/device blockers. This document retains detailed evidence; the specifications retain acceptance requirements.
 
+Native-question authority read split (2026-09-26 Asia/Jakarta): authority selects
+seven metadata fields, retaining attempt/coordinator/native-turn/live checks in order.
+Scope loads context only when its existing live consumer needs it; JSON.parse and
+persona/room semantics unchanged. No caller consumes checkpoint. Late resolution,
+identical replay and resolved takeAnswer load neither historical body. Two red
+oversized-history regressions then pass, preserving exact room scope, question
+revision/timestamp, source snapshots, resource locks and unknown effects. Resolution
+is not effect settlement. Focused49/backend2369/runtime682/typecheck/dry-build pass;
+1568849 exited0. Evidence: .local/question-projection-{red,focused,backend,runtime,build}.log.
+Live context parsing and aggregate/SQL-work/storage/native restoration bounds remain;
+no whole-request bound claimed. Full HTTP/local-Worker/browser/native-service/timed-
+shutdown/desktop matrix not rerun. Original intermittency/advisories and external gates
+unchanged. Local only.
+
 Budget override metadata projection (2026-09-26 Asia/Jakarta): override reads only
 the eight run fields consumed by its eligibility, exception and provenance checks.
 The matches type now names its seven inputs; predicate SQL/order is unchanged.

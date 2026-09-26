@@ -4,6 +4,13 @@ Hehebot uses direct Codex app-server **0.154.0** only. Protected hosted replies,
 
 ## Active follow-up (2026-09-26 Asia/Jakarta)
 
+Native-question authority now reads metadata; scope alone loads live context.
+Late resolve/replay and resolved takeAnswer avoid both historical bodies. Red2/
+focused49/backend2369/runtime682/typecheck/build pass;1568849 exit0. Exact authority,
+JS scope parsing and unknown-effect custody retained. Next live-context/storage/
+SQL-work/existing-key and native recovery bounds. No active checks/children/delivery;
+schedule enabled. Full matrix not rerun; original intermittency/advisories/gates unchanged.
+
 Budget overrides now project eight metadata fields for admission/replay. Red1/
 focused27/backend2367/typecheck/build pass;1565684 exit0. Exact revision/run binding,
 command-before-run errors and snapshots preserved. Next remaining historical/storage/

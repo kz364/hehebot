@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Store, type Database, type SqlValue } from '../src/core/store';
 import { ControlCore } from '../src/core/control';
 import { LifecycleCore } from '../src/core/lifecycle';
@@ -91,6 +91,34 @@ it('queues exact native IDs and skip, commits uncertainty before return and neve
   ledger.resolve(identity, id(100), connection); const changes = total(); ledger.resolve(identity, id(100), connection);
   expect(total()).toBe(changes); expect(ledger.list()).toEqual([]); expect(otherTables()).toEqual(before);
 });
+it('keeps live question scope validation without hydrating historical checkpoints', () => {
+  db.exec('UPDATE runs SET checkpoint_json=? WHERE id=?', 'x'.repeat(1100000), id(20));
+  const before = otherTables(), read = vi.spyOn(db, 'all');
+  try {
+    record(); expect(ledger.list()[0]).toMatchObject({ answerable: true, conversation_id: id(40) });
+    const rows = read.mock.calls.flatMap(([sql], i) => sql.includes('FROM runs WHERE id=?') ? read.mock.results[i].value : []);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row).not.toHaveProperty('checkpoint_json');
+  } finally { read.mockRestore(); }
+  expect(otherTables()).toEqual(before);
+});
+it('resolves late question custody and replays resolution without historical body reads', () => {
+  queued(); expect(ledger.takeAnswer(identity, id(100), connection)).toEqual({ answers: answers() });
+  db.exec('UPDATE runs SET context_json=?,checkpoint_json=? WHERE id=?', JSON.stringify({ padding: '界'.repeat(400000) }), 'x'.repeat(1100000), id(20));
+  clock = '2026-09-14T12:20:00.000Z';
+  const before = otherTables(), read = vi.spyOn(db, 'all');
+  try {
+    ledger.resolve(identity, id(100), connection); const writes = total();
+    ledger.resolve(identity, id(100), connection); expect(total()).toBe(writes);
+    expect(ledger.takeAnswer(identity, id(100), connection)).toBeNull();
+    expect(ledger.get(id(100))).toMatchObject({ state: 'resolved', revision: 4, resolved_at: clock });
+    const rows = read.mock.calls.flatMap(([sql], i) => sql.includes('FROM runs WHERE id=?') ? read.mock.results[i].value : []);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) { expect(row).not.toHaveProperty('context_json'); expect(row).not.toHaveProperty('checkpoint_json'); }
+  } finally { read.mockRestore(); }
+  expect(otherTables()).toEqual(before);
+});
+
 it('replays identical normalized input without writes and isolates typed request IDs and a second task', () => {
   record(); const changes = total(); record(); expect(total()).toBe(changes);
   const changed = input(); changed.params.questions[0].question = 'Changed';

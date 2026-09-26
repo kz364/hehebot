@@ -1,6 +1,7 @@
 import { ControlError, requireThat } from './errors';
 import type { Identity, LifecycleCore } from './lifecycle';
 import type { Store } from './store';
+import type { Run } from './types';
 
 export const NATIVE_QUESTION_PREFIX = 'native-question:';
 export type NativeQuestion = { id: string; header: string; question: string; isOther?: boolean; isSecret?: boolean;
@@ -201,7 +202,9 @@ export class NativeQuestionLedger {
   }
   private authority(identity: Identity, runId: string, attempt: number, turn: string, live: boolean) {
     this.lifecycle.authorizeAttempt(identity, runId, attempt);
-    const run = this.store.run(runId);
+    const run = this.store.db.all<Pick<Run,'id'|'persona_id'|'current_attempt'|'role'|'parent_run_id'|'status'|'error_code'>>(
+      'SELECT id,persona_id,current_attempt,role,parent_run_id,status,error_code FROM runs WHERE id=?', runId)[0];
+    requireThat(run, 'NOT_FOUND', 'Run unavailable.', 404);
     requireThat(run.current_attempt === attempt, 'STALE_EPOCH', 'The original question attempt changed.');
     requireThat(run.role === 'coordinator' && run.parent_run_id === null, 'FORBIDDEN', 'Only a coordinator can own native questions.', 403);
     const native = this.store.db.all<{ native_run_ref: string | null; deadline_at: string }>('SELECT native_run_ref,deadline_at FROM attempts WHERE run_id=? AND attempt=?', runId, attempt)[0];
@@ -213,8 +216,9 @@ export class NativeQuestionLedger {
     }
     return { run, native };
   }
-  private scope(run: { persona_id: string; context_json: string }): string {
-    let context: unknown; try { context = JSON.parse(run.context_json); } catch { /* reject below */ }
+  private scope(run: { id: string; persona_id: string }): string {
+    const row = this.store.db.all<{ context_json: string }>('SELECT context_json FROM runs WHERE id=?', run.id)[0];
+    let context: unknown; try { context = JSON.parse(row.context_json); } catch { /* reject below */ }
     requireThat(object(context) && object(context.persona) && context.persona.id === run.persona_id &&
       (context.room_id == null || uuid(context.room_id)), 'CONTEXT_INVALIDATED', 'The captured question scope is unavailable.');
     return context.room_id as string | null ?? run.persona_id;
