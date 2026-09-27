@@ -60,11 +60,12 @@ export class SpritesProvider implements RuntimeProvider {
   constructor(private readonly token: string, private readonly service = 'gateway', private readonly tasksBridgeVerified = false, private readonly fetcher: typeof fetch = fetch, private readonly now: () => number = Date.now, private readonly tasksBridge?: { readonly runtimeId: string; readonly client: SpritesTasksClient }, private readonly wakeTarget?: {readonly url:string;readonly token:string}) {
     this.capabilities = Object.freeze({ implemented: true, explicitWake: true, explicitStop: false, confirmedStop: false, stopMode: 'provider-idle', persistence: 'filesystem', activityHold: tasksBridge ? 'native' : 'unsupported', maxSessionSeconds: null, restrictions: Object.freeze(['Service wake and observation; whole-runtime stop is unsupported', 'Native Tasks transport is bound inside one Sprite; renew while operations are active', 'Warm/cold distinctions do not authorize replacing a runtime']) });
   }
+  // workerd rejects redirect:'error' before dispatch; 'manual' plus the ok/202 checks rejects any redirect.
   private async request(ref: RuntimeRef, suffix = '', method = 'GET'): Promise<Response> {
     validateRef(ref, this.id);
     if (!this.token.trim()) throw new ProviderError('unconfigured', 'Sprites API token is required');
     let response: Response;
-    try { response = await this.fetcher(`https://api.sprites.dev/v1/sprites/${encodeURIComponent(ref.id)}${suffix}`, { method, headers: { Authorization: `Bearer ${this.token}` }, redirect: 'error', signal: AbortSignal.timeout(15_000) }); }
+    try { response = await this.fetcher(`https://api.sprites.dev/v1/sprites/${encodeURIComponent(ref.id)}${suffix}`, { method, headers: { Authorization: `Bearer ${this.token}` }, redirect: 'manual', signal: AbortSignal.timeout(15_000) }); }
     catch { throw new ProviderError('outcome_unknown', 'Sprites request outcome is unknown'); }
     if (!response.ok) throw new ProviderError(method === 'GET' ? 'http_error' : 'outcome_unknown', 'Sprites request failed; reconcile before retry', response.status);
     return response;
@@ -99,7 +100,7 @@ export class SpritesProvider implements RuntimeProvider {
     // Starting an already-running warm Service is not an application wake event.
     // Explicit authenticated HTTP notification wakes its event loop without idle polling.
     try{
-      const wake=await this.fetcher(new URL('/wake',target),{method:'POST',headers:{Authorization:`Bearer ${this.token}`,'X-Hehe-Wake-Token':this.wakeTarget!.token,'Content-Type':'application/json'},body:JSON.stringify(command),redirect:'error',signal:AbortSignal.timeout(15000)});
+      const wake=await this.fetcher(new URL('/wake',target),{method:'POST',headers:{Authorization:`Bearer ${this.token}`,'X-Hehe-Wake-Token':this.wakeTarget!.token,'Content-Type':'application/json'},body:JSON.stringify(command),redirect:'manual',signal:AbortSignal.timeout(15000)});
       if(wake.status!==202)throw new Error('not accepted');
       const stream=wake.body?.getReader();if(!stream)throw new Error('missing response');
       let size=0,text='';const decode=new TextDecoder();

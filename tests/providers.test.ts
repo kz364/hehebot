@@ -249,10 +249,11 @@ describe('Sprites native Tasks client', () => {
 });
 
 describe('factory fetch binding', () => {
-  it('never invokes the global fetch as a provider method (workerd Illegal invocation)', async () => {
+  it('calls fetch the way workerd accepts (unbound, no redirect:error)', async () => {
     const original = globalThis.fetch;
-    const strict = vi.fn(function (this: unknown) {
+    const strict = vi.fn(function (this: unknown, _input: unknown, init?: RequestInit) {
       if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+      if (init?.redirect === 'error') throw new TypeError('Invalid redirect value');
       return Promise.resolve(new Response(JSON.stringify({ name: 'demo', status: 'cold' }), { status: 200 }));
     });
     globalThis.fetch = strict as unknown as typeof fetch;
