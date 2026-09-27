@@ -5,7 +5,7 @@ import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { AGENT_TOOL_NAMES, MAC_MESSAGES_POLICY, readAccessCredentials } from './agent-tools.mjs';
-import { BROWSER_POLICY, BROWSER_TOOLS, browserLimits } from './browser-gateway.mjs';
+import { BROWSER_POLICY, BROWSER_GATEWAY_TOOLS, browserLimits } from './browser-gateway.mjs';
 import { GOOGLE_POLICY, createGoogleAppsFence, googleAppsConfig, googleThreadConfig } from './google-apps.mjs';
 import { ControlClient } from './control-client.mjs';
 import { FileJournal } from './file-journal.mjs';
@@ -336,7 +336,8 @@ export function createCodexService(config, dependencies) {
         config.googleApps !== undefined && (!v2Mode || (() => { try { googleAppsConfig(config.googleApps); return false; } catch { return true; } })()) ||
         config.nativeHome !== undefined && (!alpha && !v2Mode || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.browser !== undefined && (!v2Mode || !config.browser || typeof config.browser !== 'object' ||
-          Object.keys(config.browser).some(key => !['dir', 'limits'].includes(key)) || typeof config.browser.dir !== 'string' || !isAbsolute(config.browser.dir) ||
+          Object.keys(config.browser).some(key => !['dir', 'limits', 'persistentProfiles'].includes(key)) || typeof config.browser.dir !== 'string' || !isAbsolute(config.browser.dir) ||
+          config.browser.persistentProfiles !== undefined && typeof config.browser.persistentProfiles !== 'boolean' ||
           (() => { try { browserLimits(config.browser.limits ?? {}); return false; } catch { return true; } })()) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean' ||
@@ -745,14 +746,22 @@ export function createCodexService(config, dependencies) {
               const browserGrant = { origin: grant.origin, tokenFile: grant.tokenFile,
                 ...(grant.accessClientIdFile ? { accessClientIdFile: grant.accessClientIdFile, accessClientSecretFile: grant.accessClientSecretFile } : {}),
                 identity, runId: run.id, attempt: run.current_attempt, browserDir: config.browser.dir,
-                outputDir: join(config.stateDirectory, 'browser', input.attemptId), ...(config.browser.limits ? { limits: config.browser.limits } : {}) };
+                outputDir: join(config.stateDirectory, 'browser', input.attemptId),
+                // Opt-in: one persistent profile per persona so an owner login
+                // survives across tasks (the gateway locks it per attempt).
+                ...(config.browser.persistentProfiles ? { profileDir: join(config.stateDirectory, 'browser-profiles',
+                  /^[A-Za-z0-9_-]{1,64}$/.test(run.persona_id) ? run.persona_id : fail('TASK_GRANT_CONFLICT')) } : {}),
+                ...(config.browser.limits ? { limits: config.browser.limits } : {}) };
               const existingBrowser = await journal.putIfAbsent(browserKey, browserGrant);
               if (existingBrowser && JSON.stringify(existingBrowser) !== JSON.stringify(browserGrant)) fail('TASK_GRANT_CONFLICT');
               mcpServers.hehebot_browser = {
                 command: process.execPath, args: [fileURLToPath(new URL('./browser-gateway.mjs', import.meta.url))],
                 env: { HEHEBOT_BROWSER_GATEWAY_CONFIG: journal.path(browserKey), ...(config.tlsCAFile ? { NODE_EXTRA_CA_CERTS: config.tlsCAFile } : {}) },
-                tools: Object.fromEntries(BROWSER_TOOLS.map(name => [name, { approval_mode: 'approve' }])),
-                ...(permissions ? { enabled_tools: [...BROWSER_TOOLS] } : {}),
+                tools: Object.fromEntries(BROWSER_GATEWAY_TOOLS.map(name => [name, { approval_mode: 'approve' }])),
+                ...(permissions ? { enabled_tools: [...BROWSER_GATEWAY_TOOLS] } : {}),
+                // browser_request_takeover blocks while the owner has the
+                // browser; Codex's 60 s MCP default would cut it off.
+                tool_timeout_sec: Math.ceil((browserLimits(config.browser.limits ?? {}).takeoverMs + 60000) / 1000),
               };
             }
             // Gmail/Calendar via Codex hosted apps, only for a granted run. Reads
