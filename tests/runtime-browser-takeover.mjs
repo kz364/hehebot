@@ -104,10 +104,10 @@ function fakeRelay() {
     binary() { return relay.sent.filter(x => typeof x !== 'string'); }, json() { return relay.sent.filter(x => typeof x === 'string').map(x => JSON.parse(x)); } };
   return relay;
 }
-function start({ cdp = fakeCdp(), relay = fakeRelay(), clock = fakeClock(), timeoutMs = 600000, limits = TAKEOVER_DEFAULTS } = {}) {
+function start({ cdp = fakeCdp(), relay = fakeRelay(), clock = fakeClock(), timeoutMs = 600000, limits = TAKEOVER_DEFAULTS, debugLog } = {}) {
   const progress = [];
   const done = runTakeover({ cdp, timeoutMs, limits, clock, onProgress: () => progress.push(clock.now()),
-    openRelay: onMessage => { relay.onMessage = onMessage; return relay; } });
+    openRelay: onMessage => { relay.onMessage = onMessage; return relay; }, ...(debugLog ? { debugLog } : {}) });
   return { cdp, relay, clock, progress, done };
 }
 
@@ -156,6 +156,25 @@ test('timeout, cancel and progress: progress at start and every 30 s, never past
   assert.equal((await c.done).outcome, 'cancelled');
   assert.match(takeoverResultText({ outcome: 'timeout', viewed: false }, 600000), /did not take over within 10 min/);
   assert.match(takeoverResultText({ outcome: 'handed_back', url: 'https://x.example/', title: 'X' }, 600000), /handed the browser back.*"X" https:\/\/x\.example\//);
+});
+
+// ---- debug logging (optional, no-op by default) ----------------------------
+test('runTakeover is silent by default; with a debug logger it records one session entry with outcome/duration/viewed, never the url or title', async () => {
+  const bare = start(); await flush(); await bare.relay.deliver({ t: 'cancel' }); await bare.done; // no debugLog: must not throw
+
+  const entries = [];
+  const debugLog = { log: (component, event, details) => entries.push({ component, event, details }) };
+  const t = start({ debugLog }); await flush();
+  await t.clock.advance(1000);
+  await t.relay.deliver({ t: 'handback' });
+  const result = await t.done;
+  assert.equal(result.outcome, 'handed_back');
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].component, 'browser_takeover'); assert.equal(entries[0].event, 'session');
+  assert.deepEqual(entries[0].details, { outcome: 'handed_back', ms: 1000, viewed: true });
+  const raw = JSON.stringify(entries);
+  assert.ok(!raw.includes('login.example'), 'the page url is never logged');
+  assert.ok(!raw.includes('Log in'), 'the page title is never logged');
 });
 
 test('input is rate-limited, oversized frames lower quality, backpressure drops frames, popups are followed', async () => {

@@ -165,7 +165,8 @@ export function connectRelay({ url, headers, WebSocketImpl = globalThis.WebSocke
  * CdpConnection-like object ({send,on,closed}); `relay` is created by
  * `openRelay(onMessage)` and returns {send,close,bufferedAmount}. Resolves to
  * {outcome, url, title, viewed}. Never throws for owner/network trouble. */
-export async function runTakeover({ cdp, openRelay, timeoutMs, onProgress = () => {}, limits = TAKEOVER_DEFAULTS, clock = { now: Date.now, setTimeout, clearTimeout, setInterval, clearInterval } }) {
+export async function runTakeover({ cdp, openRelay, timeoutMs, onProgress = () => {}, limits = TAKEOVER_DEFAULTS, clock = { now: Date.now, setTimeout, clearTimeout, setInterval, clearInterval }, debugLog = { log() {} } }) {
+  const sessionStartedAt = clock.now();
   let session = null, targetId = null, streaming = false, viewer = false, viewed = false, quality = limits.quality, lastFrameAt = 0;
   let url = '', title = '', view = { width: 1280, height: 720 }, finish, window = 0, count = 0, relay, infoAt = 0, chain = Promise.resolve();
   const known = new Set();
@@ -276,6 +277,9 @@ export async function runTakeover({ cdp, openRelay, timeoutMs, onProgress = () =
   if (session) await cdp.send('Target.detachFromTarget', { sessionId: session }).catch(() => {});
   try { relay?.send(JSON.stringify({ t: 'end', outcome })); } catch {}
   try { relay?.close(); } catch {}
+  // Never the page url/title (can carry a login page's identity/query data) --
+  // just the session's shape for debugging (docs/METERING.md).
+  debugLog.log('browser_takeover', 'session', { outcome, ms: clock.now() - sessionStartedAt, viewed });
   return { outcome, url, title, viewed };
 }
 

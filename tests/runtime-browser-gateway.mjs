@@ -7,17 +7,18 @@ const config = { identity, runId: '22222222-2222-4222-8222-222222222222', attemp
 const upstream = ['browser_navigate', 'browser_click', 'browser_snapshot', 'browser_run_code_unsafe', 'browser_evaluate', 'browser_file_upload', 'browser_type']
   .map(name => ({ name, description: name, inputSchema: { type: 'object', properties: { filename: { type: 'string' }, url: { type: 'string' } } } }));
 
-function fixture({ call = async () => ({ content: [{ type: 'text', text: 'ok' }] }), control = async () => ({}) } = {}) {
+function fixture({ call = async () => ({ content: [{ type: 'text', text: 'ok' }] }), control = async () => ({}), debugLog } = {}) {
   const requests = [], calls = [];
   let restarts = 0;
   const child = { async request(method, params) { if (method === 'tools/list') return { tools: upstream }; calls.push(params); return call(params); },
     async restart() { restarts++; } };
   const controlClient = { async request(type, payload) { requests.push([type, payload]); return control(type, payload); } };
-  const handle = createBrowserGateway({ child, controlClient, config, limits: browserLimits({ callMs: 2000, actionMs: 500, navigationMs: 1000, repeatLimit: 2, maxActions: 5 }) });
+  const handle = createBrowserGateway({ child, controlClient, config, limits: browserLimits({ callMs: 2000, actionMs: 500, navigationMs: 1000, repeatLimit: 2, maxActions: 5 }), ...(debugLog ? { debugLog } : {}) });
   let id = 0;
   const invoke = (name, args = {}) => handle({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name, arguments: args } });
   return { handle, invoke, requests, calls, restarts: () => restarts };
 }
+function debugCollector() { const entries = []; return { entries, debugLog: { log: (component, event, details) => entries.push({ component, event, details }) } }; }
 
 test('lists only allowlisted tools and strips file output arguments', async () => {
   const f = fixture();
@@ -110,4 +111,74 @@ test('new page content reports progress, throttled; repeats of seen content do n
   assert.equal(progress().length, 2, 'unreported progress flushes after the window');
   clock = 30000; await call('https://a3.example');
   assert.equal(progress().length, 2, 'already-seen content is not progress');
+});
+
+// ---- debug logging (optional, no-op by default) ----------------------------
+test('debug logging is disabled by default: no log() calls happen without a debugLog', async () => {
+  const f = fixture();
+  await f.invoke('browser_navigate', { url: 'https://example.com/path?token=secret' });
+  await f.invoke('browser_click', { element: 'x', target: 'e1' });
+  // No debugLog was supplied; nothing should have been called or thrown.
+  assert.equal(f.calls.length, 2);
+});
+
+test('a debug logger records one tool_call entry per call: name, classification, duration, outcome; query strings and typed text are never logged', async () => {
+  const { entries, debugLog } = debugCollector();
+  const f = fixture({ debugLog });
+  await f.invoke('browser_navigate', { url: 'https://example.com/login?token=secret-value' });
+  await f.invoke('browser_type', { element: 'q', target: 'e1', text: 'hunter2 super secret' });
+  const calls = entries.filter(e => e.event === 'tool_call');
+  assert.equal(calls.length, 2);
+  assert.deepEqual({ tool: calls[0].details.tool, classification: calls[0].details.classification, outcome: calls[0].details.outcome, url: calls[0].details.url },
+    { tool: 'browser_navigate', classification: 'read', outcome: 'ok', url: 'https://example.com/login' });
+  assert.equal(typeof calls[0].details.ms, 'number');
+  assert.equal(calls[1].details.tool, 'browser_type'); assert.equal(calls[1].details.classification, 'action'); assert.equal(calls[1].details.outcome, 'ok');
+  const raw = JSON.stringify(entries);
+  assert.ok(!raw.includes('secret'), 'no query string or typed text ever appears in a log entry');
+  assert.ok(!raw.includes('hunter2'));
+});
+
+test('debug logging records budget stops, repeat stops and restarts', async () => {
+  const { entries, debugLog } = debugCollector();
+  const f = fixture({ debugLog, call: async () => { throw Object.assign(new Error('BROWSER_CALL_TIMEOUT'), { code: 'BROWSER_CALL_TIMEOUT' }); } });
+  await f.invoke('browser_click', { element: 'x', target: 'e1' });
+  assert.ok(entries.some(e => e.event === 'restart' && e.details.tool === 'browser_click'));
+  assert.ok(entries.some(e => e.event === 'tool_call' && e.details.outcome === 'timeout'));
+
+  const h = fixture({ debugLog });
+  for (let i = 0; i < 2; i++) await h.invoke('browser_snapshot');
+  await h.invoke('browser_snapshot');
+  assert.ok(entries.some(e => e.event === 'repeat_stop'));
+  await h.invoke('browser_navigate', { url: 'https://a.example' });
+  await h.invoke('browser_navigate', { url: 'https://b.example' });
+  await h.invoke('browser_navigate', { url: 'https://c.example' });
+  assert.ok(entries.some(e => e.event === 'budget_stop'));
+});
+
+test('debug logging records a CAPTCHA blocker and a refused effect permit, never the reason text', async () => {
+  const { entries, debugLog } = debugCollector();
+  const f = fixture({ debugLog, call: async () => ({ content: [{ type: 'text', text: 'Please verify you are human to continue' }] }) });
+  await f.invoke('browser_navigate', { url: 'https://shop.example' });
+  assert.ok(entries.some(e => e.event === 'blocker' && e.details.tool === 'browser_navigate'));
+
+  const refused = debugCollector();
+  const g = fixture({ debugLog: refused.debugLog, control: async type => { if (type === 'effect-intent') throw Object.assign(new Error('FORBIDDEN'), { code: 'FORBIDDEN' }); return {}; } });
+  await g.invoke('browser_type', { element: 'q', target: 'e1', text: 'hi' });
+  const call = refused.entries.find(e => e.event === 'tool_call');
+  assert.equal(call.details.outcome, 'refused'); assert.equal(call.details.code, 'EFFECT_PERMIT_FAILED');
+});
+
+test('debug logging records takeover open/end as owner-visible events, never the reason text', async () => {
+  const { entries, debugLog } = debugCollector();
+  const requests = [], calls = [];
+  const child = { async request(method, params) { if (method === 'tools/list') return { tools: [{ name: 'browser_navigate', inputSchema: { type: 'object' } }] }; calls.push(params); return { content: [] }; }, async restart() {} };
+  const controlClient = { async request(type, payload) { requests.push([type, payload]); return {}; } };
+  const takeover = async () => ({ outcome: 'handed_back', url: 'https://x.example/home', title: 'Home', viewed: true });
+  const handle = createBrowserGateway({ child, controlClient, config, limits: browserLimits({ takeoverMs: 60000 }), takeover, debugLog });
+  const result = await handle({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'browser_request_takeover', arguments: { reason: 'Log in to example.com, password is hunter2' } } });
+  assert.equal(result.result.isError, undefined);
+  assert.ok(entries.some(e => e.event === 'takeover_open'));
+  const end = entries.find(e => e.event === 'takeover_end');
+  assert.equal(end.details.outcome, 'handed_back'); assert.equal(end.details.viewed, true);
+  assert.ok(!JSON.stringify(entries).includes('hunter2'), 'the owner-facing reason text is never logged');
 });

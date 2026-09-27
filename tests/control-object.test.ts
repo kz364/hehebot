@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestDatabase, bot, otherBot, routine } from './helpers';
 import { PersonalControl } from '../src/worker/control-object';
 import worker from '../src/worker/index';
@@ -24,7 +24,7 @@ beforeEach(async () => {
   db = new TestDatabase();
   await initialize();
 });
-async function initialize(executionEnabled=false) {
+async function initialize(executionEnabled=false, envOverrides: Partial<Env> = {}) {
   let initialized: Promise<unknown> = Promise.resolve();
   const ctx = {
     storage: {
@@ -37,7 +37,7 @@ async function initialize(executionEnabled=false) {
   };
   control = new PersonalControl(ctx as unknown as DurableObjectState, {
     EXECUTION_ENABLED: String(executionEnabled), NATIVE_VERIFIED: String(executionEnabled), PROVIDER_CONFIG: '{}',
-    ACTION_POLICY_IDS: '[]', TOOL_POLICY_IDS: '[]', TRIGGER_CONFIG: '{}',
+    ACTION_POLICY_IDS: '[]', TOOL_POLICY_IDS: '[]', TRIGGER_CONFIG: '{}', ...envOverrides,
   } as Env);
   await initialized;
 }
@@ -440,4 +440,58 @@ it('serves validated recovery pages through owner RPC without starting runtime w
   expect(await control.getRecovery('owner',bot,undefined,101)).toMatchObject({ok:false,error:{code:'INVALID_INPUT'}});
   expect(db.all('SELECT * FROM runs ORDER BY id')).toEqual(before);
   expect(db.all('SELECT * FROM controller_operations')).toEqual([]);expect(db.all('SELECT * FROM attempts')).toEqual([]);
+});
+
+// ---- debug logging (docs/METERING.md), off unless HEHEBOT_DEBUG='1' --------
+describe('debug logging',()=>{
+  afterEach(()=>{vi.restoreAllMocks();});
+  it('is silent by default: no console.log for /v1/commands or runtime RPCs',async()=>{
+    const spy=vi.spyOn(console,'log').mockImplementation(()=>{});
+    await control.accept('owner',randomUUID(),'x',message());
+    await control.runtime({type:'status',payload:{}});
+    expect(spy).not.toHaveBeenCalled();
+  });
+  it('logs one JSON line per /v1/commands command with type/status/ms, never the message text',async()=>{
+    await initialize(false,{HEHEBOT_DEBUG:'1'});
+    const spy=vi.spyOn(console,'log').mockImplementation(()=>{});
+    const result=await control.accept('owner',randomUUID(),'x',message());
+    expect(result.ok).toBe(true);
+    const lines=spy.mock.calls.map(call=>JSON.parse(call[0] as string));
+    const entry=lines.find(line=>line.component==='commands');
+    expect(entry).toMatchObject({component:'commands',event:'command',type:'message.send',status:'applied'});
+    expect(typeof entry.ms).toBe('number');
+    const raw=JSON.stringify(lines);
+    expect(raw).not.toContain('Independent work');
+  });
+  it('logs runtime RPC handling with type/ms/outcome, and the error code on failure',async()=>{
+    await initialize(false,{HEHEBOT_DEBUG:'1'});
+    const spy=vi.spyOn(console,'log').mockImplementation(()=>{});
+    await control.runtime({type:'status',payload:{}});
+    let lines=spy.mock.calls.map(call=>JSON.parse(call[0] as string));
+    expect(lines.find(line=>line.component==='control')).toMatchObject({component:'control',event:'rpc',type:'status',outcome:'ok'});
+    spy.mockClear();
+    const failed=await control.runtime({type:'not-a-real-type',payload:{}} as never);
+    expect(failed.ok).toBe(false);
+    lines=spy.mock.calls.map(call=>JSON.parse(call[0] as string));
+    expect(lines.find(line=>line.component==='control')).toMatchObject({component:'control',event:'rpc',type:'unknown',outcome:'error',code:'INVALID_INPUT'});
+  });
+  it('does not log when HEHEBOT_DEBUG is any value other than exactly "1"',async()=>{
+    await initialize(false,{HEHEBOT_DEBUG:'true'});
+    const spy=vi.spyOn(console,'log').mockImplementation(()=>{});
+    await control.accept('owner',randomUUID(),'x',message());
+    expect(spy).not.toHaveBeenCalled();
+  });
+  it('logs the scheduled() Cron handler with status/ms; silent when HEHEBOT_DEBUG is unset',async()=>{
+    const env={AUTH_MODE:'local',INSTALLATION_ID:'local-only',CONTROL:{getByName:()=>control}} as unknown as Env;
+    let spy=vi.spyOn(console,'log').mockImplementation(()=>{});
+    await worker.scheduled({} as ScheduledController,env,{} as ExecutionContext);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+    await initialize(false,{HEHEBOT_DEBUG:'1'});
+    const debugEnv={...env,HEHEBOT_DEBUG:'1',CONTROL:{getByName:()=>control}} as unknown as Env;
+    spy=vi.spyOn(console,'log').mockImplementation(()=>{});
+    await worker.scheduled({} as ScheduledController,debugEnv,{} as ExecutionContext);
+    const lines=spy.mock.calls.map(call=>JSON.parse(call[0] as string));
+    expect(lines.find(line=>line.component==='scheduled')).toMatchObject({component:'scheduled',event:'backup',status:'disabled'});
+  });
 });
