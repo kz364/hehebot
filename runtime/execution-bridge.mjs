@@ -199,9 +199,13 @@ export class ExecutionBridge {
       };
       await this.journal.update(this.cursor, { phase: 'submission_unknown', attemptId: input.attemptId });
       let submitted;
+      // Operator diagnostics: identifier codes only, never messages or payloads.
+      const diagnose = (stage, value) => console.error(JSON.stringify({ event: 'bridge.submit_unconfirmed', stage,
+        code: typeof value?.code === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(value.code) ? value.code : value?.name ?? null,
+        status: typeof value?.status === 'string' ? value.status.slice(0, 32) : null, recoveryRequired: value?.recoveryRequired === true }));
       try { submitted = await this.native.submit(input); }
-      catch { return this.journal.get(this.cursor); }
-      if (!submitted?.nativeRunId || submitted.recoveryRequired || submitted.status !== 'running') return this.journal.get(this.cursor);
+      catch (error) { diagnose('threw', error); return this.journal.get(this.cursor); }
+      if (!submitted?.nativeRunId || submitted.recoveryRequired || submitted.status !== 'running') { diagnose('returned', submitted); return this.journal.get(this.cursor); }
       await this.journal.update(this.cursor, { phase: 'submitted_unknown', nativeRunId: submitted.nativeRunId,
         ...((claim.text_only || claim.role !== undefined) ? { nativeThreadId: submitted.threadId } : {}) });
       try {
