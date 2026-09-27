@@ -95,7 +95,13 @@ function injectedFixture(f, fixture, extra = [], inspect = () => {}) {
   };
 }
 
-test('native-home first and session second locks exclude fixture entry; release permits a fixture holding both',
+// G3 (GROK_ALIGNMENT A2): CHANGED from the pre-G3 "a contended lock simply
+// refuses (exit 73) and the launch never runs the fixture" expectation. A
+// contended native-home or session lock is no longer refused: the launcher
+// kills the live holder's process group and takes over within its retry
+// budget, so the launch always completes (exit 0) once the prior holder is
+// reclaimed, rather than being excluded by it.
+test('native-home first and session second locks are reclaimed from a live holder and the launch completes',
   { timeout: 30000 }, async t => {
     const f = await setupConfig(t);
     const marker = join(f.root, 'entered');
@@ -105,24 +111,40 @@ test('native-home first and session second locks exclude fixture entry; release 
       import { spawn } from 'node:child_process';
       import { once } from 'node:events';
       import { writeFile, readFile } from 'node:fs/promises';
-      const [home, state, marker, report, script] = process.argv.slice(2);
+      const [home, state, marker, report] = process.argv.slice(2);
       await writeFile(marker, 'entered');
       const results = [];
+      // Non-destructive probes: a raw flock, not the with-executor-lock.sh
+      // takeover wrapper. This process IS the exec chain that already holds
+      // both locks, so going through the wrapper here would see its own
+      // ancestor as the live holder and (correctly, for a genuine external
+      // contender) kill it -- which would be self-destructive in this
+      // self-referential check. A plain nonblocking flock proves the same
+      // exclusivity without that hazard.
       for (const directory of [home, state]) {
-        const child = spawn('bash', [script, directory, process.execPath, '-e', 'process.exit(0)']);
+        const child = spawn('flock', ['--nonblock', '--conflict-exit-code', '73', directory, process.execPath, '-e', 'process.exit(0)']);
         results.push((await once(child, 'exit'))[0]);
       }
       const status = await readFile('/proc/self/status', 'utf8');
       await writeFile(report, JSON.stringify({ results, status }));
     `, { mode: 0o600 });
-    const injected = injectedFixture(f, fixture, [marker, report, lockScript]);
+    const injected = injectedFixture(f, fixture, [marker, report]);
 
     for (const locked of [f.nativeHome, f.stateDirectory]) {
       const held = holder(f.trackedSpawn, locked); await ready(held);
+      // Registered before any lock contention: the launch below kills this
+      // holder as part of takeover, so the 'exit' listener must be armed
+      // before that can happen or the event is missed and this hangs.
+      const heldExited = once(held, 'exit');
       assert.deepEqual(await launchHostedOwnerAlpha(f.path, { spawnImpl: injected.spawnImpl.bind(injected) }),
-        { code: 73, signal: null });
-      await assert.rejects(readFile(marker), { code: 'ENOENT' });
-      const exited = once(held, 'exit'); held.kill('SIGTERM'); await exited;
+        { code: 0, signal: null });
+      const [, heldSignal] = await heldExited;
+      assert.ok(typeof heldSignal === 'string' && heldSignal.startsWith('SIG'),
+        'the live holder must be genuinely killed by takeover, not merely outlast a refusal');
+      assert.equal(await readFile(marker, 'utf8'), 'entered');
+      const observed = JSON.parse(await readFile(report, 'utf8'));
+      assert.deepEqual(observed.results, [73, 73]);
+      await rm(marker, { force: true }); await rm(report, { force: true });
     }
 
     assert.deepEqual(await launchHostedOwnerAlpha(f.path, { spawnImpl: injected.spawnImpl.bind(injected) }),

@@ -10,6 +10,7 @@ import { verifyControl } from '../scripts/backup-control.mjs';
 import { exportControl } from '../src/core/control-export';
 import type { SqlValue } from '../src/core/store';
 import {legacyOccurrences} from './legacy-occurrences';
+import {legacyRuns} from './legacy-runs';
 
 type Cell = { type: string; value: string | null };
 type Table = { name: string; columns: string[]; rows: Cell[][] };
@@ -69,7 +70,7 @@ beforeEach(async () => {
     INSERT INTO flight_restore_deadlines VALUES('leg-83',2,'2026-09-20T21:00:00.000Z','Asia/Jakarta','2026-09-19T21:00:00.000Z','routine-29','source-43','outcome_unknown','child-83','{"observation":"${canary}"}');
   `);
   wire = { format: 'hehebot-control-export', version: 1, createdAt: originalTime,
-    schemaSha256: 'ce7ce5e8bf6f0d2574a42eb90653900e79b67c240b55bdd8b12acea29874cb80', schemaVersions: [16], tables: tables(db) };
+    schemaSha256: '6fedcfb0c86cd8efe3a307a73247892408875c7a818f68a777ee93c3a2b97076', schemaVersions: [18], tables: tables(db) };
   await save();
 });
 afterEach(async () => { db.close(); await rm(directory, { recursive: true, force: true }); });
@@ -210,6 +211,8 @@ it.each(['same', 'parent', 'attempt', 'persona'])('roundtrips shared thread turn
 });
 
 it.each([9, 10, 11, 12, 13, 14, 15, 16])('preserves schema%s migration history and referenced occurrences without inventing attribution or upgrading legacy snapshots', async version => {
+  legacyRuns(db);
+  wire.schemaSha256 = 'ce7ce5e8bf6f0d2574a42eb90653900e79b67c240b55bdd8b12acea29874cb80';
   db.exec(`INSERT INTO objects VALUES('routine-17','routine',19,'{}',NULL,'t1','t7');
     INSERT INTO occurrences(id,routine_id,routine_version,nominal_due_at,status,coalesced_count,created_at) VALUES('occurrence-43','routine-17',7,'2026-09-17T03:15:00.000Z','completed',5,'t3');
     UPDATE runs SET occurrence_id='occurrence-43',routine_id='routine-17' WHERE id='root-29'`);
@@ -233,7 +236,7 @@ it.each([9, 10, 11, 12, 13, 14, 15, 16])('preserves schema%s migration history a
     db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision');
     wire.schemaSha256 = '8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a';
   }
-  db.prepare('UPDATE schema_versions SET version=? WHERE version=16').run(version);
+  db.prepare('UPDATE schema_versions SET version=? WHERE version=18').run(version);
   if (version < 11) {
     const links = db.prepare('SELECT * FROM native_task_links').all();
     db.exec('DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');

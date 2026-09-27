@@ -391,25 +391,36 @@ test('wrong journal identity, false stop, and premature stop never report retire
   }
 });
 
-test('either held kernel lock prevents warm retirement despite a matching journal', async t => {
+// G3 (GROK_ALIGNMENT A2): CHANGED from the pre-G3 "a held lock refuses
+// retirement" expectation. A contended native-home or session lock is no
+// longer refused: the retirement inspection kills the live holder's process
+// group and takes over, so a foreign/stale holder no longer prevents a
+// truthful journal from being reported as retired.
+test('a held kernel lock is reclaimed by warm retirement inspection rather than blocking it', async t => {
   for (const which of ['nativeHome', 'stateDirectory']) {
     const f = await managerFixture(t);
     f.envelope.generation.policy.expires_at = new Date(Date.now() + 1500).toISOString();
     f.envelope.host_credential.grant.expires_at = f.envelope.generation.policy.expires_at;
-    let holder;
-    try {
-      await assert.rejects(runHostedOwnerWarmManager(f.config, f.request, { control: f.control, tasks: f.tasks,
-        launch: async path => {
-          await new Promise(resolve => setTimeout(resolve, 1600));
-          await stoppedWarm(path);
-          const { config } = await readOwnerAlphaConfig(path);
-          holder = spawn('bash', [join('scripts', 'with-executor-lock.sh'), config[which], process.execPath,
-            '-e', 'console.log("locked"); process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
-          await once(holder.stdout, 'data');
-          return { code: 0, signal: null };
-        } }));
-      assert.deepEqual(f.calls.map(call => call.type), ['generation']);
-    } finally { if (holder) { const exited = once(holder, 'exit'); holder.stdin.end(); await exited; } }
+    let holder, holderExited;
+    assert.equal(await runHostedOwnerWarmManager(f.config, f.request, { control: f.control, tasks: f.tasks,
+      launch: async path => {
+        await new Promise(resolve => setTimeout(resolve, 1600));
+        await stoppedWarm(path);
+        const { config } = await readOwnerAlphaConfig(path);
+        holder = spawn('bash', [join('scripts', 'with-executor-lock.sh'), config[which], process.execPath,
+          '-e', 'console.log("locked"); process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
+        await once(holder.stdout, 'data');
+        // Registered before any lock contention: a contended lock now (G3)
+        // kills a live holder as part of takeover, so the 'exit' listener
+        // must be armed before that can happen or the event is missed and
+        // this hangs forever.
+        holderExited = once(holder, 'exit');
+        return { code: 0, signal: null };
+      } }), 'RETIREMENT_REPORTED');
+    assert.deepEqual(f.calls.map(call => call.type), ['generation', 'retirement']);
+    const [, signal] = await holderExited;
+    assert.ok(typeof signal === 'string' && signal.startsWith('SIG'),
+      'the live holder must be genuinely killed by takeover, not merely outlast a refusal');
   }
 });
 
