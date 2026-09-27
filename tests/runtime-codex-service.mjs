@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCodexService } from '../runtime/codex-service.mjs';
+import { BROWSER_POLICY, TAKEOVER_TOOL } from '../runtime/browser-gateway.mjs';
 import { CODEX_TEXT_ONLY_FEATURES, createCodexTextOnlyProfile, codexTextOnlyProfileSha256 } from '../runtime/codex-text-only.mjs';
 
 function preparedMemory(run_id, selected_model = 'gpt-5.5') {
@@ -1188,4 +1189,24 @@ test('V4c: stop() stops both lanes and each lane keeps its own heartbeat cadence
   assert.equal(f.service.taskSupervisor.phase, 'recovery');
   assert.throws(() => f.service.supervisor.assertLease(), { code: 'EXECUTOR_FENCED' });
   assert.throws(() => f.service.taskSupervisor.assertLease(), { code: 'EXECUTOR_FENCED' });
+});
+
+test('browser grant: takeover tool, a Codex tool timeout above the takeover wait, opt-in per-persona profile', async t => {
+  const f = await fixture(t);
+  const v2 = { ...f.config, disposableTest: undefined, executionMode: 'v2', ownerBindingSha256: 'a'.repeat(64) };
+  const service = createCodexService({ ...v2, browser: { dir: '/opt/hehebot-browser', persistentProfiles: true, limits: { takeoverMs: 300000 } } }, { ...f.dependencies,
+    control: { request: async (type, payload) => type === 'status' ? { epoch: 1, phase: 'BOOTING', execution_enabled: true, execution_mode: 'v2', owner_binding_sha256: 'a'.repeat(64) }
+      : type === 'claim' && payload.lane !== 'background'
+      ? { submission_key: 'run:1', run: { id: 'run', current_attempt: 1, persona_id: 'bot', context_json: JSON.stringify({ ...JSON.parse(memoryContext(payload)), persona: { body: { tool_policy_ids: [BROWSER_POLICY] } } }) } }
+      : f.dependencies.control.request(type, payload) } });
+  t.after(() => service.stop().catch(() => {}));
+  await service.start();
+  const browser = f.calls.find(call => call.method === 'thread/start').params.config.mcp_servers.hehebot_browser;
+  assert.ok(Object.keys(browser.tools).includes(TAKEOVER_TOOL));
+  assert.equal(browser.tool_timeout_sec, 360);
+  const grant = JSON.parse(await readFile(browser.env.HEHEBOT_BROWSER_GATEWAY_CONFIG, 'utf8'));
+  assert.equal(grant.profileDir, join(f.directory, 'browser-profiles', 'bot'));
+  assert.deepEqual(grant.limits, { takeoverMs: 300000 });
+  const invalid = createCodexService({ ...v2, browser: { dir: '/opt/hehebot-browser', persistentProfiles: 'yes' } }, f.dependencies);
+  await assert.rejects(invalid.start(), error => ['SERVICE_RECOVERY_REQUIRED', 'INVALID_SERVICE_CONFIGURATION'].includes(error.code));
 });

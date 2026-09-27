@@ -101,3 +101,9 @@ label.field input,label.field textarea,label.field select{background:#fffefb;bor
 .provisional-typing{opacity:.85}
 .provisional-typing>.provisional-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;font-style:italic;color:var(--muted)}
 .message .status{margin-left:8px}
+.takeover{position:fixed;inset:0;z-index:20;background:#1b1a17f2;color:#f5f3ee;display:flex;flex-direction:column;gap:8px;padding:10px 14px;overflow:auto}
+.takeover-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.takeover-title{display:flex;flex-direction:column;min-width:0;flex:1 1 260px}.takeover-detail{font-size:13px;color:#d8d3c8;overflow-wrap:anywhere}
+.takeover-status{background:#3a372f;color:#f5f3ee}.takeover[data-state=live] .takeover-status{background:#2f5d3a}.takeover[data-state=ended] .takeover-status,.takeover[data-state=error] .takeover-status{background:#6b3b2c}
+.takeover-actions,.takeover-url,.takeover-type{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.takeover-url input,.takeover-type input{flex:1 1 200px;min-width:0;border:1px solid #5a564c;border-radius:6px;background:#2a2823;color:#f5f3ee;padding:7px 10px}
+.takeover .quiet{background:#2a2823;color:#f5f3ee;border-color:#5a564c}.takeover-screen{display:block;width:100%;max-width:1280px;height:auto;margin:0 auto;background:#000;border-radius:6px;touch-action:none;cursor:default;outline-offset:2px}
+.takeover .hint{color:#bdb7aa;margin:0}

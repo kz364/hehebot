@@ -1,4 +1,5 @@
 import { installImportSetup } from './import-setup.js';
+import { openTakeover } from './takeover.js';
 const $=id=>document.getElementById(id);
 const olderEvents=new Map();
 const historyFloors=new Map();
@@ -626,6 +627,17 @@ function render(){
     // runtime failing to start): always shown, never search-filtered.
     const e=node('div',undefined,'event');e.setAttribute('role','status');
     e.append(node('span',event.payload.kind==='runtime'?'Runtime':'Degraded','status'),node('span',event.payload.message));
+    timeline.append(e);
+   }else if(event.type==='notice'&&event.payload.kind==='needs_you'&&event.payload.reason==='BROWSER_TAKEOVER'){
+    // Browser takeover (docs/BROWSER_TAKEOVER.md): open until the bot records
+    // an ended notice for the same takeover id or the request expires.
+    const id=String(event.payload.takeover_id??'');
+    const ended=events.some(x=>x.type==='notice'&&x.payload?.reason==='BROWSER_TAKEOVER_ENDED'&&x.payload.takeover_id===id);
+    const open=!ended&&typeof event.payload.expires_at==='string'&&Date.parse(event.payload.expires_at)>Date.now();
+    const e=node('div',undefined,'event takeover-notice');e.setAttribute('role','status');
+    e.append(node('span','Needs you','status'),node('span',event.payload.message??'A bot needs you in its browser.'));
+    if(open)e.append(button('Take over browser',()=>openTakeover({takeoverId:id,botName:object?.body.name??'The bot',detail:String(event.payload.detail??'')})));
+    else e.append(node('span',ended?'(done)':'(expired)','hint'));
     timeline.append(e);
    }else if(event.type==='notice'&&event.payload.kind==='needs_you'){
     // V2: a needs_you notice is owner-visible uncertainty, not a search-filtered

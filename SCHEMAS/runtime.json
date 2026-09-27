@@ -2776,6 +2776,71 @@
         "type",
         "payload"
       ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "browser-takeover"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "takeover_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "action": {
+              "enum": [
+                "open",
+                "end"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "timeout_ms": {
+              "type": "integer",
+              "minimum": 60000,
+              "maximum": 3600000
+            },
+            "outcome": {
+              "enum": [
+                "handed_back",
+                "cancelled",
+                "timeout",
+                "failed"
+              ]
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "takeover_id",
+            "action"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
     }
   ]
 }

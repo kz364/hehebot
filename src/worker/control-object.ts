@@ -21,6 +21,7 @@ import { RootChildEffects } from '../core/root-child-effects';
 import { TaskSteering } from '../core/task-steering';
 import { OutputPreviews } from '../core/output-preview';
 import { BotMessages } from '../core/bot-messages';
+import { BrowserTakeovers, validateTakeoverInput } from '../core/browser-takeover';
 import { TokenUsageSnapshots } from '../core/token-usage';
 import { MemoryReadRetention } from '../core/memory-read-retention';
 import { ControlError, requireThat, safeError } from '../core/errors';
@@ -46,6 +47,10 @@ export type TriggerPolicy={routine_id:string;event_types:string[]};
  * runtime-state label sent, so a phase change can be pushed without a client
  * poll. */
 type StreamAttachment={cursor:number|null;runtime:string|null};
+/** Browser takeover relay sockets (docs/BROWSER_TAKEOVER.md). Tagged
+ * `takeover:<id>`; `window`/`count` rate-limit viewer input per second. */
+type TakeoverAttachment={kind:'takeover';role:'runtime'|'viewer';id:string;window:number;count:number};
+const TAKEOVER_MAX_BINARY=1024*1024,TAKEOVER_MAX_TEXT=4096,TAKEOVER_INPUT_PER_SECOND=60;
 function stringList(value:string):string[]{const parsed:unknown=JSON.parse(value);if(!Array.isArray(parsed)||!parsed.every(x=>typeof x==='string'))throw new Error('Invalid policy configuration');return parsed;}
 function delegationMap(value:string):Record<string,string[]>{
  const parsed:unknown=JSON.parse(value);
@@ -161,6 +166,8 @@ export class PersonalControl extends DurableObject<Env> {
  async fetch(request:Request):Promise<Response>{
   const failure=this.initializationFailure;
   if(failure)return new Response(JSON.stringify({error:safeError(failure)}),{status:failure.status,headers:{'Content-Type':'application/json'}});
+  const path=new URL(request.url).pathname;
+  if(path==='/v1/takeover/stream'||path==='/internal/takeover/stream')return this.takeoverUpgrade(request,path==='/internal/takeover/stream'?'runtime':'viewer');
   try{
    this.rate('stream:connect',120);
    // Auto-response answers "ping" with "pong" without waking the DO or
@@ -181,6 +188,8 @@ export class PersonalControl extends DurableObject<Env> {
   * JSON frame is `{type:"subscribe",cursor}`. Anything else is ignored, not
   * an error: an idle/misbehaving socket must not affect the request path. */
  async webSocketMessage(ws:WebSocket,message:string|ArrayBuffer):Promise<void>{
+  const takeover=this.takeoverAttachment(ws);
+  if(takeover)return this.takeoverMessage(ws,takeover,message);
   if(typeof message!=='string'||message==='ping')return;
   try{
    let parsed:unknown;
@@ -209,8 +218,103 @@ export class PersonalControl extends DurableObject<Env> {
    ws.serializeAttachment(attachment);
   }catch{try{ws.close(1011,'Stream message failed.');}catch{}}
  }
- async webSocketClose(ws:WebSocket,code:number,reason:string):Promise<void>{try{ws.close(code,reason);}catch{}}
- async webSocketError(ws:WebSocket):Promise<void>{try{ws.close(1011,'Stream error.');}catch{}}
+ async webSocketClose(ws:WebSocket,code:number,reason:string):Promise<void>{
+  try{ws.close(code,reason);}catch{}
+  const takeover=this.takeoverAttachment(ws);if(takeover)this.takeoverPeerGone(ws,takeover);
+ }
+ async webSocketError(ws:WebSocket):Promise<void>{
+  try{ws.close(1011,'Stream error.');}catch{}
+  const takeover=this.takeoverAttachment(ws);if(takeover)this.takeoverPeerGone(ws,takeover);
+ }
+ private takeoverAttachment(ws:WebSocket):TakeoverAttachment|null{
+  try{const value=ws.deserializeAttachment() as Partial<TakeoverAttachment>|null;if(value&&value.kind==='takeover')return value as TakeoverAttachment;}catch{}
+  return null;
+ }
+ private takeoverPeers(id:string,role:'runtime'|'viewer',except?:WebSocket):WebSocket[]{
+  let sockets:WebSocket[];
+  try{sockets=this.ctx.getWebSockets(`takeover:${id}`);}catch{return [];}
+  return sockets.filter(ws=>ws!==except&&this.takeoverAttachment(ws)?.id===id&&this.takeoverAttachment(ws)?.role===role);
+ }
+ private static sendQuiet(ws:WebSocket,data:string|ArrayBuffer){try{ws.send(data);}catch{}}
+ /** GET /internal/takeover/stream (runtime token verified by the Worker) and
+  * GET /v1/takeover/stream (owner Access + same-origin verified by the
+  * Worker). The runtime side must also present the takeover's own run,
+  * attempt and current generation; the viewer side only a live takeover id.
+  * One viewer at a time: a newer viewer replaces the older one (4001). */
+ private takeoverUpgrade(request:Request,role:'runtime'|'viewer'):Response{
+  const reply=(status:number,code:string)=>new Response(JSON.stringify({error:{code}}),{status,headers:{'Content-Type':'application/json'}});
+  try{
+   requireThat(!this.hostedOwnerAlpha,'NOT_FOUND','Route unavailable.',404);
+   requireThat(request.method==='GET'&&(request.headers.get('Upgrade')??'').toLowerCase()==='websocket','UPGRADE_REQUIRED','A WebSocket upgrade is required.',426);
+   this.rate(`takeover:${role}`,role==='runtime'?120:60);
+   const params=new URL(request.url).searchParams,id=params.get('takeover_id')??'';
+   const takeovers=new BrowserTakeovers(this.store,this.core),record=takeovers.live(id);
+   requireThat(!!record,'NOT_FOUND','This browser takeover is not open.',404);
+   if(role==='runtime'){
+    const identity={epoch:Number(params.get('epoch')),boot_id:params.get('boot_id')??''},attempt=Number(params.get('attempt'));
+    requireThat(params.get('run_id')===record!.run_id&&attempt===record!.attempt&&identity.epoch===record!.epoch&&identity.boot_id===record!.boot_id,'FORBIDDEN','Takeover belongs to another attempt.',403);
+    this.lifecycle.authorizeAttempt(identity,record!.run_id,attempt);
+   }
+   const pair=new WebSocketPair();
+   const [client,server]=Object.values(pair);
+   this.ctx.acceptWebSocket(server,[`takeover:${id}`]);
+   server.serializeAttachment({kind:'takeover',role,id,window:0,count:0} satisfies TakeoverAttachment);
+   for(const old of this.takeoverPeers(id,role,server)){try{old.close(4001,role==='viewer'?'Opened in another window.':'Runtime reconnected.');}catch{}}
+   const runtimeUp=this.takeoverPeers(id,'runtime').length>0;
+   if(role==='viewer'){
+    PersonalControl.sendQuiet(server,JSON.stringify({t:'peer',runtime:runtimeUp,reason:record!.reason,expires_at:record!.expires_at}));
+    for(const peer of this.takeoverPeers(id,'runtime'))PersonalControl.sendQuiet(peer,JSON.stringify({t:'viewer',connected:true}));
+   }else{
+    const viewers=this.takeoverPeers(id,'viewer');
+    PersonalControl.sendQuiet(server,JSON.stringify({t:'viewer',connected:viewers.length>0}));
+    for(const viewer of viewers)PersonalControl.sendQuiet(viewer,JSON.stringify({t:'peer',runtime:true}));
+   }
+   return new Response(null,{status:101,webSocket:client});
+  }catch(error){
+   const status=error instanceof ControlError?error.status:500;
+   return reply(status,safeError(error).code);
+  }
+ }
+ /** Pipes one frame. Runtime frames (JPEG binary, small JSON meta/end) go to
+  * the viewer; viewer frames must be valid input events, are rate-limited and
+  * go to the runtime re-serialized (never forwarded verbatim). */
+ private takeoverMessage(ws:WebSocket,att:TakeoverAttachment,message:string|ArrayBuffer):void{
+  try{
+   if(message==='ping')return;
+   if(att.role==='runtime'){
+    if(typeof message==='string'){
+     if(message.length>TAKEOVER_MAX_TEXT)return;
+     let frame:unknown;try{frame=JSON.parse(message);}catch{return;}
+     const t=(frame as {t?:unknown})?.t;
+     if(!['meta','status','end'].includes(t as string))return;
+     for(const viewer of this.takeoverPeers(att.id,'viewer'))PersonalControl.sendQuiet(viewer,message);
+    }else{
+     if(message.byteLength>TAKEOVER_MAX_BINARY)return;
+     for(const viewer of this.takeoverPeers(att.id,'viewer'))PersonalControl.sendQuiet(viewer,message);
+    }
+    return;
+   }
+   if(typeof message!=='string')return;
+   const second=Math.floor(Date.now()/1000);
+   if(att.window!==second){att.window=second;att.count=0;}
+   if(++att.count>TAKEOVER_INPUT_PER_SECOND){ws.serializeAttachment(att);return;}
+   ws.serializeAttachment(att);
+   const input=validateTakeoverInput(message);
+   if(!input){PersonalControl.sendQuiet(ws,JSON.stringify({t:'error',code:'INVALID_INPUT'}));return;}
+   const runtimes=this.takeoverPeers(att.id,'runtime');
+   if(!runtimes.length){PersonalControl.sendQuiet(ws,JSON.stringify({t:'peer',runtime:false}));return;}
+   for(const peer of runtimes)PersonalControl.sendQuiet(peer,JSON.stringify(input));
+  }catch{try{ws.close(1011,'Takeover relay failed.');}catch{}}
+ }
+ private takeoverPeerGone(ws:WebSocket,att:TakeoverAttachment):void{
+  if(att.role==='runtime'){for(const viewer of this.takeoverPeers(att.id,'viewer'))PersonalControl.sendQuiet(viewer,JSON.stringify({t:'peer',runtime:false}));}
+  else if(!this.takeoverPeers(att.id,'viewer',ws).length){for(const peer of this.takeoverPeers(att.id,'runtime'))PersonalControl.sendQuiet(peer,JSON.stringify({t:'viewer',connected:false}));}
+ }
+ private closeTakeover(id:string):void{
+  let sockets:WebSocket[];
+  try{sockets=this.ctx.getWebSockets(`takeover:${id}`);}catch{return;}
+  for(const ws of sockets){if(this.takeoverAttachment(ws)?.id===id){try{ws.close(1000,'Takeover ended.');}catch{}}}
+ }
  /** Maps lifecycle phases to the client-facing runtime label (ARCHITECTURE_V2 A6). */
  private runtimeStreamState():'asleep'|'waking'|'running'|'recovery_required'{
   const phase=this.lifecycle.get().phase;
@@ -246,6 +350,7 @@ export class PersonalControl extends DurableObject<Env> {
   try{now=this.core.now();after=this.store.sequence();runtime=this.runtimeStreamState();}catch{return;}
   for(const ws of sockets){
    try{
+    if(this.takeoverAttachment(ws))continue;
     const attachment=this.streamAttachment(ws);
     let changed=false;
     if(attachment.cursor!==null&&after>attachment.cursor){this.deliverStreamEvents(ws,attachment,now);changed=true;}
@@ -485,6 +590,13 @@ export class PersonalControl extends DurableObject<Env> {
    case 'memory-prepare':result=this.lifecycle.prepareMemory(command.payload.identity,command.payload.persona_models,command.payload.memory_read_personas);break;
    case 'claim':result=this.lifecycle.claim(command.payload.identity,command.payload.persona_models,command.payload.memory_budget,command.payload.memory_read_personas,command.payload.lane,command.payload.memory_notice);break;
    case 'abandon':this.lifecycle.abandon(command.payload.identity,command.payload.code);break;
+   case 'browser-takeover':{
+    const p=command.payload,takeovers=new BrowserTakeovers(this.store,this.core);
+    requireThat(!this.hostedOwnerAlpha,'NOT_FOUND','Route unavailable.',404);
+    if(p.action==='open')result=takeovers.open(p.identity,p,this.lifecycle);
+    else{result=takeovers.end(p.identity,p,this.lifecycle);this.closeTakeover(p.takeover_id);}
+    break;
+   }
    case 'progress':this.progress.record(command.payload.identity,command.payload.run_id,command.payload.attempt,command.payload.source,this.lifecycle);break;
    case 'heartbeat':result=this.lifecycle.heartbeat(command.payload.identity,command.payload.operations);break;
    case 'submitted':this.lifecycle.submitted(command.payload.identity,command.payload.run_id,command.payload.attempt,command.payload.native_ref);break;

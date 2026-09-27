@@ -34,6 +34,18 @@ export default {
     if(own&&request.method==='GET')return json(unwrap(await control.readTest(actor,own[1] as 'receipts'|'runs',own[2])));
     throw new ControlError('NOT_FOUND','Route unavailable.',404);
    }
+   if(path==='/internal/takeover/stream'){
+    // Browser takeover relay, runtime side (docs/BROWSER_TAKEOVER.md): the
+    // Sprite dials out with the same runtime token (and Access service token)
+    // as every other runtime call; the Durable Object additionally binds the
+    // socket to the takeover's run, attempt and current generation. Only the
+    // ordinary (v2) control plane offers it.
+    requireThat(request.method==='GET'&&!parseOwnerAlphaBootstrap(env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP)&&!parseOwnerAlphaWarm(env.HEHEBOT_OWNER_ALPHA_WARM_GENERATION)&&
+     !parseOwnerAlphaBackground(env.HEHEBOT_OWNER_ALPHA_BACKGROUND_GENERATION),'NOT_FOUND','Route unavailable.',404);
+    verifyRuntimeToken(request,env.RUNTIME_TOKEN);
+    requireThat((request.headers.get('Upgrade')??'').toLowerCase()==='websocket','UPGRADE_REQUIRED','A WebSocket upgrade is required.',426);
+    return control.fetch(request);
+   }
    if(path.startsWith('/internal/')){
     requireThat(request.method==='POST','NOT_FOUND','Route unavailable.',404);
     const bootstrap=parseOwnerAlphaBootstrap(env.HEHEBOT_OWNER_ALPHA_BOOTSTRAP);
@@ -125,6 +137,13 @@ export default {
     // ARCHITECTURE_V2 A6: same owner authentication and same-origin check as
     // every other /v1 route; only the transport differs. The Durable Object
     // owns the actual WebSocket Hibernation upgrade.
+    assertSameOrigin(request);
+    requireThat(request.method==='GET','NOT_FOUND','Route unavailable.',404);
+    requireThat((request.headers.get('Upgrade')??'').toLowerCase()==='websocket','UPGRADE_REQUIRED','A WebSocket upgrade is required.',426);
+    return control.fetch(request);
+   }
+   if(path==='/v1/takeover/stream'){
+    // Browser takeover viewer: same owner + same-origin checks as /v1/stream.
     assertSameOrigin(request);
     requireThat(request.method==='GET','NOT_FOUND','Route unavailable.',404);
     requireThat((request.headers.get('Upgrade')??'').toLowerCase()==='websocket','UPGRADE_REQUIRED','A WebSocket upgrade is required.',426);

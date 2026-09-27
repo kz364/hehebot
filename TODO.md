@@ -46,7 +46,7 @@ Acceptance IDs refer to ARCHITECTURE_V2 §4. Schema version is 18 today.
 | [ ] | **Metering** | No Fly/Sprites usage API exists (GraphQL has none; Cost Explorer is server-rendered). Self-meter: Worker wake/sleep intervals + runtime cgroup CPU/memory samples × published Sprite rates, plus existing Codex token snapshots; portal shows daily/monthly estimate; reconcile against Cost Explorer. | Proposed 2026-09-28. |
 | [ ] | **Routines live** | Enable one imported routine, watch a scheduled run end to end, then adopt the reviewed batch (five personas / seven routines). | Needs Google first. |
 | [ ] | **Push notifications** | Notify the owner when a bot posts (web push from the Worker). | Part of old E04. |
-| [ ] | **Browser takeover** | Owner can view and take over the runtime browser for logins/CAPTCHAs, then hand back. | Part of old E07; headless browsing is live. |
+| [x] | **Browser takeover** | Owner can view and take over the runtime browser for logins/CAPTCHAs, then hand back. | Implemented locally with tests ([docs/BROWSER_TAKEOVER.md](docs/BROWSER_TAKEOVER.md)): `browser_request_takeover`, Worker relay `/internal/takeover/stream` ↔ `/v1/takeover/stream`, portal viewer, opt-in `browser.persistentProfiles`. **Live verification pending.** |
 
 ## Shrunk scope
 
