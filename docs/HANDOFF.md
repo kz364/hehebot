@@ -61,7 +61,9 @@ still couldn't chat with a bot during a background task. See the traps in
    - Sprite: `~/.local/bin/sprite create hehebot-grok-test -o kaspar-hidayat`; `sprite exec -s hehebot-grok-test` to install Node ≥22.16 and the repo at
      this branch, run `bash scripts/setup-codex.sh && bash scripts/build-codex-service.sh`, `codex login --device-auth` into the chosen nativeHome, write a
      0600 `HEHEBOT_GROK_CONFIG` JSON (portalOrigin, token files, Access service-token files, ownerBindingSha256, stateRoot, binary, nativeHome, personas),
-     then register service `hehebot-grok` = `bash scripts/with-executor-lock.sh <stateRoot>/lock node runtime/grok-service-entry.mjs` on port 8080.
+     then inside the Sprite: `sprite-env services create hehebot-grok --cmd bash --args "scripts/with-executor-lock.sh,<stateRoot>/lock,node,runtime/grok-service-entry.mjs" --http-port 8080 --dir <repo>`.
+     Keep the Sprite URL auth at the default (`sprite`): the Worker's wake sends `Authorization: Bearer <PROVIDER_TOKEN>` plus `x-hehe-wake-token`.
+     Sprites pause (unbilled) when idle and resume frozen services on the next request; a resumed stale process is fenced by epoch (A2).
    - Worker: `npx wrangler secret put {RUNTIME_TOKEN,PROVIDER_TOKEN,SPRITE_WAKE_TOKEN} --env grok`, then `npx wrangler deploy --env grok
      --var EXECUTION_ENABLED:true --var HEHEBOT_EXECUTION_MODE:grok --var OWNER_SUB:<sub> --var ACCESS_ISSUER:<iss> --var ACCESS_AUD:<aud> --var
      PROVIDER_CONFIG:'{"provider":"fly-sprites","ref":{"provider":"fly-sprites","id":"hehebot-grok-test"},"service":"hehebot-grok","lifecycleVerified":true,"wakeUrl":"https://<sprite-url>/"}'`.
