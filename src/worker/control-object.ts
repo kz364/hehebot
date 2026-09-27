@@ -773,8 +773,12 @@ export class PersonalControl extends DurableObject<Env> {
   if(due)times.push(Date.parse(due.next_due_at));
   const retry=this.store.db.all<{due_at:string}>('SELECT due_at FROM retry_queue ORDER BY due_at LIMIT 1')[0];if(retry&&this.core.options.executionEnabled)times.push(Date.parse(retry.due_at));
   const state=this.lifecycle.get();
-  const productionWatch=this.core.options.executionEnabled&&(!['STOPPED','IDLE_PERMITTED'].includes(state.phase)||this.lifecycle.nextClaimableRun());
+  const idle=['STOPPED','IDLE_PERMITTED'].includes(state.phase),claimable=this.core.options.executionEnabled&&!!this.lifecycle.nextClaimableRun();
+  const productionWatch=this.core.options.executionEnabled&&(!idle||claimable);
   const alphaWatch=this.core.ownerAlpha.policy&&!['STOPPED','RECOVERY_REQUIRED'].includes(state.phase);
+  // Work queued on a sleeping runtime wakes it now, not on the next watch tick.
+  // The wake moves the phase to START_REQUESTED; the 1 s floor bounds any retry.
+  if(idle&&claimable&&!this.core.ownerAlpha.policy)times.push(Date.now()+Math.max(delayMs,1000));
   if(productionWatch||alphaWatch)times.push(Date.now()+Math.max(delayMs,5000));
   if(!times.length){await this.ctx.storage.deleteAlarm();return;}
   const next=Math.max(Date.now()+Math.max(100,delayMs),Math.min(...times));
