@@ -61,7 +61,7 @@ export class CodexAdapter {
   #permissionsProfile;
   #ownerAlpha;
   #now;
-  constructor({ rpc, journal, cwd, testMode = false, dynamicTools = [], mcpServers = {}, permissionsProfile = undefined, ownerAlpha = null, textOnlyProfile = null, now = Date.now }) {
+  constructor({ rpc, journal, cwd, testMode = false, dynamicTools = [], mcpServers = {}, permissionsProfile = undefined, ownerAlpha = null, textOnlyProfile = null, threadConfig = null, now = Date.now }) {
     if (typeof rpc !== 'function' || !journal?.putIfAbsent || !cwd?.startsWith('/') || !Array.isArray(dynamicTools) || dynamicTools.length > 64 ||
         !mcpServers || typeof mcpServers !== 'object' || Array.isArray(mcpServers) || Object.keys(mcpServers).length > 64 ||
         permissionsProfile !== undefined && (typeof permissionsProfile !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(permissionsProfile))) fail('INVALID_CONFIGURATION');
@@ -72,6 +72,12 @@ export class CodexAdapter {
     this.#ownerAlpha = ownerAlpha === null ? null : ownerAlphaPolicy(ownerAlpha);
     this.textOnlyProfile = textOnlyProfile === null ? null : structuredClone(textOnlyProfile);
     this.#now = now;
+    // Per-thread grant tables (today: hosted apps for a granted persona). Never
+    // combined with owner-alpha profiles, which own their own features table.
+    if (threadConfig !== null && (!threadConfig || typeof threadConfig !== 'object' || Array.isArray(threadConfig) ||
+        !Object.keys(threadConfig).length || Object.keys(threadConfig).some(key => !['features', 'apps'].includes(key)) ||
+        this.#ownerAlpha || this.textOnlyProfile)) fail('INVALID_CONFIGURATION');
+    this.threadConfig = threadConfig === null ? null : structuredClone(threadConfig);
     if (this.#ownerAlpha && (testMode || !permissionsProfile || dynamicTools.length ||
         Object.keys(mcpServers).some(key => key !== 'hehebot') || typeof now !== 'function')) fail('INVALID_CONFIGURATION');
     if (this.textOnlyProfile && (!this.#ownerAlpha?.text_only || this.#ownerAlpha.background_first_root ||
@@ -106,11 +112,14 @@ export class CodexAdapter {
       : this.dynamicTools.length ? [values, this.dynamicTools] : values;
     const fingerprintInput = this.#permissionsProfile === undefined ? legacyFingerprintInput
       : [legacyFingerprintInput, { permissionsProfile: this.#permissionsProfile, ...(this.#ownerAlpha ? { ownerAlpha: this.#ownerAlpha } : {}) }];
-    const boundFingerprintInput = this.textOnlyProfile ? [fingerprintInput, { textOnlyProfile: this.textOnlyProfile.binding }] : fingerprintInput;
+    const profiledFingerprintInput = this.textOnlyProfile ? [fingerprintInput, { textOnlyProfile: this.textOnlyProfile.binding }] : fingerprintInput;
+    // A changed per-thread grant (e.g. Gmail/Calendar added or removed) is a different attempt.
+    const boundFingerprintInput = this.threadConfig ? [profiledFingerprintInput, { threadConfig: this.threadConfig }] : profiledFingerprintInput;
     // Selected orchestration changes cannot silently replay an old V1 grant.
     const fingerprint = hash(background ? [boundFingerprintInput, { ownerAlphaBackground: true, nativeOrchestration: 'v2-cap2-restricted' }] : boundFingerprintInput);
     const config = {
       ...(Object.keys(this.mcpServers).length ? { mcp_servers: this.mcpServers } : {}),
+      ...(this.threadConfig ?? {}),
       ...(background ? { agents: { enabled: true },
         // A per-thread features table replaces the startup override table. Carry
         // all restricted gates forward instead of restoring owner-file defaults.

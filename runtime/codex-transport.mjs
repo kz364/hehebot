@@ -3,6 +3,8 @@ import { StringDecoder } from 'node:string_decoder';
 import { spawn } from 'node:child_process';
 import { materializeMemoryResponse } from './memory-read.mjs';
 
+/** Returned by an onUserInput handler for a request it does not own. */
+export const USER_INPUT_NOT_HANDLED = Symbol('USER_INPUT_NOT_HANDLED');
 const validUserInputTimeout = value => value === undefined || Number.isSafeInteger(value) && value >= 1 && value <= 900000;
 
 /** Codex 0.154.0's supported stdio protocol. Never retries a request. */
@@ -134,6 +136,13 @@ export class CodexTransport extends EventEmitter {
     }).then(result => {
       if (this.closed || controller.signal.aborted) return;
       if (userInput) {
+        // A handler that does not own this request leaves it exactly as an
+        // uninstalled handler would: refused, never answered on anyone's behalf.
+        if (result === USER_INPUT_NOT_HANDLED) {
+          this.write({ id, error: { code: -32601, message: 'Client capability not enabled' } });
+          this.emit('deniedRequest', { method: message.method });
+          return;
+        }
         const answers = result?.answers;
         if (!answers || typeof answers !== 'object' || Array.isArray(answers) ||
             Object.keys(answers).length !== questionIds.length || !questionIds.every(q => Object.hasOwn(answers, q) &&

@@ -10,10 +10,14 @@ import {MEMORY_TOKENIZER,MEMORY_READ_POLICY,projectMemory} from './memory-contex
 export const SKILL_PROPOSE_POLICY='46b2cbdd-d227-4f54-bffa-33148aad0134';
 // Browser use via runtime/browser-gateway.mjs (same value as BROWSER_POLICY there).
 export const BROWSER_POLICY='0f7d99a8-9dcc-4150-b555-da7944e2554c';
+// Gmail + Google Calendar via Codex hosted apps, writes fenced by runtime/google-apps.mjs
+// (same value as GOOGLE_POLICY there).
+export const GOOGLE_POLICY='9b80fd86-4797-4de8-ae41-1e2bbff7ba5a';
 /** Tool policies the portal may offer as per-bot switches (only those this
  * deployment's TOOL_POLICY_IDS allows are shown). */
 export const GRANTABLE_TOOL_POLICIES=Object.freeze([
  {id:BROWSER_POLICY,label:'Browser use',description:'Browse the live web through the Hehebot browser gateway. Clicks and typing are recorded as effects.'},
+ {id:GOOGLE_POLICY,label:'Gmail & Calendar',description:'Read mail and calendars; labels, drafts and calendar changes are recorded as effects. Sending, forwarding and deleting mail is off.'},
 ]);
 export const ROUTINE_MANAGE_POLICY='f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 export {MEMORY_READ_POLICY} from './memory-context';

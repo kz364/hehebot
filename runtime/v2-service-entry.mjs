@@ -11,7 +11,7 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
 const HEX64 = /^[a-f0-9]{64}$/;
 const CONFIG_KEYS = ['portalOrigin', 'runtimeTokenFile', 'wakeTokenFile', 'accessClientIdFile', 'accessClientSecretFile',
   'tlsCAFile', 'ownerBindingSha256', 'installationId', 'stateRoot', 'binary', 'nativeHome', 'personas',
-  'restrictedPermissions', 'port', 'maintainIntervalMs', 'memoryTokenizers', 'host', 'wakeHoldMs', 'browser'];
+  'restrictedPermissions', 'port', 'maintainIntervalMs', 'memoryTokenizers', 'host', 'wakeHoldMs', 'browser', 'googleApps'];
 // Codes that are safe to report; anything else may carry transport detail.
 const REPORTABLE = ['CONTROL_NOT_BOOTABLE', 'OWNER_BINDING_MISMATCH', 'SERVICE_RECOVERY_REQUIRED', 'EXECUTOR_FENCED',
   'NATIVE_STOP_UNCONFIRMED', 'CONTROL_HTTP_ERROR', 'CONTROL_TIMEOUT', 'CONTROL_TRANSPORT_FAILED', 'DRAIN_OUTCOME_UNKNOWN',
@@ -55,6 +55,8 @@ export function createV2Runtime(input, dependencies = {}) {
     ...(config.restrictedPermissions !== undefined ? { restrictedPermissions: config.restrictedPermissions } : {}),
     ...(config.memoryTokenizers !== undefined ? { memoryTokenizers: config.memoryTokenizers } : {}),
     ...(config.browser !== undefined ? { browser: config.browser } : {}),
+    // Optional { gmail, calendar, ownerEmails? } connector ids; absent = Gmail/Calendar off.
+    ...(config.googleApps !== undefined ? { googleApps: config.googleApps } : {}),
     ...(config.nativeHome ? { nativeHome: config.nativeHome } : {}),
     ...(config.tlsCAFile ? { tlsCAFile: config.tlsCAFile } : {}),
     ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}) });

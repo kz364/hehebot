@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { AGENT_TOOL_NAMES, readAccessCredentials } from './agent-tools.mjs';
 import { BROWSER_POLICY, BROWSER_TOOLS, browserLimits } from './browser-gateway.mjs';
+import { GOOGLE_POLICY, createGoogleAppsFence, googleAppsConfig, googleThreadConfig } from './google-apps.mjs';
 import { ControlClient } from './control-client.mjs';
 import { FileJournal } from './file-journal.mjs';
 import { CodexAdapter, PINNED_CODEX, RESTRICTED_CODEX_FEATURES, projectOutputMessage } from './codex-adapter.mjs';
@@ -71,7 +72,7 @@ export function createCodexService(config, dependencies) {
     } } = dependencies;
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
   let taskSupervisor = null, taskAdmission;
-  let ownsIntent = false, stopping, questions, questionNotification, admission;
+  let ownsIntent = false, stopping, questions, questionNotification, admission, googleFence, googleNotification;
   let alpha = null, textOnlyProfile = null, textOnlyVerification = null, textOnlyCatalogContent = null, commandedConfigContent = null;
   let alphaGeneration = null, alphaWarm = null, alphaBackground = null, backgroundProfile = null;
   let verifyTextOnlyCurrent;
@@ -328,7 +329,8 @@ export function createCodexService(config, dependencies) {
       } else if (config.backgroundProfile !== undefined) fail('INVALID_SERVICE_CONFIGURATION');
       if (config.textOnlyProfile !== undefined && !alpha?.text_only) fail('INVALID_SERVICE_CONFIGURATION');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs', 'backgroundTaskLane', 'executionMode', 'ownerBindingSha256', 'memoryTokenizers', 'browser'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs', 'backgroundTaskLane', 'executionMode', 'ownerBindingSha256', 'memoryTokenizers', 'browser', 'googleApps'].includes(key)) ||
+        config.googleApps !== undefined && (!v2Mode || (() => { try { googleAppsConfig(config.googleApps); return false; } catch { return true; } })()) ||
         config.nativeHome !== undefined && (!alpha && !v2Mode || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.browser !== undefined && (!v2Mode || !config.browser || typeof config.browser !== 'object' ||
           Object.keys(config.browser).some(key => !['dir', 'limits'].includes(key)) || typeof config.browser.dir !== 'string' || !isAbsolute(config.browser.dir) ||
@@ -503,9 +505,38 @@ export function createCodexService(config, dependencies) {
             }
             return null;
           } });
+        // Gmail/Calendar writes (hosted apps) are allowed only through this
+        // fence: it answers Codex's per-call approval after an effect permit.
+        if (config.googleApps !== undefined && !questions) googleFence = createGoogleAppsFence({ control, identity, apps: config.googleApps,
+          resolveRun: async ({ threadId, turnId }) => {
+            // The approval can race the turn/start reply; wait only for that admission.
+            for (let tries = 0; tries < 200; tries++) {
+              if (!['starting', 'running'].includes(phase) || !supervisor) return null;
+              let waiting = false;
+              for (const sup of [supervisor, taskSupervisor].filter(Boolean)) {
+                for (const row of await sup.bridge.families()) {
+                  const nativeRow = await journal.get(row.attemptId);
+                  if (nativeRow?.threadId !== threadId) continue;
+                  if (!row.claim?.run || row.phase === 'complete' || nativeRow.nativeRunId && nativeRow.nativeRunId !== turnId) return null;
+                  if (!nativeRow.nativeRunId) { waiting = true; continue; }
+                  sup.assertLease();
+                  const context = JSON.parse(row.claim.run.context_json);
+                  return { runId: row.claim.run.id, attempt: row.claim.run.current_attempt, grants: context.persona?.body?.tool_policy_ids ?? [] };
+                }
+              }
+              if (!waiting && tries > 40) return null;
+              await new Promise(resolve => setTimeout(resolve, 25));
+            }
+            return null;
+          } });
         if (hosted) await starting(() => activity.ensure());
         transport = launch({ binary: config.binary, home, cwd: workspace, timeoutMs: 10000, configOverrides,
-          ...(questions ? { onUserInput: questions.onUserInput, userInputTimeoutMs: 300000 } : {}) });
+          ...(questions ? { onUserInput: questions.onUserInput, userInputTimeoutMs: 300000 }
+            : googleFence ? { onUserInput: googleFence.onUserInput, userInputTimeoutMs: 60000 } : {}) });
+        if (googleFence) {
+          googleNotification = message => { void Promise.resolve(googleFence.onNotification(message)).catch(() => {}); };
+          transport.on('notification', googleNotification);
+        }
         if (questions) {
           questionNotification = message => { void questions.onNotification(message).catch(recover); };
           transport.on('notification', questionNotification);
@@ -690,9 +721,13 @@ export function createCodexService(config, dependencies) {
                 ...(permissions ? { enabled_tools: [...BROWSER_TOOLS] } : {}),
               };
             }
+            // Gmail/Calendar via Codex hosted apps, only for a granted run. Reads
+            // run freely; every write waits for googleFence's effect permit.
+            const googleGranted = googleFence && (taskContext.persona?.body?.tool_policy_ids ?? []).includes(GOOGLE_POLICY);
             // Fresh service-owned native home has no inherited global MCP config.
             return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, testMode: !alpha,
               ownerAlpha: alpha ? { ...alpha, expires_at: row.claim.deadline_at } : null, now, mcpServers,
+              ...(googleGranted ? { threadConfig: googleThreadConfig(config.googleApps) } : {}),
               permissionsProfile: permissions?.name }).submit(input);
           },
         };
@@ -823,6 +858,7 @@ export function createCodexService(config, dependencies) {
         phase = 'recovery';
         questions?.close();
         if (questionNotification) { transport?.off('notification', questionNotification); transport?.off('disconnect', recover); }
+        if (googleNotification) transport?.off('notification', googleNotification);
         supervisor?.disconnect(); taskSupervisor?.disconnect(); router?.close(); transport?.close();
         if (router) await router.tail;
         if (transport) {
