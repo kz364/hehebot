@@ -247,3 +247,19 @@ describe('Sprites native Tasks client', () => {
     expect(provider.capabilities.confirmedStop).toBe(false);
   });
 });
+
+describe('factory fetch binding', () => {
+  it('never invokes the global fetch as a provider method (workerd Illegal invocation)', async () => {
+    const original = globalThis.fetch;
+    const strict = vi.fn(function (this: unknown) {
+      if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+      return Promise.resolve(new Response(JSON.stringify({ name: 'demo', status: 'cold' }), { status: 200 }));
+    });
+    globalThis.fetch = strict as unknown as typeof fetch;
+    try {
+      const provider = createProvider({ provider: 'fly-sprites', token: 'token', service: 'hehebot' });
+      await expect(provider.observe({ provider: 'fly-sprites', id: 'demo' })).resolves.toMatchObject({ executionPaused: true });
+      expect(strict).toHaveBeenCalledOnce();
+    } finally { globalThis.fetch = original; }
+  });
+});

@@ -22,7 +22,7 @@ import { BotMessages } from '../core/bot-messages';
 import { TokenUsageSnapshots } from '../core/token-usage';
 import { MemoryReadRetention } from '../core/memory-read-retention';
 import { ControlError, requireThat, safeError } from '../core/errors';
-import { createProvider, type ProviderConfig, type RuntimeRef } from '../providers';
+import { createProvider, ProviderError, type ProviderConfig, type RuntimeRef } from '../providers';
 import validateRuntime from '../generated/validate-runtime.js';
 import type { RuntimeCommand } from '../core/runtime-types';
 import type { RoutinePut } from '../core/types';
@@ -791,7 +791,8 @@ export class PersonalControl extends DurableObject<Env> {
     catch(error){console.error(JSON.stringify({event:'control.owner_alpha_wake_unknown',code:safeError(error).code,...(error instanceof HostedWakeDeliveryError?{phase:error.phase,upstream_status:error.upstreamStatus}:{})}));}
    }
    if(this.core.options.executionEnabled){const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);await this.lifecycle.drive(provider);}
-  }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code}));}
+  }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code,
+   ...(error instanceof ProviderError?{provider_code:error.code,provider_status:error.status??null}:{error_name:error instanceof Error?error.name:typeof error})}));}
   finally{this.broadcastStreamCommit();await this.arm(failed?300000:0);}
  }
 }

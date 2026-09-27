@@ -8,7 +8,9 @@ import { RailwayProvider } from './railway';
 import { ProviderError, type ProviderId, type RuntimeProvider, type RuntimeRef } from './index';
 /** Construct privately from bindings; never persist this token-bearing object. */
 export interface ProviderConfig { readonly provider: ProviderId; readonly ref?: RuntimeRef; readonly token?: string; readonly service?: string; readonly lifecycleVerified?: boolean; readonly tokenKind?: 'project' | 'account'; readonly wakeUrl?:string; readonly wakeToken?:string }
-export function createProvider(config: ProviderConfig, fetcher: typeof fetch = fetch, clients?: { e2b?: E2BSdkPort }): RuntimeProvider {
+// workerd rejects fetch invoked as a method ("Illegal invocation"); providers call this.fetcher(...).
+const globalFetch: typeof fetch = (input, init) => fetch(input, init);
+export function createProvider(config: ProviderConfig, fetcher: typeof fetch = globalFetch, clients?: { e2b?: E2BSdkPort }): RuntimeProvider {
   switch (config.provider) {
     case 'fake': return new FakeProvider();
     case 'fly-machines': return new FlyMachinesProvider(config.token ?? '', fetcher);
