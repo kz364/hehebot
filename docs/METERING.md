@@ -126,7 +126,7 @@ Off by default everywhere. Turn it on with either:
   `CONFIG_KEYS` in `runtime/v2-service-entry.mjs`).
 
 When enabled, `runtime/debug-log.mjs` writes one JSON line per event to
-`<stateDirectory>/logs/debug-YYYY-MM-DD.jsonl` (mode 0600), keeping 7 days
+`<stateDirectory>/logs/debug-YYYY-MM-DD.jsonl` (on the Sprite the state directory is per boot: `ls -t ~/.hehebot/state/*/logs/*.jsonl`) (mode 0600), keeping 7 days
 and capping each day's file size (older lines are dropped once the cap is
 hit, the file is never left to grow unbounded). Logged: every control RPC
 (`type`, latency in ms, outcome/error code — this covers boot, ready, claim,

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const CGROUP_ROOT = '/sys/fs/cgroup';
 
@@ -16,6 +16,10 @@ export function defaultCgroupReader() {
     const relative = line?.split(':')[2];
     if (typeof relative === 'string' && relative.startsWith('/')) base = `${CGROUP_ROOT}${relative}`;
   } catch { /* use the cgroup root */ }
+  // A service manager can place the process in a cgroup that isn't visible
+  // in this mount namespace (live Sprite: ENOENT on every sample). The VM
+  // root is what is billed anyway.
+  if (!existsSync(`${base}/cpu.stat`)) base = CGROUP_ROOT;
   return {
     cpuUsageUsec() {
       const match = /^usage_usec (\d+)$/m.exec(readFileSync(`${base}/cpu.stat`, 'utf8'));
