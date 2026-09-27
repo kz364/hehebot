@@ -64,7 +64,8 @@ still couldn't chat with a bot during a background task. See the traps in
      this branch, run `bash scripts/setup-codex.sh && bash scripts/build-codex-service.sh`, `codex login --device-auth` into the chosen nativeHome, write a
      0600 `HEHEBOT_V2_CONFIG` JSON (portalOrigin, token files, the `~/.hehebot-secrets/access-client-id`/`access-client-secret` files, ownerBindingSha256,
      stateRoot, binary, nativeHome, personas),
-     then inside the Sprite: `sprite-env services create hehebot --cmd bash --args "scripts/with-executor-lock.sh,<stateRoot>/lock,node,runtime/v2-service-entry.mjs" --http-port 8080 --dir <repo>`.
+     then inside the Sprite: `sprite-env services create hehebot --cmd setpriv --args "--inh-caps=-all,--ambient-caps=-all,--bounding-set=-all,--,env,HEHEBOT_V2_CONFIG=<config>,bash,scripts/with-executor-lock.sh,<stateRoot>/executor.lock,node,runtime/v2-service-entry.mjs" --http-port 8080 --dir <repo>`.
+     Dropping all capabilities is required: Sprite processes carry ambient caps and Codex's bubblewrap sandbox refuses them. Persona `model` must be one the memory module accepts (`gpt-5.5` works; `gpt-5.6-luna` fails boot with MEMORY_MODEL_UNSUPPORTED).
      Keep the Sprite URL auth at the default (`sprite`): the Worker's wake sends `Authorization: Bearer <PROVIDER_TOKEN>` plus `x-hehe-wake-token`.
      Sprites pause (unbilled) when idle and resume frozen services on the next request; a resumed stale process is fenced by epoch (A2).
    - Worker: `npx wrangler secret put {RUNTIME_TOKEN,PROVIDER_TOKEN,SPRITE_WAKE_TOKEN} --env hehebot`, then `npx wrangler deploy --env hehebot
