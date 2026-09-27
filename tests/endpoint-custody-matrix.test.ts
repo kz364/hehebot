@@ -53,7 +53,7 @@ beforeEach(async () => {
   sql: { exec: (sql: string, ...values: (string | number | null)[]) => {
    const rows = db.all(sql, ...values); return { toArray: () => rows };
   } },
-  transactionSync: <T>(fn: () => T) => db.transaction(fn), setAlarm, deleteAlarm,
+  transactionSync: <T>(fn: () => T) => db.transaction(fn), getAlarm: async () => null, setAlarm, deleteAlarm,
  }, blockConcurrencyWhile: (fn: () => Promise<unknown>) => { initialized = fn(); } };
  env = { AUTH_MODE: 'access', INSTALLATION_ID: 'custody', ACCESS_ISSUER: issuer, ACCESS_AUD: 'custody', OWNER_SUB: 'owner',
   EXECUTION_ENABLED: 'true', NATIVE_VERIFIED: 'true', PROVIDER_CONFIG: '{}', ACTION_POLICY_IDS: '[]', TOOL_POLICY_IDS: JSON.stringify([policy]),

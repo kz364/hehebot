@@ -16,7 +16,7 @@ const network=vi.fn(()=>{throw new Error('Unexpected provider/network call');});
 const setAlarm=vi.fn(async()=>{});
 async function initialize(config:OwnerAlphaPolicy|null=policy){
  let initialized:Promise<unknown>=Promise.resolve();
- const ctx={storage:{sql:{exec:(sql:string,...values:(string|number|null)[])=>{const rows=db.all(sql,...values);return {toArray:()=>rows};}},transactionSync:<T>(fn:()=>T)=>db.transaction(fn),setAlarm,deleteAlarm:async()=>{}},blockConcurrencyWhile:(fn:()=>Promise<unknown>)=>{initialized=fn();}};
+ const ctx={storage:{sql:{exec:(sql:string,...values:(string|number|null)[])=>{const rows=db.all(sql,...values);return {toArray:()=>rows};}},transactionSync:<T>(fn:()=>T)=>db.transaction(fn),getAlarm: async () => null,setAlarm,deleteAlarm:async()=>{}},blockConcurrencyWhile:(fn:()=>Promise<unknown>)=>{initialized=fn();}};
  env={...base,HEHEBOT_OWNER_ALPHA:config?JSON.stringify(config):undefined,INSTALLATION_ID:'local-only',OWNER_SUB:'local-owner',ACTION_POLICY_IDS:'[]',TOOL_POLICY_IDS:JSON.stringify([ROUTINE_MANAGE_POLICY]),TRIGGER_CONFIG:'{}',RUNTIME_TOKEN:token,CONTROL:{getByName:()=>control}} as unknown as Env;
  control=new PersonalControl(ctx as unknown as DurableObjectState,env);await initialized;
 }

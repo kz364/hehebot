@@ -40,7 +40,7 @@ beforeEach(async () => {
   db = new TestDatabase();
   db.exec("INSERT INTO lifecycle(singleton,provider_ref_json,phase,desired_state) VALUES(1,'{}','STOPPED','STOP')");
   let initialized: Promise<unknown> = Promise.resolve();
-  const ctx = { storage: { sql: { exec: (sql: string, ...values: (string | number | null)[]) => { const rows=db.all(sql,...values);return {toArray:()=>rows}; } }, transactionSync: <T>(fn: () => T) => db.transaction(fn), setAlarm, deleteAlarm }, blockConcurrencyWhile: (fn: () => Promise<unknown>) => { initialized = fn(); } };
+  const ctx = { storage: { sql: { exec: (sql: string, ...values: (string | number | null)[]) => { const rows=db.all(sql,...values);return {toArray:()=>rows}; } }, transactionSync: <T>(fn: () => T) => db.transaction(fn), getAlarm: async () => null, setAlarm, deleteAlarm }, blockConcurrencyWhile: (fn: () => Promise<unknown>) => { initialized = fn(); } };
   env = { AUTH_MODE: 'access', INSTALLATION_ID: 'history', ACCESS_ISSUER: issuer, ACCESS_AUD: 'history', OWNER_SUB: 'owner', EXECUTION_ENABLED: 'false', NATIVE_VERIFIED: 'false', PROVIDER_CONFIG: '{}', ACTION_POLICY_IDS: '[]', TOOL_POLICY_IDS: '[]', TRIGGER_CONFIG: '{}', RUNTIME_TOKEN: runtimeToken, CONTROL: { getByName: () => control } } as unknown as Env;
   control = new PersonalControl(ctx as unknown as DurableObjectState, env); await initialized;
   const store = new Store(db); skill = randomUUID();

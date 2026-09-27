@@ -55,7 +55,7 @@ describe('GET /v1/receipts?idempotency_key= (worker route)', () => {
         sql: { exec: (sql: string, ...values: (string | number | null)[]) => {
           const rows = db.all(sql, ...values); return { toArray: () => rows };
         } },
-        transactionSync: <T>(fn: () => T) => db.transaction(fn), setAlarm: vi.fn(), deleteAlarm: vi.fn(),
+        transactionSync: <T>(fn: () => T) => db.transaction(fn), getAlarm: async () => null, setAlarm: vi.fn(), deleteAlarm: vi.fn(),
       },
       blockConcurrencyWhile: (fn: () => Promise<unknown>) => { initialized = fn(); },
     };

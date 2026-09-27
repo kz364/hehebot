@@ -16,7 +16,7 @@ const policy={session_id:'21000000-0000-4000-8000-000000000091',persona_id:bot,e
 
 async function initialize(){
  let ready:Promise<unknown>=Promise.resolve();
- const ctx={storage:{sql:{exec:(sql:string,...values:(string|number|null)[])=>{const rows=db.all(sql,...values);return {toArray:()=>rows};}},transactionSync:<T>(fn:()=>T)=>db.transaction(fn),setAlarm:async()=>{},deleteAlarm:async()=>{}},blockConcurrencyWhile:(fn:()=>Promise<unknown>)=>{ready=fn();}};
+ const ctx={storage:{sql:{exec:(sql:string,...values:(string|number|null)[])=>{const rows=db.all(sql,...values);return {toArray:()=>rows};}},transactionSync:<T>(fn:()=>T)=>db.transaction(fn),getAlarm: async () => null,setAlarm:async()=>{},deleteAlarm:async()=>{}},blockConcurrencyWhile:(fn:()=>Promise<unknown>)=>{ready=fn();}};
  control=new PersonalControl(ctx as unknown as DurableObjectState,{...base,HEHEBOT_OWNER_ALPHA:JSON.stringify(policy),ACTION_POLICY_IDS:'[]',TOOL_POLICY_IDS:'[]',TRIGGER_CONFIG:'{}'} as Env);await ready;
 }
 async function runtime(type:string,payload:unknown):Promise<any>{const result=await control.runtime({type,payload});expect(result).toMatchObject({ok:true});return (result as any).value;}

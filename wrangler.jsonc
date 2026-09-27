@@ -104,9 +104,7 @@
         "FLIGHT_RESTORE_POLICY_ID": "",
         "NATIVE_DELEGATIONS": "{}",
         "HEHEBOT_EXECUTION_MODE": "v2",
-        // Wake -> ready window; a Sprite boot measures ~4 s. The runtime also reports failed boots immediately (abandon).
         "HEHEBOT_BOOT_DEADLINE_MS": "15000",
-        // Successive failed starts: exponential from base_ms to max_ms; owner notice after notify_after failures.
         "HEHEBOT_SUCCESSOR_BACKOFF": "{\"base_ms\":5000,\"max_ms\":300000,\"notify_after\":3}"
       },
       "durable_objects": {

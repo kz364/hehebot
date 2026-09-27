@@ -31,7 +31,7 @@ async function initialize(executionEnabled=false) {
       sql: { exec: (sql: string, ...values: (string | number | null)[]) => {
         const rows = db.all(sql, ...values); return { toArray: () => rows };
       } },
-      transactionSync: <T>(fn: () => T) => db.transaction(fn), setAlarm, deleteAlarm,
+      transactionSync: <T>(fn: () => T) => db.transaction(fn), getAlarm: async () => null, setAlarm, deleteAlarm,
     },
     blockConcurrencyWhile: (fn: () => Promise<unknown>) => { initialized = fn(); },
   };

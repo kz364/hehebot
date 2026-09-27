@@ -13,7 +13,7 @@ const base={AUTH_MODE:'local',EXECUTION_ENABLED:'false',NATIVE_VERIFIED:'false',
 let db:TestDatabase,control:PersonalControl,policy:OwnerAlphaPolicy;
 async function initialize(config=policy){
  let ready:Promise<unknown>=Promise.resolve();
- const ctx={storage:{sql:{exec:(sql:string,...values:(string|number|null)[])=>{const rows=db.all(sql,...values);return {toArray:()=>rows};}},transactionSync:<T>(fn:()=>T)=>db.transaction(fn),setAlarm:async()=>{},deleteAlarm:async()=>{}},blockConcurrencyWhile:(fn:()=>Promise<unknown>)=>{ready=fn();}};
+ const ctx={storage:{sql:{exec:(sql:string,...values:(string|number|null)[])=>{const rows=db.all(sql,...values);return {toArray:()=>rows};}},transactionSync:<T>(fn:()=>T)=>db.transaction(fn),getAlarm: async () => null,setAlarm:async()=>{},deleteAlarm:async()=>{}},blockConcurrencyWhile:(fn:()=>Promise<unknown>)=>{ready=fn();}};
  control=new PersonalControl(ctx as unknown as DurableObjectState,{...base,HEHEBOT_OWNER_ALPHA:JSON.stringify(config),ACTION_POLICY_IDS:'[]',TOOL_POLICY_IDS:'[]',TRIGGER_CONFIG:'{}'} as Env);await ready;
 }
 beforeEach(async()=>{

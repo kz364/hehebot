@@ -51,6 +51,8 @@ function delegationMap(value:string):Record<string,string[]>{
  requireThat(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&Object.entries(parsed).every(([key,targets])=>/^[0-9a-f-]{36}$/i.test(key)&&Array.isArray(targets)&&targets.length<=5&&targets.every(x=>typeof x==='string'&&/^[0-9a-f-]{36}$/i.test(x))),'INVALID_CONFIGURATION','Invalid native delegation map.',503);
  return parsed as Record<string,string[]>;
 }
+/** An alarm may move earlier freely; only the alarm handler (existing=null) may move it later. */
+export function shouldSetAlarm(existing:number|null,next:number):boolean{return existing===null||existing>next;}
 export class PersonalControl extends DurableObject<Env> {
  private store:Store;
  private core:ControlCore;
@@ -739,7 +741,7 @@ export class PersonalControl extends DurableObject<Env> {
   if(type==='status')return this.statusSummary();
   return this.execute(command,true);
  });}
- private async arm(delayMs=0):Promise<void>{
+ private async arm(delayMs=0,fromAlarm=false):Promise<void>{
   const generation=this.core.ownerAlpha.activeGeneration();
   if(generation){
    const state=this.lifecycle.get();
@@ -774,8 +776,12 @@ export class PersonalControl extends DurableObject<Env> {
   const productionWatch=this.core.options.executionEnabled&&(!['STOPPED','IDLE_PERMITTED'].includes(state.phase)||this.lifecycle.nextClaimableRun());
   const alphaWatch=this.core.ownerAlpha.policy&&!['STOPPED','RECOVERY_REQUIRED'].includes(state.phase);
   if(productionWatch||alphaWatch)times.push(Date.now()+Math.max(delayMs,5000));
-  if(times.length)await this.ctx.storage.setAlarm(Math.max(Date.now()+Math.max(100,delayMs),Math.min(...times)));
-  else await this.ctx.storage.deleteAlarm();
+  if(!times.length){await this.ctx.storage.deleteAlarm();return;}
+  const next=Math.max(Date.now()+Math.max(100,delayMs),Math.min(...times));
+  // Ingress (portal polls, runtime heartbeats) must never postpone an earlier
+  // pending alarm, or a queued wake waits until traffic stops. Only the alarm
+  // handler itself may move the alarm later (e.g. its failure backoff).
+  if(shouldSetAlarm(fromAlarm?null:await this.ctx.storage.getAlarm(),next))await this.ctx.storage.setAlarm(next);
  }
  protected sendHostedWake(command:{epoch:number;operationId:string}):Promise<void>{
   return sendHostedOwnerWake(this.hostedWake!,command,this.env.PROVIDER_TOKEN!,this.env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN!);
@@ -795,6 +801,6 @@ export class PersonalControl extends DurableObject<Env> {
    if(this.core.options.executionEnabled){const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);await this.lifecycle.drive(provider);}
   }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code,
    ...(error instanceof ProviderError?{provider_code:error.code,provider_status:error.status??null}:{error_name:error instanceof Error?error.name:typeof error})}));}
-  finally{this.broadcastStreamCommit();await this.arm(failed?300000:0);}
+  finally{this.broadcastStreamCommit();await this.arm(failed?300000:0,true);}
  }
 }

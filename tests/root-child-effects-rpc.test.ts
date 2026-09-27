@@ -56,7 +56,7 @@ beforeEach(async () => {
    sql: { exec: (sql: string, ...values: (string | number | null)[]) => {
     const rows = db.all(sql, ...values); return { toArray: () => rows };
    } },
-   transactionSync: <T>(fn: () => T) => db.transaction(fn), setAlarm: vi.fn(async () => {}), deleteAlarm: vi.fn(async () => {}),
+   transactionSync: <T>(fn: () => T) => db.transaction(fn), getAlarm: async () => null, setAlarm: vi.fn(async () => {}), deleteAlarm: vi.fn(async () => {}),
   },
   blockConcurrencyWhile: (fn: () => Promise<unknown>) => { initialized = fn(); },
  };
