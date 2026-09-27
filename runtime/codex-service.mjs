@@ -35,7 +35,7 @@ const COORDINATOR_ONLY_TASK_TOOLS = Object.freeze(['hehebot_start_task', 'hehebo
   'hehebot_task_detail', 'hehebot_steer_task', 'hehebot_queue_followup', 'hehebot_cancel_task']);
 // V8: v2 execution mode may grant the coordinator task tools under the
 // restricted native profile; owner-alpha keeps its narrower read-only set.
-const RESTRICTED_TOOLS = Object.freeze(['hehebot_list_routines', 'hehebot_read_skill', 'hehebot_send_message']);
+const RESTRICTED_TOOLS = Object.freeze(['hehebot_list_routines', 'hehebot_read_skill', 'hehebot_send_message', 'hehebot_pass_turn']);
 const V2_RESTRICTED_TOOLS = Object.freeze([...RESTRICTED_TOOLS, ...COORDINATOR_ONLY_TASK_TOOLS]);
 // Idle grace before the runtime asks to sleep. The Worker's own prepare-sleep
 // grace is 60s from its last activity touch; the margin absorbs clock skew so

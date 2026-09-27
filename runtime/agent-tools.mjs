@@ -10,7 +10,7 @@ import addFormats from 'ajv-formats';
 import { ControlClient, ControlClientError } from './control-client.mjs';
 import { prepareMemoryDelivery, deferMemoryResponse, materializeMemoryResponse } from './memory-read.mjs';
 
-export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills', 'hehebot_read_memory', 'hehebot_send_message', 'hehebot_start_task', 'hehebot_list_tasks', 'hehebot_task_detail', 'hehebot_steer_task', 'hehebot_queue_followup', 'hehebot_cancel_task', 'hehebot_messages_search']);
+export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills', 'hehebot_read_memory', 'hehebot_send_message', 'hehebot_start_task', 'hehebot_list_tasks', 'hehebot_task_detail', 'hehebot_steer_task', 'hehebot_queue_followup', 'hehebot_cancel_task', 'hehebot_messages_search', 'hehebot_pass_turn']);
 // ARCHITECTURE_V2 A9: granted only when the run's persona snapshot holds this
 // tool policy (same value as MAC_MESSAGES_POLICY in src/core/node-bridge.ts).
 export const MAC_MESSAGES_POLICY = 'f1503d17-e75d-4c90-9c9c-2012628b3aea';
@@ -125,6 +125,9 @@ export function buildToolDefinitions(contracts) {
         limit: { type: 'integer', minimum: 1, maximum: 50 },
       },
     } },
+    { name: AGENT_TOOL_NAMES[16], description: 'Only available on a scheduled room turn (ARCHITECTURE_V2 A8). Explicitly pass this turn without sending a message, when there is nothing useful to add. Prefer this over sending a bare acknowledgement.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: { reason: { type: 'string', maxLength: 2000 } },
+    } },
   ]);
 }
 
@@ -210,6 +213,18 @@ export function createAgentToolsHandler({ controlClient, config, contracts, memo
       if (name === 'hehebot_messages_search') {
         return { jsonrpc: '2.0', id: message.id, result: await macRequest({ controlClient, config, capability: 'messages.search', args: clone(args),
           requestKey: `${config.runId}:${config.attempt}:${SERVER_INSTANCE_ID}:${message.id}`, nodeWait, sleep, now, signal }) };
+      }
+      if (name === 'hehebot_pass_turn') {
+        try {
+          const result = await controlClient.request('pass-turn', { identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
+          if (!result || result.accepted !== true) throw new Error('INVALID_PASS_RECEIPT');
+          return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify({ passed: true }) }] } };
+        } catch (error) {
+          const code = error instanceof ControlClientError ? error.code : 'AGENT_TOOL_FAILED';
+          const status = error instanceof ControlClientError ? error.status : undefined;
+          return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text',
+            text: `hehebot_pass_turn failed: ${code}${status ? ` (${status})` : ''}. This is only available on a scheduled room turn.` }] } };
+        }
       }
       if (name === 'hehebot_list_tasks') {
         const result = await controlClient.request('agent-task-list', { ...clone(args), identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });

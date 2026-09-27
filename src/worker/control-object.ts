@@ -534,7 +534,7 @@ export class PersonalControl extends DurableObject<Env> {
   }
   const alpha=this.core.ownerAlpha.policy;
   if(command.type==='status')return this.statusSummary();
-  return this.execute(command,!!alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','bot-message','token-usage','metering','steer-pending','agent-routines','agent-skill','agent-task-list','agent-task-detail'].includes(command.type)||!!(alpha.text_only&&command.type==='complete')||!!(alpha.background_first_root&&command.type==='native-child')));
+  return this.execute(command,!!alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','bot-message','pass-turn','token-usage','metering','steer-pending','agent-routines','agent-skill','agent-task-list','agent-task-detail'].includes(command.type)||!!(alpha.text_only&&command.type==='complete')||!!(alpha.background_first_root&&command.type==='native-child')));
  });}
  private statusSummary(){
   const state=this.lifecycle.get(),alpha=this.core.ownerAlpha.policy,generation=this.core.ownerAlpha.activeGeneration();
@@ -598,6 +598,11 @@ export class PersonalControl extends DurableObject<Env> {
    case 'bot-message':{
     const {identity,...message}=command.payload;
     result=new BotMessages(this.store,()=>this.core.now(),()=>crypto.randomUUID()).post(identity,message,this.lifecycle);
+    break;
+   }
+   case 'pass-turn':{
+    const {identity,...input}=command.payload;
+    result=this.core.roomTurns.pass(identity,input,this.lifecycle);
     break;
    }
    case 'steer-pending':{
@@ -727,7 +732,7 @@ export class PersonalControl extends DurableObject<Env> {
    'STALE_EPOCH','Credential is not bound to the active warm generation.',409);
   const manifestFor=(runId:string):WarmManifest|undefined=>generation.authority.admissions.find(item=>item.run_id===runId);
   if(mode==='task'){
-   requireThat(type==='agent-routines'||type==='agent-skill'||type==='bot-message','FORBIDDEN','Warm task credential cannot reach this route.',403);
+   requireThat(type==='agent-routines'||type==='agent-skill'||type==='bot-message'||type==='pass-turn','FORBIDDEN','Warm task credential cannot reach this route.',403);
    const task=authority as WarmTaskGrant;
    const p=command.payload as {identity?:{epoch?:number;boot_id?:string};run_id?:unknown;attempt?:unknown};
    requireThat(p.identity?.epoch===generation.epoch&&p.identity.boot_id?.toLowerCase()===generation.boot_id,'STALE_EPOCH','Runtime payload is not bound to the active generation.',409);
@@ -735,7 +740,7 @@ export class PersonalControl extends DurableObject<Env> {
    requireThat(manifestFor(task.run_id)?.manifest_sha256===task.manifest_sha256,'STALE_EPOCH','Task credential is not bound to an admitted manifest.',409);
    return this.execute(command,true);
   }
-  requireThat(['boot','ready','claim','heartbeat','submitted','coordinator-release','complete','status','output-preview','bot-message','token-usage','steer-pending'].includes(type),
+  requireThat(['boot','ready','claim','heartbeat','submitted','coordinator-release','complete','status','output-preview','bot-message','pass-turn','token-usage','steer-pending'].includes(type),
    'FORBIDDEN','Warm host credential cannot reach this route.',403);
   if(type==='boot'){
    requireThat(state.phase==='BOOTING','STALE_EPOCH','No boot is expected.',409);
@@ -841,7 +846,7 @@ export class PersonalControl extends DurableObject<Env> {
   const check=(runId:unknown,attempt:unknown)=>requireThat(runId&&typeof runId==='string'&&admitted.has(runId)&&attempt===1,
    'FORBIDDEN','Background credential cannot address another run.',403);
   if(mode==='task'){
-   requireThat(type==='agent-routines'||type==='agent-skill'||type==='bot-message','FORBIDDEN','Background task credential cannot reach this route.',403);
+   requireThat(type==='agent-routines'||type==='agent-skill'||type==='bot-message'||type==='pass-turn','FORBIDDEN','Background task credential cannot reach this route.',403);
    const task=authority as BackgroundTaskGrant;
    const p=command.payload as {identity?:{epoch?:number;boot_id?:string};run_id?:unknown;attempt?:unknown};
    requireThat(p.identity?.epoch===generation.epoch&&p.identity.boot_id?.toLowerCase()===generation.boot_id,'STALE_EPOCH','Runtime payload is not bound to the active generation.',409);
@@ -849,7 +854,7 @@ export class PersonalControl extends DurableObject<Env> {
    requireThat(manifestFor(task.run_id)?.manifest_sha256===task.manifest_sha256,'STALE_EPOCH','Task credential is not bound to an admitted manifest.',409);
    return this.execute(command,true);
   }
-  requireThat(['boot','ready','claim','heartbeat','submitted','coordinator-release','complete','status','output-preview','bot-message','token-usage','steer-pending','steer-result','native-child'].includes(type),
+  requireThat(['boot','ready','claim','heartbeat','submitted','coordinator-release','complete','status','output-preview','bot-message','pass-turn','token-usage','steer-pending','steer-result','native-child'].includes(type),
    'FORBIDDEN','Background host credential cannot reach this route.',403);
   if(type==='boot'){
    requireThat(state.phase==='BOOTING','STALE_EPOCH','No boot is expected.',409);

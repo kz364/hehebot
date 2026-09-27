@@ -22,6 +22,8 @@ export function legacyRuns(db:DatabaseSync):void {
  db.exec('BEGIN; PRAGMA defer_foreign_keys=ON');
  try{
   db.exec('DROP TABLE IF EXISTS bot_messages');
+  // V9 (v19): room_turn_log/passes/pending did not exist pre-v19 either.
+  db.exec('DROP TABLE IF EXISTS room_turn_pending; DROP TABLE IF EXISTS room_turn_passes; DROP TABLE IF EXISTS room_turn_log');
   const indexes=db.prepare("SELECT sql FROM sqlite_schema WHERE type='index' AND tbl_name='runs' AND sql IS NOT NULL").all() as {sql:string}[];
   db.exec('CREATE TABLE legacy_runs_rows AS SELECT id,command_id,occurrence_id,persona_id,routine_id,context_json,role,parent_run_id,title,status,current_attempt,error_code,checkpoint_json,created_at,updated_at FROM runs');
   db.exec('DROP TABLE runs');db.exec(legacyRunsSql);

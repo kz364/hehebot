@@ -10,6 +10,15 @@ const MAX_TEXT_BYTES = 32768;
 const MAX_PER_ATTEMPT = 20;
 const ACTIVE_STATUSES = ['claimed', 'running', 'finishing', 'cancelling'];
 
+/** V9 (ARCHITECTURE_V2 A8): the conversation a run's hehebot_send_message/
+ * final_text lands in. Read only from the run's own admitted context_json --
+ * never from a model-supplied argument -- so room targeting cannot be spoofed.
+ * A run with no room_id (the overwhelming majority) keeps posting to the
+ * bot's own persona conversation, unchanged. */
+export function botMessageConversation(store: Store, runId: string, personaId: string): string {
+ const row = store.db.all<{ room_id: string | null }>("SELECT json_extract(context_json,'$.room_id') AS room_id FROM runs WHERE id=?", runId)[0];
+ return row?.room_id ?? personaId;
+}
 /** Shared append used by the `hehebot_send_message` tool path and the
  * lifecycle.complete() final_text fallback. A committed bot.message is final:
  * neither caller retracts or edits it afterwards. */
@@ -20,7 +29,8 @@ export function appendBotMessageEvent(
 ): { event_id: string; sequence: number } {
  const eventId = uuid();
  const payload: BotMessagePayload = { text, run_id: run.id, attempt, task_run_id: run.role === 'background' ? run.id : null, origin, reply_to_event_id: replyToEventId };
- const sequence = store.event(eventId, run.persona_id, 'bot.message', run.persona_id, run.id, payload, now);
+ const conversationId = botMessageConversation(store, run.id, run.persona_id);
+ const sequence = store.event(eventId, conversationId, 'bot.message', run.persona_id, run.id, payload, now);
  store.db.exec('INSERT INTO bot_messages(message_key,run_id,attempt,event_sequence,origin,created_at) VALUES(?,?,?,?,?,?)', messageKey, run.id, attempt, sequence, origin, now);
  return { event_id: eventId, sequence };
 }

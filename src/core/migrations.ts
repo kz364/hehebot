@@ -228,5 +228,41 @@ export function migrateApplication(db:Database,now:string):void {
   }
  });
  if(version===17)version=18;
- requireThat([16,17,18].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===18)db.transaction(()=>{
+  // V9 (ARCHITECTURE_V2 A8): the bounded room turn scheduler's own bookkeeping.
+  // room_turn_log is the append-only ledger of scheduled/settled/skipped turns
+  // (one row per turn attempt at a member; a SKIPPED row never gets a run_id).
+  // It is what hop depth, per-owner-message contribution counts and "is a turn
+  // for this room currently in flight" are computed from -- never by parsing
+  // context_json in SQL. room_turn_passes is bot_messages' sibling: the
+  // dedupe/marker table for the explicit hehebot_pass_turn tool call.
+  // Guarded/idempotent like the v16 bot_messages migration: a downstream test
+  // or deployment may re-run this step while the tables already exist.
+  const logSql=`CREATE TABLE room_turn_log (
+ id TEXT PRIMARY KEY, room_id TEXT NOT NULL, member_id TEXT NOT NULL, root_cause_id TEXT NOT NULL,
+ hop INTEGER NOT NULL, run_id TEXT, outcome TEXT CHECK(outcome IS NULL OR outcome IN ('SENT','PASS','SKIPPED','TIMEOUT','ERROR')),
+ created_at TEXT NOT NULL
+)`;
+  db.exec(logSql.replace('CREATE TABLE','CREATE TABLE IF NOT EXISTS'));
+  requireThat(db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='room_turn_log'")[0]?.sql===logSql,
+   'SCHEMA_MISMATCH','Room turn log schema needs explicit reconciliation.',503);
+  db.exec('CREATE INDEX IF NOT EXISTS room_turn_log_room ON room_turn_log(room_id,created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS room_turn_log_cause ON room_turn_log(root_cause_id)');
+  const passesSql=`CREATE TABLE room_turn_passes (
+ run_id TEXT NOT NULL, attempt INTEGER NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(run_id,attempt)
+)`;
+  db.exec(passesSql.replace('CREATE TABLE','CREATE TABLE IF NOT EXISTS'));
+  requireThat(db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='room_turn_passes'")[0]?.sql===passesSql,
+   'SCHEMA_MISMATCH','Room turn passes schema needs explicit reconciliation.',503);
+  const pendingSql=`CREATE TABLE room_turn_pending (
+ room_id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('owner','candidate')),
+ member_id TEXT, text TEXT, root_cause_id TEXT NOT NULL, hop INTEGER NOT NULL, created_at TEXT NOT NULL
+)`;
+  db.exec(pendingSql.replace('CREATE TABLE','CREATE TABLE IF NOT EXISTS'));
+  requireThat(db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='room_turn_pending'")[0]?.sql===pendingSql,
+   'SCHEMA_MISMATCH','Room turn pending schema needs explicit reconciliation.',503);
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(19,?)',now);
+ });
+ if(version===18)version=19;
+ requireThat([16,17,18,19].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

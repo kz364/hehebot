@@ -632,6 +632,15 @@ export class LifecycleCore {
    if(run.occurrence_id&&result.status!=='waiting')this.store.db.exec('UPDATE occurrences SET status=? WHERE id=?',result.status==='completed'?'completed':'failed',run.occurrence_id);
    // Settlement and follow-up enqueueing do not change id, role or current_attempt.
    if(result.status==='failed'&&result.error_code)this.scheduleRetry(run,result.error_code);
+   // V9 (ARCHITECTURE_V2 A8): record the outcome of a scheduled room turn and
+   // decide the next one, only once this attempt is genuinely terminal (not
+   // requeued 'waiting' by scheduleRetry above, and not the durable-checkpoint
+   // 'waiting' a native turn may report directly).
+   if(this.core.options.roomTurns){
+    const settled=this.store.db.all<{context_json:string;status:string}>('SELECT context_json,status FROM runs WHERE id=?',runId)[0];
+    const roomTurn=settled&&settled.status!=='waiting'?(JSON.parse(settled.context_json) as ContextSnapshot).room_turn:undefined;
+    if(roomTurn)this.core.roomTurnSettled({id:run.id,persona_id:run.persona_id},roomTurn,attempt,{status:result.status,error_code:result.error_code});
+   }
    this.touch();
   });
  }
@@ -661,6 +670,12 @@ export class LifecycleCore {
  private scheduleRetry(run:Pick<Run,'id'|'role'|'current_attempt'>,reason:string):void {
   if(this.core.ownerAlpha.policy)return;
   if(run.role==='background'||run.current_attempt>=3 || !['TEMPORARY_UNAVAILABLE','DEADLINE_EXCEEDED','STALE_EPOCH','CANCEL_UNCONFIRMED'].includes(reason))return;
+  // V9 (ARCHITECTURE_V2 A8): a scheduled room turn always settles as a
+  // terminal outcome (TIMEOUT/ERROR) for RoomTurns to act on; it is never
+  // silently retried by this generic backoff, which would re-run the same
+  // member's turn outside the scheduler's hop/contribution bookkeeping.
+  if(this.core.options.roomTurns&&this.store.db.all<{marker:number}>(
+   "SELECT json_extract(context_json,'$.room_turn') IS NOT NULL AS marker FROM runs WHERE id=?",run.id)[0]?.marker===1)return;
   if(this.core.questions.list().some(question=>question.run_id===run.id))return;
   // Receipt presence follows the stored TEXT's truthiness, not its JSON value.
   if(this.store.db.all(`SELECT id FROM effects WHERE run_id=? AND (
@@ -751,6 +766,16 @@ export class LifecycleCore {
    if(run.role==='background'&&run.parent_run_id&&
     this.store.db.all<{marker:number|null}>("SELECT json_extract(context_json,'$.coordinator_task') AS marker FROM runs WHERE id=?",id)[0]?.marker===1)
     this.core.enqueueTaskEvent({id,persona_id:run.persona_id,parent_run_id:run.parent_run_id,title:run.title},'interrupted',`Reason: ${errorCode}.`);
+   // V9 (ARCHITECTURE_V2 A8): a room-turn run fenced into 'interrupted' (and not
+   // re-seeded by scheduleRetry above) is a TIMEOUT/ERROR outcome for the
+   // scheduler, exactly like an ordinary failed completion. Skip a run
+   // scheduleRetry actually requeued ('waiting'/'queued'): not terminal yet.
+   if(this.core.options.roomTurns){
+    const settled=this.store.db.all<{context_json:string;status:string}>('SELECT context_json,status FROM runs WHERE id=?',id)[0];
+    const roomTurn=settled&&settled.status==='interrupted'?(JSON.parse(settled.context_json) as ContextSnapshot).room_turn:undefined;
+    if(roomTurn)this.core.roomTurnSettled({id,persona_id:run.persona_id},roomTurn,run.current_attempt,
+     {status:'failed',error_code:['STALE_EPOCH','GENERATION_ADVANCED'].includes(errorCode)?'DEADLINE_EXCEEDED':errorCode});
+   }
   }
  }
  /** Public fence for one generation `(epoch,boot_id)`: every non-terminal run

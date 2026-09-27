@@ -31,6 +31,21 @@ function coordinatorGuidance(allowedTools = [], grants = []) {
     ...lines, 'When a background task completes, fails, is cancelled or needs input, you are woken with its result; relay it to the owner via hehebot_send_message. ' +
     'If the wake says the task already posted its result to the owner, do not repeat it and do not send a bare acknowledgement such as "Done."; send nothing unless you have something to add.'].join(' ');
 }
+// V9 (ARCHITECTURE_V2 A8): this run is one scheduled turn in a bounded group
+// room, not an ordinary persona conversation. peers/limits/is_winding_down
+// come straight from context.room_turn (the Worker's own envelope); nothing
+// here is model-supplied. Composed regardless of whether this persona also
+// has task tools -- room-turn guidance is not conditioned on TASK_TOOL_GUIDANCE.
+function roomTurnGuidance(roomTurn) {
+  const peers = roomTurn.peers.map(p => p.name).join(', ') || 'no one else';
+  return [
+    `This is one turn in a group room. Other members: ${peers}. Only you were asked for this turn; wait to be asked again before speaking further.`,
+    'Reply into the room only through hehebot_send_message. To bring in a specific other member, name them (or @mention them) in your message; the Worker schedules their turn next, not you.',
+    'If you have nothing useful to add, call hehebot_pass_turn instead of sending a message; never send a bare acknowledgement.',
+    roomTurn.is_winding_down ? 'This is the last turn the scheduler will grant for this exchange (hop or contribution limit reached); say what matters now or pass.' : null,
+    'Never loop: do not re-address a member who already replied without new information, and do not repeat what was already said in this room.',
+  ].filter(Boolean).join(' ');
+}
 // V4b (ARCHITECTURE_V2 A4, docs/AGENT_MODEL.md): concise instructions composed
 // only into a coordinator task run's own isolated turn (never the coordinator's).
 function taskExecutorGuidance(personaName, grants = []) {
@@ -214,7 +229,8 @@ export class ExecutionBridge {
           ...(claim.run.current_attempt > 1 && claim.run.checkpoint_json
             ? { durable_checkpoint: JSON.parse(claim.run.checkpoint_json) } : {}),
           ...(claim.run.role !== 'background' && claim.role === undefined
-            ? (guidance => guidance ? { coordinator_guidance: guidance } : {})(coordinatorGuidance(persona.allowedTools, context.persona?.body?.tool_policy_ids ?? []))
+            ? (guidance => guidance ? { coordinator_guidance: guidance } : {})(
+                context.room_turn ? roomTurnGuidance(context.room_turn) : coordinatorGuidance(persona.allowedTools, context.persona?.body?.tool_policy_ids ?? []))
             : {}),
           ...(claim.run.role === 'background' && claim.role === undefined && context.coordinator_task
             ? { task_guidance: taskExecutorGuidance(persona.agentId, context.persona?.body?.tool_policy_ids ?? []) } : {}) }),

@@ -73,7 +73,7 @@ beforeEach(async () => {
     INSERT INTO flight_restore_deadlines VALUES('leg-83',2,'2026-09-20T21:00:00.000Z','Asia/Jakarta','2026-09-19T21:00:00.000Z','routine-29','source-43','outcome_unknown','child-83','{"observation":"${canary}"}');
   `);
   wire = { format: 'hehebot-control-export', version: 1, createdAt: originalTime,
-    schemaSha256: '6fedcfb0c86cd8efe3a307a73247892408875c7a818f68a777ee93c3a2b97076', schemaVersions: [18], tables: tables(db) };
+    schemaSha256: '6cd52fd465a1785c90154eb461f91fc375e9ad31bbcc7529e0d8c2b636b1d524', schemaVersions: [19], tables: tables(db) };
   await save();
 });
 afterEach(async () => { db.close(); await rm(directory, { recursive: true, force: true }); });
@@ -239,7 +239,7 @@ it.each([9, 10, 11, 12, 13, 14, 15, 16])('preserves schema%s migration history a
     db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision');
     wire.schemaSha256 = '8bd40b2cb56bf706a72006fe4a54cf310d1620ec3c0d408af4429d5cf2c5947a';
   }
-  db.prepare('UPDATE schema_versions SET version=? WHERE version=18').run(version);
+  db.prepare('UPDATE schema_versions SET version=? WHERE version=19').run(version);
   if (version < 11) {
     const links = db.prepare('SELECT * FROM native_task_links').all();
     db.exec('DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');

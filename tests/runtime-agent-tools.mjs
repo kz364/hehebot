@@ -249,6 +249,40 @@ test('allowedTools is a host allowlist and cannot name owner-only commands', asy
   assert.throws(() => createAgentToolsHandler({ controlClient: { request() {} }, config: { ...config, allowedTools: ['skill.review'] }, contracts }), /INVALID_CONFIGURATION/);
 });
 
+test('hehebot_pass_turn sends a bare pass-turn RPC keyed to the host run/attempt, tolerating an optional reason', async () => {
+  const requests = [];
+  const { handle } = fixture({ request: async (...args) => { requests.push(args); return { accepted: true }; } });
+  const message = { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'hehebot_pass_turn', arguments: {} } };
+  assert.deepEqual(JSON.parse((await handle(message)).result.content[0].text), { passed: true });
+  assert.deepEqual(requests, [['pass-turn', { identity: config.identity, run_id: config.runId, attempt: config.attempt }]]);
+  message.params.arguments = { reason: 'Nothing useful to add.' };
+  assert.deepEqual(JSON.parse((await handle(message)).result.content[0].text), { passed: true });
+  assert.equal(requests.length, 2);
+  // The model cannot supply its own run/attempt/identity -- extra properties are rejected locally, never reaching the backend.
+  for (const arguments_ of [{ run_id: uuid(77) }, { attempt: 9 }, { identity: { epoch: 99 } }, { reason: 'x'.repeat(2001) }]) {
+    message.params.arguments = arguments_;
+    assert.equal((await handle(message)).error.code, -32602);
+  }
+  assert.equal(requests.length, 2);
+});
+
+test('hehebot_pass_turn surfaces a backend rejection as a tool error, never a crash, and never leaks backend detail', async () => {
+  const { handle } = fixture({ request: async () => { throw new Error('token and backend detail'); } });
+  const message = { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'hehebot_pass_turn', arguments: {} } };
+  const response = await handle(message);
+  assert.equal(response.result.isError, true);
+  assert.match(response.result.content[0].text, /^hehebot_pass_turn failed: AGENT_TOOL_FAILED\. This is only available on a scheduled room turn\.$/);
+  assert.equal(JSON.stringify(response).includes('token'), false);
+});
+
+test('hehebot_pass_turn rejects a malformed accept receipt from the backend as a tool error', async () => {
+  const { handle } = fixture({ request: async () => ({ accepted: false }) });
+  const message = { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'hehebot_pass_turn', arguments: {} } };
+  const response = await handle(message);
+  assert.equal(response.result.isError, true);
+  assert.match(response.result.content[0].text, /^hehebot_pass_turn failed: AGENT_TOOL_FAILED\./);
+});
+
 test('real CLI accepts private grants but rejects symlinks and oversized frames without leaking secrets', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'hehebot-tools-cli-'));
   try {

@@ -1,12 +1,12 @@
-const TYPES = Object.freeze(['abandon', 'progress', 'browser-takeover', 'whatsapp-read-authorize', 'agent-command', 'agent-routines', 'agent-skill', 'agent-skill-search', 'agent-task-list', 'agent-task-detail', 'question-record', 'question-take', 'question-resolve', 'output-preview', 'bot-message', 'token-usage', 'metering', 'steer-pending', 'steer-result', 'budget-report', 'flight-register', 'flight-confirm', 'flight-reconcile', 'native-child', 'resource-acquire', 'resource-release', 'status', 'boot', 'ready', 'memory-prepare', 'memory-read-prepare', 'memory-read-reserve', 'claim', 'heartbeat', 'submitted', 'coordinator-release', 'complete', 'prepare-sleep', 'commit-sleep', 'effect-intent', 'effect-result', 'root-child-effect-intent', 'root-child-effect-result', 'node-request', 'node-result']);
+const TYPES = Object.freeze(['abandon', 'progress', 'browser-takeover', 'whatsapp-read-authorize', 'agent-command', 'agent-routines', 'agent-skill', 'agent-skill-search', 'agent-task-list', 'agent-task-detail', 'question-record', 'question-take', 'question-resolve', 'output-preview', 'bot-message', 'pass-turn', 'token-usage', 'metering', 'steer-pending', 'steer-result', 'budget-report', 'flight-register', 'flight-confirm', 'flight-reconcile', 'native-child', 'resource-acquire', 'resource-release', 'status', 'boot', 'ready', 'memory-prepare', 'memory-read-prepare', 'memory-read-reserve', 'claim', 'heartbeat', 'submitted', 'coordinator-release', 'complete', 'prepare-sleep', 'commit-sleep', 'effect-intent', 'effect-result', 'root-child-effect-intent', 'root-child-effect-result', 'node-request', 'node-result']);
 export const RUNTIME_ENDPOINT_TYPES = TYPES;
 const MANAGER_TYPES = Object.freeze(['manifest', 'retirement']);
 const WARM_MANAGER_TYPES = Object.freeze(['generation', 'retirement']);
-const WARM_HOST_TYPES = Object.freeze(['boot', 'ready', 'claim', 'heartbeat', 'submitted', 'coordinator-release', 'complete', 'status', 'output-preview', 'bot-message', 'token-usage', 'steer-pending']);
-const WARM_TASK_TYPES = Object.freeze(['agent-routines', 'agent-skill', 'bot-message']);
+const WARM_HOST_TYPES = Object.freeze(['boot', 'ready', 'claim', 'heartbeat', 'submitted', 'coordinator-release', 'complete', 'status', 'output-preview', 'bot-message', 'pass-turn', 'token-usage', 'steer-pending']);
+const WARM_TASK_TYPES = Object.freeze(['agent-routines', 'agent-skill', 'bot-message', 'pass-turn']);
 const BACKGROUND_MANAGER_TYPES = Object.freeze(['generation', 'retirement']);
-const BACKGROUND_HOST_TYPES = Object.freeze(['boot', 'ready', 'claim', 'heartbeat', 'submitted', 'coordinator-release', 'complete', 'status', 'output-preview', 'bot-message', 'token-usage', 'steer-pending', 'steer-result', 'native-child']);
-const BACKGROUND_TASK_TYPES = Object.freeze(['agent-routines', 'agent-skill', 'bot-message']);
+const BACKGROUND_HOST_TYPES = Object.freeze(['boot', 'ready', 'claim', 'heartbeat', 'submitted', 'coordinator-release', 'complete', 'status', 'output-preview', 'bot-message', 'pass-turn', 'token-usage', 'steer-pending', 'steer-result', 'native-child']);
+const BACKGROUND_TASK_TYPES = Object.freeze(['agent-routines', 'agent-skill', 'bot-message', 'pass-turn']);
 /** Route selection is not authentication; the Worker checks separate keys and
  * token kinds per principal. Warm and background principals never widen legacy
  * route meaning, and never reach each other's routes. */

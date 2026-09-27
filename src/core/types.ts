@@ -21,6 +21,18 @@ export type SkillBody = { name:string; description:string; when_to_use:string; i
 export type SkillProvenance = { kind:'owner'|'task'|'notes'|'file'|'url'|'import'|'model'; source_ref:string };
 export type SkillProposal = { proposal_id:string; skill_id:string; expected_skill_revision:number; body:SkillBody; provenance:SkillProvenance; executable_files_changed:boolean };
 export type RoomPublish = { room_id: string; kind: 'context_update' | 'action_request' | 'message'; recipient_ids: string[]; text: string; references: { kind: string; id: string; revision: number }[]; cause_id: string };
+// V9 (ARCHITECTURE_V2 A8): the Worker-composed turn envelope handed to exactly
+// one room member at a time. new_messages is a bounded (count/bytes) projection
+// of room events since this member's last turn (the same consumer_cursors
+// cursor A6's room context page already advances at claim time); it is not a
+// second source of truth. Never accepted from the model -- only ever written
+// by RoomTurns from the run's own admitted context.
+export type RoomTurnMessage = { sequence: number; actor_id: string; type: string; text: string };
+export type RoomTurnEnvelope = {
+  room_id: string; member_id: string; new_messages: RoomTurnMessage[]; peers: { id: string; name: string }[];
+  deadline_ms: number; is_winding_down: boolean; root_cause_id: string; hop: number;
+};
+export type RoomTurnOutcome = 'SENT' | 'PASS' | 'SKIPPED' | 'TIMEOUT' | 'ERROR';
 export type PayloadMap = {
  'owner-alpha.activate':{transition_id:string;envelope_sha256:string};
  'run.recover':{run_id:string;expected_attempt:number;release_resources:true};
@@ -64,6 +76,11 @@ export type ContextSnapshot = {memory_budget?:import('./memory-context').MemoryB
  // from the pre-existing native-child parent/child task hierarchy which also
  // uses role='background'+parent_run_id but must never wake a coordinator.
  coordinator_task?:true;
+ // V9 (ARCHITECTURE_V2 A8): present only on a coordinator run that is one
+ // scheduled room turn. Read by execution-bridge.mjs for turn guidance and by
+ // BotMessages/RoomTurns for room-targeted delivery and outcome recording.
+ // Never accepted from the model; only RoomTurns writes it via enqueue().
+ room_turn?:RoomTurnEnvelope;
  schema_version: 1; persona: StoredObject<PersonaPut>; routine: StoredObject<RoutinePut> | null; memories: MemoryContextEntry[]; skills:StoredObject<SkillBody>[]; scope_key: string; instruction: string; room_id: string | null; context_events: TimelineEvent[]; authorization_policy_ids: string[] };
 export type TimelineEvent = { sequence: number; id: string; conversation_id: string | null; type: string; actor_id: string; cause_id: string | null; payload: Record<string, unknown>; created_at: string };
 export type Options = { testCampaignGrant?:TestCampaignGrant;ownerAlphaBootstrap?:OwnerAlphaBootstrapConfig;ownerAlphaWarm?:import('./owner-alpha-warm').WarmGenerationConfig;ownerAlphaBackground?:import('./owner-alpha-background').BackgroundGenerationConfig;ownerAlpha?:OwnerAlphaPolicy;ownerAlphaSuccessor?:OwnerAlphaSuccessor;ownerBindingSha256?:string;whatsappReadPolicies?:WhatsAppReadPolicies;delegations?:Record<string,string[]>;executionEnabled: boolean; actionPolicyIds: string[]; toolPolicyIds: string[]; now: () => Date; uuid: () => string;
@@ -74,4 +91,8 @@ export type Options = { testCampaignGrant?:TestCampaignGrant;ownerAlphaBootstrap
  // V-Backups: whether nightly R2 backup is wired (BACKUPS bucket binding and
  // HEHEBOT_BACKUP_AGE_RECIPIENT var both set). Off by default; state() only
  // reports a backup summary when this is true.
- backupsConfigured?: boolean; meteringRates?: import('./metering').MeteringRates };
+ backupsConfigured?: boolean; meteringRates?: import('./metering').MeteringRates;
+ // V9 (ARCHITECTURE_V2 A8): gates the bounded room turn scheduler. Off by
+ // default so every pre-existing room (message.send to a room, room.publish
+ // action_request) test keeps its prior one-shot-enqueue behavior.
+ roomTurns?: boolean };
