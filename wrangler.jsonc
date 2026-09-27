@@ -107,7 +107,7 @@
         "HEHEBOT_BOOT_DEADLINE_MS": "15000",
         "HEHEBOT_STUCK_POLICY": "{\"no_progress_ms\":300000,\"nudge_grace_ms\":120000}",
         "HEHEBOT_SUCCESSOR_BACKOFF": "{\"base_ms\":5000,\"max_ms\":300000,\"notify_after\":3}",
-        "HEHEBOT_BACKUP_AGE_RECIPIENT": ""
+        "HEHEBOT_BACKUP_AGE_RECIPIENT": "age1mtf532qyqt3st32ug8892tsd8cg7c5pmelp74058laramnrdyylqnemlc8"
       },
       "durable_objects": {
         "bindings": [
@@ -117,12 +117,6 @@
           }
         ]
       },
-      "r2_buckets": [
-        {
-          "binding": "BACKUPS",
-          "bucket_name": "hehebot-backups"
-        }
-      ],
       "triggers": {
         "crons": [
           "0 20 * * *"
