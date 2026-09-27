@@ -20,6 +20,7 @@ const schemaPins = {
   16: 'ce7ce5e8bf6f0d2574a42eb90653900e79b67c240b55bdd8b12acea29874cb80',
   17: 'b66a8db8aa4b008053201a56ea680ff51f628d13619354f75414abec70336664',
   18: '6fedcfb0c86cd8efe3a307a73247892408875c7a818f68a777ee93c3a2b97076',
+  19: '444bb7e91df0388dff09520398bc9cc24e3b5c7347f9244983a79a6521228f10',
 };
 const maxManifest = 65536;
 const fail = code => { throw new Error(code); };

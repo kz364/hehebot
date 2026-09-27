@@ -7,7 +7,7 @@ import type {Database,SqlValue} from '../src/core/store';
 import {legacyOccurrencesSql} from './legacy-occurrences';
 
 const schema=readFileSync(new URL('../DB/schema.sql',import.meta.url),'utf8');
-const prior=schema.replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (18,','VALUES (12,').replace(/^CREATE INDEX (objects_memory_scope|runs_parent|operations_run_status|effects_run_status|resource_locks_run|bot_messages_run_attempt) .*\n/gm,'').replace(/\n-- Committed bot messages[\s\S]*?CREATE TABLE bot_messages \([\s\S]*?\n\);\n/,'\n');
+const prior=schema.replace(/CREATE TABLE "occurrences" \([\s\S]*?\n\);/,legacyOccurrencesSql+';').replace('VALUES (19,','VALUES (12,').replace(/^CREATE INDEX (objects_memory_scope|runs_parent|operations_run_status|effects_run_status|resource_locks_run|bot_messages_run_attempt) .*\n/gm,'').replace(/\n-- Committed bot messages[\s\S]*?CREATE TABLE bot_messages \([\s\S]*?\n\);\n/,'\n');
 const schemaRows=(sqlite:DatabaseSync)=>sqlite.prepare("SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name").all();
 function fixture(migrated=true){
  const sqlite=new DatabaseSync(':memory:');sqlite.exec(migrated?prior:schema);
@@ -31,7 +31,7 @@ describe('v13 occurrence origin migration',()=>{
    expect(db.all('SELECT * FROM occurrences')).toEqual(occurrences.map(row=>({...row as object,origin:'scheduled'})));
    expect(db.all('SELECT * FROM runs')).toEqual(runs);expect(db.all('SELECT * FROM attempts')).toEqual(attempts);
    expect(schemaRows(sqlite)).toEqual(schemaRows(fresh));
-   expect(createHash('sha256').update(JSON.stringify(schemaRows(sqlite))).digest('hex')).toBe('6fedcfb0c86cd8efe3a307a73247892408875c7a818f68a777ee93c3a2b97076');
+   expect(createHash('sha256').update(JSON.stringify(schemaRows(sqlite))).digest('hex')).toBe('444bb7e91df0388dff09520398bc9cc24e3b5c7347f9244983a79a6521228f10');
    expect(db.all('PRAGMA foreign_key_check')).toEqual([]);
    expect(db.all('PRAGMA foreign_keys')).toEqual([{foreign_keys:1}]);
    expect(db.all('PRAGMA defer_foreign_keys')).toEqual([{defer_foreign_keys:0}]);

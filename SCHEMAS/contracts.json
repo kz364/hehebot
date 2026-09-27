@@ -89,6 +89,24 @@
       "type": "object", "additionalProperties": false,
       "properties": { "schema_version": { "const": 1 }, "type": { "const": "skill.restore" }, "payload": { "type": "object", "additionalProperties": false, "properties": { "proposal_id": { "$ref": "#/$defs/uuid" }, "skill_id": { "$ref": "#/$defs/uuid" }, "expected_skill_revision": { "type": "integer", "minimum": 1 }, "source_revision": { "type": "integer", "minimum": 1 } }, "required": ["proposal_id","skill_id","expected_skill_revision","source_revision"] } },
       "required": ["schema_version","type","payload"]
+    },
+    "pushSubscribe": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "schema_version": { "const": 1 }, "type": { "const": "push.subscribe" }, "payload": { "type": "object", "additionalProperties": false, "properties": {
+        "endpoint": { "type": "string", "format": "uri", "pattern": "^https://", "minLength": 1, "maxLength": 2048 },
+        "keys": { "type": "object", "additionalProperties": false, "properties": {
+          "p256dh": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,256}$" },
+          "auth": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" }
+        }, "required": ["p256dh","auth"] }
+      }, "required": ["endpoint","keys"] } },
+      "required": ["schema_version","type","payload"]
+    },
+    "pushUnsubscribe": {
+      "type": "object", "additionalProperties": false,
+      "properties": { "schema_version": { "const": 1 }, "type": { "const": "push.unsubscribe" }, "payload": { "type": "object", "additionalProperties": false, "properties": {
+        "endpoint": { "type": "string", "format": "uri", "pattern": "^https://", "minLength": 1, "maxLength": 2048 }
+      }, "required": ["endpoint"] } },
+      "required": ["schema_version","type","payload"]
     }
   },
   "oneOf": [
@@ -250,6 +268,8 @@
     { "$ref": "#/$defs/skillRun" },
     { "$ref": "#/$defs/skillDelete" },
     { "$ref": "#/$defs/skillRestore" },
+    { "$ref": "#/$defs/pushSubscribe" },
+    { "$ref": "#/$defs/pushUnsubscribe" },
     {
       "type": "object",
       "additionalProperties": false,

@@ -42,7 +42,7 @@ const protectedRows = () => db.all<{ name: string }>("SELECT name FROM sqlite_sc
   .map(({ name }) => [name, db.all(`SELECT * FROM "${name}" ORDER BY rowid`)]);
 beforeEach(() => {
   db = new RosterDatabase(); store = new Store(db); ledger = new RosterLedger(store, () => now);
-  expect(db.all('SELECT version FROM schema_versions')).toEqual([{ version: 18 }]);
+  expect(db.all('SELECT version FROM schema_versions')).toEqual([{ version: 19 }]);
   for (let n = 1; n <= 4; n++) store.put(id(n), 'persona', { name: `Persona ${n}`, archived: n === 4 }, 0, 'owner', now);
   store.put(id(100), 'routine', { persona_id: id(3), enabled: true }, 0, 'owner', now);
   db.exec("INSERT INTO runs(id,persona_id,routine_id,context_json,status,current_attempt,created_at,updated_at) VALUES(?,?,?,'{}','running',1,?,?)", id(200), id(3), id(100), now, now);

@@ -9,7 +9,7 @@ import { snapshotControl, verifyControl } from './backup-control.mjs';
 
 export const MAX_EXPORT_BYTES = 4 * 1024 * 1024;
 export const MAX_EXPORT_ROWS = 10000;
-const sqlHash = 'bf85f5e3aaa81390b0f7d6f1401d85e909ddab9319cbeec0530ad16f00e7d005';
+const sqlHash = 'aff38b4b825a521235299f9ceeae6e13f5c6b60a60d10ff0278c3744fb6510fa';
 const schemaPins = {
   9: '15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c',
   10: '682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4',
@@ -21,6 +21,7 @@ const schemaPins = {
   16: 'ce7ce5e8bf6f0d2574a42eb90653900e79b67c240b55bdd8b12acea29874cb80',
   17: 'b66a8db8aa4b008053201a56ea680ff51f628d13619354f75414abec70336664',
   18: '6fedcfb0c86cd8efe3a307a73247892408875c7a818f68a777ee93c3a2b97076',
+  19: '444bb7e91df0388dff09520398bc9cc24e3b5c7347f9244983a79a6521228f10',
 };
 const hash = value => createHash('sha256').update(value).digest('hex');
 /** @returns {never} */
@@ -116,7 +117,7 @@ export async function importControlExport(exportFile, snapshotDirectory) {
     const input = parseExport(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, size)));
     keys(input, ['format', 'version', 'createdAt', 'schemaSha256', 'schemaVersions', 'tables']);
     const latest = Array.isArray(input.schemaVersions) ? input.schemaVersions.at(-1) : null;
-    if (input.format !== 'hehebot-control-export' || input.version !== 1 || ![9, 10, 11, 12, 13, 14, 15, 16, 17, 18].includes(latest) || input.schemaSha256 !== schemaPins[latest] ||
+    if (input.format !== 'hehebot-control-export' || input.version !== 1 || ![9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].includes(latest) || input.schemaSha256 !== schemaPins[latest] ||
         input.schemaVersions.length < 1 || input.schemaVersions.length > latest || !input.schemaVersions.every((version, i) =>
           Number.isInteger(version) && version >= 1 && version <= latest && (!i || version > input.schemaVersions[i - 1])) ||
         typeof input.createdAt !== 'string' ||
@@ -132,6 +133,7 @@ export async function importControlExport(exportFile, snapshotDirectory) {
       db.exec(sql.toString('utf8'));
       // Reconstruct legacy snapshots without inventing receipts or upgrading
       // their history. Only this disposable, empty local staging DB is changed.
+      if (latest < 19) db.exec('DROP TABLE push_subscriptions; DROP TABLE push_throttle');
       if (latest < 18) db.exec(`PRAGMA foreign_keys=OFF; DROP TABLE runs; CREATE TABLE runs (
  id TEXT PRIMARY KEY, command_id TEXT REFERENCES commands(id), occurrence_id TEXT UNIQUE REFERENCES occurrences(id),
  persona_id TEXT NOT NULL REFERENCES objects(id), routine_id TEXT REFERENCES objects(id),
