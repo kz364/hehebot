@@ -268,6 +268,11 @@ export class LifecycleCore {
   requireThat(row,'REVISION_CONFLICT','Attempt is unavailable.');
   requireThat(row.epoch===identity.epoch&&row.boot_id===identity.boot_id,'STALE_EPOCH','Attempt belongs to a different executor.');
  }
+ /** Metering samples the whole process, not one attempt: only the epoch/boot/lease
+  * check applies, same as heartbeat. Allows BOOTING so sampling can start before claim. */
+ authorizeMetering(identity:Identity):void {
+  this.identity(identity,true);
+ }
  registerBoot(bootId:string):Identity {
   return this.store.db.transaction(()=>{
    if(this.core.ownerAlpha.policy&&this.get().phase==='STOPPED'){

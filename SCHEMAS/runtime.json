@@ -330,6 +330,59 @@
       "additionalProperties": false,
       "properties": {
         "type": {
+          "const": "metering"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "interval_seconds": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 3600
+            },
+            "cpu_seconds": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 14400
+            },
+            "gb_seconds": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 230400
+            },
+            "samples": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000
+            },
+            "cgroup_available": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "identity",
+            "interval_seconds",
+            "cpu_seconds",
+            "gb_seconds",
+            "samples",
+            "cgroup_available"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
           "const": "coordinator-release"
         },
         "payload": {

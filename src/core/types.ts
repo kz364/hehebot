@@ -74,4 +74,4 @@ export type Options = { testCampaignGrant?:TestCampaignGrant;ownerAlphaBootstrap
  // V-Backups: whether nightly R2 backup is wired (BACKUPS bucket binding and
  // HEHEBOT_BACKUP_AGE_RECIPIENT var both set). Off by default; state() only
  // reports a backup summary when this is true.
- backupsConfigured?: boolean };
+ backupsConfigured?: boolean; meteringRates?: import('./metering').MeteringRates };

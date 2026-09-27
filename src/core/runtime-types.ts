@@ -9,6 +9,7 @@ import type {SteeringTarget,SteeringOutcome} from './task-steering';
 import type {OutputPreview} from './output-preview';
 import type {BotMessageInput} from './bot-messages';
 import type {TokenUsageSnapshot} from './token-usage';
+import type {MeteringReport} from './metering';
 import type {NativeQuestionInput} from './native-questions';
 import type {WhatsAppReadRequest} from './whatsapp-access';
 import type {TextOnlyProfile} from './owner-alpha';
@@ -26,6 +27,7 @@ export type RuntimePayloads={
  'output-preview':Base & OutputPreview;
  'bot-message':Base & BotMessageInput;
  'token-usage':Base & TokenUsageSnapshot;
+ metering:Base & MeteringReport;
  'steer-pending':Base & {targets:SteeringTarget[]};
  'steer-result':Base & SteeringTarget & {command_id:string;status:SteeringOutcome};
  'budget-report':Base & Attempt & {report:BudgetReport};
