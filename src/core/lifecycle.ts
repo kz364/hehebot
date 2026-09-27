@@ -29,7 +29,9 @@ function operationTime(value:string):string {
 export class LifecycleCore {
  constructor(public store:Store,public core:ControlCore,private options:{idleMode?:boolean}={}){}
  get():Lifecycle{return this.store.db.all<Lifecycle>('SELECT * FROM lifecycle WHERE singleton=1')[0];}
- initialize(ref:RuntimeRef|Record<string,never>):void{this.store.db.exec("INSERT OR IGNORE INTO lifecycle(singleton,provider_ref_json,epoch,phase,desired_state,queue_sequence,wake_after_stop) VALUES(1,?,0,'STOPPED','STOP',0,0)",JSON.stringify(ref));this.core.ownerAlpha.initialize();}
+ initialize(ref:RuntimeRef|Record<string,never>):void{this.store.db.exec("INSERT OR IGNORE INTO lifecycle(singleton,provider_ref_json,epoch,phase,desired_state,queue_sequence,wake_after_stop) VALUES(1,?,0,'STOPPED','STOP',0,0)",JSON.stringify(ref));
+  // A never-started lifecycle adopts a runtime configured after first boot; any started one keeps its ref.
+  if(Object.keys(ref).length)this.store.db.exec("UPDATE lifecycle SET provider_ref_json=? WHERE singleton=1 AND provider_ref_json='{}' AND epoch=0 AND phase='STOPPED' AND boot_id IS NULL AND provider_operation_id IS NULL",JSON.stringify(ref));this.core.ownerAlpha.initialize();}
  activateOwnerAlphaSuccessor(command:Extract<Command,{type:'owner-alpha.activate'}>,ownerId:string,ownerCommandId:string):{owner_alpha_generation:{epoch:number;boot_id:string;transition_id:string}} {
   return this.activateGeneration(command,ownerId,ownerCommandId);
  }

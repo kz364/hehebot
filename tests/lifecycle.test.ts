@@ -968,3 +968,20 @@ describe('drain, stop and takeover races', () => {
     expect(f.db.all('SELECT status FROM effects WHERE run_id=?', children[2].id)).toEqual([{ status: 'outcome_unknown' }]);
   });
 });
+
+describe('runtime ref adoption', () => {
+  it('adopts a configured runtime only while the lifecycle has never started', () => {
+    const g = fixture(true);
+    try {
+      g.db.exec("UPDATE lifecycle SET provider_ref_json='{}',epoch=0,phase='STOPPED',boot_id=NULL,provider_operation_id=NULL");
+      const core = new LifecycleCore(g.store, g.core);
+      core.initialize(ref);
+      expect(core.get().provider_ref_json).toBe(JSON.stringify(ref));
+      core.initialize({ provider: 'fake', id: 'other-runtime' });
+      expect(core.get().provider_ref_json).toBe(JSON.stringify(ref));
+      g.db.exec("UPDATE lifecycle SET provider_ref_json='{}',epoch=1");
+      core.initialize(ref);
+      expect(core.get().provider_ref_json).toBe('{}');
+    } finally { g.close(); }
+  });
+});
