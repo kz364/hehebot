@@ -7,7 +7,10 @@ import { realpathSync as realPath } from 'node:fs';
 // The backup scripts refuse symlinked path components; macOS tmpdir() is under the /var symlink.
 const tmpdir = () => realPath(osTmpdir());
 import { join, resolve } from 'node:path';
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it as test, vi } from 'vitest';
+import { existsSync } from 'node:fs';
+// The prune lock pins Linux /usr/bin/flock (backups run on the Linux runtime); skip visibly elsewhere.
+const it = test.skipIf(!existsSync('/usr/bin/flock'));
 
 const fault = vi.hoisted(() => ({ directory: '', sourceManifest: '', mode: '', onFrozen: undefined as undefined | (() => Promise<void>), onPublish: undefined as undefined | (() => Promise<void>), onRename: undefined as undefined | (() => Promise<void>) }));
 vi.mock('node:fs/promises', async importOriginal => {
