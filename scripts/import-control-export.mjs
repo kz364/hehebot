@@ -19,6 +19,8 @@ const schemaPins = {
   14: '1fe0bfe3a7be6a29c66dc3b73bb3b8974de03fbda7773fe921c50e7b19558ddb',
   15: '327be864123d24d2aa574a9bddb9b333948b7311e2eb0ea9363d4b37b3799c5c',
   16: 'ce7ce5e8bf6f0d2574a42eb90653900e79b67c240b55bdd8b12acea29874cb80',
+  17: 'b66a8db8aa4b008053201a56ea680ff51f628d13619354f75414abec70336664',
+  18: '6fedcfb0c86cd8efe3a307a73247892408875c7a818f68a777ee93c3a2b97076',
 };
 const hash = value => createHash('sha256').update(value).digest('hex');
 /** @returns {never} */
@@ -114,7 +116,7 @@ export async function importControlExport(exportFile, snapshotDirectory) {
     const input = parseExport(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, size)));
     keys(input, ['format', 'version', 'createdAt', 'schemaSha256', 'schemaVersions', 'tables']);
     const latest = Array.isArray(input.schemaVersions) ? input.schemaVersions.at(-1) : null;
-    if (input.format !== 'hehebot-control-export' || input.version !== 1 || ![9, 10, 11, 12, 13, 14, 15, 16].includes(latest) || input.schemaSha256 !== schemaPins[latest] ||
+    if (input.format !== 'hehebot-control-export' || input.version !== 1 || ![9, 10, 11, 12, 13, 14, 15, 16, 17, 18].includes(latest) || input.schemaSha256 !== schemaPins[latest] ||
         input.schemaVersions.length < 1 || input.schemaVersions.length > latest || !input.schemaVersions.every((version, i) =>
           Number.isInteger(version) && version >= 1 && version <= latest && (!i || version > input.schemaVersions[i - 1])) ||
         typeof input.createdAt !== 'string' ||
@@ -130,6 +132,19 @@ export async function importControlExport(exportFile, snapshotDirectory) {
       db.exec(sql.toString('utf8'));
       // Reconstruct legacy snapshots without inventing receipts or upgrading
       // their history. Only this disposable, empty local staging DB is changed.
+      if (latest < 18) db.exec(`PRAGMA foreign_keys=OFF; DROP TABLE runs; CREATE TABLE runs (
+ id TEXT PRIMARY KEY, command_id TEXT REFERENCES commands(id), occurrence_id TEXT UNIQUE REFERENCES occurrences(id),
+ persona_id TEXT NOT NULL REFERENCES objects(id), routine_id TEXT REFERENCES objects(id),
+ context_json TEXT NOT NULL CHECK(json_valid(context_json)),
+ role TEXT NOT NULL DEFAULT 'coordinator' CHECK(role IN ('coordinator','background')),
+ parent_run_id TEXT REFERENCES runs(id), title TEXT,
+ status TEXT NOT NULL CHECK(status IN ('queued','claimed','running','finishing','completed','waiting','failed','cancelling','cancelled','recovery_required')),
+ current_attempt INTEGER NOT NULL DEFAULT 0, error_code TEXT, checkpoint_json TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX runs_status_created ON runs(status,created_at);
+CREATE INDEX runs_parent ON runs(parent_run_id,id); PRAGMA foreign_keys=ON;`);
+      if (latest < 17) db.exec('DROP TABLE bot_messages');
       if (latest < 16) db.exec('DROP INDEX operations_run_status; DROP INDEX effects_run_status; DROP INDEX resource_locks_run');
       if (latest < 15) db.exec('DROP INDEX runs_parent');
       if (latest < 14) db.exec('DROP INDEX objects_memory_scope');
