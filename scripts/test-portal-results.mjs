@@ -45,8 +45,8 @@ try{
  await browser('set','viewport','390','844','2');await top();await browser('screenshot',decodeURIComponent(new URL('portal-results-narrow.png',artifacts).pathname));
  assert.equal((await browser('eval','document.querySelector("#timeline").getBoundingClientRect().bottom<=document.querySelector("#task-strip").getBoundingClientRect().top&&document.querySelector("#timeline").scrollHeight>document.querySelector("#timeline").clientHeight')).stdout.trim(),'true');
  for(const [index,name] of [[1,'waiting'],[4,'last']]){
-  // GROK_ALIGNMENT A7: a run.result outcome is a non-bubble notice (`div.event`), not an
-  // `article` — only the legacy fallback for a pre-G1 completed run without a bot.message
+  // ARCHITECTURE_V2 A7: a run.result outcome is a non-bubble notice (`div.event`), not an
+  // `article` — only the legacy fallback for a pre-V1 completed run without a bot.message
   // renders an article. Match either container.
   await browser('eval',`document.querySelectorAll('.result-outcome')[${index}].closest('article,.event').scrollIntoView({block:'start',behavior:'instant'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
   await browser('screenshot',decodeURIComponent(new URL(`portal-results-narrow-${name}.png`,artifacts).pathname));

@@ -13,7 +13,7 @@ The default product consists of conversations, tasks, routines, and an optional 
 
 Owner clarification (2026-09-18): Amp is an architecture reference, not the product foundation or a coding UI to embed; users need no Amp account. Follow the [reference boundary in SPEC section 21.1](SPEC.md#211-scope-ownership-and-preserved-work). Bot history, retained task status and metadata remain accessible through the control plane while execution sleeps, without inference or wake. The persona orchestrator is not always on: admitted work wakes the shared runtime when needed, with truthful queued/waking states and accepted cold-start delay. This is not a promise of offline-device history availability or permission to keep a coordinator VM running.
 
-The target is the complete publicly documented Grok Bot capability and UX surface, not a preset family-office or coding assistant. The five-persona migration is one installation's configuration, not the product ontology. Optional UI means opt-in use, not permission to omit that capability from the parity backlog. Provider freedom and intent-aware interruption are deliberate differences. Public documentation cannot establish undocumented behavior or guarantee identical reliability; unknowns remain explicit acceptance gaps.
+The target is the complete publicly documented reference hosted-assistant capability and UX surface (see [docs/REFERENCE_PATTERNS.md](docs/REFERENCE_PATTERNS.md)), not a preset family-office or coding assistant. The five-persona migration is one installation's configuration, not the product ontology. Optional UI means opt-in use, not permission to omit that capability from the parity backlog. Provider freedom and intent-aware interruption are deliberate differences. Public documentation cannot establish undocumented behavior or guarantee identical reliability; unknowns remain explicit acceptance gaps.
 
 Sources of inspiration, not dependency or compatibility promises:
 
@@ -51,7 +51,7 @@ These sources were inspected, not benchmarked as a deployed alternative. Source 
 
 ### UX04 — Quiet chat with truthful live status
 
-*2026-09-27 ([GROK_ALIGNMENT.md](docs/GROK_ALIGNMENT.md) A1, A5–A7):*
+*2026-09-27 ([ARCHITECTURE_V2.md](docs/ARCHITECTURE_V2.md) A1, A5–A7):*
 - Bot bubbles are committed `bot.message` events from `hehebot_send_message`. They are final once shown, even if the turn later fails. Streamed text is an ephemeral live preview only.
 - Owner sends use a durable outbox with an optimistic bubble, reconciled by idempotency key after reload.
 - The timeline streams over a hibernating WebSocket.
@@ -65,7 +65,7 @@ These sources were inspected, not benchmarked as a deployed alternative. Source 
 
 - Place a compact task strip near the composer, with title, owner, status, and an expandable detail view. Read authoritative application task records, not DOM snapshots or CSS-derived status.
 - Offer exact task follow-up, steer/interrupt when supported, and cancellation. Distinguish request accepted, queued, applied, cancellation requested, and definitively settled.
-- Ordinary owner messages must not automatically interrupt work. The coordinator resolves status questions, new independent work, intentional steering, and deferred follow-up **by choosing task tools** (GROK_ALIGNMENT A4); ambiguous targets require clarification rather than guessing. Task cards show `interrupted` and needs-you states with owner choices, not a hidden recovery custody.
+- Ordinary owner messages must not automatically interrupt work. The coordinator resolves status questions, new independent work, intentional steering, and deferred follow-up **by choosing task tools** (ARCHITECTURE_V2 A4); ambiguous targets require clarification rather than guessing. Task cards show `interrupted` and needs-you states with owner choices, not a hidden recovery custody.
 - A needs-you indicator aggregates unresolved approvals, questions, and recovery items. Clearing one reason must not clear unrelated attention.
 - Acceptance: with tasks A and B present, steering/cancelling A never changes B; a status request changes neither. Lost acknowledgments retain uncertainty and never cause blind resubmission. Task-strip state survives reload.
 
@@ -140,8 +140,8 @@ These sources were inspected, not benchmarked as a deployed alternative. Source 
 
 ### UX14 — Demonstrations, integrations and portable templates
 
-- Include opt-in teach-by-demonstration: explicitly start/stop visible interaction capture, show recording state, exclude microphone audio, generate a reviewable draft skill and test it safely before automation. Grok documents a ten-minute capture limit and gradual rollout; match the workflow without treating observation as permission to replay secrets or writes.
-- Provide connector/packaged-skill discovery, install/enable/disable, per-tool restrictions and secure credential handoff. A full marketplace service is not a prerequisite for a curated install catalog, but discovery/install behavior remains in scope. Connector coverage must be named individually; a generic MCP client is not proof every Grok integration works.
+- Include opt-in teach-by-demonstration: explicitly start/stop visible interaction capture, show recording state, exclude microphone audio, generate a reviewable draft skill and test it safely before automation. The reference product documents a ten-minute capture limit and gradual rollout; match the workflow without treating observation as permission to replay secrets or writes.
+- Provide connector/packaged-skill discovery, install/enable/disable, per-tool restrictions and secure credential handoff. A full marketplace service is not a prerequisite for a curated install catalog, but discovery/install behavior remains in scope. Connector coverage must be named individually; a generic MCP client is not proof every reference-product integration works.
 - Duplicate and export/import bots, skills and routines with a diff/omission preview. Duplication excludes history, attachments, memory and credentials by default. Templates can explicitly include selected reviewed memories; require audience review before sharing and never publish implicitly. Imports start with disabled routines and unresolved auth references.
 - Export application-owned state in a documented versioned format so leaving a model, harness or VM provider does not lose bot identity, conversations, skill revisions, routine definitions or effect receipts. Secret/account reauthorization and nonportable native session state must be disclosed separately.
 - Acceptance: export into a second clean orb with no credential transfer, inspect omissions, rebind capabilities and verify stable application meaning without activating schedules. Reject unknown bundle semantics and traversal/executable content outside adopted install policy. Record hardware and external-account tests separately from orb proof.
@@ -179,19 +179,19 @@ Non-goals: cloning proprietary internals or commercial usage restrictions, compu
 
 ## 5. Research traceability and parity accounting
 
-These are advertised behaviors and source observations, not live acceptance of Grok or Hermes. Track implementation gaps directly against UX01–UX15; the 20-enabled-routine cap remains a capacity gap, not settled parity policy.
+These are advertised behaviors and source observations, not live acceptance of any reference product. Track implementation gaps directly against UX01–UX15; the 20-enabled-routine cap remains a capacity gap, not settled parity policy.
 
 | Evidence | Requirements / outstanding decision |
 | --- | --- |
-| [Grok skills and routines](https://docs.x.ai/grok-bot/skills-routines-and-automations) | UX06/11/12/14; one-time task → correction → saved skill → tested routine; teaching draft, lifecycle, event triggers |
-| [Grok chat/collaboration](https://docs.x.ai/grok-bot/chat-and-collaboration), [bots](https://docs.x.ai/grok-bot/bots) | UX01–05/07/13/14; exact parity of group routing remains unmeasured; cost-bounded routing is an explicit difference |
-| [Grok settings](https://docs.x.ai/grok-bot/settings-and-notifications), [computer](https://docs.x.ai/grok-bot/computer-and-apps), [approvals](https://docs.x.ai/grok-bot/approvals-security-and-privacy) | UX08–10/13/14; shared computer, per-device access, notification states, secure handoff; require-approval rules take precedence over allow rules |
-| [Hermes skills](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/skills.md), [memory](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/memory.md) | UX11/13; explicit learning, progressive disclosure, update-before-duplicate and staged review are useful adaptations; automatic review is configurable, not a Grok parity fact |
+| Reference product skills and routines (see [docs/REFERENCE_PATTERNS.md](docs/REFERENCE_PATTERNS.md)) | UX06/11/12/14; one-time task → correction → saved skill → tested routine; teaching draft, lifecycle, event triggers |
+| Reference product chat/collaboration and bots | UX01–05/07/13/14; exact parity of group routing remains unmeasured; cost-bounded routing is an explicit difference |
+| Reference product settings, computer/apps, approvals | UX08–10/13/14; shared computer, per-device access, notification states, secure handoff; require-approval rules take precedence over allow rules |
+| [Hermes skills](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/skills.md), [memory](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/memory.md) | UX11/13; explicit learning, progressive disclosure, update-before-duplicate and staged review are useful adaptations; automatic review is configurable, not a settled parity fact |
 | [Hermes cron](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/cron.md), [cron lifecycle](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/developer-guide/cron-internals.md) | UX12; fresh occurrence context, configuration preflight, distinct execution/delivery outcomes |
 | [Hermes Codex runtime](https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/features/codex-app-server-runtime.md) | UX15; main documents missing in-turn memory/session-search/delegation tools, auxiliary Hermes review and cron not specifically tested. Selecting Codex is not transparent harness equivalence. |
-| [Flavio Copes walkthrough](https://flaviocopes.com/grok-bot/) | Secondary corroboration of task → skill → routine and shared-computer workflow; not authority for exact internal dispatch or current rollout coverage |
+| Secondary third-party walkthrough | Secondary corroboration of task → skill → routine and shared-computer workflow; not authority for exact internal dispatch or current rollout coverage |
 
-Track each acceptance item as documented target, implemented, synthetic-tested, live-tested, blocked, or deliberate difference, with pinned versions and evidence. No aggregate “100% parity” claim while any required row is unverified. Grok advertises 50 routines per bot and 20 recent run records; our 20-enabled-per-installation limit remains current behavior pending a cost-aware capacity change, not permission to drop that gap. Better retention is allowed; commercial quota imitation is not required. Approval, secret handling and uncertainty invariants are not relaxed for parity.
+Track each acceptance item as documented target, implemented, synthetic-tested, live-tested, blocked, or deliberate difference, with pinned versions and evidence. No aggregate “100% parity” claim while any required row is unverified. The reference product advertises 50 routines per bot and 20 recent run records; our 20-enabled-per-installation limit remains current behavior pending a cost-aware capacity change, not permission to drop that gap. Better retention is allowed; commercial quota imitation is not required. Approval, secret handling and uncertainty invariants are not relaxed for parity.
 
 ## 6. Desktop reuse and optional managed offering
 

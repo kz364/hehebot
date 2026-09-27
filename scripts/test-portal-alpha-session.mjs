@@ -13,7 +13,7 @@ const commands=[],commandKeys=[];let reads=0,deniedReads=0,offline=false,failMes
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
 const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
 const wait=code=>browser('wait','--fn',code);
-// The G5 durable outbox (GROK_ALIGNMENT A5) sends via an async drain loop
+// The V5 durable outbox (ARCHITECTURE_V2 A5) sends via an async drain loop
 // instead of a synchronous command() call, so a click no longer guarantees
 // the server has the POST by the time the composer clears. Poll the
 // Node-side `commands` array (populated by the fixture's own HTTP handler)
@@ -23,8 +23,8 @@ const waitForCommands=async(n,timeoutMs=5000)=>{const start=Date.now();while(com
 // (nonce/conversation_id/text/phase only) in place of the old single
 // 'personal.pending.<conversation>' localStorage key.
 const outboxRecordFor=async conversationId=>(await evaluate('window.__hehebotOutbox()')).find(r=>r.conversation_id===conversationId);
-// The G5 outbox only clears its optimistic bubble once the timeline echoes
-// the command's Idempotency-Key on a message.user event (GROK_ALIGNMENT A5).
+// The V5 outbox only clears its optimistic bubble once the timeline echoes
+// the command's Idempotency-Key on a message.user event (ARCHITECTURE_V2 A5).
 // A static /events fixture would leave every send's outbox record forever
 // in 'accepted' phase, wedging `sending` (and #send.disabled) permanently
 // true from the first message on. Echo real sends alongside the fixed
@@ -157,8 +157,8 @@ try{
  await wait('!document.querySelector("#editor-error").hidden');assert.match(await evaluate('document.querySelector("#editor-error").textContent'),/connection changed/);
  offline=false;await dismiss();await refresh();await review();await confirm();await wait('!document.querySelector("#editor").open&&!document.querySelector("#send").disabled');
  // A lost/failed response (5xx) is neither an outright rejection (4xx, which
- // restores the draft) nor a confirmed send: the G5 outbox keeps retrying
- // under the same Idempotency-Key (GROK_ALIGNMENT A5) instead of the old
+ // restores the draft) nor a confirmed send: the V5 outbox keeps retrying
+ // under the same Idempotency-Key (ARCHITECTURE_V2 A5) instead of the old
  // single 'personal.pending.<conversation>' localStorage record.
  failMessage=true;const beforeUnconfirmed=commands.length;
  await browser('fill','#message','Unconfirmed exact request');await browser('click','#send');
@@ -171,7 +171,7 @@ try{
  assert.equal(await evaluate('document.querySelector("#message").value'),'','the composer clears immediately; the unsent text lives only in the optimistic outbox bubble, not the draft');
  state.summary.owner_alpha_bootstrap=nextPolicy('synthetic-policy-7');await refresh();
  // One unconfirmed send blocks alpha-session review at the control itself
- // (GROK_ALIGNMENT A5) — the button is disabled outright, unlike the old
+ // (ARCHITECTURE_V2 A5) — the button is disabled outright, unlike the old
  // pending-key check which only threw once a click reached the handler.
  // reviewAlphaSession() still refuses it when invoked directly too.
  assert.equal(await evaluate('document.querySelector("#review-alpha-session").disabled'),true,'review stays disabled while a send is unconfirmed');

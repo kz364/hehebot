@@ -57,17 +57,17 @@ export type RunStatus = 'queued' | 'claimed' | 'running' | 'finishing' | 'comple
 export type Run = { role:'coordinator'|'background';parent_run_id:string|null;title:string|null;id: string; command_id: string | null; occurrence_id: string | null; persona_id: string; routine_id: string | null; context_json: string; status: RunStatus; current_attempt: number; error_code: string | null; checkpoint_json: string | null; created_at: string; updated_at: string };
 export type Operation = { id: string; kind: 'inference' | 'tool' | 'child' | 'transfer' | 'node' | 'flush' | 'delivery'; status: 'active' | 'cancelling' | 'settled' | 'unknown'; started_at: string; deadline_at: string; last_progress_at: string };
 export type ContextSnapshot = {memory_budget?:import('./memory-context').MemoryBudgetReceipt;selected_model?:string;conversation_history?:{purpose:string;truncated:boolean;messages:Array<{command_id:string;text:string;truncated:boolean;completed_reply?:{run_id:string;attempt:number;text:string;truncated:boolean};provisional_reply?:{run_id:string;attempt:number;version:number;text:string;truncated:boolean}}>};whatsapp_read_policies?:WhatsAppReadPolicies;context_history_gap?:{requested_after:number;expired_through:number};continuation?:{previous_attempt:number;reason:string;delivered_messages:string[];unknown_effects?:Array<{effect_id:string;kind:string}>};task_summaries?:Array<{id:string;title:string|null;status:string;updated_at:string}>;skill_invocation?:{skill_id:string;skill_revision:number};
- // G4: causal depth of automatic coordinator wakes (task.event chains). Absent
+ // V4: causal depth of automatic coordinator wakes (task.event chains). Absent
  // or 0 on an ordinary owner/routine-initiated coordinator run.
  causal_depth?:number;
- // G4: marks a role='background' run created by hehebot_start_task, distinct
+ // V4: marks a role='background' run created by hehebot_start_task, distinct
  // from the pre-existing native-child parent/child task hierarchy which also
  // uses role='background'+parent_run_id but must never wake a coordinator.
  coordinator_task?:true;
  schema_version: 1; persona: StoredObject<PersonaPut>; routine: StoredObject<RoutinePut> | null; memories: MemoryContextEntry[]; skills:StoredObject<SkillBody>[]; scope_key: string; instruction: string; room_id: string | null; context_events: TimelineEvent[]; authorization_policy_ids: string[] };
 export type TimelineEvent = { sequence: number; id: string; conversation_id: string | null; type: string; actor_id: string; cause_id: string | null; payload: Record<string, unknown>; created_at: string };
 export type Options = { testCampaignGrant?:TestCampaignGrant;ownerAlphaBootstrap?:OwnerAlphaBootstrapConfig;ownerAlphaWarm?:import('./owner-alpha-warm').WarmGenerationConfig;ownerAlphaBackground?:import('./owner-alpha-background').BackgroundGenerationConfig;ownerAlpha?:OwnerAlphaPolicy;ownerAlphaSuccessor?:OwnerAlphaSuccessor;ownerBindingSha256?:string;whatsappReadPolicies?:WhatsAppReadPolicies;delegations?:Record<string,string[]>;executionEnabled: boolean; actionPolicyIds: string[]; toolPolicyIds: string[]; now: () => Date; uuid: () => string;
- // G4 (GROK_ALIGNMENT A4): gates the per-persona coordinator inbox (steer-or-batch
+ // V4 (ARCHITECTURE_V2 A4): gates the per-persona coordinator inbox (steer-or-batch
  // routing of message.send) and the task.event coordinator wake. Off by default so
  // every pre-existing message.send/completion test keeps its prior behavior.
  coordinatorInbox?: boolean };

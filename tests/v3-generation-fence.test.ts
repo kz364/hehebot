@@ -1,4 +1,4 @@
-// G3 (GROK_ALIGNMENT A2, AGENTS.md trap 1): generation fencing and successor
+// V3 (ARCHITECTURE_V2 A2, AGENTS.md trap 1): generation fencing and successor
 // start without process-death proof. `advanceGeneration` atomically bumps the
 // epoch and fences the retiring generation in one transaction; every runtime
 // RPC choke point rejects a stale (epoch,boot_id) with STALE_EPOCH; a
@@ -66,7 +66,7 @@ describe('advanceGeneration', () => {
  });
 });
 
-describe('G-A2: every runtime RPC choke point rejects a stale generation after an advance', () => {
+describe('V-A2: every runtime RPC choke point rejects a stale generation after an advance', () => {
  it('rejects the old (epoch,boot_id) across the full RPC surface, while the new generation is admitted', () => {
   const { life, identity, runId } = running();
   const messages = new BotMessages(f.store, () => f.core.now(), () => randomUUID());
@@ -112,7 +112,7 @@ describe('G-A2: every runtime RPC choke point rejects a stale generation after a
  });
 });
 
-describe('G2 follow-up: seeded continuation lists unknown_effects', () => {
+describe('V2 follow-up: seeded continuation lists unknown_effects', () => {
  it('a re-seeded attempt carries its own outcome_unknown effects for the model to reconcile before redoing them', () => {
   const { life, identity, runId } = running();
   const effectId = randomUUID();

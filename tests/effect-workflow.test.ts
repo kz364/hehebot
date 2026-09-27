@@ -158,7 +158,7 @@ it.each(['intent', 'dispatched'] as const)('never replays a %s mutation after lo
     destinationWrites.push('synthetic-mail-17 restored'); // Fake destination succeeded; receipt deliberately lost.
   }
   reconstruct(); f.setNow('2026-09-10T00:01:31.000Z'); life.watchdog();
-  // G2 (GROK_ALIGNMENT A3): a never-dispatched intent is abandoned outright
+  // V2 (ARCHITECTURE_V2 A3): a never-dispatched intent is abandoned outright
   // (it can be neither owner-visible-unknown nor replayed); only a dispatched
   // effect's outcome is genuinely unknown to the owner.
   expect(f.db.all('SELECT status FROM effects')).toEqual([{ status: crashAt === 'dispatched' ? 'outcome_unknown' : 'failed' }]);

@@ -96,7 +96,7 @@ export class ControlCore {
   return {id:row.id,status:row.status,accepted_at:row.accepted_at,resource_id:row.resource_id,error:row.error_json?JSON.parse(row.error_json):null};
  }
  // Owner-scoped lookup by the client's Idempotency-Key, for durable-outbox
- // reconciliation after a page reload or a lost response (GROK_ALIGNMENT A5).
+ // reconciliation after a page reload or a lost response (ARCHITECTURE_V2 A5).
  // Only this owner's own commands are visible; an unknown key is NOT_FOUND.
  receiptByIdempotencyKey(owner:string,key:string):Receipt {
   const row=this.store.db.all<{id:string}>('SELECT id FROM commands WHERE owner_id=? AND idempotency_key=?',owner,key)[0];
@@ -136,7 +136,7 @@ export class ControlCore {
    case 'run.recover':{
     const p=command.payload,run=this.store.db.all<Pick<Run,'id'|'current_attempt'|'status'|'error_code'|'occurrence_id'|'persona_id'>>('SELECT id,current_attempt,status,error_code,occurrence_id,persona_id FROM runs WHERE id=?',p.run_id)[0];
     if(!run)throw new ControlError('NOT_FOUND','Run unavailable.',404);
-    // G2 (GROK_ALIGNMENT A2/A3): 'interrupted' is the other terminal attempt
+    // V2 (ARCHITECTURE_V2 A2/A3): 'interrupted' is the other terminal attempt
     // state that can still be sitting on unresolved custody (unreconciled
     // effects, held locks, or an open stopped-executor question) needing this
     // same explicit owner recovery close-out.
@@ -227,7 +227,7 @@ export class ControlCore {
    }
    case 'task.start': {
     // Only reachable through AgentCommandBoundary.accept(), which stamps this
-    // actor tag with the calling coordinator run's own id (GROK_ALIGNMENT A4).
+    // actor tag with the calling coordinator run's own id (ARCHITECTURE_V2 A4).
     // A direct owner (or any other) call cannot fabricate a parent coordinator.
     const match=/^runtime-task:([0-9a-f-]{36})$/i.exec(owner);
     requireThat(match,'FORBIDDEN','Only a coordinator turn may start a task.',403);
@@ -243,7 +243,7 @@ export class ControlCore {
     // Retained background custody denies candidate owner messages the same way.
     if(!this.options.ownerAlphaBackground&&!this.options.executionEnabled&&target.kind==='persona')this.background.assertMessageAdmissible(owner,commandId,target.id);
     // Carries the client's own Idempotency-Key so the portal's durable outbox
-    // can recognize its own committed message as an echo (GROK_ALIGNMENT A5).
+    // can recognize its own committed message as an echo (ARCHITECTURE_V2 A5).
     this.store.event(commandId,target.id,'message.user',owner,null,{text:command.payload.text,idempotency_key:idempotencyKey},now);
     // With a warm generation configured, a candidate owner message either
     // admits or the whole command is rejected; no orphan unassigned run.
@@ -251,7 +251,7 @@ export class ControlCore {
     // With a background generation configured, the same all-or-nothing rule
     // applies: the candidate either admits or the whole command is rejected.
     if(this.options.ownerAlphaBackground&&!this.options.executionEnabled&&target.kind==='persona')this.background.assertMessageAdmissible(owner,commandId,target.id);
-    // G4 per-persona inbox (GROK_ALIGNMENT A4). Gated: executionEnabled is
+    // V4 per-persona inbox (ARCHITECTURE_V2 A4). Gated: executionEnabled is
     // mutually exclusive with owner-alpha/bootstrap/warm/background by
     // construction, and this flag defaults off, so every pre-existing
     // message.send test keeps its prior one-run-per-message behavior.
@@ -337,7 +337,7 @@ export class ControlCore {
     requireThat(run,'NOT_FOUND','Run unavailable.',404);
     if(['completed','failed','cancelled'].includes(run.status))return run.id;
     // Recovery remains parked; heartbeats already deliver cancellation for it.
-    // G2: an interrupted attempt is already terminal (A3) -- abandoning it via
+    // V2: an interrupted attempt is already terminal (A3) -- abandoning it via
     // run.cancel closes it out directly, with no cancellation round-trip to wait for.
     const status=run.status==='recovery_required'?'recovery_required':run.status==='interrupted'?'cancelled':['queued','waiting'].includes(run.status)?'cancelled':'cancelling';
     // While cancelling, updated_at is the watchdog's original grace anchor.
@@ -361,7 +361,7 @@ export class ControlCore {
      requireThat(!JSON.parse(run.context_json).skill_invocation||Date.parse(run.created_at)+30*86400000>this.options.now().getTime(),'MESSAGE_EXPIRED','This unstarted skill snapshot expired. Send a fresh request.');
     }
     requireThat(run.current_attempt<3,'DEADLINE_EXCEEDED','This run has reached its retry limit.');
-    // G2 (GROK_ALIGNMENT A2/A3): interrupted is already the fenced terminal
+    // V2 (ARCHITECTURE_V2 A2/A3): interrupted is already the fenced terminal
     // state for the attempt; it needs no separate confirmed-native-stop proof.
     if(run.status!=='interrupted'){
      const unsettledAttempt=this.store.db.all("SELECT run_id FROM attempts WHERE run_id=? AND status IN ('claimed','running')",run.id);
@@ -607,7 +607,7 @@ export class ControlCore {
   this.store.event(this.options.uuid(),roomId??personaId,'run.accepted','system',commandId,{run_id:id,status,reason:reason==='CAPABILITY_UNAVAILABLE'?'Runtime execution is not configured and verified yet.':reason},now);
   if(status==='queued')this.noteRunnable();return id;
  }
- /** G4 (GROK_ALIGNMENT A4): create a `role='background'` task run under an
+ /** V4 (ARCHITECTURE_V2 A4): create a `role='background'` task run under an
   * admitted coordinator turn. Reuses the shared budget/run-accepted/wake
   * plumbing from `enqueue()`, but is a distinct admission path: no
   * ownerAlpha/warm/background/bootstrap candidate logic applies to a task a
@@ -634,7 +634,7 @@ export class ControlCore {
   if(finalStatus==='queued')this.noteRunnable();
   return id;
  }
- /** G4: per-persona coordinator inbox. A live (running) coordinator turn —
+ /** V4: per-persona coordinator inbox. A live (running) coordinator turn —
   * direct DM only, not room, not routine — gets this message delivered as a
   * steer of that turn via the existing owner run.steer mechanism (a synthetic
   * run.steer command row is minted so TaskSteering.queue's normal provenance
@@ -678,7 +678,7 @@ export class ControlCore {
   if(rows.length)advanceCursor(rows.at(-1)!.sequence);
   return id;
  }
- /** G4: append a `task.event` for a settled child task and, within a bounded
+ /** V4: append a `task.event` for a settled child task and, within a bounded
   * causal chain, enqueue (or join a 2s-batched pending) coordinator wake so
   * the coordinator can relay the result via hehebot_send_message. Depth is
   * carried on the coordinator run's own context, not a separate ledger, so a
@@ -693,7 +693,7 @@ export class ControlCore {
   if(!parent)return;
   const parentDepth=(JSON.parse(parent.context_json) as ContextSnapshot).causal_depth??0;
   const depth=parentDepth+1;
-  if(depth>3)return; // Loop bound (GROK_ALIGNMENT A4): no further automatic wake.
+  if(depth>3)return; // Loop bound (ARCHITECTURE_V2 A4): no further automatic wake.
   const line=`Task "${task.title??task.id}" is now ${status}. ${summary}`.slice(0,4000);
   const wakeKey=`task_wake:${task.persona_id}`;
   const pending=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',wakeKey)[0];
@@ -858,7 +858,7 @@ export class ControlCore {
   return {runs,recovery:runs.map(run=>this.recoveryMetadata(run,questions)),next_cursor:rows.length>limit?runs.at(-1)!.id:null};
  }
  private recoveryMetadata(run:Pick<Run,'id'|'current_attempt'|'status'>,unresolvedQuestions:ReadonlyArray<{run_id:string}>){
-  // G2 (GROK_ALIGNMENT A2/A3): an interrupted attempt is fenced by the epoch
+  // V2 (ARCHITECTURE_V2 A2/A3): an interrupted attempt is fenced by the epoch
   // advance itself, not by a confirmed provider stop. Treat it the same as a
   // provider-confirmed 'terminated' attempt for reconciliation purposes.
   const terminated=run.status==='interrupted'||this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,run.current_attempt)[0]?.status==='terminated';

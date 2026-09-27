@@ -5,11 +5,11 @@ import {LifecycleCore,type Identity} from '../src/core/lifecycle';
 import type {ContextSnapshot} from '../src/core/types';
 import {bot,fixture} from './helpers';
 
-// G4 (GROK_ALIGNMENT A4): coordinator task tools, per-persona inbox and
+// V4 (ARCHITECTURE_V2 A4): coordinator task tools, per-persona inbox and
 // task.event wake. These tests exercise the ControlCore/AgentCommandBoundary
 // layer directly (the same level tests/agent-commands.test.ts and
 // tests/task-steering.test.ts already use for native-child rows) rather than
-// a full scripted-Codex-model harness: a background G4 task run's own native
+// a full scripted-Codex-model harness: a background V4 task run's own native
 // admission/claim wiring is out of scope for this row (see final report).
 
 const identity:Identity={epoch:1,boot_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'};
@@ -29,7 +29,7 @@ const start=(title:string,brief:string,capabilities?:string[])=>
  boundary.accept({identity,run_id:coordinatorId,attempt:1,idempotency_key:randomUUID(),
   command:{schema_version:1,type:'task.start',payload:{title,brief,...(capabilities?{capabilities}:{})}}});
 
-/** Directly transitions a queued G4 task run to 'running' with a real native
+/** Directly transitions a queued V4 task run to 'running' with a real native
  * attempt, the same way native-child fixtures bypass the coordinator-only
  * claim() queue (see tests/task-steering.test.ts). */
 function runTask(taskId:string,nativeRef=`native-${taskId}`){
@@ -107,13 +107,13 @@ describe('hehebot_list_tasks / hehebot_task_detail scoping',()=>{
    other,bot,JSON.stringify({schema_version:1,persona:{id:null},routine:null,memories:[],skills:[],scope_key:null,instruction:'x',room_id:null,context_events:[],authorization_policy_ids:[]}),f.core.now(),f.core.now());
   expect(()=>boundary.taskDetail({identity,run_id:coordinatorId,attempt:1,task_run_id:other})).toThrowError(expect.objectContaining({code:'NOT_FOUND'}));
  });
- it('a pre-existing native-child run of this coordinator is readable (reads cover all background children, not just G4 tasks)',()=>{
+ it('a pre-existing native-child run of this coordinator is readable (reads cover all background children, not just V4 tasks)',()=>{
   const other=randomUUID();
   f.db.exec("INSERT INTO runs(id,persona_id,context_json,role,parent_run_id,status,current_attempt,created_at,updated_at) VALUES(?,?,?,'background',?,'running',1,?,?)",
    other,bot,JSON.stringify({schema_version:1,persona:{id:null},routine:null,memories:[],skills:[],scope_key:null,instruction:'x',room_id:null,context_events:[],authorization_policy_ids:[]}),coordinatorId,f.core.now(),f.core.now());
   expect(boundary.taskDetail({identity,run_id:coordinatorId,attempt:1,task_run_id:other}).task.id).toBe(other);
  });
- it('G8: a later coordinator turn of the same persona sees and manages tasks an earlier turn started; another persona does not',()=>{
+ it('V8: a later coordinator turn of the same persona sees and manages tasks an earlier turn started; another persona does not',()=>{
   const a=start('Research hotels','brief a').resource_id!;runTask(a);
   const first=coordinatorId;
   admitCoordinator(); // the "how's it going?" turn: a new coordinator run
@@ -220,7 +220,7 @@ describe('task.event coordinator wake',()=>{
   expect(wakeContext.instruction).toContain('Research hotels');
   expect(wakeContext.instruction).toContain('completed');
  });
- // G2 follow-up (GROK_ALIGNMENT A3/A4): a coordinator task fenced into
+ // V2 follow-up (ARCHITECTURE_V2 A3/A4): a coordinator task fenced into
  // 'interrupted' (epoch advance, boot-lease loss, unconfirmed cancellation --
  // never a native-reported completion) owes its coordinator the same
  // task.event + bounded wake a normal settlement fires via complete().
@@ -300,13 +300,13 @@ describe('task.event coordinator wake',()=>{
  });
 });
 
-// G4b (GROK_ALIGNMENT A4, docs/AGENT_MODEL.md "one reserved interactive model
+// V4b (ARCHITECTURE_V2 A4, docs/AGENT_MODEL.md "one reserved interactive model
 // turn plus at most one background model turn installation-wide"): the claim
-// lane that actually executes a G4 task run. Before this row, a started task
+// lane that actually executes a V4 task run. Before this row, a started task
 // sat 'queued' forever because nextClaimableRun() only ever admitted
-// role='coordinator' runs (see the G4 TODO gap note and AGENTS.md trap #6:
+// role='coordinator' runs (see the V4 TODO gap note and AGENTS.md trap #6:
 // critical path first).
-describe('claim() background task lane (G4b)',()=>{
+describe('claim() background task lane (V4b)',()=>{
  const claimTask=()=>life.claim(identity,undefined,undefined,[],'background');
  it('a queued task run is claimable on the background lane with an isolated context snapshot',()=>{
   const capA=randomUUID();
@@ -314,7 +314,7 @@ describe('claim() background task lane (G4b)',()=>{
   f.store.put(bot,'persona',{...existing.body,tool_policy_ids:[capA]},existing.revision,'owner',f.core.now());
   admitCoordinator();
   const taskId=start('Research hotels','Find three hotel options for the trip.',[capA]).resource_id!;
-  // The coordinator lane never sees a G4 task run as claimable.
+  // The coordinator lane never sees a V4 task run as claimable.
   expect(life.nextClaimableRun('coordinator')?.id).not.toBe(taskId);
   expect(life.nextClaimableRun('background')?.id).toBe(taskId);
   const claim=claimTask();

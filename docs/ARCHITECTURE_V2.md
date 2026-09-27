@@ -1,4 +1,4 @@
-# Grok-aligned execution architecture (normative, 2026-09-27)
+# Hehebot v2 execution architecture (normative, 2026-09-27)
 
 Status: **normative owner decision.** This document supersedes conflicting clauses in
 [SPEC.md](../SPEC.md), [PROJECT_INTENT.md](PROJECT_INTENT.md),
@@ -20,13 +20,14 @@ root Codex turn did not settle. The design made every user-visible outcome wait 
 proving the state of a third-party process. That is unprovable with supported
 interfaces, so the project stalled.
 
-Grok Bot faces the same problems and ships (see [GROK_BOT_REFERENCE.md](GROK_BOT_REFERENCE.md)).
-Its design **fences effects instead of proving process death**, **commits messages
-independently of turn settlement**, treats **interrupted work as a visible terminal
-state rather than something to take over**, and lets the **agent route messages with
-tools** instead of a separate classifier. Hehebot keeps its own selected stack
-(Cloudflare Worker + SQLite Durable Object, one sleeping Sprite, Codex app-server
-0.154.0) and adopts those patterns.
+Patterns from prior art in hosted assistant products face the same problems and ship
+(see [REFERENCE_PATTERNS.md](REFERENCE_PATTERNS.md)). That design **fences effects
+instead of proving process death**, **commits messages independently of turn
+settlement**, treats **interrupted work as a visible terminal state rather than
+something to take over**, and lets the **agent route messages with tools** instead of
+a separate classifier. Hehebot keeps its own selected stack (Cloudflare Worker +
+SQLite Durable Object, one sleeping Sprite, Codex app-server 0.154.0) and adopts those
+patterns.
 
 ## 1. Decisions
 
@@ -217,8 +218,8 @@ durably, and the Sprite is never kept awake just to wait for it.
   and Codex remains the only harness.
 - **Per-session VMs, or an object-store disk manifest.** One sleeping Sprite with
   its persistent disk stays the selected runtime.
-- **Grok's full widget catalogue.** Approvals, questions and forms use the existing
-  Hehebot contracts, rendered as `notice` or `task.card`.
+- **That prior art's full widget catalogue.** Approvals, questions and forms use the
+  existing Hehebot contracts, rendered as `notice` or `task.card`.
 
 ## 3. Unchanged invariants
 
@@ -231,25 +232,25 @@ durably, and the Sprite is never kept awake just to wait for it.
 - No patching of Codex internals and no copying of OAuth caches.
 - Production flags stay false until the documented gates pass.
 
-## 4. Acceptance (additions; the G rows in TODO.md track them)
+## 4. Acceptance (additions; the V rows in TODO.md track them)
 
 | ID | Test |
 | --- | --- |
-| G-A1 | A turn calls `hehebot_send_message`, then is killed before completion. The message stays visible after reload, the attempt shows `interrupted` and a notice explains. Repeating the call with the same `message_key` does not duplicate the message. A turn with only final text publishes one `final_text` message. |
-| G-A2 | Epoch advance with a live old process fixture. The old generation's send, effect permit and completion all get `STALE_EPOCH`. A same-machine flock holder is killed and the successor starts. No test depends on provider termination evidence. |
-| G-A3 | A crashed read-only task auto-continues once on a new attempt with a seeded brief. A crashed task with an `outcome_unknown` effect parks as needs-you. The sleep predicate returns idle while only interrupted or unknown records exist. |
-| G-A4 | With task A running, a status question gets a coordinator reply and A is unchanged. "Also do B" produces a `start_task` call and B is independent. "Use tomorrow for A" produces `steer_task` (or `queue_followup` when A is between turns). Completion of A wakes the coordinator, which relays the result. |
-| G-A5 | Kill the network mid-send, then reload. The bubble reconciles through the receipt lookup with exactly one owner message and no duplicate run. A rejected send restores the draft. |
-| G-A6 | Open idle sockets for 1 hour: zero wakes and zero inference. Resume from a cursor after reconnect, and get `snapshot_required` when retention evicts the cursor. |
-| G-A7 | A timeline with tool activity renders only the bubbles, with activity collapsed and notices visible. Checked in Chromium at desktop and 390 px widths. |
+| V-A1 | A turn calls `hehebot_send_message`, then is killed before completion. The message stays visible after reload, the attempt shows `interrupted` and a notice explains. Repeating the call with the same `message_key` does not duplicate the message. A turn with only final text publishes one `final_text` message. |
+| V-A2 | Epoch advance with a live old process fixture. The old generation's send, effect permit and completion all get `STALE_EPOCH`. A same-machine flock holder is killed and the successor starts. No test depends on provider termination evidence. |
+| V-A3 | A crashed read-only task auto-continues once on a new attempt with a seeded brief. A crashed task with an `outcome_unknown` effect parks as needs-you. The sleep predicate returns idle while only interrupted or unknown records exist. |
+| V-A4 | With task A running, a status question gets a coordinator reply and A is unchanged. "Also do B" produces a `start_task` call and B is independent. "Use tomorrow for A" produces `steer_task` (or `queue_followup` when A is between turns). Completion of A wakes the coordinator, which relays the result. |
+| V-A5 | Kill the network mid-send, then reload. The bubble reconciles through the receipt lookup with exactly one owner message and no duplicate run. A rejected send restores the draft. |
+| V-A6 | Open idle sockets for 1 hour: zero wakes and zero inference. Resume from a cursor after reconnect, and get `snapshot_required` when retention evicts the cursor. |
+| V-A7 | A timeline with tool activity renders only the bubbles, with activity collapsed and notices visible. Checked in Chromium at desktop and 390 px widths. |
 
-A scripted-model fixture is enough for G-A1 through G-A7. Real-model evaluation of
-routing quality (G-A4 with a live model) is a separate, owner-authorized step.
+A scripted-model fixture is enough for V-A1 through V-A7. Real-model evaluation of
+routing quality (V-A4 with a live model) is a separate, owner-authorized step.
 
 ## 5. Implementation map
 
-The concrete, file-level work breakdown lives in the **Grok alignment** section at the
-top of [TODO.md](../TODO.md) (rows G0–G9). TODO.md is the only live checklist.
+The concrete, file-level work breakdown lives in the **v2 architecture** section at the
+top of [TODO.md](../TODO.md) (rows V0–V9). TODO.md is the only live checklist.
 
 ## 9. Superseded clauses
 
@@ -267,4 +268,4 @@ top of [TODO.md](../TODO.md) (rows G0–G9). TODO.md is the only live checklist.
 | NATIVE_ORCHESTRATION "Required routing" | classification; completed root not a barrier for results | A1/A4 |
 | CODEX_RECOVERY | recovery inspection as a precondition | A3: optional diagnostic |
 | PRODUCT_UX_SPEC UX04 | provisional stream as the reply surface | A1/A7 |
-| TODO F3/E01/E02 as "next" | recursive settlement / native takeover as critical path | G rows; E01/E02 are demoted to sleep-correctness-only work |
+| TODO F3/E01/E02 as "next" | recursive settlement / native takeover as critical path | V rows; E01/E02 are demoted to sleep-correctness-only work |

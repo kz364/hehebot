@@ -182,7 +182,7 @@ export class LifecycleCore {
    this.store.db.exec('UPDATE runtime_metadata SET value_json=? WHERE key=? AND value_json=?',JSON.stringify({...intent.value,status:'queued'}),intent.key,intent.valueJson);
   });
  }
- /** G2 (GROK_ALIGNMENT A3, trap 4): only LIVE current-generation work blocks
+ /** V2 (ARCHITECTURE_V2 A3, trap 4): only LIVE current-generation work blocks
   * sleep. Durable records of a dead (interrupted) generation -- its terminal
   * run, the locks it still holds pending reconciliation, its outcome_unknown
   * or already-fenced effects -- are never blockers. `recovery_required` is no
@@ -204,7 +204,7 @@ export class LifecycleCore {
    this.store.db.all(`SELECT o.id FROM operations o JOIN runs r ON r.id=o.run_id AND o.attempt=r.current_attempt WHERE o.status!='settled' AND (${live}) LIMIT 1`,...liveArgs).length>0 ||
    this.store.db.all(`SELECT e.id FROM effects e JOIN runs r ON r.id=e.run_id WHERE e.status IN ('intent','dispatched') AND (${live}) LIMIT 1`,...liveArgs).length>0;
  }
- /** G4b (GROK_ALIGNMENT A4, docs/AGENT_MODEL.md "one reserved interactive model
+ /** V4b (ARCHITECTURE_V2 A4, docs/AGENT_MODEL.md "one reserved interactive model
   * turn plus at most one background model turn installation-wide"): two
   * independent claim lanes. 'coordinator' is the pre-existing persona
   * conversation lane (unchanged selection). 'background' selects a queued
@@ -290,7 +290,7 @@ export class LifecycleCore {
     const run=this.store.db.all<Pick<Run,'id'|'current_attempt'|'status'>>('SELECT id,current_attempt,status FROM runs WHERE id=?',op.run_id)[0];
     requireThat(run,'NOT_FOUND','Run unavailable.',404);
     this.core.ownerAlpha.authorize(run.id,op.attempt);
-    // G2: an interrupted run's stale native operation still reports here so the
+    // V2: an interrupted run's stale native operation still reports here so the
     // runtime keeps hearing (via `cancellations` below) that it must stop.
     requireThat(run.current_attempt===op.attempt&&['claimed','running','finishing','cancelling','recovery_required','interrupted'].includes(run.status),'STALE_EPOCH','Operation does not belong to an active attempt.');
     const attempt=this.store.db.all<{epoch:number;boot_id:string;deadline_at:string}>('SELECT epoch,boot_id,deadline_at FROM attempts WHERE run_id=? AND attempt=?',run.id,op.attempt)[0];
@@ -307,9 +307,9 @@ export class LifecycleCore {
    const lease=new Date(generation?Math.min(Date.parse(generation.policy.expires_at),renewed):renewed).toISOString();
    this.store.db.exec('UPDATE lifecycle SET lease_until=?,last_heartbeat=? WHERE singleton=1',lease,this.core.now());
    if(this.active())this.touch();
-   // G2: an interrupted run may still have a live native process that never
+   // V2: an interrupted run may still have a live native process that never
    // got the memo -- keep telling the runtime to stop/ignore it, same as the
-   // pre-G2 recovery_required signal.
+   // pre-V2 recovery_required signal.
    return {lease_until:lease,cancellations:this.store.db.all<{id:string}>("SELECT id FROM runs WHERE status IN ('cancelling','recovery_required','interrupted')").map(x=>x.id)};
   });
  }
@@ -343,7 +343,7 @@ export class LifecycleCore {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled||this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
-   // G4b: the background task lane only exists under ordinary execution
+   // V4b: the background task lane only exists under ordinary execution
    // admission. Owner-alpha's staged single-coordinator boot never has task
    // runs to claim (task.start itself only queues once executionEnabled).
    requireThat(lane==='coordinator'||this.core.options.executionEnabled,'CAPABILITY_UNAVAILABLE','Background task lane requires ordinary execution admission.');
@@ -354,13 +354,13 @@ export class LifecycleCore {
     if(this.store.db.all(`SELECT r.id FROM runs r WHERE r.role='coordinator' AND r.status IN ('claimed','running','finishing','cancelling','recovery_required','interrupted')
     AND NOT (r.status IN ('recovery_required','interrupted') AND (
      EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.status='terminated' AND a.settled_at IS NOT NULL)
-     -- G3 (GROK_ALIGNMENT A2, AGENTS.md trap 1): an 'interrupted' run is
+     -- V3 (ARCHITECTURE_V2 A2, AGENTS.md trap 1): an 'interrupted' run is
      -- ALREADY terminal per interruptRuns/interruptGeneration, with no
      -- process-death proof required. Once its current attempt belongs to a
      -- generation other than the one presenting here, it can never block a
      -- fresh coordinator claim -- waiting for observeStopped's separate
      -- 'terminated'+settled_at evidence would reintroduce exactly the
-     -- process-death precondition G3 removes.
+     -- process-death precondition V3 removes.
      OR (r.status='interrupted' AND NOT EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?))
     )) AND NOT EXISTS(
      SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?
@@ -379,7 +379,7 @@ export class LifecycleCore {
     ) LIMIT 32)`,...(current?[current.epoch,current.boot_id]:[]))[0].count;
     if(unresolved>=32)return null;
    }else{
-    // G4b capacity rule: at most one background coordinator-task run active
+    // V4b capacity rule: at most one background coordinator-task run active
     // installation-wide. This lane never touches or blocks the coordinator's
     // own single-run slot (checked only above, for lane==='coordinator').
     if(this.store.db.all(`SELECT r.id FROM runs r WHERE r.role='background' AND r.parent_run_id IS NOT NULL
@@ -404,7 +404,7 @@ export class LifecycleCore {
    const backgroundRootRole=this.core.ownerAlpha.backgroundCompletionRole(run.id);
    let context:ContextSnapshot;
    try{context=prior.coordinator_task?
-    // G4b: a coordinator task run already carries its own isolated context
+    // V4b: a coordinator task run already carries its own isolated context
     // snapshot from task.start (persona grant restricted to the admitted
     // capabilities, brief as instruction, no shared conversation history).
     // Never recompute or widen it through the coordinator's full persona
@@ -421,7 +421,7 @@ export class LifecycleCore {
     requireThat(typeof model==='string'&&/^[a-zA-Z0-9._-]{1,128}$/.test(model),'NATIVE_PERSONA_UNMAPPED','The runtime must declare the selected persona model.');
     context.selected_model=model;
    }
-   // G2 (GROK_ALIGNMENT A3): a run re-seeded after interruptRuns' scheduleRetry
+   // V2 (ARCHITECTURE_V2 A3): a run re-seeded after interruptRuns' scheduleRetry
    // call (error_code CANCEL_UNCONFIRMED/STALE_EPOCH, never a native-reported
    // failure reason) is a fresh attempt, not a resumption -- but the runtime
    // still needs to know it is a continuation and what the abandoned attempt
@@ -429,9 +429,9 @@ export class LifecycleCore {
    // silently repeating or contradicting a committed hehebot_send_message.
    if(run.current_attempt>0&&run.error_code&&['CANCEL_UNCONFIRMED','STALE_EPOCH','GENERATION_ADVANCED'].includes(run.error_code)){
     const delivered=this.store.db.all<{text:string}>(`SELECT json_extract(e.payload_json,'$.text') AS text FROM bot_messages b JOIN events e ON e.sequence=b.event_sequence WHERE b.run_id=? AND b.attempt=? ORDER BY b.event_sequence`,run.id,run.current_attempt).map(x=>x.text);
-    // G3 (G2 follow-up): the seeded continuation also lists this run's own
+    // V3 (V2 follow-up): the seeded continuation also lists this run's own
     // still-unresolved outcome_unknown effects, so the fresh attempt can tell
-    // the owner/model to reconcile or ask before redoing them (GROK_ALIGNMENT
+    // the owner/model to reconcile or ask before redoing them (ARCHITECTURE_V2
     // A3's seeded brief), instead of silently rediscovering them.
     const unknownEffects=this.store.db.all<{effect_id:string;action_key:string}>("SELECT id AS effect_id,action_key FROM effects WHERE run_id=? AND status='outcome_unknown' ORDER BY updated_at,id",run.id)
      .map(e=>({effect_id:e.effect_id,kind:e.action_key}));
@@ -556,7 +556,7 @@ export class LifecycleCore {
     requireThat(!backgroundSettling||this.store.db.all('SELECT key FROM runtime_metadata WHERE key=?',backgroundProofKey).length===1,'RESULT_CONFLICT','Background completion evidence is missing.');
     return;
    }
-   // G2 (GROK_ALIGNMENT A2/A3): a late settlement report for an interrupted
+   // V2 (ARCHITECTURE_V2 A2/A3): a late settlement report for an interrupted
    // attempt is not a resumption -- it may still confirm (and must match, per
    // the OWNER_CANCELLED/CONTEXT_INVALIDATED coercion above) the outcome the
    // epoch fence already committed to.
@@ -586,11 +586,11 @@ export class LifecycleCore {
    if(result.status==='completed'&&result.text.length>0&&!relayedByCoordinator&&!this.store.db.all('SELECT 1 FROM bot_messages WHERE run_id=? AND attempt=? LIMIT 1',runId,attempt).length)
     appendBotMessageEvent(this.store,this.core.options.uuid,now,{id:runId,persona_id:run.persona_id,role:run.role},attempt,result.text,'final_text',null,`${runId}:${attempt}:final_text`);
    if(['completed','failed','cancelled'].includes(result.status))this.core.flushFollowups(runId);
-   // G4 (GROK_ALIGNMENT A4): a task the coordinator started (hehebot_start_task,
+   // V4 (ARCHITECTURE_V2 A4): a task the coordinator started (hehebot_start_task,
    // marked coordinator_task in its context — distinct from the pre-existing
    // native-child parent/child hierarchy, which also uses role='background'
    // with a parent_run_id but must never wake a coordinator) wakes it on
-   // settlement. 'interrupted' is a distinct terminal status introduced by G2
+   // settlement. 'interrupted' is a distinct terminal status introduced by V2
    // and is not reachable from this result union yet; wire it here too once
    // that status exists on this code path.
    if(run.role==='background'&&run.parent_run_id&&['completed','failed','cancelled','waiting'].includes(result.status)){
@@ -670,12 +670,12 @@ export class LifecycleCore {
     ${runId?'AND r.id=?':''} ${identity?'AND a.epoch=? AND a.boot_id=?':''}
    ON CONFLICT(key) DO NOTHING`,JSON.stringify('MEMORY_PREPARATION_LIMIT'),...(runId?[runId]:[]),...(identity?[identity.epoch,identity.boot_id]:[]));
  }
- /** G2 (GROK_ALIGNMENT A3): the shared terminal transition for a non-terminal
+ /** V2 (ARCHITECTURE_V2 A3): the shared terminal transition for a non-terminal
   * attempt. Moves the run and its current attempt to 'interrupted', fences its
   * effects (dispatched -> outcome_unknown; never-dispatched intent -> failed
   * with receipt abandoned_interrupted), and leaves resource locks held for
   * owner reconciliation. Idempotent: a run already in a terminal status is
-  * left alone. Callers (watchdog's two sites below, and G3's successor start)
+  * left alone. Callers (watchdog's two sites below, and V3's successor start)
   * select which runs qualify; this only performs the transition.
   */
  private interruptRuns(runIds:Iterable<string>,reason:string):void {
@@ -690,14 +690,14 @@ export class LifecycleCore {
    // the run's status is the authoritative terminal record for the attempt.
    this.store.db.exec("UPDATE effects SET status='failed',receipt_json=?,updated_at=? WHERE run_id=? AND status='intent'",JSON.stringify({kind:'abandoned_interrupted'}),now,id);
    this.store.db.exec("UPDATE effects SET status='outcome_unknown',updated_at=? WHERE run_id=? AND status='dispatched'",now,id);
-   // G2 (GROK_ALIGNMENT A2/A3, trap 1): the successor continuation needs only
+   // V2 (ARCHITECTURE_V2 A2/A3, trap 1): the successor continuation needs only
    // the epoch fence just applied above, not a confirmed provider-termination
    // proof. A read-only attempt with no unresolved custody (no native
    // question, no unsettled operation, no mutation/unresolved effect) may be
    // seeded again immediately; scheduleRetry's existing exclusions already
    // encode exactly that "no unknowns" bar, so reuse it here unchanged.
    this.scheduleRetry({id,role:run.role,current_attempt:run.current_attempt},errorCode);
-   // G2 (GROK_ALIGNMENT A3, trap 7): when scheduleRetry declined (an unresolved
+   // V2 (ARCHITECTURE_V2 A3, trap 7): when scheduleRetry declined (an unresolved
    // question, mutation/unknown effect, unsettled operation, background role or
    // attempt exhaustion), the run stays 'interrupted' with genuine uncertainty
    // that no automatic recovery can resolve. Surface it as an owner-visible
@@ -708,7 +708,7 @@ export class LifecycleCore {
     this.store.event(this.core.options.uuid(),run.persona_id,'notice','system',run.command_id,
      {kind:'needs_you',run_id:id,reason:errorCode,effect_ids:effectIds,choices:['reconcile','retry','abandon']},now);
    }
-   // G2 follow-up (GROK_ALIGNMENT A4): a G4 coordinator task (role='background',
+   // V2 follow-up (ARCHITECTURE_V2 A4): a V4 coordinator task (role='background',
    // parent_run_id set, and taskStart()'s own `coordinator_task` marker --
    // never an ordinary native-child background row) that gets fenced into
    // 'interrupted' still owes its coordinator the same task.event + bounded
@@ -724,7 +724,7 @@ export class LifecycleCore {
  }
  /** Public fence for one generation `(epoch,boot_id)`: every non-terminal run
   * whose CURRENT attempt belongs to it is interrupted via {@link interruptRuns}.
-  * G3's `advanceGeneration` calls this immediately after its atomic epoch bump,
+  * V3's `advanceGeneration` calls this immediately after its atomic epoch bump,
   * for the retired (predecessor) generation, with no process-death proof.
   */
  interruptGeneration(epoch:number,boot_id:string,reason:string):void {
@@ -734,7 +734,7 @@ export class LifecycleCore {
    this.interruptRuns(runIds,reason);
   });
  }
- /** G3 (GROK_ALIGNMENT A2, AGENTS.md trap 1): the successor path. From
+ /** V3 (ARCHITECTURE_V2 A2, AGENTS.md trap 1): the successor path. From
   * READY-with-an-expired-lease, RECOVERY_REQUIRED, or STOPPED, atomically bump
   * the epoch and fence the retiring generation's live work via
   * {@link interruptGeneration} in the SAME transaction, then leave the
@@ -774,7 +774,7 @@ export class LifecycleCore {
    const cancelledBefore=new Date(this.core.options.now().getTime()-30000).toISOString();
    const unsettled=this.store.db.all<{id:string}>(`SELECT r.id FROM runs r WHERE r.status='cancelling' AND r.updated_at<=? ${current?'AND EXISTS(SELECT 1 FROM attempts a WHERE a.run_id=r.id AND a.attempt=r.current_attempt AND a.epoch=? AND a.boot_id=?)':''}`,cancelledBefore,...(current?[current.epoch,current.boot_id]:[]));
    if(unsettled.length){
-    // G2 (GROK_ALIGNMENT A3): an unconfirmed cancellation is terminal for the
+    // V2 (ARCHITECTURE_V2 A3): an unconfirmed cancellation is terminal for the
     // attempt, not a recovery_required detour. Never-dispatched intent effects
     // are abandoned; dispatched effects become owner-visible unknowns; locks
     // stay held (A2) until the owner reconciles or releases them.
@@ -784,7 +784,7 @@ export class LifecycleCore {
    if(state.lease_until&&state.lease_until<=now&&['READY','DRAINING','BOOTING','START_REQUESTED'].includes(state.phase)){
     this.retainNativeMemoryRefusals(undefined,current??undefined);
     this.store.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',desired_state='STOP' WHERE singleton=1");
-    // G2 (GROK_ALIGNMENT A3): a lost boot lease interrupts the generation's
+    // V2 (ARCHITECTURE_V2 A3): a lost boot lease interrupts the generation's
     // live work in place of the old recovery_required+STALE_EPOCH bulk write.
     if(current)this.interruptGeneration(current.epoch,current.boot_id,'STALE_EPOCH');
     else this.interruptRuns(this.store.db.all<{id:string}>("SELECT id FROM runs WHERE status IN ('claimed','running','finishing','cancelling')").map(run=>run.id),'STALE_EPOCH');
@@ -843,7 +843,7 @@ export class LifecycleCore {
    requireThat(observation.executionStopped&&observation.persistentState==='retained','CAPABILITY_UNAVAILABLE','Existing runtime ownership is uncertain.');
    await this.requestWake(provider,ref,state);
   }else if(state.phase==='RECOVERY_REQUIRED'&&!this.core.ownerAlpha.policy&&this.claimableWork()){
-   // G3 (GROK_ALIGNMENT A2, AGENTS.md trap 1): a successor may start on an
+   // V3 (ARCHITECTURE_V2 A2, AGENTS.md trap 1): a successor may start on an
    // atomic epoch advance alone. Do not wait for `observation.executionStopped`
    // / observeStopped -- advanceGeneration already fenced the retiring
    // generation's live work (effects/locks/notice) in the same transaction as

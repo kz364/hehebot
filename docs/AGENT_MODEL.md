@@ -66,7 +66,7 @@ The initial concurrency target is one reserved interactive model turn plus at mo
 
 ## Messages go to the coordinator, not automatically into active work
 
-Routing follows [GROK_ALIGNMENT.md](GROK_ALIGNMENT.md) A4. The owner message enters the persona's coordinator turn, or steers it if one is already running. The coordinator chooses a tool, and everything it says goes through `hehebot_send_message`.
+Routing follows [ARCHITECTURE_V2.md](ARCHITECTURE_V2.md) A4. The owner message enters the persona's coordinator turn, or steers it if one is already running. The coordinator chooses a tool, and everything it says goes through `hehebot_send_message`.
 
 While Travel is filling form A:
 

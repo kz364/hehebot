@@ -186,7 +186,7 @@ export function migrateApplication(db:Database,now:string):void {
  });
  if(version===16)version=17;
  if(version===17)db.transaction(()=>{
-  // G2 (GROK_ALIGNMENT A3): 'interrupted' is a new terminal run status. SQLite
+  // V2 (ARCHITECTURE_V2 A3): 'interrupted' is a new terminal run status. SQLite
   // cannot ALTER a CHECK constraint, so rebuild the table like the v12/v13
   // rebuilds did. Existing hosted rows in recovery_required are NOT rewritten:
   // only new interruptions use the new status.

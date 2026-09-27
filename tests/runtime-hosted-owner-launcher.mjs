@@ -95,7 +95,7 @@ function injectedFixture(f, fixture, extra = [], inspect = () => {}) {
   };
 }
 
-// G3 (GROK_ALIGNMENT A2): CHANGED from the pre-G3 "a contended lock simply
+// V3 (ARCHITECTURE_V2 A2): CHANGED from the pre-V3 "a contended lock simply
 // refuses (exit 73) and the launch never runs the fixture" expectation. A
 // contended native-home or session lock is no longer refused: the launcher
 // kills the live holder's process group and takes over within its retry

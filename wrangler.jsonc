@@ -83,12 +83,12 @@
         ]
       }
     },
-    "grok": {
-      "name": "hehebot-grok",
+    "hehebot": {
+      "name": "hehebot",
       "workers_dev": true,
       "preview_urls": false,
       "vars": {
-        "INSTALLATION_ID": "personal-grok",
+        "INSTALLATION_ID": "personal-v2",
         "AUTH_MODE": "access",
         "ACCESS_ISSUER": "https://ancient-waterfall-b4eb.cloudflareaccess.com",
         "ACCESS_AUD": "",

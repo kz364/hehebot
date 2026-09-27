@@ -15,7 +15,7 @@ const state={objects:[{id:persona,kind:'persona',revision:1,body:{name:'Usage bo
 let taskUsage=[valid],routineUsage=[valid],commands=0;const requests=[];
 const page=usage=>({observed_at:'2026-09-17T00:00:00Z',counts:{total:1,waiting:0,recovery:0},runs:[run],next_cursor:null,steering:[],recovery:[],output_previews:[],token_usage_snapshots:usage});
 const server=createServer(async(req,res)=>{const path=new URL(req.url,'http://fixture').pathname;
- // GROK_ALIGNMENT A6: the portal always attempts a same-origin WebSocket at /v1/stream.
+ // ARCHITECTURE_V2 A6: the portal always attempts a same-origin WebSocket at /v1/stream.
  // This fixture is plain HTTP with no upgrade handling, so answer with 426 and keep it
  // out of the request log the assertions below check — it is not one of the reads under test.
  if(path==='/v1/stream'){res.writeHead(426);return res.end();}

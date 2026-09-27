@@ -1,6 +1,6 @@
 # Bot setup migration — shared Sprite + paired Mac
 
-Prepared 2026-09-10 from the owner's Grok export. This is the shareable setup summary; the complete adapted instructions and private migration context are in ignored `.local/imports/bot-routines-setup.md`. Original Downloads backup remains unchanged. Do not commit the source or private copy: they contain personal identity and contact information.
+Prepared 2026-09-10 from the owner's prior-bot export. This is the shareable setup summary; the complete adapted instructions and private migration context are in ignored `.local/imports/bot-routines-setup.md`. Original Downloads backup remains unchanged. Do not commit the source or private copy: they contain personal identity and contact information.
 
 ## Native-first setup
 

@@ -329,7 +329,7 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(life.get().phase).toBe('READY');expect(f.store.run(a.id)).toEqual(beforeA);
     expect(f.store.run(b.id).status).toBe('interrupted');
     expect(life.heartbeat(identity,[]).cancellations).toContain(b.id);
-    // G2 (GROK_ALIGNMENT A2/A3): interrupted needs no confirmed native
+    // V2 (ARCHITECTURE_V2 A2/A3): interrupted needs no confirmed native
     // settlement before retry -- the still-held resource lock is now the
     // genuine, more specific blocker.
     expect(f.accept({schema_version:1,type:'run.retry',payload:{run_id:b.id,expected_attempt:1}}).error?.code).toBe('RESOURCE_BUSY');
@@ -426,7 +426,7 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
       f.setNow(mode==='lease-expiry'?'2026-09-10T00:00:11.000Z':'2026-09-10T00:00:31.000Z');
       life.watchdog();
     }
-    // G2 (GROK_ALIGNMENT A2/A3): only observeStopped's confirmed provider
+    // V2 (ARCHITECTURE_V2 A2/A3): only observeStopped's confirmed provider
     // termination still lands in recovery_required; the watchdog's own
     // unconfirmed-cancel/lease-loss fences now produce 'interrupted'.
     expect(f.store.run(child.id)).toMatchObject({status:mode==='provider-stop'?'recovery_required':'interrupted',context_json:original,
@@ -531,7 +531,7 @@ describe('O01–O08 local orchestration metadata boundaries', () => {
     expect(() => life.prepareSleep(identity)).toThrowError(expect.objectContaining({ code: 'SLEEP_DENIED' }));
     f.setNow('2026-09-10T00:00:31.000Z'); life.watchdog();
     expect(f.store.run(child.id)).toMatchObject({ status: 'interrupted', error_code: 'CANCEL_UNCONFIRMED' });
-    // G2 (GROK_ALIGNMENT A2/A3): interrupted needs no confirmed native
+    // V2 (ARCHITECTURE_V2 A2/A3): interrupted needs no confirmed native
     // settlement before retry -- this native (background-role) task's own
     // capability restriction is now the genuine, more specific blocker.
     expect(f.accept({ schema_version: 1, type: 'run.retry', payload: { run_id: child.id, expected_attempt: 1 } }).error?.code).toBe('CAPABILITY_UNAVAILABLE');

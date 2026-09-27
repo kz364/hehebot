@@ -10,7 +10,7 @@ export class EffectLedger {
    requireThat(run,'NOT_FOUND','Run unavailable.',404);
    requireThat(run.current_attempt===input.expected_attempt,'REVISION_CONFLICT','The attempt has changed.');
    const attempt=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,input.expected_attempt)[0];
-   // G2 (GROK_ALIGNMENT A2/A3): interrupted is the epoch-fenced terminal state
+   // V2 (ARCHITECTURE_V2 A2/A3): interrupted is the epoch-fenced terminal state
    // for the attempt. It substitutes for confirmed executor termination; no
    // process-death proof is required before the owner may reconcile.
    requireThat(run.status==='interrupted'||attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before an owner effect decision.');

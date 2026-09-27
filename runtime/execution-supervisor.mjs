@@ -247,7 +247,7 @@ export class ExecutionSupervisor {
     });
   }
 
-  /** G8: stop this lane's timer before the coordinator lane drains, without
+  /** V8: stop this lane's timer before the coordinator lane drains, without
    * treating it as a failure. Any later lane call fails EXECUTOR_FENCED. */
   async quiesce() {
     if (this.phase !== 'running') fail('EXECUTOR_FENCED');

@@ -2,7 +2,7 @@
 
 Direct Codex app-server 0.154.0 is the only supported harness. Preserve supported native behavior, external durable control, one remote runtime and the no-patch/no-credential-copy constraints; use [Codex setup](CODEX_RUNTIME_SETUP.md) for authentication and [the handoff](HANDOFF.md) for continuation.
 
-**2026-09-27 owner decision:** [GROK_ALIGNMENT.md](GROK_ALIGNMENT.md) is normative and overrides conflicting text below. Replies are committed through `hehebot_send_message`, generations are fenced instead of proving process death, interrupted turns are terminal and continue as new attempts, and the coordinator routes with tools. The owner wants a usable assistant first. Recovery hardening that doesn't unblock a G row is out of scope.
+**2026-09-27 owner decision:** [ARCHITECTURE_V2.md](ARCHITECTURE_V2.md) is normative and overrides conflicting text below. Replies are committed through `hehebot_send_message`, generations are fenced instead of proving process death, interrupted turns are terminal and continue as new attempts, and the coordinator routes with tools. The owner wants a usable assistant first. Recovery hardening that doesn't unblock a V row is out of scope.
 
 Revision: 2026-09-13. This document preserves the product intent expressed across the remote-client setup, sleeping-assistant design, implementation handoffs, and bot-migration conversations. It is a normative supplement to [SPEC.md](../SPEC.md), with [BOT_ORCHESTRATION_ADDENDUM.md](BOT_ORCHESTRATION_ADDENDUM.md) defining the later concurrency clarification. It contains requirements, not a claim that the application is operational. [IMPLEMENTATION.md](IMPLEMENTATION.md) records implementation evidence and remaining gates.
 
@@ -41,15 +41,15 @@ Memory includes general owner preferences and dedicated persona/routine/skill me
 
 Scheduled tasks and selected external triggers wake the same persistent runtime. A dedicated portal is the wake channel; WhatsApp is a connector that can disconnect during sleep and reconnect using persisted state. Do not log out/unpair on normal sleep. Successful reconnection does not prove recovery of all messages received while offline. Measure catch-up, disclose gaps and never advance a coverage watermark over unknown history.
 
-Sleep is allowed only after all **live, current-generation** inference, tools, child tasks, browser work, transfers, local-node operations and persistence flushes settle. Interrupted attempts and unknown effects are durable records shown to the owner, not live work (GROK_ALIGNMENT A3). An idle coordinator is not an idle runtime. Use the selected provider's activity holds and verify their renewal, release and expiry behavior. Cold wake must reconstruct durable tasks and state without assuming process memory survived. Avoid polling that prevents sleep.
+Sleep is allowed only after all **live, current-generation** inference, tools, child tasks, browser work, transfers, local-node operations and persistence flushes settle. Interrupted attempts and unknown effects are durable records shown to the owner, not live work (ARCHITECTURE_V2 A3). An idle coordinator is not an idle runtime. Use the selected provider's activity holds and verify their renewal, release and expiry behavior. Cold wake must reconstruct durable tasks and state without assuming process memory survived. Avoid polling that prevents sleep.
 
-Replacing an executor needs an atomic epoch advance that fences the old generation's messages and effect permits, not proof that the old process died (GROK_ALIGNMENT A2). A reply the agent has committed through `hehebot_send_message` is visible regardless of later turn failure (A1). Detect stuck tasks; distinguish cancellation requested from cancellation confirmed. Retry bounded safe failures; reconcile uncertain external effects before retrying them. Cancellation of one task must not stop unrelated work. A new message, switching bots, closing a browser tab or timing out is not cancellation. Every accepted job retains a visible outcome or waiting/recovery reason.
+Replacing an executor needs an atomic epoch advance that fences the old generation's messages and effect permits, not proof that the old process died (ARCHITECTURE_V2 A2). A reply the agent has committed through `hehebot_send_message` is visible regardless of later turn failure (A1). Detect stuck tasks; distinguish cancellation requested from cancellation confirmed. Retry bounded safe failures; reconcile uncertain external effects before retrying them. Cancellation of one task must not stop unrelated work. A new message, switching bots, closing a browser tab or timing out is not cancellation. Every accepted job retains a visible outcome or waiting/recovery reason.
 
 Initial native capacity of one interactive turn plus one background model turn is an engineering candidate, not an owner demand for a custom scheduler. Native behavior must satisfy O01–O09 before claiming the non-interrupting conversation requirement complete. Serialization behind one busy background session does not meet that requirement.
 
 ## 4. Bot migration: common rules
 
-The supplied Grok export has been adapted for the single-Sprite topology. Import five personas and seven canonical recurring routines; omit the empty bot stub. One installation owns connector authentication: one configured Google connection, one shared WhatsApp linked session and one paired Mac. Personas receive scoped capabilities, not copies of credentials. Historical Grok VM/session IDs and login/tool names are mapping references only.
+The supplied prior-bot export has been adapted for the single-Sprite topology. Import five personas and seven canonical recurring routines; omit the empty bot stub. One installation owns connector authentication: one configured Google connection, one shared WhatsApp linked session and one paired Mac. Personas receive scoped capabilities, not copies of credentials. Historical prior-bot VM/session IDs and login/tool names are mapping references only.
 
 Imported routines start disabled. Preview instructions, source/account/calendar/chat mappings, action scope, current revisions and next three execution times, then adopt the reviewed batch once. Historical enabled flags or “always approve” instructions are not activation commands. Do not repeatedly ask approval for each routine after a bounded batch is actually authorized.
 
@@ -89,7 +89,7 @@ Extract supported plans, appointments and deadlines; apply shared calendar rules
 
 Use the paired Mac's supported read-only reader or consistent snapshot with permissions granted to its actual host process. Activating Messages may help synchronization but does not prove all messages arrived. Establish an explicit first-run baseline rather than arbitrary backfill. Process available new appointment confirmations, clinics, reschedules and cancellations; skip banter and duplicates. Apply exact reminder and tentative-time rules. Report material changes.
 
-When the Mac is offline, preserve the watermark and a durable wait, suppress repeated offline notices, and retry on reconnection. The Sprite must not stay awake solely waiting for the laptop. Active node calls do count as runtime activity. Historical Grok Full Disk Access/Text Message Forwarding claims do not establish the new process's permission or SMS completeness.
+When the Mac is offline, preserve the watermark and a durable wait, suppress repeated offline notices, and retry on reconnection. The Sprite must not stay awake solely waiting for the laptop. Active node calls do count as runtime activity. Historical prior-bot Full Disk Access/Text Message Forwarding claims do not establish the new process's permission or SMS completeness.
 
 ### Flight hold and restore
 
@@ -149,7 +149,7 @@ The original deployment handoff requested an architecture diagram, concise statu
 | Sprites selected; explicit auth/API setup guidance requested | Sections 2 and 7; AUTH_SETUP.md |
 | Laptop retained as a node | Sections 2 and 5; AUTH_SETUP.md |
 | Every bot stays messageable while carrying out other tasks | Sections 1 and 3; normative O01–O09 addendum |
-| Adapt Grok export to one VM/shared accounts rather than copying verbatim | Sections 4–6; BOT_SETUP.md and IMPORT_FORMAT.md |
+| Adapt prior-bot export to one VM/shared accounts rather than copying verbatim | Sections 4–6; BOT_SETUP.md and IMPORT_FORMAT.md |
 | Preserve supported Codex execution behavior | Sections 2–3; no second model/tool loop |
 | Optional exporter and Codex desktop computer-use backend | Export supplied: normalized import is first path; automated exporter and desktop-specific backend remain optional, requiring supported interfaces |
 | Publish code, documentation and full intent privately | This supplement and SPEC.md; exclude secrets, raw account state and private identity records |

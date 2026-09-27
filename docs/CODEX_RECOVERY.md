@@ -1,6 +1,6 @@
 # Offline Codex recovery inspection
 
-> **2026-09-27 ([GROK_ALIGNMENT.md](GROK_ALIGNMENT.md) A2/A3):** this inspector is an **optional operator diagnostic, frozen.**
+> **2026-09-27 ([ARCHITECTURE_V2.md](ARCHITECTURE_V2.md) A2/A3):** this inspector is an **optional operator diagnostic, frozen.**
 > - It is not a precondition for successor start, retry, continuation or sleep.
 > - Interrupted attempts are terminal and continue as new seeded attempts.
 > - Don't extend its coverage or add more custody variants unless a G-row defect needs it (AGENTS.md "Traps").

@@ -4,7 +4,7 @@ import { TestDatabase, bot } from './helpers';
 import { PersonalControl } from '../src/worker/control-object';
 import worker from '../src/worker/index';
 
-// GROK_ALIGNMENT A6: the streamed timeline. Exercised the same way as
+// ARCHITECTURE_V2 A6: the streamed timeline. Exercised the same way as
 // control-object.test.ts — the real RPC methods, the real SQL, only the
 // Cloudflare host (DurableObject base, WebSocketPair/hibernation primitives)
 // is replaced. A fake socket is a plain object supporting exactly the

@@ -6,18 +6,18 @@ The only supported execution harness is **Codex app-server 0.154.0**. Fly Sprite
 
 **Current status:** the protected cloud portal has demonstrated canonically completed bounded text-only replies, including a Worker-triggered wake and authenticated reload. Historical failed work remains recovery-required. Message-triggered fresh-session staging is local and default-off; this is not ongoing chat availability or production operation. Production execution gates remain false. A root Codex turn completing is not proof that tools, children, effects, output delivery, or persistence have settled. See TODO for current evidence and blockers.
 
-**Architecture direction (2026-09-27):** [Grok-aligned execution architecture](docs/GROK_ALIGNMENT.md) is normative.
+**Architecture direction (2026-09-27):** [Hehebot v2 execution architecture](docs/ARCHITECTURE_V2.md) is normative.
 - Agents reply through a committed `hehebot_send_message`.
 - Stale executors are fenced by epoch instead of proving they died.
 - Interrupted turns are terminal and continue as new attempts.
 - Coordinators route with task tools.
 - The portal uses a durable outbox and a streamed timeline.
 
-Work is tracked as the G rows in [TODO.md](TODO.md). [Grok Bot reference patterns](docs/GROK_BOT_REFERENCE.md) explains where each decision comes from.
+Work is tracked as the V rows in [TODO.md](TODO.md). [Reference patterns](docs/REFERENCE_PATTERNS.md) explains where each decision comes from.
 
 ## Start here
 
-- **[Current handoff](docs/HANDOFF.md)** covers the Grok-alignment resume (2026-09-27): where to start, the code map and the current state. Work is on the `grok-alignment` branch (from `source-custody`), not `main`.
+- **[Current handoff](docs/HANDOFF.md)** covers the v2-architecture resume (2026-09-27): where to start, the code map and the current state. Work is on the `v2-architecture` branch (from `source-custody`), not `main`.
 - **[Progress and TODO](TODO.md)** — completed local work, remaining tasks, next priority, verification and owner/account/device blockers; updated at implementation checkpoints.
 - [Agent model: personas, background tasks, and shared accounts](docs/AGENT_MODEL.md) — diagram and explanation of who controls what
 - [Implementation status](docs/IMPLEMENTATION.md)

@@ -76,7 +76,7 @@ it.each([9,10,11,12])('keeps v%s exports readable without migration or fabricate
  f.db.exec('DROP INDEX runs_parent');
  f.db.exec('DROP INDEX objects_memory_scope');
  f.db.exec('DROP INDEX bot_messages_run_attempt');f.db.exec('DROP TABLE bot_messages');
- // G2 (v18) rebuilt runs with an unquoted name and no 'interrupted' status for
+ // V2 (v18) rebuilt runs with an unquoted name and no 'interrupted' status for
  // these historical (pre-v18) pins; recreate that exact pre-v18 shape. Build
  // the replacement directly under its final name (no ALTER...RENAME) so SQLite
  // does not re-quote the identifier in its own or dependents' stored SQL text.

@@ -1,6 +1,6 @@
 # Codex orchestration and settlement contract
 
-> **2026-09-27 supersession ([GROK_ALIGNMENT.md](GROK_ALIGNMENT.md)):**
+> **2026-09-27 supersession ([ARCHITECTURE_V2.md](ARCHITECTURE_V2.md)):**
 > - Routing is the coordinator's choice of tool (A4), not classification.
 > - Settlement and descendant coverage gate **automatic sleep and effect reconciliation only**. They don't gate committed `hehebot_send_message` replies (A1) or successor start (A2).
 > - An interrupted turn is terminal for its attempt. Its descendants are killed with the process group, and effects are fenced by epoch. There is no native takeover or reconstruction of child trees (A3).

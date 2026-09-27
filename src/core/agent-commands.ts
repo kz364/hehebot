@@ -11,7 +11,7 @@ export const SKILL_PROPOSE_POLICY='46b2cbdd-d227-4f54-bffa-33148aad0134';
 export const ROUTINE_MANAGE_POLICY='f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 export {MEMORY_READ_POLICY} from './memory-context';
 
-/** G8 (GROK_ALIGNMENT A4): tasks belong to the persona's conversation, not to
+/** V8 (ARCHITECTURE_V2 A4): tasks belong to the persona's conversation, not to
  * the single coordinator turn that started them. A later coordinator turn of
  * the same persona (the next owner message or a task.event wake) must see and
  * manage them, or "how's it going?" cannot be answered from hehebot_list_tasks.
@@ -135,7 +135,7 @@ export class AgentCommandBoundary {
   requireThat(skill,'NOT_FOUND','This skill is not enabled in the admitted task snapshot.',404);
   return {skill};
  }
- /** G4: coordinator-only task ledger reads, scoped to this run's own children.
+ /** V4: coordinator-only task ledger reads, scoped to this run's own children.
   * A background task (no admitted persona coordinator role) gets FORBIDDEN;
   * this is the "no recursive fan-out" boundary for every task tool. */
  taskList(request:AgentTaskList){
@@ -183,7 +183,7 @@ export class AgentCommandBoundary {
    requireThat(!supplied.payload.executable_files_changed,'CAPABILITY_UNAVAILABLE','Executable skill files require separate review.');
    command={...supplied,payload:{...supplied.payload,provenance:{kind:'model',source_ref:request.run_id}}};
   }else if(supplied.type==='task.start'){
-   // G4 (GROK_ALIGNMENT A4): coordinator-only, and never fanned out recursively
+   // V4 (ARCHITECTURE_V2 A4): coordinator-only, and never fanned out recursively
    // from within an already-running background task.
    requireThat(run.role!=='background','FORBIDDEN','A background task may not start another task.',403);
    const capabilities=supplied.payload.capabilities??[];

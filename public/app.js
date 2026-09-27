@@ -301,7 +301,7 @@ async function command(type,payload,key=crypto.randomUUID()){
  const result=await api('/v1/commands',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key},body:JSON.stringify({schema_version:1,type,payload})});
  if(result.status==='rejected')throw new Error(result.error?.message??'This change could not be saved.');return result;
 }
-// --- G5 durable client outbox (GROK_ALIGNMENT A5) --------------------------
+// --- V5 durable client outbox (ARCHITECTURE_V2 A5) --------------------------
 // A send is persisted to storage BEFORE its POST, so a reload or a lost
 // response reconciles through GET /v1/receipts?idempotency_key= instead of
 // silently duplicating or losing an owner message. nonce === Idempotency-Key.
@@ -431,7 +431,7 @@ async function outboxReconcileOnLoad(){
  // 15s fallback poll, which would leave an accepted-but-unechoed bubble on
  // screen far longer than a reload should. Only fires when reconciliation
  // actually found something, so a page with no outbox history never issues
- // an extra read. Bug found while making G-A5 pass (GROK_ALIGNMENT A5).
+ // an extra read. Bug found while making V-A5 pass (ARCHITECTURE_V2 A5).
  if(foundAccepted)refresh();
  for(const conversationId of new Set([...outboxRecords.values()].map(r=>r.conversation_id)))outboxDrain(conversationId);
 }
@@ -490,7 +490,7 @@ async function refresh(force=false){
  if(loading||document.hidden&&!force)return;loading=true;
  try{const value=await api('/v1/state');snapshot=value;
   // Seed the stream cursor from the snapshot so events committed between this
-  // read and the next subscribe are replayed, not skipped (GROK_ALIGNMENT A6).
+  // read and the next subscribe are replayed, not skipped (ARCHITECTURE_V2 A6).
   if(wsCursor===null&&/^\d+$/.test(String(value.next_cursor)))wsCursor=Number(value.next_cursor);
   // Bind background/warm/alpha fences before any conversation reads so
   // unrelated personas and rooms stay read-only without issuing denied
@@ -581,9 +581,9 @@ function render(){
   }catch(e){if(selected===conversationId)report(e.message);}},'quiet'));}
   if(!view&&!conversation.length&&!questions.length&&!pendingOutbox.length&&alphaConversationAvailable(selected)){const empty=node('div',undefined,'empty');empty.append(node('h2',`A place to work with ${object?.body.name??'your assistant'}`),node('p','Ask for help, share an update, or describe something you’d like done on a schedule.'));timeline.append(empty);}
   for(const question of questions)renderQuestion(timeline,question);
-  // G7 clean thread (GROK_ALIGNMENT A7): only owner.message (message.user) and
+  // V7 clean thread (ARCHITECTURE_V2 A7): only owner.message (message.user) and
   // bot.message are chat bubbles. A run.result stays a non-bubble recorded
-  // outcome once a bot.message exists for its run (G1 emits one final_text
+  // outcome once a bot.message exists for its run (V1 emits one final_text
   // bot.message per completed attempt); a completed run with retained text
   // and no such event is legacy data, shown once as a bubble marked (legacy).
   const botMessageRunIds=new Set(conversation.filter(e=>e.type==='bot.message').map(e=>e.payload?.run_id));
@@ -611,14 +611,14 @@ function render(){
     e.append(label);
     timeline.append(e);
     // Legacy fallback only: a completed result with retained text but no
-    // bot.message for this run predates G1 and would otherwise be silent.
+    // bot.message for this run predates V1 and would otherwise be silent.
     const legacyText=event.payload.status==='completed'&&event.payload.text&&!botMessageRunIds.has(event.payload.run_id)?event.payload.text:null;
     if(legacyText&&(!query||legacyText.toLowerCase().includes(query))){
      const m=node('article',undefined,'message bot');const h=node('div',undefined,'message-head');h.append(node('strong',object?.body.name??'Assistant'),node('time',time(event.created_at)),node('span','(legacy)','status'));
      m.append(h,node('div',legacyText,'message-body'));timeline.append(m);
     }
    }else if(event.type==='notice'&&event.payload.kind==='needs_you'){
-    // G2: a needs_you notice is owner-visible uncertainty, not a search-filtered
+    // V2: a needs_you notice is owner-visible uncertainty, not a search-filtered
     // bubble -- it must always render, even when a text query is active.
     const run=runs.find(x=>x.id===event.payload.run_id);
     const e=node('div',undefined,'event');e.setAttribute('role','status');
@@ -641,7 +641,7 @@ function render(){
     const e=node('div',undefined,'event');e.setAttribute('role','status');const skillRun=Boolean(event.payload?.skill_id||event.payload?.skill_invocation);e.append(node('span','Request expired','status'),node('span',skillRun?'An unstarted Run once request expired after 30 days. Open the current approved skill and supply fresh input.':'A queued request expired after 90 days without starting. Send a fresh request if it is still needed.'));timeline.append(e);
    }else if(event.type.startsWith('room.')){const e=node('div',undefined,'event');e.append(node('span',event.type==='room.context_update'?'Context update':'Room update'),node('span',event.payload.text??''));timeline.append(e);}
   }
-  // G5 outbox (GROK_ALIGNMENT A5): unresolved sends render as owner bubbles,
+  // V5 outbox (ARCHITECTURE_V2 A5): unresolved sends render as owner bubbles,
   // optimistic until echoed, never search-filtered since they aren't committed.
   const outboxLabels={queued:'Queued to send…',sending:'Sending…',accepted:'Sent — waiting for confirmation…',unknown:'Not delivered yet — retrying…'};
   for(const record of pendingOutbox){
@@ -663,7 +663,7 @@ function render(){
    renderTokenUsage(card,run,view?.kind==='tasks'?view.page:view?null:snapshot);
    const preview=previews.find(item=>item.run_id===run.id);
    if(preview){
-    // G7 clean thread (A7): provisional text is an ephemeral, visually
+    // V7 clean thread (A7): provisional text is an ephemeral, visually
     // distinct "working" line, never a chat bubble and never given the
     // persisted look of a committed message.
     card.querySelector('summary').append(node('span',' · Working…','status'));
@@ -1382,7 +1382,7 @@ $('export-control').onclick=async()=>{
  }catch(error){status.textContent=error instanceof TypeError?'Connection failed. No download was requested.':error.message;}
  finally{trigger.disabled=false;}
 };
-// --- G6 streamed timeline, portal client (GROK_ALIGNMENT A6) ---------------
+// --- V6 streamed timeline, portal client (ARCHITECTURE_V2 A6) ---------------
 // Primary transport is a same-origin WebSocket at /v1/stream. It is only ever
 // opened while the page is visible, never wakes or infers anything by
 // itself, and any close/error backs off (1,2,4…30s) and reconnects. While it
@@ -1452,7 +1452,7 @@ document.addEventListener('visibilitychange',()=>{if(alphaSeen)renderAlphaSessio
 await refresh(true);if(selected==='connectors')loadConnectorCatalog();if(selected)$('message').value=localStorage.getItem('personal.draft.'+selected)??'';
 await outboxReconcileOnLoad();
 // Fallback polling only: never while hidden, never while the stream is open.
-// 15s replaces the old fixed 5s full refresh (GROK_ALIGNMENT A6).
+// 15s replaces the old fixed 5s full refresh (ARCHITECTURE_V2 A6).
 setInterval(()=>{if(!streamActive&&!document.hidden)refresh();},15000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(true);});
 if(!document.hidden)connectStream();

@@ -1,5 +1,5 @@
-// G2 (GROK_ALIGNMENT A2/A3, AGENTS.md traps 1/2/3/4/7): the five behavioral
-// scenarios the G2 checkpoint requires, exercised end to end rather than as
+// V2 (ARCHITECTURE_V2 A2/A3, AGENTS.md traps 1/2/3/4/7): the five behavioral
+// scenarios the V2 checkpoint requires, exercised end to end rather than as
 // unit-level variants of invariants already proven elsewhere.
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, it } from 'vitest';

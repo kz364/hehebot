@@ -1,6 +1,6 @@
 # Implementation status
 
-> **2026-09-27:** Architecture direction is now [GROK_ALIGNMENT.md](GROK_ALIGNMENT.md), and the live checklist is the G rows in [TODO.md](../TODO.md). This file is a **historical evidence log**: search it, don't read it top to bottom. Its "next" and "continue" statements predate the realignment and are superseded.
+> **2026-09-27:** Architecture direction is now [ARCHITECTURE_V2.md](ARCHITECTURE_V2.md), and the live checklist is the V rows in [TODO.md](../TODO.md). This file is a **historical evidence log**: search it, don't read it top to bottom. Its "next" and "continue" statements predate the realignment and are superseded.
 
 
 Hehebot has demonstrated canonically completed hosted text-only replies, including a Worker-triggered staged wake, with authenticated full-reload persistence. This is not production operation or ongoing availability. Direct Codex app-server **0.154.0** is the only supported harness. Historical failed trial custody remains recovery-required. Production execution and native-verification flags remain false.

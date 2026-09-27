@@ -567,7 +567,7 @@ describe('executor leases and attempts', () => {
     f.db.exec("INSERT INTO effects(id,run_id,action_key,classification,status,authorization_ref,request_digest,receipt_json,updated_at) VALUES(?,?,?,?,'dispatched','test','digest',?,?)", effectId, id, randomUUID(), classification, receipt, f.core.now());
     f.setNow('2026-09-10T00:03:00.000Z');
     life.watchdog();
-    // G2 (GROK_ALIGNMENT A3): a lost lease interrupts the attempt in place of
+    // V2 (ARCHITECTURE_V2 A3): a lost lease interrupts the attempt in place of
     // the old recovery_required+STALE_EPOCH detour; interrupted is terminal.
     expect(f.store.run(id)).toMatchObject({ status: 'interrupted', error_code: 'STALE_EPOCH' });
     const effects = f.db.all('SELECT * FROM effects'), locks = f.db.all('SELECT * FROM resource_locks');
@@ -919,7 +919,7 @@ describe('drain, stop and takeover races', () => {
     f.db.exec("UPDATE effects SET status='dispatched'");
     f.setNow('2026-09-10T00:01:31.000Z'); life.watchdog();
     expect(life.get().phase).toBe('RECOVERY_REQUIRED');
-    // G2 (GROK_ALIGNMENT A3): the lease-loss fence now interrupts the attempt
+    // V2 (ARCHITECTURE_V2 A3): the lease-loss fence now interrupts the attempt
     // directly instead of parking it as recovery_required+STALE_EPOCH.
     expect(f.store.run(claim.run.id).status).toBe('interrupted');
     expect(f.db.all('SELECT status FROM effects')[0]).toEqual({ status: 'outcome_unknown' });

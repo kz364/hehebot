@@ -85,7 +85,7 @@ it.each(['OWNER_CANCELLED', 'CONTEXT_INVALIDATED', 'DEADLINE_EXCEEDED'])('preser
   f.core.questions.resolve(identity, id, connection);
   expect(f.core.questions.get(id)).toMatchObject({ state: 'resolved', restart_required_at: f.core.now() });
   f.setNow('2026-09-10T00:05:20.000Z'); lifecycle.watchdog();
-  // G2 (GROK_ALIGNMENT A2/A3, trap 1): a read-only run interrupted for a
+  // V2 (ARCHITECTURE_V2 A2/A3, trap 1): a read-only run interrupted for a
   // retryable reason (unlike an owner-directed cancellation) with no
   // remaining unresolved custody is reseeded immediately from the same fence.
   expect(f.store.run(runId).status).toBe(reason === 'DEADLINE_EXCEEDED' ? 'waiting' : 'interrupted');

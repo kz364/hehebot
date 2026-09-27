@@ -165,7 +165,7 @@ CREATE TABLE flight_restore_deadlines (
  run_id TEXT, receipt_json TEXT, PRIMARY KEY(leg_id,revision)
 );
 
--- Committed bot messages (GROK_ALIGNMENT A1). One row per delivered hehebot_send_message
+-- Committed bot messages (ARCHITECTURE_V2 A1). One row per delivered hehebot_send_message
 -- call or final_text fallback; the bot.message event is the durable record, this table
 -- is the dedupe/rate-limit index over it.
 CREATE TABLE bot_messages (

@@ -31,7 +31,7 @@ let reads=0,deniedReads=0,botReads=0,offline=false,failMessage=false;
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
 const evaluate=async code=>JSON.parse((await browser('eval',code).then(r=>r.stdout.trim()||'null')).trim());
 const wait=code=>browser('wait','--fn',code);
-// The G5 durable outbox (GROK_ALIGNMENT A5) sends via an async drain loop, so
+// The V5 durable outbox (ARCHITECTURE_V2 A5) sends via an async drain loop, so
 // a click no longer guarantees the server has the POST by the time the
 // composer clears; poll the Node-side `commands` array instead of asserting
 // its length immediately after a UI wait.
@@ -218,7 +218,7 @@ try{
  offline=false;await refresh();await wait('!document.querySelector("#send").disabled');
  // Phase J — uncertain send preserves pending bytes/key; explicit retry reuses the same key.
  await resetPage();background('bg-12');await open();await enabled();
- // The G5 durable outbox (GROK_ALIGNMENT A5) retries automatically under the
+ // The V5 durable outbox (ARCHITECTURE_V2 A5) retries automatically under the
  // same Idempotency-Key with backoff; there is no manual retry click, and
  // the composer clears immediately rather than holding the unsent text.
  failMessage=true;const beforeUncertain=commands.length;

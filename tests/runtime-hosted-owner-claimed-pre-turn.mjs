@@ -232,7 +232,7 @@ test('stopped direct child and both free locks do not attest a surviving helper 
   } finally { const exit = once(helper, 'exit'); helper.stdin.end(); await exit; }
 });
 
-// G3 (GROK_ALIGNMENT A2): CHANGED from the pre-G3 "a held lock refuses
+// V3 (ARCHITECTURE_V2 A2): CHANGED from the pre-V3 "a held lock refuses
 // evidence production" expectation. A contended native_home or session lock
 // is no longer refused: the real nested lock chain inside
 // produceClaimedPreTurnEvidence kills the live holder's process group and
@@ -245,7 +245,7 @@ test('a held kernel lock is reclaimed by claimed pre-turn evidence production ra
     const f = await fixture(t), holder = spawn('bash', [lockScript, f.request.roots[key].path, process.execPath, '-e',
       'console.log("locked");process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
     await once(holder.stdout, 'data');
-    // Registered before any lock contention: a contended lock now (G3) kills a
+    // Registered before any lock contention: a contended lock now (V3) kills a
     // live holder as part of takeover, so the 'exit' listener must be armed
     // before that can happen or the event is missed and this hangs forever.
     const exited = once(holder, 'exit');

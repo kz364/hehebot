@@ -8,7 +8,7 @@ The full specification includes this document and the normative [project intent]
 
 **Start with section 21 for the consolidated product, Apache-reuse and low-cost execution contract.** It incorporates all UX01–UX15 requirements in [PRODUCT_UX_SPEC.md](PRODUCT_UX_SPEC.md) as normative detail. Sections 1–20 retain storage, lifecycle, authorization and acceptance contracts. [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) maps requirements to delivery work.
 
-**Precedence (2026-09-27): [docs/GROK_ALIGNMENT.md](docs/GROK_ALIGNMENT.md) and [section 22](#22-grok-aligned-execution-architecture-2026-09-27) are normative and override conflicting clauses below.** In short:
+**Precedence (2026-09-27): [docs/ARCHITECTURE_V2.md](docs/ARCHITECTURE_V2.md) and [section 22](#22-v2-execution-architecture-2026-09-27) are normative and override conflicting clauses below.** In short:
 - replies are committed through `hehebot_send_message` independently of turn settlement
 - successors start after an atomic epoch advance, and effects are fenced by generation, not by proof of process termination
 - interrupted attempts are terminal and continue as new attempts
@@ -46,9 +46,9 @@ The user should think “ask Travel” or “run the morning briefing,” withou
 
 Each persona coordinates its own isolated background task contexts while remaining available for conversation; ordinary messages do not implicitly steer or cancel active tasks. There is no required intermediate layer of persistent worker agents. Personas and tasks share one installation-owned Codex login and configured tool accounts, with capabilities enforced per persona/task rather than granted by shared authentication. See the [agent model diagram and explainer](docs/AGENT_MODEL.md) for roles, message-routing examples, account boundaries, and unverified gates; the [orchestration contract](docs/BOT_ORCHESTRATION_ADDENDUM.md) defines acceptance.
 
-Provided constraints: approximately $5/month infrastructure target through transient compute; dedicated chat rather than WhatsApp as the wake channel; scheduled and event wake; no sleeping during inference or tools; stuck detection and cancellation/retry; OpenAI subscription OAuth. Codex desktop computer use and Grok export are optional. Implementation is now authorized locally; live deployment and inference remain gated.
+Provided constraints: approximately $5/month infrastructure target through transient compute; dedicated chat rather than WhatsApp as the wake channel; scheduled and event wake; no sleeping during inference or tools; stuck detection and cancellation/retry; OpenAI subscription OAuth. Codex desktop computer use and the prior-bot export are optional. Implementation is now authorized locally; live deployment and inference remain gated.
 
-Non-goals: multi-user SaaS, a new general-purpose agent orchestration framework, always-on WhatsApp connectivity, guaranteed recovery of every missed WhatsApp message, multiple active copies of the runtime, autonomous spending or sending beyond user authorization, or complete replication of Grok's internals.
+Non-goals: multi-user SaaS, a new general-purpose agent orchestration framework, always-on WhatsApp connectivity, guaranteed recovery of every missed WhatsApp message, multiple active copies of the runtime, autonomous spending or sending beyond user authorization, or complete replication of the reference product's internals.
 
 Stakeholder: one owner using desktop/mobile browsers and an optional paired Mac. Tradeoffs: cold-start delay and recovery downtime are accepted for lower cost; external orchestration adds a small service but is necessary to wake a stopped runtime; application metadata must have one canonical writer; browser side effects cannot be made exactly-once merely with queue deduplication.
 
@@ -57,7 +57,7 @@ Stakeholder: one owner using desktop/mobile browsers and an optional paired Mac.
 - **Mode:** API/backend plus portal UI and optional CLI. Rationale: lifecycle correctness depends on durable contracts. Override: a different front end may reuse the same command API.
 - **Topology:** Cloudflare Worker + one SQLite Durable Object per installation; one persistent runtime selected through a provider adapter; Node 24 and Codex app-server 0.154.0. Rationale: external acceptance/alarms with resumable state and no always-on agent host.
 - **Owner login:** one allowlisted owner through Cloudflare Access; verify issuer, audience, signature and subject on every request. Rationale: avoid building account management. Override: another OIDC provider with equivalent checks; never trust an unsigned identity header.
-- **Personas:** start with Chief of Staff, Inbox Triage, Whatsapp, Messages, and Travel; enable only configured connectors. Rationale: a small useful set illustrates Grok-like responsibilities without pre-authorizing tasks. Override: owner can create/rename/archive bots and edit instructions.
+- **Personas:** start with Chief of Staff, Inbox Triage, Whatsapp, Messages, and Travel; enable only configured connectors. Rationale: a small useful set illustrates reference-product-like responsibilities without pre-authorizing tasks. Override: owner can create/rename/archive bots and edit instructions.
 - **Conversation:** one visible timeline per bot, plus optional rooms; native task sessions hidden. Rationale: remove thread management while keeping tasks isolated. Override: developer diagnostics can expose native IDs; no required user thread workflow.
 - **Memory:** canonical application records for global/persona/routine/skill memory; Codex thread state is executor-private. An adapter may use native storage only if equivalent revisions, scopes and deletion are demonstrated.
 - **Time:** IANA `Asia/Jakarta`; timestamps UTC RFC3339 with milliseconds; UUIDv4 object IDs. Rationale: current owner timezone and unambiguous persistence. Override: installation timezone and individual schedule timezone, each versioned.
@@ -71,14 +71,14 @@ Stakeholder: one owner using desktop/mobile browsers and an optional paired Mac.
 
 The runtime choice is settled: direct Codex app-server 0.154.0 only. The following are implementation or rollout gates, not claims of verified compatibility.
 
-The expanded product target is work-domain-neutral Grok Bot UX/capability parity with replaceable model/harness execution. UX11–UX15 explicitly require managed skill authoring, full conversational routine lifecycle, interaction/knowledge parity, teaching/templates and portable application state. These additions supersede earlier optional-capability omissions for the full product target, but do not claim implementation or change current limits. The 20-enabled-routine cap remains a capacity gap to evaluate, not an owner-requested permanent restriction. Existing S/O acceptance remains necessary but is not sufficient to claim complete product parity.
+The expanded product target is work-domain-neutral reference-product UX/capability parity with replaceable model/harness execution. UX11–UX15 explicitly require managed skill authoring, full conversational routine lifecycle, interaction/knowledge parity, teaching/templates and portable application state. These additions supersede earlier optional-capability omissions for the full product target, but do not claim implementation or change current limits. The 20-enabled-routine cap remains a capacity gap to evaluate, not an owner-requested permanent restriction. Existing S/O acceptance remains necessary but is not sufficient to claim complete product parity.
 
 1. **[BLOCKER for production sleep]** Does the pinned native Codex runtime expose complete admission, cancellation, child/tool and terminal lifecycle coverage? Default: fail closed on sleep and keep production schedules disabled until the adapter tests pass; do not deploy always-on as an unnoticed workaround.
 2. **[BLOCKER for production inference]** Does the owner's subscription support the selected model and Codex-managed authentication across restart/refresh? No paid fallback; block affected jobs with `AUTH_REQUIRED` if unsupported.
 3. **[NON-BLOCKER]** What WhatsApp catch-up completeness is needed? Default: best-effort historical retrieval with visible last-sync age; no routine may claim complete coverage until the cold-start matrix passes.
 4. **[NON-BLOCKER]** Which external events should wake the system? Default: signed generic webhook and portal messages, plus schedules; individual email/calendar subscriptions are later connector configuration, not arbitrary polling.
 5. **[NON-BLOCKER]** What measured Sprites CPU/memory/storage footprint meets the budget? Default: Sprites is selected; benchmark actual use and wake overhead before enabling monitoring. Fly Machines sizing is a portability comparison only.
-6. **[RESOLVED for initial migration]** The owner supplied a Grok markdown export. Use the reviewed adapted five-bot/seven-routine import. Automated extraction remains optional and is not required for setup.
+6. **[RESOLVED for initial migration]** The owner supplied a prior-bot markdown export. Use the reviewed adapted five-bot/seven-routine import. Automated extraction remains optional and is not required for setup.
 
 ### Deferred: shared secrets integration
 
@@ -96,17 +96,17 @@ Current project: local control-plane and scripted Codex fixtures exist, with no 
 
 Desired: portal always accepts authenticated work; one stopped Machine resumes with the same state; native personas execute with relevant memory; routine occurrences come from the external scheduler; timelines show outcomes, waiting states and recovery actions. WhatsApp disconnects on stop and reconnects from persisted auth, without logout/unpairing.
 
-Grok observation: its visible app has a bot sidebar, a bot conversation with grouped inter-bot activity, and a routine panel. Accessibility exposed little content and UI navigation did not establish an export mechanism. These observations support the presentation model only. Group dispatch, internal memory architecture and export availability are not verified Grok facts. *(2026-09-27:)* A later inspection of the installed Grok Bot desktop client's code and protocol shapes is summarized in [docs/GROK_BOT_REFERENCE.md](docs/GROK_BOT_REFERENCE.md). It is an architecture reference; server internals remain inferred. Do not copy private conversation content into test fixtures.
+Reference-product observation: its visible app has a bot sidebar, a bot conversation with grouped inter-bot activity, and a routine panel. Accessibility exposed little content and UI navigation did not establish an export mechanism. These observations support the presentation model only. Group dispatch, internal memory architecture and export availability are not verified reference-product facts. *(2026-09-27:)* A later inspection of the installed reference product's desktop client code and protocol shapes is summarized in [docs/REFERENCE_PATTERNS.md](docs/REFERENCE_PATTERNS.md). It is an architecture reference; server internals remain inferred. Do not copy private conversation content into test fixtures.
 
 Compatibility: preserve existing project setup instructions and local state. Reuse native agents, sessions, skills, model auth, task tracking and cancellation where verified; add a thin adapter, not a core fork. Native cron MUST NOT independently fire the same application routine.
 
 ## 6. Rules & Invariants
 
 1. Persist and deduplicate ingress before returning 202 or requesting wake.
-2. At most one active runtime **generation** may act. *(Superseded 2026-09-27 by GROK_ALIGNMENT A2.)* A stale lease is not proof the old process stopped, so the Worker fences it instead. An atomic epoch advance invalidates the old generation's credentials, message posts and effect permits. On the same machine, the new supervisor acquires the executor flock and kills a live prior holder's process group. Provider stopped-state confirmation is **not** required before replacement.
+2. At most one active runtime **generation** may act. *(Superseded 2026-09-27 by ARCHITECTURE_V2 A2.)* A stale lease is not proof the old process stopped, so the Worker fences it instead. An atomic epoch advance invalidates the old generation's credentials, message posts and effect permits. On the same machine, the new supervisor acquires the executor flock and kills a live prior holder's process group. Provider stopped-state confirmation is **not** required before replacement.
 3. Every executor claim, heartbeat, acknowledgment and completion carries `epoch` and `boot_id`; reject stale ownership. Acquire an OS lock before starting runtime.
 4. A run lease begins before native submission and lasts through terminal persistence and result-outbox commit. Tool hooks alone do not constitute an activity ledger.
-5. Normal sleep is forbidden while any **current-generation, live** run turn, inference, tool, child, transfer, node operation or flush remains active. *(Clarified 2026-09-27 by GROK_ALIGNMENT A3.)* Interrupted attempts, `outcome_unknown` effects, parked tasks and needs-you items of any generation are durable records, not live work, and never block sleep.
+5. Normal sleep is forbidden while any **current-generation, live** run turn, inference, tool, child, transfer, node operation or flush remains active. *(Clarified 2026-09-27 by ARCHITECTURE_V2 A3.)* Interrupted attempts, `outcome_unknown` effects, parked tasks and needs-you items of any generation are durable records, not live work, and never block sleep.
 6. Passive sockets, open portal tabs and data-only updates do not count as work. A blocked job may release compute only when a durable checkpoint or explicit non-resumable failure exists.
 7. Queue receipt is at-least-once; logical IDs are deduplicated. External effects are not promised exactly-once. Unknown effects must be reconciled before retry.
 8. A wait timeout is not cancellation. Cancellation is requested, acknowledged, then verified terminal; UI must distinguish these states.
@@ -127,7 +127,7 @@ Core: authenticated responsive portal; personas and hidden session routing; scop
 
 Dependencies: Codex app-server 0.154.0, selected provider lifecycle/persistence, Cloudflare Worker/DO/Access, an eligible OpenAI account, and optional connector/Mac capabilities.
 
-Optional enhancements, separately gated: Grok exporter/import preview; Codex desktop computer-use bridge. Excluded: arbitrary Grok auth/session extraction, unlimited bot debate, automatic connector enrollment, mobile native app, HA replica and API-billing setup.
+Optional enhancements, separately gated: prior-bot exporter/import preview; Codex desktop computer-use bridge. Excluded: arbitrary prior-bot auth/session extraction, unlimited bot debate, automatic connector enrollment, mobile native app, HA replica and API-billing setup.
 
 ## 8. Given / When / Then Scenario Suite
 
@@ -142,7 +142,7 @@ Each row is a mandatory automated scenario unless marked staged/manual. Fixtures
 | S05 | Tool, download, child, Mac call or flush active | No chat for 10 minutes | No normal sleep for every operation class |
 | S06 | Empty runnable queue and zero operations | Grace expires | Drain, checkpoint, stop and provider confirmation |
 | S07 | Drain in progress | New message before / after stop commit | Token invalidated and resume / durable wake-after-stop; no loss |
-| S08 | Executor lease lost | Provider state unknown | *(Revised by GROK_ALIGNMENT A2/A3.)* Epoch advances atomically, and prior-generation attempts become `interrupted` with dispatched effects `outcome_unknown`. The old generation's sends, permits and completions are rejected with `STALE_EPOCH`. A successor may start. Queued work is retained. |
+| S08 | Executor lease lost | Provider state unknown | *(Revised by ARCHITECTURE_V2 A2/A3.)* Epoch advances atomically, and prior-generation attempts become `interrupted` with dispatched effects `outcome_unknown`. The old generation's sends, permits and completions are rejected with `STALE_EPOCH`. A successor may start. Queued work is retained. |
 | S09 | Persona Travel | Owner switches to Inbox | Correct distinct instructions/context; authorized global preferences shared |
 | S10 | Routine A private memory | Routine B requests retrieval | Excluded unless explicit shared scope; denial audited |
 | S11 | Existing fact revision 2 | Owner corrects it with expected revision 2 | Revision 3 supersedes; next admitted run uses it; stale write conflicts |
@@ -162,7 +162,7 @@ Each row is a mandatory automated scenario unless marked staged/manual. Fixtures
 | S25 | Cost reaches cap | Optional routine due | Park budget-blocked; explicit user override can admit; current effect completes |
 | S26 | Backup restored | Old executor verified stopped | One new owner; counts/revisions checked; connector/auth readiness measured |
 | S27 | WhatsApp asleep 5 min, 1 h, 24 h, 72 h | Reconnect after synthetic messages | Report recovered/missing/duplicate counts and auth survival separately; manual staged test |
-| S28 | Grok archive unknown schema | Export/import preview requested | Reject unsupported fields without executing instructions or creating schedules; optional |
+| S28 | Prior-bot archive unknown schema | Export/import preview requested | Reject unsupported fields without executing instructions or creating schedules; optional |
 | S29 | Paired Mac offline | Desktop-only action requested | Wait with capability reason; portal works; no fabricated computer-use success |
 | S30 | Cursor older than retention | Bot next runs | Snapshot + retained deltas with history_gap marker; no inference during publication |
 | S31 | Max-size message / too large / empty | Submit | 32768 UTF-8 bytes accepted / 413 / 422; idempotent validation |
@@ -172,7 +172,7 @@ Each row is a mandatory automated scenario unless marked staged/manual. Fixtures
 
 ### 9.1 Public Interfaces Overview
 
-Portal: left sidebar of bots/rooms, central timeline, contextual routine/memory panel. Owner sends ordinary text, sees durable receipt immediately, and sees queued/waking/running/waiting/completed/failed states. Streaming is optional presentation, never the durable result. *(2026-09-27, GROK_ALIGNMENT A5–A7:)*
+Portal: left sidebar of bots/rooms, central timeline, contextual routine/memory panel. Owner sends ordinary text, sees durable receipt immediately, and sees queued/waking/running/waiting/completed/failed states. Streaming is optional presentation, never the durable result. *(2026-09-27, ARCHITECTURE_V2 A5–A7:)*
 - Sends go through a durable client outbox: nonce = Idempotency-Key, persisted before POST, optimistic bubble, reconciliation by key after reload.
 - Committed events stream over a hibernating Durable Object WebSocket (`/v1/stream`), with the cursor long poll below as fallback.
 - Only `owner.message` and `bot.message` render as bubbles. Tool and progress activity is collapsed, and notices are always visible. Routine status is draft/enabled/paused/error; show next execution in local timezone and UTC, last result and edit/pause/run-now actions. Memory panel shows scopes, provenance, revisions, correction and deletion.
@@ -199,7 +199,7 @@ complete(run_id, attempt, epoch, result_ref, effect_receipts[]) -> acknowledgmen
 prepareSleep(epoch, boot_id, queue_sequence, activity_snapshot) -> stop_token | DENIED
 commitSleep(stop_token, epoch, queue_sequence, checkpoint_ref) -> STOP_COMMITTED | DENIED
 publishContext(room_id, recipient_ids, revisions, summary, cause_id) -> event_sequence
-# Added 2026-09-27 (GROK_ALIGNMENT A1/A4); every call is epoch/boot fenced
+# Added 2026-09-27 (ARCHITECTURE_V2 A1/A4); every call is epoch/boot fenced
 postBotMessage(run_id, attempt, epoch, boot_id, message_key, text, reply_to?) -> {event_id, seq}
 startTask(coordinator_run_id, attempt, epoch, boot_id, call_key, title, brief, capability_ids[]) -> {task_id}
 listTasks / taskDetail(persona_id, task_id?) -> task ledger rows
@@ -282,7 +282,7 @@ Migration: create v1 tables in development, validate foreign keys/uniqueness, ba
 
 Instance: `STOPPED → START_REQUESTED → BOOTING → READY → DRAINING → STOP_COMMITTED → STOPPING → STOPPED`; unresolved provider/executor state enters `RECOVERY_REQUIRED`. Desired run/stop state is independent of observed provider phase. One serialized controller issues lifecycle operations with operation IDs; duplicate triggers coalesce. Wake API failures retry after 1, 5, 15 and 60 seconds, then enter recovery-required with durable queued work and a 5-minute reconciliation alarm; owner retry uses the same lifecycle operation identity where supported. Never infer a failed start is absent without querying provider state. No provider proxy autostop: request traffic cannot see background model work.
 
-Supervisor heartbeats every 15 seconds, lease 90 seconds. If renewal fails, stop new admission immediately; cancel root inference, active tools, node calls and all child/subprocess groups before expiry with a 15-second safety margin. If cancellation cannot settle, terminate the owning executor process group; preserve uncertain effects for reconciliation. *(Superseded 2026-09-27, GROK_ALIGNMENT A2:)* The controller may start a successor as soon as the epoch advance commits. It does not wait for provider confirmation that the old executor stopped. The old generation is fenced at the Worker, and on the same machine the flock holder is killed. Local OS lock prevents two runtime processes in one Machine. Epochs reject late callbacks; they do not undo website actions.
+Supervisor heartbeats every 15 seconds, lease 90 seconds. If renewal fails, stop new admission immediately; cancel root inference, active tools, node calls and all child/subprocess groups before expiry with a 15-second safety margin. If cancellation cannot settle, terminate the owning executor process group; preserve uncertain effects for reconciliation. *(Superseded 2026-09-27, ARCHITECTURE_V2 A2:)* The controller may start a successor as soon as the epoch advance commits. It does not wait for provider confirmation that the old executor stopped. The old generation is fenced at the Worker, and on the same machine the flock holder is killed. Local OS lock prevents two runtime processes in one Machine. Epochs reject late callbacks; they do not undo website actions.
 
 Sleep predicate: no runnable/claimed runs, no live operations, no uncertain live effects, no pending state/outbox commit, all waits parked durably, idle grace elapsed. First close admission, then collect snapshot; prepare stop token binds epoch and queue sequence. Flush native state/browser and persist checkpoint before commit. New work before commit invalidates token and resumes; after commit it sets wake-after-stop. Controller completes stop before issuing next start. A failed drain has a 30-second deadline, then reopens admission or enters recovery; do not force normal sleep through an unknown active operation.
 
@@ -290,7 +290,7 @@ Job: `queued → claimed → running → finishing → completed`; alternatives 
 
 One DO alarm tracks the earliest due schedule, wake retry or external watchdog deadline. Durable alarm delivery is at-least-once; re-arm after processing. Every public request also reconciles overdue alarms. Idle daily reconciliation is permitted for schedule health and does not wake the runtime. No perpetual 15-second alarm while stopped. Claimed occurrences pin revision. Schedule edits atomically invalidate unclaimed old occurrences and recompute next due. DST: skip nonexistent local times; repeated local times fire once at earliest UTC instant. Coalescing records count/range of missed ticks, chooses latest eligible nominal tick, and never hides discarded ticks from run detail. `queue_one` retains only newest eligible pending occurrence during overlap; `skip` records skipped; v1 disallows parallel same-routine execution.
 
-Watchdog: heartbeat absence 45 seconds triggers probe, not immediate retry; quiet inference deadline 5 minutes by default, tool deadline 2 minutes except explicitly declared transfer/shell up to 10 minutes; run hard deadline 20 minutes. Progress may extend phase deadlines only inside hard deadline. Cancellation grace 15 seconds then verify for another 15; if still live, kill the owning process group and mark the attempt `interrupted` (terminal; GROK_ALIGNMENT A3). Continuation, if any, is a new attempt seeded from durable state. External effects become outcome_unknown where needed. Read-only/idempotent attempts retry at most twice after 10 and 60 seconds; external mutations require matching provider idempotency key or verified receipt. A human wait can park only at restartable checkpoint; ephemeral page/modal waits get a bounded 5-minute hold, then explicit restart-required state.
+Watchdog: heartbeat absence 45 seconds triggers probe, not immediate retry; quiet inference deadline 5 minutes by default, tool deadline 2 minutes except explicitly declared transfer/shell up to 10 minutes; run hard deadline 20 minutes. Progress may extend phase deadlines only inside hard deadline. Cancellation grace 15 seconds then verify for another 15; if still live, kill the owning process group and mark the attempt `interrupted` (terminal; ARCHITECTURE_V2 A3). Continuation, if any, is a new attempt seeded from durable state. External effects become outcome_unknown where needed. Read-only/idempotent attempts retry at most twice after 10 and 60 seconds; external mutations require matching provider idempotency key or verified receipt. A human wait can park only at restartable checkpoint; ephemeral page/modal waits get a bounded 5-minute hold, then explicit restart-required state.
 
 Bot collaboration: one default responder, at most 3 bot contributions per owner message, hop depth 2, fan-out 2, total run hard deadline shared across the chain. Deduplicate `(cause_id, sender, recipient, request_digest)`; prohibit self-dispatch and repeated causal edges. When a parent requests another bot, persist its continuation and yield the sole execution slot before dispatching the child. The workflow lease remains a sleep blocker while a child or runnable continuation exists. Capacity=1 counts active native execution, not parked parents; a synchronous parent wait holding the slot is forbidden. Owner can explicitly authorize a larger bounded collaboration in a new command. Other bot messages are attributed data, not higher-priority instructions. Room membership grants room visibility, not automatic access to every member's private memory.
 
@@ -327,7 +327,7 @@ Portal dashboard panels: queue/recovery, active operations and sleep blockers, s
 
 ## 13. Rollout & Rollback
 
-Flags default off: `runtime_execution`, `scheduled_wake`, `event_wake`, `auto_sleep`, `bot_collaboration`, `grok_import`, `desktop_bridge`. Portal metadata editing may be enabled independently. Environments: local fake provider/effect sink, isolated staging state/account, then one production owner. Never test destructive actions against real contacts.
+Flags default off: `runtime_execution`, `scheduled_wake`, `event_wake`, `auto_sleep`, `bot_collaboration`, `prior_bot_import`, `desktop_bridge`. Portal metadata editing may be enabled independently. Environments: local fake provider/effect sink, isolated staging state/account, then one production owner. Never test destructive actions against real contacts.
 
 Promotion: contract validation → adapter/OAuth proof → lifecycle failure tests → read-only manual portal trials → 7-day staged cost/WhatsApp trial → production read-only tasks → explicitly authorized mutations. Canary for one owner means one selected read-only routine for 24 hours, then up to 3 for 48 hours; all others stay paused. Enable auto-sleep only after sleep/cancel gates; document temporary test uptime cost. No feature automatically enables external recipients.
 
@@ -350,7 +350,7 @@ npm run test:restore
 npm run test:cost-report -- --days=7
 ```
 
-Unit tests: schema limits, timezone parsing/DST, occurrence keys, optimistic revisions, memory ACL/tombstones, causal budgets, retry classification, sleep predicate. Integration: transactional DO test runtime with fake clock; fake Fly operation ordering; pinned native runtime in isolated state; fake model with silence/tool/child phases; fake effect sink recording idempotency and receipts. E2E: portal bot switch, routine natural-language flow, room/no-op, waiting resume, offline drafts, auth failures, keyboard/mobile views. Never use private Grok chats as fixtures.
+Unit tests: schema limits, timezone parsing/DST, occurrence keys, optimistic revisions, memory ACL/tombstones, causal budgets, retry classification, sleep predicate. Integration: transactional DO test runtime with fake clock; fake Fly operation ordering; pinned native runtime in isolated state; fake model with silence/tool/child phases; fake effect sink recording idempotency and receipts. E2E: portal bot switch, routine natural-language flow, room/no-op, waiting resume, offline drafts, auth failures, keyboard/mobile views. Never use private prior-bot chats as fixtures.
 
 Adapter tests must prove every S04/S05 operation and S32 submission ambiguity is observable or conservatively blocked. OAuth smoke uses one small subscription-backed call with a test prompt, stop/restart then a second call; no paid API key. Refresh behavior requires a later expiry/refresh observation or documented simulated test plus explicit pending live gate; don't call two successes proof of indefinite auth. WhatsApp S27 is manual staged measurement with known sent-message IDs and coverage ratios. Optional desktop actions require Mac online/offline tests and task-scoped permissions. Long-running local batches use `caffeinate -i` tied to the process and a <=15-minute wall-clock health check.
 
@@ -365,12 +365,12 @@ Adapter tests must prove every S04/S05 operation and S32 submission ambiguity is
 7. **Routines/triggers** — typed natural-language tools, schedule engine, misfire/version/overlap, signed webhook; depends 2–6. No duplicate native cron ownership.
 8. **Bot collaboration** — room messages, no-op events/watermarks, bounded action dispatch; depends 5–7. Zero-wake/no-inference test required.
 9. **Operational rollout** — metrics/cost/backup/restore, WhatsApp matrix, 7-day sample, canary; depends 3–8. Production flags remain gated.
-10. **Optional Grok export/import** — supported export discovery, normalized bundle and preview; depends 2,5,7; independent of core rollout.
+10. **Optional prior-bot export/import** — supported export discovery, normalized bundle and preview; depends 2,5,7; independent of core rollout.
 11. **Optional Mac/Codex bridge** — capability discovery, permitted desktop tools, durable wait/cancel; depends 4,9. Never make sleeping-Mac automation a required cloud dependency.
 
 ## 16. Definition of Done
 
-Implementation is done only when all core S01–S27 and S29–S32 scenarios pass where applicable; all public and runtime contracts have schemas/examples; native cancellation/activity proof passes; no-op counters stay zero; schedules wake stopped compute; auth refresh and connector limitations are documented; seven-day measured cost projection includes all charges; restore drill passes; UI meets the defined states/accessibility targets; observability and recovery controls are usable; canary completes without acknowledged work loss or duplicate effects; documentation states limitations and exact tested versions. S28 and automated Grok export are optional, not core blockers. This document's completion does not imply these implementation criteria are achieved.
+Implementation is done only when all core S01–S27 and S29–S32 scenarios pass where applicable; all public and runtime contracts have schemas/examples; native cancellation/activity proof passes; no-op counters stay zero; schedules wake stopped compute; auth refresh and connector limitations are documented; seven-day measured cost projection includes all charges; restore drill passes; UI meets the defined states/accessibility targets; observability and recovery controls are usable; canary completes without acknowledged work loss or duplicate effects; documentation states limitations and exact tested versions. S28 and automated prior-bot export are optional, not core blockers. This document's completion does not imply these implementation criteria are achieved.
 
 ## 17. Spec Lint Checklist
 
@@ -396,7 +396,7 @@ Implementation is done only when all core S01–S27 and S29–S32 scenarios pass
 - **Epoch fencing could be mistaken for website fencing.** *(Revised 2026-09-27.)* Fence at the effect-permit boundary: a stale generation cannot obtain a dispatch permit, and effects it already dispatched become `outcome_unknown` and are reconciled at the destination. Mutating tools that bypass the permit boundary are unfenced and get read-only grants.
 - **Recovery hardening could crowd out the product.** *(Added 2026-09-27.)* Don't make replies, successor start or alpha use wait on proving a third-party process's state. See AGENTS.md "Traps".
 - **Memory deletion could leave prompt copies.** Tombstone, invalidate, cancel/rebuild affected context, expire backups, and distinguish canonical deletion from transcript cleanup.
-- **Grok exporter could require unsupported extraction.** Treat discovery as optional gate; user-supplied archive first; explicit unsupported-schema failure.
+- **Prior-bot exporter could require unsupported extraction.** Treat discovery as optional gate; user-supplied archive first; explicit unsupported-schema failure.
 
 ## 19. Traceability
 
@@ -406,7 +406,7 @@ Implementation is done only when all core S01–S27 and S29–S32 scenarios pass
 | Global and routine/skill memory | 6, 9.3, 10 scopes/revisions | S10–S11, S30 |
 | Natural-language routines/cron | 9.5, 10 scheduler | S14–S18 |
 | 1:1/group bot communication and no-op | 9.5, 10 collaboration | S12–S13 |
-| Grok exporter bonus | Optional contract below | S28 |
+| Prior-bot exporter bonus | Optional contract below | S28 |
 | Messaging portal | 9.1–9.4 | S01–S03, S23, S31 |
 | Scheduled/event wake | 10 lifecycle/scheduler | S03, S16, S24 |
 | No sleep during inference/tools | 6, 10 | S04–S08 |
@@ -415,9 +415,9 @@ Implementation is done only when all core S01–S27 and S29–S32 scenarios pass
 | Codex desktop computer use | Optional contract below | S29 |
 | ~$5 transient infrastructure | 11, 12 | S25 + seven-day sample |
 
-### Optional Grok exporter contract
+### Optional prior-bot exporter contract
 
-First try an official export UI/documented archive. Read-only reconnaissance in this session established neither. Proposed later CLI: `grok-export inspect --input PATH --json`, `grok-export export --input PATH --output bundle.json`, `grok-export validate bundle.json`. Only explicitly selected owner-readable exports; never live auth-token stores or undocumented network endpoints. Input <=50 MiB, local UTF-8 JSON or documented archive; archive paths cannot escape extraction directory. Exit 0 success, 2 usage/schema, 3 unsupported source, 4 permission, 5 parse/partial export. A partial export must mark `complete:false` and enumerate omissions.
+First try an official export UI/documented archive. Read-only reconnaissance in this session established neither. Proposed later CLI: `priorbot-export inspect --input PATH --json`, `priorbot-export export --input PATH --output bundle.json`, `priorbot-export validate bundle.json`. Only explicitly selected owner-readable exports; never live auth-token stores or undocumented network endpoints. Input <=50 MiB, local UTF-8 JSON or documented archive; archive paths cannot escape extraction directory. Exit 0 success, 2 usage/schema, 3 unsupported source, 4 permission, 5 parse/partial export. A partial export must mark `complete:false` and enumerate omissions.
 
 Bundle v1: `schema_version`, `source:{product,version,exported_at,method}`, `complete`, `personas:[{source_id,name,instructions}]`, `routines:[{source_id,persona_source_id,name,instructions,schedule_raw,timezone,enabled}]`, `omissions:[{source_id,field,reason}]`; preserve exact instruction text and raw schedule string, not inferred behavior. Exclude conversations, secrets and attachments by default. Build a strict JSON Schema and fixtures at optional milestone 10 before coding parser. Import shows field-by-field preview and duplicates by source ID + content hash; unknown semantics become draft. All imported routines disabled until owner adopts them; adopted instructions remain below application authorization rules. Tool not implemented in this spec-only pass.
 
@@ -461,7 +461,7 @@ The installed application schema migrates version 1 to version 2 while preservin
 
 ### 21.1 Scope, ownership and preserved work
 
-Deliver a work-domain-neutral, open Grok Bot-style assistant with a dedicated web/Mac portal, replaceable harness/model execution, and inexpensive sleeping compute. Preserve the implemented Worker/SQLite command store, receipts, schedule occurrences, scoped memory records, effect ledger, lifecycle fencing and tests. Do not discard those contracts merely to reuse a desktop application. The existing five-bot/seven-routine configuration remains a reviewed onboarding case, not mandatory product roles.
+Deliver a work-domain-neutral, open reference-product-style assistant with a dedicated web/Mac portal, replaceable harness/model execution, and inexpensive sleeping compute. Preserve the implemented Worker/SQLite command store, receipts, schedule occurrences, scoped memory records, effect ledger, lifecycle fencing and tests. Do not discard those contracts merely to reuse a desktop application. The existing five-bot/seven-routine configuration remains a reviewed onboarding case, not mandatory product roles.
 
 | Layer | Authoritative responsibility | Reuse boundary |
 | --- | --- | --- |
@@ -500,7 +500,7 @@ The following inventory incorporates the detailed behaviors and acceptance cases
 | Portability and distribution | Reviewed templates, disabled imported routines, versioned state export, minimal connector setup, commercially reusable code | UX14/15; R06 below; S28 only concerns optional proprietary-source extraction |
 | Cost and recovery | Sleeping execution, restart-safe state, unknown effects not replayed, measured infrastructure and model overhead | UX09/10/15; S01–S08/S25–S27/S32; R05/R07 |
 
-Specialized connectors, team administration, payments and mobile-native delivery remain named parity gaps requiring source-dated capability rows and feasibility evidence, not implied by a generic MCP client. Web mobile acceptance remains required independently. Public research defines advertised behavior, not hidden Grok internals or proof of 100% reliability.
+Specialized connectors, team administration, payments and mobile-native delivery remain named parity gaps requiring source-dated capability rows and feasibility evidence, not implied by a generic MCP client. Web mobile acceptance remains required independently. Public research defines advertised behavior, not hidden reference-product internals or proof of 100% reliability.
 
 ### 21.3 Sleeping containers are a required cost boundary
 
@@ -558,9 +558,9 @@ Delivery order: (1) Apache provenance/dependency audit and bounded client/adapte
 
 For full product completion, require this combined scope, not only the older core Definition of Done. Keep each failure classified as implementation work, upstream unsupported capability, external authorization/hardware blocker or explicit product difference. Do all reproducible debugging in orbs first; a Mac-only or provider-specific check is a final acceptance boundary, not an excuse to defer integration debugging. This document completes planning only and does not claim an operational assistant or authorize implementation to begin automatically.
 
-## 22. Grok-aligned execution architecture (2026-09-27)
+## 22. v2 execution architecture (2026-09-27)
 
-Owner decision, normative. [docs/GROK_ALIGNMENT.md](docs/GROK_ALIGNMENT.md) holds the full contract (A1–A9), acceptance rows G-A1–G-A7 and the list of superseded clauses. Summary:
+Owner decision, normative. [docs/ARCHITECTURE_V2.md](docs/ARCHITECTURE_V2.md) holds the full contract (A1–A9), acceptance rows V-A1–V-A7 and the list of superseded clauses. Summary:
 
 | ID | Requirement |
 | --- | --- |
@@ -574,4 +574,4 @@ Owner decision, normative. [docs/GROK_ALIGNMENT.md](docs/GROK_ALIGNMENT.md) hold
 | A8 | Rooms run as a bounded turn scheduler (deadline, PASS, winding down, root cause id). |
 | A9 | The paired Mac pulls queued node requests over an outbound socket and parks when offline. |
 
-S/O/UX acceptance still applies where not superseded. G-A1–G-A7 are added acceptance.
+S/O/UX acceptance still applies where not superseded. V-A1–V-A7 are added acceptance.

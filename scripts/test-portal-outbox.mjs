@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Synthetic browser fixtures only; no model, account, provider or gateway calls.
-// Covers GROK_ALIGNMENT A5 (durable client outbox) acceptance G-A5, and the
+// Covers ARCHITECTURE_V2 A5 (durable client outbox) acceptance V-A5, and the
 // A7 clean-thread split between bot.message bubbles and ephemeral provisional
-// text (G-A7), against a synthetic HTTP fixture — no real /v1/stream server.
+// text (V-A7), against a synthetic HTTP fixture — no real /v1/stream server.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
@@ -61,7 +61,7 @@ const bubbleTexts=()=>evaluate('Array.from(document.querySelectorAll("article.me
 try{
  await open();
 
- // --- bot.message renders as a bubble; provisional text never does (A7/G-A7) ---
+ // --- bot.message renders as a bubble; provisional text never does (A7/V-A7) ---
  events.push({sequence:1,id:randomUUID(),conversation_id:bot,type:'bot.message',created_at:new Date().toISOString(),
   payload:{text:'Synthetic completed reply',run_id:run,attempt:1,task_run_id:run,origin:'final_text',reply_to_event_id:null}});
  await browser('click','#refresh');
@@ -74,7 +74,7 @@ try{
  assert.equal(await evaluate('document.querySelector(".provisional-typing").textContent').then(t=>t.includes('Synthetic provisional working text')),true);
  await browser('screenshot',decodeURIComponent(new URL('portal-outbox-bot-message.png',artifacts).pathname));
 
- // --- rejected send restores the draft (A5/G-A5) ---
+ // --- rejected send restores the draft (A5/V-A5) ---
  commandMode='reject';
  await browser('fill','#message','Draft that will be rejected');
  await browser('click','#send');
@@ -83,7 +83,7 @@ try{
  assert.equal(await evaluate('document.querySelectorAll("article.message.user.outbox-pending").length'),0,'a rejected send leaves no outbox bubble behind');
  await browser('screenshot',decodeURIComponent(new URL('portal-outbox-rejected.png',artifacts).pathname));
 
- // --- network-killed send reconciles to exactly one message after reload (A5/G-A5) ---
+ // --- network-killed send reconciles to exactly one message after reload (A5/V-A5) ---
  commandMode='network-fail';
  await browser('fill','#message','Message sent while the network is down');
  await browser('click','#send');

@@ -5,11 +5,11 @@ appended to, at each checkpoint. Earlier handoffs are in
 [archive/HANDOFF_HISTORY_2026-09.md](archive/HANDOFF_HISTORY_2026-09.md) and are
 historical only.
 
-## Current: Grok-alignment resume (2026-09-27)
+## Current: v2-architecture resume (2026-09-27)
 
 ### What changed and why
 
-The owner resumed implementation with a new direction: [GROK_ALIGNMENT.md](GROK_ALIGNMENT.md)
+The owner resumed implementation with a new direction: [ARCHITECTURE_V2.md](ARCHITECTURE_V2.md)
 (normative). The earlier plan to "resume at F3/E01/E02 recursive recovery" is
 **cancelled**. That track produced ~150 commits of custody hardening while the owner
 still couldn't chat with a bot during a background task. See the traps in
@@ -28,8 +28,8 @@ still couldn't chat with a bot during a background task. See the traps in
 
 ### Start here
 
-1. Branch **`grok-alignment`** (from `source-custody` @ `b930d21`). `main` is stale.
-2. Read `AGENTS.md` → `GROK_ALIGNMENT.md` → the G rows at the top of `TODO.md`.
+1. Branch **`v2-architecture`** (from `source-custody` @ `b930d21`). `main` is stale.
+2. Read `AGENTS.md` → `ARCHITECTURE_V2.md` → the V rows at the top of `TODO.md`.
 3. Toolchain: Node ≥ 22.16, then `npm ci` and `npm run types`.
    - Focused checks: `npm run typecheck`, `npx vitest run tests/<file>.test.ts` and
      `node --test tests/runtime-<file>.mjs`.
@@ -45,7 +45,7 @@ still couldn't chat with a bot during a background task. See the traps in
      `runtime-process-lock.mjs` and `runtime-hosted-owner-unused.mjs` (Linux flock/process-group
      semantics; still fails with Homebrew `flock`/`util-linux`), and several codex-service cases
      fail because `build-codex-service.sh` needs the Linux Codex binary. Run focused runtime files
-     individually on macOS; run the full runtime suite on Linux. G3's lock work needs Linux evidence.
+     individually on macOS; run the full runtime suite on Linux. V3's lock work needs Linux evidence.
    - **Browser fixtures on macOS:** `npm i -g agent-browser && agent-browser install`, plus
      `bash scripts/setup-codex.sh && bash scripts/build-codex-service.sh` for the codex manager
      fixtures. Already failing at `d1a9906` (baseline, not G work): test-portal-{connector-catalog,
@@ -53,25 +53,28 @@ still couldn't chat with a bot during a background task. See the traps in
      skill-references, skill-review, skill-run, skill-task-proposal, steering, task-cancel}
      (several flaky) and the RETIREMENT_REPORTED / HOSTED_WAKE_OUTCOME_UNKNOWN assertions in
      test-codex-{background,hosted,warm}-manager.
-4. Pick the lowest open G row whose dependencies are merged (waves are listed in TODO).
-5. **G8 hosted runbook (owner-authorized only; branch `g8-hosted-wiring`; rehearse first: `node scripts/test-grok-mode-e2e.mjs`).**
-   Never touch the `hehebot` Sprite or `hehebot-portal`; everything below is a fresh `hehebot-grok` Worker/DO and a fresh Sprite.
+4. Pick the lowest open V row whose dependencies are merged (waves are listed in TODO).
+5. **V8 hosted runbook (owner-authorized only; branch `g8-hosted-wiring`; rehearse first: `node scripts/test-v2-e2e.mjs`).**
+   Never touch the existing production Sprite or the `hehebot-portal` Worker; everything below is a fresh `hehebot` Worker/DO (`hehebot.kaspar-zhou.workers.dev`) and a fresh Sprite.
    - Secrets: `python3 scripts/setup-secrets.py --generate` (RUNTIME_TOKEN, SPRITE_WAKE_TOKEN) and `--store PROVIDER_TOKEN` (Sprites org token, kaspar-hidayat).
-     Create a Cloudflare Access app for the `hehebot-grok` hostname; note its issuer, AUD and your `sub`.
-   - Sprite: `~/.local/bin/sprite create hehebot-grok-test -o kaspar-hidayat`; `sprite exec -s hehebot-grok-test` to install Node ≥22.16 and the repo at
+     Create Cloudflare Access apps `hehebot` (owner-only, the `hehebot.kaspar-zhou.workers.dev` hostname) and `hehebot-internal` (runtime-only, service-auth), plus a
+     dedicated service token `hehebot-runtime`; note the apps' issuer, AUD and your `sub`, and store the token's client ID/secret at
+     `~/.hehebot-secrets/access-client-id` and `~/.hehebot-secrets/access-client-secret` (0600).
+   - Sprite: `~/.local/bin/sprite create hehebot-test -o kaspar-hidayat`; `sprite exec -s hehebot-test` to install Node ≥22.16 and the repo at
      this branch, run `bash scripts/setup-codex.sh && bash scripts/build-codex-service.sh`, `codex login --device-auth` into the chosen nativeHome, write a
-     0600 `HEHEBOT_GROK_CONFIG` JSON (portalOrigin, token files, Access service-token files, ownerBindingSha256, stateRoot, binary, nativeHome, personas),
-     then inside the Sprite: `sprite-env services create hehebot-grok --cmd bash --args "scripts/with-executor-lock.sh,<stateRoot>/lock,node,runtime/grok-service-entry.mjs" --http-port 8080 --dir <repo>`.
+     0600 `HEHEBOT_V2_CONFIG` JSON (portalOrigin, token files, the `~/.hehebot-secrets/access-client-id`/`access-client-secret` files, ownerBindingSha256,
+     stateRoot, binary, nativeHome, personas),
+     then inside the Sprite: `sprite-env services create hehebot --cmd bash --args "scripts/with-executor-lock.sh,<stateRoot>/lock,node,runtime/v2-service-entry.mjs" --http-port 8080 --dir <repo>`.
      Keep the Sprite URL auth at the default (`sprite`): the Worker's wake sends `Authorization: Bearer <PROVIDER_TOKEN>` plus `x-hehe-wake-token`.
      Sprites pause (unbilled) when idle and resume frozen services on the next request; a resumed stale process is fenced by epoch (A2).
-   - Worker: `npx wrangler secret put {RUNTIME_TOKEN,PROVIDER_TOKEN,SPRITE_WAKE_TOKEN} --env grok`, then `npx wrangler deploy --env grok
-     --var EXECUTION_ENABLED:true --var HEHEBOT_EXECUTION_MODE:grok --var OWNER_SUB:<sub> --var ACCESS_ISSUER:<iss> --var ACCESS_AUD:<aud> --var
-     PROVIDER_CONFIG:'{"provider":"fly-sprites","ref":{"provider":"fly-sprites","id":"hehebot-grok-test"},"service":"hehebot-grok","lifecycleVerified":true,"wakeUrl":"https://<sprite-url>/"}'`.
+   - Worker: `npx wrangler secret put {RUNTIME_TOKEN,PROVIDER_TOKEN,SPRITE_WAKE_TOKEN} --env hehebot`, then `npx wrangler deploy --env hehebot
+     --var EXECUTION_ENABLED:true --var HEHEBOT_EXECUTION_MODE:v2 --var OWNER_SUB:<sub> --var ACCESS_ISSUER:<iss> --var ACCESS_AUD:<aud> --var
+     PROVIDER_CONFIG:'{"provider":"fly-sprites","ref":{"provider":"fly-sprites","id":"hehebot-test"},"service":"hehebot","lifecycleVerified":true,"wakeUrl":"https://<sprite-url>/"}'`.
    - Scenario: ask for hotel research, ask a status question while it runs, see the result relayed, then confirm the Sprite sleeps (~65 s idle).
    - Cost: Sprite billed only while awake; Worker/DO on the free tier; model usage on the owner's ChatGPT plan; stays within the ≤$10 budget.
-   - Rollback: redeploy `--env grok` with `EXECUTION_ENABLED:false` and empty `HEHEBOT_EXECUTION_MODE`, or `npx wrangler delete --env grok`; `sprite destroy hehebot-grok-test`.
+   - Rollback: redeploy `--env hehebot` with `EXECUTION_ENABLED:false` and empty `HEHEBOT_EXECUTION_MODE`, or `npx wrangler delete --env hehebot`; `sprite destroy hehebot-test`.
 
-### Code map for the G rows
+### Code map for the V rows
 
 | Concern | Where |
 | --- | --- |
@@ -88,11 +91,11 @@ still couldn't chat with a bot during a background task. See the traps in
 
 ### State
 
-- G0–G7 are done locally on `grok-alignment` (not pushed); on Linux (test Sprite `hehebot-ci`,
+- V0–V7 are done locally on `v2-architecture` (not pushed); on Linux (test Sprite `hehebot-ci`,
   run tests attached — Sprites pause when idle) full vitest and the runtime suite pass except 3
-  pre-existing setpriv cases. G8 local prep and `scripts/test-grok-mode-e2e.mjs` pass. Next is **G8** (hosted alpha on the new path), which
+  pre-existing setpriv cases. V8 local prep and `scripts/test-v2-e2e.mjs` pass. Next is **V8** (hosted alpha on the new path), which
   needs owner authorization: Worker deploy, live Codex calls, and Fly credentials (owner approved
-  ≤ $10 Fly spend on 2026-09-27). `coordinatorInbox` is off by default until G8 enables it.
+  ≤ $10 Fly spend on 2026-09-27). `coordinatorInbox` is off by default until V8 enables it.
 - The deployed portal and the Sprite are unchanged. The hosted trial work from
   2026-09-17 is still `recovery_required`: don't replay it.
 - Production execution and native-verification flags remain false.
@@ -102,7 +105,7 @@ still couldn't chat with a bot during a background task. See the traps in
 ### Checkpoint rule
 
 At each checkpoint, update **one** place:
-- the G row status in TODO.md,
+- the V row status in TODO.md,
 - the commit message with its evidence,
 - and this section only if the start-here, code map or state facts change.
 

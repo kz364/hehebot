@@ -50,7 +50,7 @@ async function fixture(t) {
       if (type === 'heartbeat') return { lease_until: new Date(now + 60000).toISOString(), cancellations: [] };
       if (type === 'steer-pending') return [];
       if (type === 'memory-prepare') return preparedMemory('run', payload.persona_models.bot);
-      // G4c: this generic fixture models a single ordinary coordinator run with no
+      // V4c: this generic fixture models a single ordinary coordinator run with no
       // queued background task, so the background lane never has anything to
       // claim -- matching a real Worker's nextClaimableRun('background') when no
       // coordinator_task run is queued. Tests exercising the task lane itself use
@@ -1038,7 +1038,7 @@ test('service validates the declared shell deadline before any side effect', asy
   }
 });
 
-// G4c: a real service composition runs the coordinator lane and the background
+// V4c: a real service composition runs the coordinator lane and the background
 // task lane concurrently on one Codex app-server connection -- shared
 // native/adapter.rpc/router, per-lane heartbeat, admit()/maintain()/stop()
 // driving both, notifications routed by attemptId (already lane-disambiguating).
@@ -1092,7 +1092,7 @@ async function twoLaneFixture(t) {
   return { ...f, service, queueCoordinator, queueTask, completions };
 }
 
-test('G4c: coordinator turn starts a task claimed on the background lane in its own thread while the coordinator lane stays free', async t => {
+test('V4c: coordinator turn starts a task claimed on the background lane in its own thread while the coordinator lane stays free', async t => {
   const f = await twoLaneFixture(t);
   f.queueCoordinator('coord-1');
   const first = await f.service.start();
@@ -1149,7 +1149,7 @@ test('G4c: coordinator turn starts a task claimed on the background lane in its 
   assert.equal(third.claim.run.id, 'coord-3', 'coordinator wake claim succeeds after the task lane settles');
 });
 
-test('G4c: stop() stops both lanes and each lane keeps its own heartbeat cadence', async t => {
+test('V4c: stop() stops both lanes and each lane keeps its own heartbeat cadence', async t => {
   const f = await twoLaneFixture(t);
   f.queueCoordinator('coord-1');
   await f.service.start();

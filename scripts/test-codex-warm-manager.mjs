@@ -212,7 +212,7 @@ try {
     // Passive-read custody: portal load, roster selection, state polling and
     // the streamed timeline caused zero commands, launches, model requests,
     // Sprite contacts or staged sessions.
-    // GROK_ALIGNMENT A6: the portal is stream-primary — a same-origin /v1/stream
+    // ARCHITECTURE_V2 A6: the portal is stream-primary — a same-origin /v1/stream
     // WebSocket carries live events, with a 15s fallback poll that only runs
     // while that stream isn't open (and never while hidden), plus a debounced
     // refresh on incoming stream frames. This replaced the old fixed 5s full
@@ -492,7 +492,7 @@ try {
     await browser('fill', '#message', text1);
     await browser('click', '#send');
     if (wakeFirst) await wakeFirstGate();
-    // The G5 durable outbox (GROK_ALIGNMENT A5) clears the composer as soon as
+    // The V5 durable outbox (ARCHITECTURE_V2 A5) clears the composer as soon as
     // the send is queued, via an async drain loop — no longer only once the
     // receipt is confirmed. Wait for the real POST to land before counting.
     assert.ok(await waitFor(() => browserJson('document.querySelector("#message")?.value === ""'), 15000),

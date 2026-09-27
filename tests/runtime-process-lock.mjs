@@ -12,7 +12,7 @@ function run(directory, code) {
   child.stderr.resume();
   return child;
 }
-// G3: with-executor-lock.sh no longer just refuses a contended lock -- it
+// V3: with-executor-lock.sh no longer just refuses a contended lock -- it
 // kills the live holder's process group and takes over. A read-only "is this
 // still contended" probe (used by the descendant-containment fixture below to
 // observe kernel-level flock exclusivity across a *voluntary* parent exit,
@@ -25,14 +25,14 @@ function probe(directory, code) {
   return child;
 }
 
-// G3 (GROK_ALIGNMENT A2, AGENTS.md trap 1): CHANGED from the pre-G3 "second
+// V3 (ARCHITECTURE_V2 A2, AGENTS.md trap 1): CHANGED from the pre-V3 "second
 // executor is simply refused (exit 73), the first holder keeps running"
 // expectation. That encoded exactly the "successor waits for the prior
-// executor to exit/be proven dead on its own" precondition G3 removes: a
+// executor to exit/be proven dead on its own" precondition V3 removes: a
 // contended lock now kills the live prior holder's process group and takes
 // over within the 30s retry budget, so a successor never needs independent
 // proof of process death.
-test('G3: a contended lock kills the live holder and the contender takes over', { timeout: 20000 }, async t => {
+test('V3: a contended lock kills the live holder and the contender takes over', { timeout: 20000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'hehe-lock-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const holder = run(directory, "process.stdout.write('ready'); setInterval(()=>{},1000)");
@@ -48,11 +48,11 @@ test('G3: a contended lock kills the live holder and the contender takes over', 
   assert.deepEqual(await once(replacement, 'exit'), [0, null]);
 });
 
-// G3: when the recorded holder cannot actually be reclaimed (e.g. a stale or
+// V3: when the recorded holder cannot actually be reclaimed (e.g. a stale or
 // foreign pid on record, so the takeover kill is a no-op) the contender waits
 // out the full budget and reports RECOVERY_REQUIRED rather than hanging
 // forever or silently proceeding.
-test('G3: an unreclaimable lock reports RECOVERY_REQUIRED after the retry budget', { timeout: 40000 }, async t => {
+test('V3: an unreclaimable lock reports RECOVERY_REQUIRED after the retry budget', { timeout: 40000 }, async t => {
   const directory = await mkdtemp(join(tmpdir(), 'hehe-lock-unreclaimable-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const holder = run(directory, "process.stdout.write('ready'); setInterval(()=>{},1000)");

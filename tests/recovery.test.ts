@@ -146,7 +146,7 @@ describe('bounded recovery',()=>{
   expect(life.heartbeat(identity,[]).cancellations).not.toContain(runId);
   expect(f.accept({schema_version:1,type:'run.retry',payload:{run_id:runId,expected_attempt:1}}))
    .toMatchObject({status:'rejected',error:{code:'CANCEL_UNCONFIRMED'}});
-  // G2 (GROK_ALIGNMENT A3, trap 4): the run is no longer live current-generation
+  // V2 (ARCHITECTURE_V2 A3, trap 4): the run is no longer live current-generation
   // work, so its still-unreconciled lock/effect/operation records are owner-
   // visible custody, not a sleep blocker.
   f.setNow('2026-09-10T08:01:36.000Z');life.heartbeat(identity,[]);
@@ -174,11 +174,11 @@ describe('bounded recovery',()=>{
   f.setNow('2026-09-10T08:00:20.000Z');life.heartbeat(identity,[]);life.watchdog();expect(life.get().phase).toBe('READY');
   f.setNow('2026-09-10T08:00:31.000Z');life.watchdog();expect(life.get().phase).toBe('READY');expect(f.store.run(runId).status).toBe('interrupted');expect(f.store.run(runId).error_code).toBe('OWNER_CANCELLED');
   expect(life.heartbeat(identity,[]).cancellations).toContain(runId);
-  // G2 (GROK_ALIGNMENT A2/A3): a late settlement report for the interrupted
+  // V2 (ARCHITECTURE_V2 A2/A3): a late settlement report for the interrupted
   // attempt still confirms the fenced outcome; it is not a resumption.
   life.complete(identity,runId,1,{status:'cancelled',text:''});expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0);
  });
- // G2 (GROK_ALIGNMENT A2/A3, trap 1): a lost boot lease now interrupts the
+ // V2 (ARCHITECTURE_V2 A2/A3, trap 1): a lost boot lease now interrupts the
  // generation's live work directly (no recovery_required detour), and a
  // read-only attempt with no unresolved custody is reseeded from that same
  // epoch fence -- no confirmed provider-termination proof is required or

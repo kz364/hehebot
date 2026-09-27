@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// G6: GROK_ALIGNMENT A6 streamed timeline, `GET /v1/stream`, exercised in real
+// V6: ARCHITECTURE_V2 A6 streamed timeline, `GET /v1/stream`, exercised in real
 // local workerd (real Durable Object WebSocket Hibernation upgrade, real
 // WebSocketPair, real setWebSocketAutoResponse) instead of the mocked ctx
 // tests/stream.test.ts uses (Node has no WebSocketPair). Same pattern as the
@@ -19,7 +19,7 @@
 // performs a real HTTP Upgrade handshake for `/v1/stream`, so a real
 // WebSocket client (the `ws` package — Node's global WebSocket/fetch cannot
 // set the `Origin` header the Fetch spec forbids, but this is exactly the
-// header GROK_ALIGNMENT A6 depends on) proves the real workerd upgrade path,
+// header ARCHITECTURE_V2 A6 depends on) proves the real workerd upgrade path,
 // not a mock.
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -210,7 +210,7 @@ async function main() {
     assert.ok(replay.cursor > cursorAfterFirst);
     console.log(`      reconnect with cursor ${cursorAfterFirst} replayed exactly [${replayedUserTexts.join(', ')}]`);
 
-    console.log(JSON.stringify({ result: 'pass', scope: 'GROK_ALIGNMENT A6 GET /v1/stream in real local workerd (Miniflare, real WebSocket Hibernation upgrade)' }));
+    console.log(JSON.stringify({ result: 'pass', scope: 'ARCHITECTURE_V2 A6 GET /v1/stream in real local workerd (Miniflare, real WebSocket Hibernation upgrade)' }));
   } finally {
     for (const ws of sockets) { try { ws.terminate(); } catch { /* already closed */ } }
     if (mf) await mf.dispose().catch(() => {});

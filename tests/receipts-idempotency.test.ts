@@ -9,10 +9,10 @@ vi.mock('cloudflare:workers', () => ({ DurableObject: class {
 } }));
 vi.mock('../DB/schema.sql', () => ({ default: '' }));
 
-// GROK_ALIGNMENT A5: the portal's durable outbox reconciles a send after a
+// ARCHITECTURE_V2 A5: the portal's durable outbox reconciles a send after a
 // reload or a lost response by looking its own Idempotency-Key back up, and
 // the committed message.user event must carry that same key so the portal
-// can recognize its own echo. See docs/GROK_ALIGNMENT.md A5 and TODO.md G5.
+// can recognize its own echo. See docs/ARCHITECTURE_V2.md A5 and TODO.md V5.
 describe('receipt lookup by idempotency key', () => {
   it('returns the original receipt for this owner and echoes the key on message.user', () => {
     const f = fixture();

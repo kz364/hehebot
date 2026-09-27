@@ -149,7 +149,7 @@ try {
     await browser('fill', '#message', text);
     await browser('click', '#send');
     assert.ok(await waitFor(() => browserJson('document.querySelector("#message").value === ""')), 'composer receipt not confirmed');
-    // The G5 durable outbox (GROK_ALIGNMENT A5) sends via an async drain loop,
+    // The V5 durable outbox (ARCHITECTURE_V2 A5) sends via an async drain loop,
     // so the composer clearing no longer guarantees the server has the POST.
     assert.ok(await waitFor(() => fixture.browserCommands.length >= ordinal), 'browser send did not reach the server');
     assert.equal(fixture.browserCommands.length, ordinal, 'passive or duplicate browser command');
@@ -160,7 +160,7 @@ try {
     assert.equal(sent.headers['sec-fetch-site'], 'same-origin');
     // No unconfirmed outbox record remains once the real timeline echo
     // reconciles it. window.__hehebotOutbox() (nonce/conversation_id/text/
-    // phase only) is the G5 outbox's read-only test hook, replacing the old
+    // phase only) is the V5 outbox's read-only test hook, replacing the old
     // single 'personal.pending.<conversation>' localStorage key.
     assert.ok(await waitFor(() => browserJson(`!window.__hehebotOutbox().some(r=>r.conversation_id==="${persona}")`)),
       'outbox record for this conversation did not reconcile after the real send');

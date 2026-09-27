@@ -6,11 +6,11 @@ import { join } from 'node:path';
 import { ExecutionBridge } from '../runtime/execution-bridge.mjs';
 import { FileJournal } from '../runtime/file-journal.mjs';
 
-// G4b (GROK_ALIGNMENT A4, docs/AGENT_MODEL.md "one reserved interactive model
+// V4b (ARCHITECTURE_V2 A4, docs/AGENT_MODEL.md "one reserved interactive model
 // turn plus at most one background model turn installation-wide"): the claim
 // lane that actually executes a coordinator task run. Before this row a
 // started task sat 'queued' forever -- nextClaimableRun() only ever admitted
-// role='coordinator' runs (see the G4 TODO gap note and AGENTS.md trap #6).
+// role='coordinator' runs (see the V4 TODO gap note and AGENTS.md trap #6).
 //
 // This exercises the runtime wiring with a scripted fake control/native
 // backend, mirroring tests/runtime-execution-families.mjs's pattern, rather
@@ -18,7 +18,7 @@ import { FileJournal } from '../runtime/file-journal.mjs';
 // brief). The fake backend models exactly the two-lane capacity and wake
 // contract the real ControlCore/LifecycleCore now implement (proven against
 // the real core in tests/task-tools.test.ts's "claim() background task lane
-// (G4b)" describe block): one coordinator run, at most one background task
+// (V4b)" describe block): one coordinator run, at most one background task
 // run active at a time, and a coordinator wake enqueued on task settlement.
 
 function createBackend() {

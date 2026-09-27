@@ -220,7 +220,7 @@ it('routes owner steering and exact native receipts while denying model commands
  expect((await http('steer-pending',query,'incorrect-token')).status).toBe(401);
  expect((await http('steer-result',outcome,'incorrect-token')).status).toBe(401);
  expect((await http('steer-result',{...outcome,status:'consumed'})).status).toBe(422);
- // G4: run.steer is now a schema-permitted agent-command type (a coordinator
+ // V4: run.steer is now a schema-permitted agent-command type (a coordinator
  // may steer its own hehebot_start_task children), so this native child --
  // not a coordinator-managed task -- is refused as FORBIDDEN, not rejected by
  // the runtime envelope schema.

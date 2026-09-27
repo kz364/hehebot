@@ -1,12 +1,12 @@
 import {describe,expect,it} from 'vitest';
 import {parseExecutionMode} from '../src/core/execution-mode';
 
-// G8: the grok execution mode is an explicit, default-off switch that cannot
+// V8: the v2 execution mode is an explicit, default-off switch that cannot
 // coexist with owner-alpha/test-campaign custody.
 const token='t'.repeat(40);
-const sprites=JSON.stringify({provider:'fly-sprites',ref:{provider:'fly-sprites',id:'hehebot-grok'}});
+const sprites=JSON.stringify({provider:'fly-sprites',ref:{provider:'fly-sprites',id:'hehebot-v2'}});
 const fake=JSON.stringify({provider:'fake',ref:{provider:'fake',id:'rehearsal'}});
-const hosted={HEHEBOT_EXECUTION_MODE:'grok',AUTH_MODE:'access',OWNER_SUB:'owner-sub',EXECUTION_ENABLED:'true',PROVIDER_CONFIG:sprites,RUNTIME_TOKEN:token};
+const hosted={HEHEBOT_EXECUTION_MODE:'v2',AUTH_MODE:'access',OWNER_SUB:'owner-sub',EXECUTION_ENABLED:'true',PROVIDER_CONFIG:sprites,RUNTIME_TOKEN:token};
 
 describe('parseExecutionMode',()=>{
  it('is off unless explicitly set',()=>{
@@ -14,8 +14,8 @@ describe('parseExecutionMode',()=>{
   expect(parseExecutionMode({...hosted,HEHEBOT_EXECUTION_MODE:''})).toBeUndefined();
  });
  it('accepts the hosted Sprites configuration and the loopback fake rehearsal',()=>{
-  expect(parseExecutionMode(hosted)).toBe('grok');
-  expect(parseExecutionMode({...hosted,AUTH_MODE:'local',PROVIDER_CONFIG:fake})).toBe('grok');
+  expect(parseExecutionMode(hosted)).toBe('v2');
+  expect(parseExecutionMode({...hosted,AUTH_MODE:'local',PROVIDER_CONFIG:fake})).toBe('v2');
  });
  it.each([
   ['unknown mode',{HEHEBOT_EXECUTION_MODE:'fast'}],

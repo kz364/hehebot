@@ -18,7 +18,7 @@ const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
 const wait=code=>browser('wait','--fn',code);
 const server=createServer(async(req,res)=>{
  const url=new URL(req.url,'http://fixture');
- // GROK_ALIGNMENT A6: the portal always attempts a same-origin WebSocket at /v1/stream.
+ // ARCHITECTURE_V2 A6: the portal always attempts a same-origin WebSocket at /v1/stream.
  // This fixture is plain HTTP with no upgrade handling, so answer with 426 and keep it
  // out of the request log the assertions below check — it is not one of the reads under test.
  if(url.pathname==='/v1/stream'){res.writeHead(426);return res.end();}
@@ -67,7 +67,7 @@ try{
  assert.equal(await evaluate('document.querySelector("#conversation-search").maxLength'),200);
  assert.equal(await evaluate('document.querySelector("#conversation-search-status").getAttribute("role")'),'status');
  await search('  TrAiN  ',['Train 71','TRAIN result 103']);
- // run.result is a notice, not a search-filtered bubble (GROK_ALIGNMENT A7): the "N of M
+ // run.result is a notice, not a search-filtered bubble (ARCHITECTURE_V2 A7): the "N of M
  // loaded messages" count only covers message.user/bot.message, so the run.result event
  // among `recent` (rendered separately, via its own always-shown notice plus a legacy-text
  // bot article) is excluded from both the denominator and this count's numerator.

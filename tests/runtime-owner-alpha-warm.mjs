@@ -391,7 +391,7 @@ test('wrong journal identity, false stop, and premature stop never report retire
   }
 });
 
-// G3 (GROK_ALIGNMENT A2): CHANGED from the pre-G3 "a held lock refuses
+// V3 (ARCHITECTURE_V2 A2): CHANGED from the pre-V3 "a held lock refuses
 // retirement" expectation. A contended native-home or session lock is no
 // longer refused: the retirement inspection kills the live holder's process
 // group and takes over, so a foreign/stale holder no longer prevents a
@@ -410,7 +410,7 @@ test('a held kernel lock is reclaimed by warm retirement inspection rather than 
         holder = spawn('bash', [join('scripts', 'with-executor-lock.sh'), config[which], process.execPath,
           '-e', 'console.log("locked"); process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
         await once(holder.stdout, 'data');
-        // Registered before any lock contention: a contended lock now (G3)
+        // Registered before any lock contention: a contended lock now (V3)
         // kills a live holder as part of takeover, so the 'exit' listener
         // must be armed before that can happen or the event is missed and
         // this hangs forever.

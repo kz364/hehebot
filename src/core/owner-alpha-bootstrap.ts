@@ -78,7 +78,7 @@ export function assertClaimedPreTurnQuarantineCustody(store:Store,grant:OwnerAlp
    FROM attempts WHERE run_id=? OR epoch=? OR boot_id=? LIMIT 2`,p.run_id,p.epoch,p.boot_id),a=attempts[0];
  requireThat(grant.installation_id===prior.installation_id&&grant.owner_binding_sha256===prior.owner_binding_sha256&&Object.entries(p).every(([key,value])=>prior[key as keyof typeof p]===value)&&
   grant.evidence.observed_at>=prior.expires_at&&grant.evidence.observed_at<=now&&now<grant.expires_at&&grant.successor_policy_revision!==prior.policy_revision&&
-  // G2 (GROK_ALIGNMENT A2/A3): the predecessor's unsettled claimed attempt is now
+  // V2 (ARCHITECTURE_V2 A2/A3): the predecessor's unsettled claimed attempt is now
   // fenced into 'interrupted' rather than parked in 'recovery_required'.
   run.current_attempt===1&&(run.status==='recovery_required'||run.status==='interrupted')&&run.checkpoint_is_null===1&&attempts.length===1&&a.run_id===p.run_id&&a.attempt===attempt&&a.epoch===p.epoch&&a.boot_id===p.boot_id&&
   a.submission_key===submission_key&&a.status==='claimed'&&utc(a.deadline_at)&&a.deadline_at<=now&&a.unresolved_pre_turn===1,

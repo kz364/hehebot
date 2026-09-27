@@ -1,6 +1,6 @@
 # Bot orchestration clarification — 2026-09-10
 
-> **2026-09-27 supersession ([GROK_ALIGNMENT.md](GROK_ALIGNMENT.md) A4):** the coordinator resolves intent **by choosing tools**. There is no separate classification step.
+> **2026-09-27 supersession ([ARCHITECTURE_V2.md](ARCHITECTURE_V2.md) A4):** the coordinator resolves intent **by choosing tools**. There is no separate classification step.
 > - `hehebot_start_task` creates independent work.
 > - `hehebot_steer_task` steers an identified running task.
 > - `hehebot_queue_followup` defers an instruction to a task's next turn.
@@ -59,4 +59,4 @@ Coordinator context contains persona instructions plus authorized summaries/task
 - O08: A coordinator reply finishes while a background tool is active. Sprite remains awake until all activity blockers settle.
 - O09: Auth-refresh race under two turns results in one managed refresh owner and no token overwrite, secret leakage or paid fallback.
 
-These tests supplement S01–S32. Update compute defaults, claim capacity/lane schemas, native routing, UI, activity counts, rollout gates and Definition of Done accordingly. The supplied Grok export makes a new exporter unnecessary for initial onboarding: implement preview/normalized import from the adapted markdown first.
+These tests supplement S01–S32. Update compute defaults, claim capacity/lane schemas, native routing, UI, activity counts, rollout gates and Definition of Done accordingly. The supplied prior-bot export makes a new exporter unnecessary for initial onboarding: implement preview/normalized import from the adapted markdown first.

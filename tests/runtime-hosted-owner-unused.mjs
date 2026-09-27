@@ -114,7 +114,7 @@ test('empty, partial and symlink transition directories are never attested or ch
   }
 });
 
-// G3 (GROK_ALIGNMENT A2): CHANGED from the pre-G3 "a held lock refuses
+// V3 (ARCHITECTURE_V2 A2): CHANGED from the pre-V3 "a held lock refuses
 // consumption" expectation. A contended native-home lock is no longer
 // refused: produceUnusedEvidence's own lock chain kills the live holder's
 // process group and takes over, so a foreign/stale holder no longer blocks a
@@ -124,7 +124,7 @@ test('a held native-home flock is reclaimed by unused evidence production rather
   const holder = spawn('bash', [lockScript, f.request.review.native_home.path, process.execPath, '-e',
     'console.log("locked");process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
   await once(holder.stdout, 'data');
-  // Registered before any lock contention: a contended lock now (G3) kills a
+  // Registered before any lock contention: a contended lock now (V3) kills a
   // live holder as part of takeover, so the 'exit' listener must be armed
   // before that can happen or the event is missed and this hangs forever.
   const exited = once(holder, 'exit');
@@ -152,11 +152,11 @@ test('a held transition-directory lock is reclaimed by evidence write rather tha
   const holder = spawn('bash', [lockScript, f.directory, process.execPath, '-e',
     'console.log("locked");process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
   await once(holder.stdout, 'data');
-  // Registered before any lock contention: a contended lock now (G3) kills a
+  // Registered before any lock contention: a contended lock now (V3) kills a
   // live holder as part of takeover, so the 'exit' listener must be armed
   // before that can happen or the event is missed and this hangs forever.
   const exited = once(holder, 'exit');
-  // G3 (GROK_ALIGNMENT A2): CHANGED from the pre-G3 "a held transition-
+  // V3 (ARCHITECTURE_V2 A2): CHANGED from the pre-V3 "a held transition-
   // directory lock refuses the write" expectation. The nested lock chain
   // kills the live holder's process group and takes over, so the write with
   // a valid reservation ticket now succeeds instead of being refused.

@@ -74,7 +74,7 @@ try{
   // #refresh sits in .sidebar-footer, which is display:none at this narrow (390px)
   // viewport, so the explicit click below may be a no-op there (same on old code).
   // The 10s wait used to be safe only because the old fixed 5s full-refresh timer
-  // would independently hit the tasks endpoint well inside that window; GROK_ALIGNMENT
+  // would independently hit the tasks endpoint well inside that window; ARCHITECTURE_V2
   // A6 replaced that with a 15s fallback poll, so the safety margin must grow to match.
   await browser('click','#refresh');await Promise.race([arrived,new Promise((_,reject)=>timer=setTimeout(()=>reject(new Error('Delayed task request did not arrive')),20000))]);
   await click('Beta');assert.doesNotMatch((await browser('get','text','#task-strip')).stdout,/Task A|Task B/);

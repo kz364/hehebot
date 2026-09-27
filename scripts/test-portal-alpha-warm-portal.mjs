@@ -26,7 +26,7 @@ let reads=0,deniedReads=0,botReads=0,offline=false,failMessage=false;
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
 const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
 const wait=code=>browser('wait','--fn',code);
-// The G5 durable outbox (GROK_ALIGNMENT A5) sends via an async drain loop, so
+// The V5 durable outbox (ARCHITECTURE_V2 A5) sends via an async drain loop, so
 // a click no longer guarantees the server has the POST by the time the
 // composer clears; poll the Node-side `commands` array instead of asserting
 // its length immediately after a UI wait.
@@ -151,8 +151,8 @@ try{
  await rollbackClock();await refresh();await blocked(); // in-page rollback
  await open();await blocked();await rollbackClock();await refresh();await blocked(); // rollback after reload
  assert.match(await banner(),/Warm generation expired/);await restoreClock();
- // Phase H — drafts and uncertain pending bytes/keys are preserved. The G5
- // durable outbox (GROK_ALIGNMENT A5) retries automatically under the same
+ // Phase H — drafts and uncertain pending bytes/keys are preserved. The V5
+ // durable outbox (ARCHITECTURE_V2 A5) retries automatically under the same
  // Idempotency-Key with backoff; there is no manual retry click, and the
  // composer clears immediately rather than holding the unsent text.
  await resetPage();warm('warm-9');await open();await enabled();

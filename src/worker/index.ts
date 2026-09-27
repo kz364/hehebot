@@ -122,7 +122,7 @@ export default {
    // Auth is applied before assets as well as API. Local dev is loopback-only.
    const owner=await authenticateOwner(request,env);
    if(path==='/v1/stream'){
-    // GROK_ALIGNMENT A6: same owner authentication and same-origin check as
+    // ARCHITECTURE_V2 A6: same owner authentication and same-origin check as
     // every other /v1 route; only the transport differs. The Durable Object
     // owns the actual WebSocket Hibernation upgrade.
     assertSameOrigin(request);

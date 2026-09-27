@@ -15,7 +15,7 @@ export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot
 // retries of the same JSON-RPC call within one process dedupe at the Worker.
 const SERVER_INSTANCE_ID = randomUUID();
 const COMMAND_TYPES = Object.freeze({ hehebot_propose_skill: 'skill.propose', hehebot_save_routine: 'routine.put', hehebot_run_routine: 'routine.run', hehebot_delete_routine: 'routine.delete', hehebot_start_task: 'task.start' });
-// G4 (GROK_ALIGNMENT A4): task_run_id/text-only tool shapes that must be
+// V4 (ARCHITECTURE_V2 A4): task_run_id/text-only tool shapes that must be
 // remapped to their underlying run.steer/run.followup/run.cancel command
 // payloads. The Worker binds run.steer's live attempt itself; the model
 // never supplies or sees expected_attempt.

@@ -146,7 +146,7 @@ try {
       `composer never admitted the turn-${turn} send`);
     await browser('fill', '#message', text);
     await browser('click', '#send');
-    // The G5 durable outbox (GROK_ALIGNMENT A5) clears the composer as soon as
+    // The V5 durable outbox (ARCHITECTURE_V2 A5) clears the composer as soon as
     // the send is queued, via an async drain loop — no longer only once the
     // receipt is confirmed. Wait for the real POST to land at the server
     // before counting commands.
@@ -332,7 +332,7 @@ try {
     assert.equal(report.nativeStarts, 2, 'reload launched another native runtime');
     assert.equal(report.modelRequests, 2, 'reload reached a model');
     // window.__hehebotOutbox() (nonce/conversation_id/text/phase only) is the
-    // G5 durable outbox's read-only test hook (GROK_ALIGNMENT A5), replacing
+    // V5 durable outbox's read-only test hook (ARCHITECTURE_V2 A5), replacing
     // the old single 'personal.pending.<conversation>' localStorage key.
     assert.equal(await browserJson(`window.__hehebotOutbox().filter(r=>r.conversation_id==="${persona}").length`), 0,
       'composer left an unconfirmed outbox record');

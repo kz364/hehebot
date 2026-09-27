@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-// G4 (GROK_ALIGNMENT A4, docs/AGENT_MODEL.md routing table): concise coordinator
+// V4 (ARCHITECTURE_V2 A4, docs/AGENT_MODEL.md routing table): concise coordinator
 // routing guidance, composed into the turn only for a coordinator run (never a
 // background task, which has no task tools) and only naming tools this persona
 // actually has. There is no separate base-instructions prompt string in this
@@ -22,7 +22,7 @@ function coordinatorGuidance(allowedTools = []) {
   return ['You are the coordinator for this conversation. Reply to the owner only through hehebot_send_message.',
     ...lines, 'When a background task completes, fails, is cancelled or needs input, you are woken with its result; relay it to the owner via hehebot_send_message.'].join(' ');
 }
-// G4b (GROK_ALIGNMENT A4, docs/AGENT_MODEL.md): concise instructions composed
+// V4b (ARCHITECTURE_V2 A4, docs/AGENT_MODEL.md): concise instructions composed
 // only into a coordinator task run's own isolated turn (never the coordinator's).
 function taskExecutorGuidance(personaName) {
   return `You are a task executor${personaName ? ` for ${personaName}` : ''}. ` +
@@ -46,7 +46,7 @@ export class ExecutionBridge {
         memoryCounter !== null && typeof memoryCounter !== 'function') fail('INVALID_BRIDGE_CONFIGURATION');
     Object.assign(this, { control, native, journal, identity, installationId, personas, claimStage, lane });
     this.memoryCounter = memoryCounter;
-    // G4b: the background task lane gets its own journal cursor/dispatch slot so
+    // V4b: the background task lane gets its own journal cursor/dispatch slot so
     // it never contends with, or is confused for, the coordinator's own single
     // dispatch record. The coordinator's cursor format is unchanged (existing
     // recovery tooling -- codex-recovery-inspect.mjs -- keys off dispatch-${hash(identity)}).
@@ -173,14 +173,14 @@ export class ExecutionBridge {
       const input = {
         attemptId: hash([this.installationId, claim.submission_key]), installationId: this.installationId,
         personaId: persona.agentId, model: persona.model,
-        // G4c: routing metadata only -- codex-service.mjs's native.submit reads
+        // V4c: routing metadata only -- codex-service.mjs's native.submit reads
         // this to pick the correct lane's supervisor/bridge cursor, then strips
         // it before the actual CodexAdapter.submit() call (whose input allowlist
         // never includes `lane`).
         ...(this.lane === 'background' ? { lane: 'background' } : {}),
         ...(background ? { ownerAlphaBackground: true } : {}),
         scope: claim.run.routine_id ? 'routine' : 'conversation',
-        // G4b: a coordinator task run gets its own scope, keyed by its own run
+        // V4b: a coordinator task run gets its own scope, keyed by its own run
         // id -- never the coordinator's persona/room scope -- so the native
         // adapter opens an isolated Codex thread for it, never the coordinator's.
         scopeId: claim.run.routine_id ?? context.room_id ?? (context.coordinator_task ? claim.run.id : claim.run.persona_id),

@@ -25,7 +25,7 @@ export function appendBotMessageEvent(
  return { event_id: eventId, sequence };
 }
 
-/** GROK_ALIGNMENT A1: the agent speaks only through `hehebot_send_message`.
+/** ARCHITECTURE_V2 A1: the agent speaks only through `hehebot_send_message`.
  * A committed message is final regardless of later turn failure, cancellation
  * or interruption; this class only ever appends, never retracts. */
 export class BotMessages {

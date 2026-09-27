@@ -17,7 +17,7 @@ mkdir -p -- "$state"
   exit 64
 }
 
-# G3 (GROK_ALIGNMENT A2): a contended lock no longer just refuses. It kills the
+# V3 (ARCHITECTURE_V2 A2): a contended lock no longer just refuses. It kills the
 # prior holder's process group (SIGTERM, then SIGKILL after a short grace) and
 # retries acquiring for up to 30s total; only then does it give up and report
 # RECOVERY_REQUIRED. No process-death proof is required before that -- the
@@ -78,7 +78,7 @@ kill_holder() {
 }
 
 # Quick non-consuming probe: if the lock is free right now, the immediate
-# blocking acquire below is effectively instant (matches the pre-G3 fast
+# blocking acquire below is effectively instant (matches the pre-V3 fast
 # path exactly). If it is held, a live holder gets one takeover attempt
 # before we wait out the rest of the 30s budget.
 if ! flock --nonblock --conflict-exit-code 73 "$state" true 2>/dev/null; then

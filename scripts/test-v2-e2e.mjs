@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// G8 local rehearsal of the Grok-aligned hosted path, credential-free.
+// G8 local rehearsal of the v2-architecture hosted path, credential-free.
 //
 // Real: Worker + SQLite Durable Object in local workerd (wrangler dev, HTTPS,
-// HEHEBOT_EXECUTION_MODE=grok, NATIVE_VERIFIED left false), the Sprite runtime
-// entry (runtime/grok-service-entry.mjs) with its /wake handler, codex-service
+// HEHEBOT_EXECUTION_MODE=v2, NATIVE_VERIFIED left false), the Sprite runtime
+// entry (runtime/v2-service-entry.mjs) with its /wake handler, codex-service
 // with both lanes, pinned Codex 0.154.0 app-server, and the hehebot MCP tools
 // over HTTPS into the Worker.
 // Synthetic: the model (a loopback Responses server that scripts each turn),
@@ -27,7 +27,7 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Agent } from 'undici';
 import { createSpriteCodexService } from '../runtime/sprites-codex-service.mjs';
-import { createGrokRuntime } from '../runtime/grok-service-entry.mjs';
+import { createV2Runtime } from '../runtime/v2-service-entry.mjs';
 import { ControlClient } from '../runtime/control-client.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -104,21 +104,21 @@ function context(body) {
   return null;
 }
 
-const directory = await mkdtemp(join(tmpdir(), 'hehe-grok-e2e-'));
+const directory = await mkdtemp(join(tmpdir(), 'hehe-v2-e2e-'));
 const report = { status: 'failed', modelRequests: 0, turns: {}, spriteTasks: [], runtimeEvents: [] };
 const errors = [];
 let worker, modelServer, runtimeServer, runtime, dispatcher, workerLogs = '';
 let taskHeld = null, releaseTask, listTasksSeen = null;
 try {
-  // --- Worker in local workerd, grok mode on, NATIVE_VERIFIED stays false.
+  // --- Worker in local workerd, v2 mode on, NATIVE_VERIFIED stays false.
   const workerPort = await freePort(), token = randomBytes(32).toString('hex'), wakeToken = randomBytes(32).toString('hex');
   const cert = join(directory, 'cert.pem'), key = join(directory, 'key.pem');
   await promisify(execFile)('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
     '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', key, '-out', cert]);
   worker = spawn(process.execPath, ['node_modules/wrangler/bin/wrangler.js', 'dev', '--local', '--env', 'local', '--ip', '127.0.0.1',
     '--port', String(workerPort), '--persist-to', join(directory, 'worker'), '--local-protocol', 'https', '--https-key-path', key, '--https-cert-path', cert,
-    '--var', 'EXECUTION_ENABLED:true', '--var', 'HEHEBOT_EXECUTION_MODE:grok', '--var', `RUNTIME_TOKEN:${token}`,
-    '--var', `PROVIDER_CONFIG:${JSON.stringify({ provider: 'fake', ref: { provider: 'fake', id: 'grok-rehearsal' } })}`],
+    '--var', 'EXECUTION_ENABLED:true', '--var', 'HEHEBOT_EXECUTION_MODE:v2', '--var', `RUNTIME_TOKEN:${token}`,
+    '--var', `PROVIDER_CONFIG:${JSON.stringify({ provider: 'fake', ref: { provider: 'fake', id: 'v2-rehearsal' } })}`],
   { cwd: root, env: { ...process.env, WRANGLER_SEND_METRICS: 'false', WRANGLER_LOG_PATH: join(directory, 'logs') }, stdio: ['ignore', 'pipe', 'pipe'] });
   worker.stdout.on('data', chunk => { workerLogs += chunk; }); worker.stderr.on('data', chunk => { workerLogs += chunk; });
   await wait(() => workerLogs.replace(/\u001b\[[0-9;]*m/g, '').includes(`Ready on https://127.0.0.1:${workerPort}`), 'Worker readiness', 60000);
@@ -135,7 +135,7 @@ try {
     'idempotency-key': randomUUID() }, body: JSON.stringify({ schema_version: 1, type: 'message.send', payload: { conversation_id: persona, text } }) });
   const control = new ControlClient({ origin: origin + '/', token, fetchImpl: trustedFetch });
   const initial = await control.request('status', {});
-  assert.equal(initial.execution_mode, 'grok');
+  assert.equal(initial.execution_mode, 'v2');
   assert.equal(initial.execution_enabled, true);
   assert.equal(initial.phase, 'STOPPED');
   const state = await owner('/v1/state');
@@ -225,8 +225,8 @@ try {
     };
     return req;
   };
-  runtime = createGrokRuntime({ portalOrigin: origin + '/', runtimeTokenFile, wakeTokenFile, tlsCAFile: cert,
-    ownerBindingSha256: initial.owner_binding_sha256 ?? null, installationId: 'grok-rehearsal', stateRoot,
+  runtime = createV2Runtime({ portalOrigin: origin + '/', runtimeTokenFile, wakeTokenFile, tlsCAFile: cert,
+    ownerBindingSha256: initial.owner_binding_sha256 ?? null, installationId: 'v2-rehearsal', stateRoot,
     binary: join(root, '.local/codex-runtime/node_modules/.bin/codex'), restrictedPermissions: true, maintainIntervalMs: 500,
     personas: { [persona]: { agentId: 'assistant', model, allowedTools: ['hehebot_send_message', 'hehebot_start_task',
       'hehebot_list_tasks', 'hehebot_task_detail', 'hehebot_steer_task', 'hehebot_queue_followup', 'hehebot_cancel_task'] } } },
@@ -246,7 +246,7 @@ try {
   assert.equal(first.status, 'applied');
   const booting = await wait(async () => { const s = await control.request('status', {}); return s.phase === 'BOOTING' && s; }, 'Worker wake request');
   await wake(booting.epoch);
-  await wait(() => report.runtimeEvents.some(event => event.event === 'grok.ready'), 'runtime boot', 60000);
+  await wait(() => report.runtimeEvents.some(event => event.event === 'v2.ready'), 'runtime boot', 60000);
 
   // 2. Coordinator starts the task and acknowledges through hehebot_send_message.
   const timeline = async () => (await owner(`/v1/conversations/${persona}/events?after=0`)).events;
@@ -276,12 +276,12 @@ try {
   await wait(async () => (await run(report.taskRunId))?.status === 'completed', 'task completed');
 
   // 5. Both lanes idle -> runtime asks -> Worker commits sleep (G2 predicate).
-  await wait(() => report.runtimeEvents.some(event => event.event === 'grok.sleep_committed'), 'sleep committed', 150000);
-  await wait(() => report.runtimeEvents.some(event => event.event === 'grok.stopped'), 'native stopped after sleep', 30000);
+  await wait(() => report.runtimeEvents.some(event => event.event === 'v2.sleep_committed'), 'sleep committed', 150000);
+  await wait(() => report.runtimeEvents.some(event => event.event === 'v2.stopped'), 'native stopped after sleep', 30000);
   const asleep = await wait(async () => { const s = await control.request('status', {}); return ['STOP_COMMITTED', 'STOPPING', 'STOPPED'].includes(s.phase) && s; }, 'Worker sleep phase');
   report.finalPhase = asleep.phase;
   assert.equal(held, null, 'Sprite activity hold released after the committed sleep');
-  assert.ok(!report.runtimeEvents.some(event => event.event === 'grok.failed'), JSON.stringify(report.runtimeEvents));
+  assert.ok(!report.runtimeEvents.some(event => event.event === 'v2.failed'), JSON.stringify(report.runtimeEvents));
 
   // 6. Clean thread: only message.user / bot.message bubbles, ordered, no duplicates.
   const events = await timeline();

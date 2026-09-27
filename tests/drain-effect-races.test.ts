@@ -111,7 +111,7 @@ describe('seeded effect custody and drain races', () => {
         });
         if (!cancelled) actions.push({ name: 'cancel', run: () => {
           expect(f.accept({ schema_version: 1, type: 'run.cancel', payload: { run_id: run, reason: 'Synthetic cancel' } }).status).toBe('applied');
-          // G2: cancelling an already-interrupted (unconfirmed) attempt resolves
+          // V2: cancelling an already-interrupted (unconfirmed) attempt resolves
           // it straight to 'cancelled'; cancelling before that fence is reached
           // just marks 'cancelling' and later interrupts preserve OWNER_CANCELLED.
           if (lost) cancelledAfterLost = true;
@@ -122,7 +122,7 @@ describe('seeded effect custody and drain races', () => {
           f.setNow('2026-09-10T00:01:29.999Z');
           life.authorizeAttempt(identity, run, 1);
           f.setNow('2026-09-10T00:01:30.000Z'); life.watchdog(); lost = true; count('lease-loss');
-          // G2 (GROK_ALIGNMENT A3): a never-dispatched intent is abandoned
+          // V2 (ARCHITECTURE_V2 A3): a never-dispatched intent is abandoned
           // outright; only a dispatched effect's outcome becomes unknown.
           for (const e of model) {
             if (e.status === 'intent') { e.status = 'failed'; e.receipt = { kind: 'abandoned_interrupted' }; }

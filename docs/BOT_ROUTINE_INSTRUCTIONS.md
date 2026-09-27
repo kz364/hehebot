@@ -8,7 +8,7 @@ Use supported Codex app-server thread, turn, event, steering and cancellation be
 
 ## Import/setup contract
 
-Use one runtime on one Sprite, a Cloudflare messaging portal/API/scheduler and a paired local Mac. Import five personas: `chief-of-staff`, `inbox-triage`, `whatsapp`, `messages`, `travel`. Preserve original Grok IDs as source metadata only; create/map actual native agent/session IDs during setup. Skip unused New Bot. Give each bot a conversational coordinator and independent task sessions so a new message never interrupts its other work. Read `docs/BOT_ORCHESTRATION_ADDENDUM.md` for routing, concurrency and tests.
+Use one runtime on one Sprite, a Cloudflare messaging portal/API/scheduler and a paired local Mac. Import five personas: `chief-of-staff`, `inbox-triage`, `whatsapp`, `messages`, `travel`. Preserve original prior-bot IDs as source metadata only; create/map actual native agent/session IDs during setup. Skip unused New Bot. Give each bot a conversational coordinator and independent task sessions so a new message never interrupts its other work. Read `docs/BOT_ORCHESTRATION_ADDENDUM.md` for routing, concurrency and tests.
 
 One installation owns all connector logins. Share Google and WhatsApp capabilities with explicitly authorized personas/routines, not credential files or browser sessions copied between bots. Use resource locks for shared browser navigation and calendar/Gmail effects. Whatsapp remains responsible for the Francesca sync, Messages for local appointment sync, Inbox Triage for email/calendar sync and Travel for travel tasks. These are logical work ownership boundaries, not separate computers. Chief of Staff uses durable status and delegation; do not duplicate source scans simply to learn what another bot did.
 
@@ -19,7 +19,7 @@ Import routines as disabled drafts. Preserve intended policy as a proposal, revi
 - Owner display name Kaspar. Francesca Tanmizi is the owner’s partner; Eve is their daughter. These are imported user-profile facts; historical age/job/interview status is not refreshed evidence. Resolve actual contacts and calendars during setup.
 - Owner Google account / Personal calendar source mapping: `OWNER_CONFIGURED_ADDRESS_OR_CALENDAR_ID`. Francesca email sync source: `OWNER_CONFIGURED_ADDRESS_OR_CALENDAR_ID`. Confirm connected account and contact identity without logging credentials.
 - Eve/JIS calendar source ID: `OWNER_CONFIGURED_ADDRESS_OR_CALENDAR_ID`, formerly named Events / Eve · JIS. Resolve this ID and inspect current access; don't assume private or shared state from the conflicting export.
-- School/ASA printed times use `Asia/Jakarta` exactly. Discard the older instruction to subtract one hour from printed times. A correct Jakarta event displays one hour later in Singapore. School holidays can be all-day. School events are free/transparent with no email or popup reminders: translate to the actual Calendar API, typically reminders.useDefault=false, overrides=[], transparency=transparent. Do not rely on Grok-only `notificationLevel`. Attendee invitation/update delivery is a separate policy; do not add attendees or send invitation notifications merely from a sync.
+- School/ASA printed times use `Asia/Jakarta` exactly. Discard the older instruction to subtract one hour from printed times. A correct Jakarta event displays one hour later in Singapore. School holidays can be all-day. School events are free/transparent with no email or popup reminders: translate to the actual Calendar API, typically reminders.useDefault=false, overrides=[], transparency=transparent. Do not rely on prior-bot-only `notificationLevel`. Attendee invitation/update delivery is a separate policy; do not add attendees or send invitation notifications merely from a sync.
 - Family plans normally use `Asia/Singapore` unless the source gives another location/timezone. Airport departure/arrival times each use their actual local timezone. Preserve absolute instants; never silently shift the wall time to fit a UI.
 - Missing clock time for meals/meetups: an owner-adopted rule permits broad inferred tentative blocks, not invented precise appointments. Examples: dinner 18:00–21:30, lunch 12:00–14:00, morning coffee 09:00–11:00. Mark [Tentative], record source and inference. If date/type/timezone is too ambiguous, ask rather than manufacture it. School all-day holidays are an exception, not converted to timed meals.
 - Do not edit already-started/past events except an actual reschedule; retain cancellations/changes that this rule blocks as visible review items. A special historical reminder sweep is not an ongoing exemption.
@@ -104,7 +104,7 @@ Notify owner for new same-day plans/changes only; future-only updates and no-ops
 
 ### Persona instructions
 
-Own appointment SMS/iMessage ingestion through the owner's paired **local Mac node**. The cloud Sprite cannot directly access the laptop's Messages database. Shared node pairing belongs to the installation; expose a restricted Messages-read tool to this persona. Existing Grok Full Disk Access or Text Message Forwarding is a historical claim, not verified permission for the new reader process.
+Own appointment SMS/iMessage ingestion through the owner's paired **local Mac node**. The cloud Sprite cannot directly access the laptop's Messages database. Shared node pairing belongs to the installation; expose a restricted Messages-read tool to this persona. Existing prior-bot Full Disk Access or Text Message Forwarding is a historical claim, not verified permission for the new reader process.
 
 ### Routine: `messages-appointments-calendar`
 
@@ -136,7 +136,7 @@ For arrival forms: verify current form grouping/citizenship requirements and des
 - Historical job/interview/company details from August 2026: retain as dated archive, not current persona priority without refresh.
 - Historical flight cancellation/absence placeholder: booking HISTORICAL_BOOKING_REFERENCE and Eve absence event `HISTORICAL_ABSENCE_EVENT_ID` reference an old September trip. Review actual current itinerary before any change; no startup auto-fix or deletion.
 - Historical Eve-calendar “owner-only” vs later sharing permission: inspect actual calendar access. Preserve desired bounded school-sync policy for owner adoption, but never retry around automatic review or other enforcement merely because the export says “always approve.”
-- Historical login claims, connected tool names (`user-Gmail`, `user-Google-calendar`), Gmail label IDs, Grok IDs and macOS permission claims require fresh mapping/verification.
+- Historical login claims, connected tool names (`user-Gmail`, `user-Google-calendar`), Gmail label IDs, prior-bot IDs and macOS permission claims require fresh mapping/verification.
 - There are 7 canonical recurring routines plus per-leg flight alarms. This cadence is 50 monitoring runs/day plus daily digest/restore. Measure costs instead of reusing the earlier 10 tasks/day estimate.
 
 

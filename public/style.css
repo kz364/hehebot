@@ -92,12 +92,12 @@ label.field input,label.field textarea,label.field select{background:#fffefb;bor
 .question-card h2{font-size:18px;font-weight:550;letter-spacing:-.4px;margin:4px 0 16px}
 .question-card h3{font-size:14px;margin:16px 0 6px}
 .question-card>p{font-size:14px;line-height:1.6}
-/* G5 durable outbox: an unresolved send is visibly distinct from a committed
+/* V5 durable outbox: an unresolved send is visibly distinct from a committed
    bubble until it echoes back on the timeline. */
 .message.outbox-pending .message-body{opacity:.75;border-style:dashed}
 .message.outbox-unknown .message-body{border-color:#c98a4d}
 .outbox-status{margin-top:2px}
-/* G7 clean thread: provisional/working text is ephemeral, never a bubble. */
+/* V7 clean thread: provisional/working text is ephemeral, never a bubble. */
 .provisional-typing{opacity:.85}
 .provisional-typing>.provisional-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;font-style:italic;color:var(--muted)}
 .message .status{margin-left:8px}
