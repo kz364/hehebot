@@ -4,7 +4,7 @@ import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { AGENT_TOOL_NAMES, readAccessCredentials } from './agent-tools.mjs';
+import { AGENT_TOOL_NAMES, MAC_MESSAGES_POLICY, readAccessCredentials } from './agent-tools.mjs';
 import { BROWSER_POLICY, BROWSER_TOOLS, browserLimits } from './browser-gateway.mjs';
 import { GOOGLE_POLICY, createGoogleAppsFence, googleAppsConfig, googleThreadConfig } from './google-apps.mjs';
 import { ControlClient } from './control-client.mjs';
@@ -680,9 +680,14 @@ export function createCodexService(config, dependencies) {
             // defense-in-depth: ControlCore already refuses task.start from a
             // background run (see tests/task-tools.test.ts "no recursive fan-out").
             const taskContext = JSON.parse(run.context_json);
-            const allowedTools = taskContext.coordinator_task === true
+            const configuredTools = taskContext.coordinator_task === true
               ? persona.allowedTools.filter(name => !COORDINATOR_ONLY_TASK_TOOLS.includes(name))
               : persona.allowedTools;
+            // ARCHITECTURE_V2 A9: the Mac Messages tool follows the Worker-side
+            // grant (persona tool policy or the task's admitted capabilities),
+            // like browser use; the Worker re-checks it on every node request.
+            const allowedTools = (taskContext.persona?.body?.tool_policy_ids ?? []).includes(MAC_MESSAGES_POLICY) &&
+              !configuredTools.includes('hehebot_messages_search') ? [...configuredTools, 'hehebot_messages_search'] : configuredTools;
             const grant = { origin: config.portalOrigin, tokenFile: config.runtimeTokenFile,
               ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}),
               identity, runId: run.id, attempt: run.current_attempt, allowedTools };

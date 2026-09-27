@@ -49,4 +49,47 @@ final class PortalPolicyTests: XCTestCase {
         XCTAssertFalse(config.allowsResponse(url, status: 200, displayable: true, attachment: true))
         XCTAssertFalse(config.allowsResponse(URL(string: "https://evil.test"), status: 200, displayable: true, attachment: false))
     }
+
+    func testAccessTeamOriginIsExact() throws {
+        XCTAssertEqual(try PortalConfiguration.accessTeamOrigin("ancient-waterfall-b4eb").value, "https://ancient-waterfall-b4eb.cloudflareaccess.com")
+        for team in ["", "Team", "a.b", "-a", "a-", "evil.example/", "a b", String(repeating: "a", count: 64)] {
+            XCTAssertThrowsError(try PortalConfiguration.accessTeamOrigin(team), team)
+        }
+        let access = try PortalConfiguration.accessTeamOrigin("team")
+        let config = try PortalConfiguration(portal: "https://p.test", loginOrigins: [access.value])
+        XCTAssertTrue(config.allows(URL(string: "https://team.cloudflareaccess.com/cdn-cgi/access/login/p.test?kid=x")))
+        XCTAssertFalse(config.allows(URL(string: "https://other.cloudflareaccess.com/cdn-cgi/access/login")))
+    }
+
+    func testNotificationBridgeAcceptsOnlyPortalMainFrameShapes() throws {
+        let portal = try Origin("https://p.test")
+        let good = NotificationRequest(body: ["title": "Chief of Staff", "body": "Dentist Tue\u{0007} 10:00"], isMainFrame: true,
+                                       scheme: "https", host: "p.test", port: 0, portal: portal)
+        XCTAssertEqual(good, NotificationRequest(body: ["title": "Chief of Staff", "body": "Dentist Tue 10:00"], isMainFrame: true,
+                                                 scheme: "https", host: "p.test", port: 443, portal: portal))
+        XCTAssertEqual(good?.body, "Dentist Tue 10:00")
+        XCTAssertNil(NotificationRequest(body: ["title": "x", "body": "y"], isMainFrame: false, scheme: "https", host: "p.test", port: 0, portal: portal))
+        XCTAssertNil(NotificationRequest(body: ["title": "x", "body": "y"], isMainFrame: true, scheme: "https", host: "team.cloudflareaccess.com", port: 0, portal: portal))
+        XCTAssertNil(NotificationRequest(body: ["title": "x", "body": "y"], isMainFrame: true, scheme: "https", host: "p.test", port: 8443, portal: portal))
+        XCTAssertNil(NotificationRequest(body: ["title": "x", "body": "y", "url": "file:///etc"], isMainFrame: true, scheme: "https", host: "p.test", port: 0, portal: portal))
+        XCTAssertNil(NotificationRequest(body: "text", isMainFrame: true, scheme: "https", host: "p.test", port: 0, portal: portal))
+        XCTAssertNil(NotificationRequest(body: ["title": "x", "body": "   "], isMainFrame: true, scheme: "https", host: "p.test", port: 0, portal: portal))
+        let long = NotificationRequest(body: ["title": String(repeating: "t", count: 500), "body": String(repeating: "b", count: 500)],
+                                       isMainFrame: true, scheme: "https", host: "p.test", port: 0, portal: portal)
+        XCTAssertEqual(long?.title.count, NotificationRequest.maxTitle)
+        XCTAssertEqual(long?.body.count, NotificationRequest.maxBody)
+        var limiter = NotificationRateLimiter(burst: 2, window: 10)
+        let start = Date(timeIntervalSince1970: 0)
+        XCTAssertTrue(limiter.allow(now: start)); XCTAssertTrue(limiter.allow(now: start.addingTimeInterval(1)))
+        XCTAssertFalse(limiter.allow(now: start.addingTimeInterval(2)))
+        XCTAssertTrue(limiter.allow(now: start.addingTimeInterval(10.5)))
+    }
+
+    func testMacNodeLaunchctlVectorsAreFixed() {
+        XCTAssertEqual(MacNodeAgent.arguments(.start, uid: 501, home: "/Users/o"),
+                       ["bootstrap", "gui/501", "/Users/o/Library/LaunchAgents/com.hehebot.mac-node.plist"])
+        XCTAssertEqual(MacNodeAgent.arguments(.stop, uid: 501, home: "/Users/o"), ["bootout", "gui/501/com.hehebot.mac-node"])
+        XCTAssertEqual(MacNodeAgent.arguments(.status, uid: 501, home: "/Users/o"), ["print", "gui/501/com.hehebot.mac-node"])
+        XCTAssertEqual(MacNodeAgent.launchctl, "/bin/launchctl")
+    }
 }

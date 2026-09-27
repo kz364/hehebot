@@ -1379,7 +1379,47 @@ function editMemory(object){
 }
 $('add-bot').onclick=()=>editBot();$('edit-bot').onclick=()=>editBot(current());$('add-routine').onclick=()=>editRoutine();$('add-memory').onclick=()=>editMemory();
 $('add-room').onclick=()=>{const bots=items('persona').filter(x=>!x.body.archived);const fields=[field('Room name','name'),selectField('Default responder','responder',bots.map(x=>[x.id,x.body.name]),bots[0]?.id)];for(const bot of bots){const l=node('label',undefined,'check');const c=node('input');c.type='checkbox';c.name='members';c.value=bot.id;c.checked=true;l.append(c,document.createTextNode(bot.body.name));fields.push(l);}openEditor('New room',fields,form=>command('room.put',{id:crypto.randomUUID(),expected_revision:0,name:form.get('name'),member_ids:form.getAll('members'),default_responder_id:form.get('responder')}));};
-$('show-details').onclick=()=>$('details').classList.add('open');$('close-details').onclick=()=>$('details').classList.remove('open');$('refresh').onclick=()=>refresh(true);
+// ARCHITECTURE_V2 A9: the paired Mac node card (owner routes /v1/nodes*).
+let macView=null,macRevokeArmed=false;
+function renderMac(){
+ const list=$('mac-status');if(!list)return;
+ const row=(label,value)=>{const d=node('div');d.append(node('dt',label),node('dd',value));return d;};
+ const when=value=>value?new Date(value).toLocaleString():'never';
+ const m=macView;
+ if(!m)list.replaceChildren(row('Status','Not loaded'));
+ else if(m.error)list.replaceChildren(row('Status',m.error));
+ else list.replaceChildren(row('Paired',m.paired?`${m.node.name} (since ${when(m.node.paired_at)})`:'No'),row('Online',m.paired?(m.online?'Yes':'No'):'—'),
+  row('Last seen',m.paired?when(m.node.last_seen_at):'—'),row('Queued requests',String((m.queued??0)+(m.delivered??0))),
+  ...(m.paired&&m.node.capabilities?.length?[row('Capabilities',m.node.capabilities.join(', '))]:[]));
+ $('revoke-mac').hidden=!m?.paired;$('revoke-mac').textContent=macRevokeArmed?'Confirm revoke':'Revoke';
+}
+async function loadMac(){try{macView=await api('/v1/nodes',{cache:'no-store'});}catch(error){macView={error:error.message};}renderMac();}
+$('refresh-mac').onclick=()=>loadMac();
+$('pair-mac').onclick=async()=>{
+ const status=$('mac-pairing');
+ try{
+  const pairing=await api('/v1/nodes/pair',{method:'POST'});
+  status.textContent=`Pairing code ${pairing.code} (one use, expires ${new Date(pairing.expires_at).toLocaleTimeString()}). On the Mac run: node mac-node/mac-node.mjs pair --origin ${location.origin} --code ${pairing.code}`;
+ }catch(error){status.textContent=error.message;}
+ loadMac();
+};
+$('revoke-mac').onclick=async()=>{
+ if(!macRevokeArmed){macRevokeArmed=true;renderMac();setTimeout(()=>{macRevokeArmed=false;renderMac();},5000);return;}
+ macRevokeArmed=false;
+ try{await api('/v1/nodes/revoke',{method:'POST'});$('mac-pairing').textContent='Mac revoked. Its token no longer works; waiting requests expire by their deadline.';}catch(error){$('mac-pairing').textContent=error.message;}
+ loadMac();
+};
+/** Native shell notification bridge (macos/ HehebotPortal): only present inside
+ * the Mac app's WKWebView, which accepts {title,body} from the portal origin. */
+function notifyNative(events){
+ const bridge=window.webkit?.messageHandlers?.hehebotNotify;
+ if(!bridge||(!document.hidden&&document.hasFocus()))return;
+ for(const event of events.filter(e=>e?.type==='bot.message'&&typeof e.payload?.text==='string').slice(-3)){
+  const persona=items('persona').find(x=>x.id===event.conversation_id);
+  try{bridge.postMessage({title:persona?.body?.name??'Hehebot',body:event.payload.text.slice(0,240)});}catch{}
+ }
+}
+$('show-details').onclick=()=>{$('details').classList.add('open');loadMac();};$('close-details').onclick=()=>$('details').classList.remove('open');$('refresh').onclick=()=>refresh(true);
 $('show-skills').onclick=()=>choose('skills');
  $('show-connectors').onclick=()=>choose('connectors');
 $('export-control').onclick=async()=>{
@@ -1442,6 +1482,7 @@ function connectStream(){
   if(!frame||typeof frame!=='object')return;
   if(frame.type==='events'&&Array.isArray(frame.events)){
    if(Number.isFinite(frame.cursor))wsCursor=frame.cursor;
+   notifyNative(frame.events);
    const relevant=frame.events.filter(e=>e&&e.conversation_id===selected);
    if(relevant.length){
     const combined=[...events,...relevant];

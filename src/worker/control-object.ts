@@ -39,6 +39,7 @@ import {HostedWakeDeliveryError,parseHostedOwnerWake,sendHostedOwnerWake,type Ho
 import {TestCampaign,parseTestCampaignGrant} from '../core/test-campaign';
 import {parseTestAuthConfig} from './test-auth';
 import {parseExecutionMode,type ExecutionMode} from '../core/execution-mode';
+import {NodeBridge,type NodeRequest} from '../core/node-bridge';
 export type TriggerPolicy={routine_id:string;event_types:string[]};
 /** Per-socket Hibernation API attachment (ARCHITECTURE_V2 A6). `cursor` is the
  * last sequence delivered to this socket; null means the socket has not
@@ -47,6 +48,8 @@ export type TriggerPolicy={routine_id:string;event_types:string[]};
  * runtime-state label sent, so a phase change can be pushed without a client
  * poll. */
 type StreamAttachment={cursor:number|null;runtime:string|null};
+/** A paired Mac node socket (ARCHITECTURE_V2 A9), tagged 'node'. */
+type NodeAttachment={kind:'node';node_id:string};
 function stringList(value:string):string[]{const parsed:unknown=JSON.parse(value);if(!Array.isArray(parsed)||!parsed.every(x=>typeof x==='string'))throw new Error('Invalid policy configuration');return parsed;}
 function delegationMap(value:string):Record<string,string[]>{
  const parsed:unknown=JSON.parse(value);
@@ -61,6 +64,7 @@ export class PersonalControl extends DurableObject<Env> {
  private lifecycle:LifecycleCore;
  private progress:ProgressWatchdog;
  private flights:FlightRestoreIntegration;
+ private nodes:NodeBridge;
  private retention:TimelineRetention;
  private resultRetention:ResultRetention;
  private ownerBindingSha256:string|undefined;
@@ -108,6 +112,7 @@ export class PersonalControl extends DurableObject<Env> {
   try{idleMode=createProvider(JSON.parse(env.PROVIDER_CONFIG) as ProviderConfig).capabilities.stopMode==='provider-idle';}catch{}
   this.lifecycle=new LifecycleCore(this.store,this.core,{idleMode,...parseLifecycleTimings(env)});
   this.progress=new ProgressWatchdog(this.store,this.core,parseStuckPolicy(env.HEHEBOT_STUCK_POLICY));
+  this.nodes=new NodeBridge(this.store,this.core);
   this.flights=new FlightRestoreIntegration(this.store,this.core,this.lifecycle,{enabled:env.FLIGHT_RESTORE_VERIFIED==='true',policyId:env.FLIGHT_RESTORE_POLICY_ID??''});
   this.ctx.blockConcurrencyWhile(async()=>{try{
    if(!db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_versions'").length)db.exec(schema.replace('PRAGMA foreign_keys = ON;',''));
@@ -162,6 +167,7 @@ export class PersonalControl extends DurableObject<Env> {
  async fetch(request:Request):Promise<Response>{
   const failure=this.initializationFailure;
   if(failure)return new Response(JSON.stringify({error:safeError(failure)}),{status:failure.status,headers:{'Content-Type':'application/json'}});
+  if(new URL(request.url).pathname==='/node/stream')return this.nodeConnect(request);
   try{
    this.rate('stream:connect',120);
    // Auto-response answers "ping" with "pong" without waking the DO or
@@ -183,6 +189,8 @@ export class PersonalControl extends DurableObject<Env> {
   * an error: an idle/misbehaving socket must not affect the request path. */
  async webSocketMessage(ws:WebSocket,message:string|ArrayBuffer):Promise<void>{
   if(typeof message!=='string'||message==='ping')return;
+  const nodeAttachment=this.nodeAttachment(ws);
+  if(nodeAttachment){await this.nodeMessage(ws,nodeAttachment,message);return;}
   try{
    let parsed:unknown;
    try{parsed=JSON.parse(message);}catch{return;}
@@ -246,6 +254,7 @@ export class PersonalControl extends DurableObject<Env> {
   let now:string,after:number,runtime:'asleep'|'waking'|'running'|'recovery_required';
   try{now=this.core.now();after=this.store.sequence();runtime=this.runtimeStreamState();}catch{return;}
   for(const ws of sockets){
+   if(this.nodeAttachment(ws))continue;
    try{
     const attachment=this.streamAttachment(ws);
     let changed=false;
@@ -276,6 +285,7 @@ export class PersonalControl extends DurableObject<Env> {
   if(this.core.ownerAlpha.activeGeneration()){this.lifecycle.watchdog();return;}
   this.core.expireMemories();this.core.expireCommandPayloads();this.core.expireFollowups();this.core.expireQueuedContexts();this.retention.prune();this.resultRetention.prune();this.core.tick();if(this.flights.nextDue())this.flights.reconcile();this.lifecycle.watchdog();this.lifecycle.retryDue();this.core.reconcileBudget();
   new TaskSteering(this.store,()=>this.core.now()).prune();
+  this.nodes.expire();this.nodes.prune();
   this.core.questions.prune();
   new OutputPreviews(this.store,()=>this.core.now()).prune();
   new TokenUsageSnapshots(this.store,()=>this.core.now()).prune();
@@ -525,6 +535,16 @@ export class PersonalControl extends DurableObject<Env> {
    case 'agent-task-detail':result=new AgentCommandBoundary(this.core,this.lifecycle).taskDetail(command.payload);break;
    case 'memory-read-prepare':result=new AgentCommandBoundary(this.core,this.lifecycle).prepareMemoryRead(command.payload);break;
    case 'memory-read-reserve':result=new AgentCommandBoundary(this.core,this.lifecycle).reserveMemoryRead(command.payload);break;
+   case 'node-request':{
+    const {identity,...input}=command.payload;
+    const queued=this.nodes.enqueue(identity,input,this.lifecycle);
+    this.deliverNodeRequests(false);
+    result={...queued,status:this.nodes.request(queued.request_id)?.status??queued.status,node_online:this.nodeOnline()};break;
+   }
+   case 'node-result':{
+    const {identity,...input}=command.payload;
+    result={...this.nodes.poll(identity,input,this.lifecycle),node_online:this.nodeOnline()};break;
+   }
   }
   await this.arm();return result;
  }
@@ -758,6 +778,82 @@ export class PersonalControl extends DurableObject<Env> {
   if(type==='status')return this.statusSummary();
   return this.execute(command,true);
  });}
+ /** Owner (Access) routes for the Mac card: status, one-time pairing code, revoke. */
+ getNodeStatus(owner:string){return this.rpc(()=>{this.rate(owner+':read',120);return this.nodes.status(this.nodeOnline());});}
+ createNodePairing(owner:string){return this.rpc(()=>{this.rate(owner+':node-pair',10);return this.nodes.createPairing();});}
+ revokeNode(owner:string){return this.rpc(()=>{
+  this.rate(owner+':write',60);
+  const sockets=this.nodeSockets();const result=this.nodes.revoke();
+  for(const ws of sockets){try{ws.send(JSON.stringify({type:'revoked'}));ws.close(4001,'Node revoked.');}catch{}}
+  return result;
+ });}
+ /** Unauthenticated-by-Access node route: the one-time code is the credential. */
+ exchangeNodePairing(code:unknown,name:unknown){return this.rpc(()=>{this.rate('node:exchange',10);return this.nodes.exchange(code,name);});}
+ private nodeAttachment(ws:WebSocket):NodeAttachment|undefined{
+  try{const value=ws.deserializeAttachment() as NodeAttachment|null;if(value&&typeof value==='object'&&value.kind==='node'&&typeof value.node_id==='string')return value;}catch{}
+  return undefined;
+ }
+ /** Open sockets of the currently paired node (a revoked node's sockets are closed on revoke). */
+ private nodeSockets():WebSocket[]{
+  const device=this.nodes.device();if(!device)return [];
+  let sockets:WebSocket[];try{sockets=this.ctx.getWebSockets('node');}catch{return [];}
+  return sockets.filter(ws=>this.nodeAttachment(ws)?.node_id===device.node_id);
+ }
+ private nodeOnline():boolean{return this.nodeSockets().length>0;}
+ /** GET /node/stream: node token (Bearer) authenticates; Access service-token
+  * headers are checked at the Cloudflare edge before this Worker runs. */
+ private nodeConnect(request:Request):Response{
+  const reply=(error:unknown)=>{const status=error instanceof ControlError?error.status:500;return new Response(JSON.stringify({error:safeError(error)}),{status,headers:{'Content-Type':'application/json'}});};
+  const failure=this.initializationFailure;if(failure)return reply(failure);
+  try{
+   this.rate('node:connect',30);
+   const authorization=request.headers.get('Authorization')??'';
+   const device=this.nodes.authenticate(authorization.startsWith('Bearer ')?authorization.slice(7):null);
+   // One live socket per node: a reconnect replaces a half-open predecessor.
+   for(const old of this.nodeSockets()){try{old.close(4000,'Replaced by a newer connection.');}catch{}}
+   const pair=new WebSocketPair();
+   const [client,server]=Object.values(pair);
+   this.ctx.acceptWebSocket(server,['node']);
+   server.serializeAttachment({kind:'node',node_id:device.node_id} satisfies NodeAttachment);
+   server.send(JSON.stringify({type:'welcome',node_id:device.node_id,heartbeat_ms:30000}));
+   return new Response(null,{status:101,webSocket:client});
+  }catch(error){return reply(error);}
+ }
+ /** Node frames: hello {capabilities,version}, heartbeat, result {id,ok,result|error}.
+  * Anything else is ignored. A result for a parked request enqueues the
+  * follow-up coordinator run, so the alarm is re-armed to wake the runtime. */
+ private async nodeMessage(ws:WebSocket,attachment:NodeAttachment,message:string):Promise<void>{
+   try{
+    let frame:{type?:unknown;capabilities?:unknown;version?:unknown}&Record<string,unknown>;
+    try{frame=JSON.parse(message);}catch{return;}
+    if(!frame||typeof frame!=='object'||Array.isArray(frame))return;
+    const device=this.nodes.device();
+    if(!device||device.node_id!==attachment.node_id){try{ws.send(JSON.stringify({type:'revoked'}));ws.close(4001,'Node revoked.');}catch{}return;}
+    if(frame.type==='hello'){
+     const capabilities=Array.isArray(frame.capabilities)?frame.capabilities.filter((c):c is string=>typeof c==='string').slice(0,16):[];
+     this.nodes.touch(device.node_id,{capabilities,version:typeof frame.version==='string'?frame.version.slice(0,40):null});
+     this.deliverNodeRequests(true);
+    }else if(frame.type==='heartbeat'){
+     this.nodes.touch(device.node_id);ws.send(JSON.stringify({type:'heartbeat_ack'}));
+    }else if(frame.type==='result'){
+     this.nodes.touch(device.node_id);
+     const settled=this.nodes.result(device.node_id,frame as {id?:unknown;ok?:unknown;result?:unknown;error?:unknown});
+     ws.send(JSON.stringify({type:'ack',id:typeof frame.id==='string'?frame.id:null}));
+     if(settled?.follow_up_run_id)await this.arm();
+     this.broadcastStreamCommit();
+    }
+   }catch{try{ws.close(1011,'Node message failed.');}catch{}}
+ }
+ /** Pushes queued (and after a reconnect, delivered-but-open) requests. */
+ private deliverNodeRequests(includeDelivered:boolean):void{
+  const ws=this.nodeSockets().at(-1);if(!ws)return; // newest connection
+  const device=this.nodes.device()!;
+  const due:NodeRequest[]=this.nodes.takeDeliverable(device.node_id,includeDelivered);
+  for(const request of due){
+   try{ws.send(JSON.stringify({type:'request',id:request.id,capability:request.capability,args:request.args,deadline:request.deadline}));}
+   catch{break;} // Left 'delivered'; redelivered on the next hello.
+  }
+ }
  private async arm(delayMs=0,fromAlarm=false):Promise<void>{
   const generation=this.core.ownerAlpha.activeGeneration();
   if(generation){
@@ -786,6 +882,7 @@ export class PersonalControl extends DurableObject<Env> {
   const queuedContextExpiry=this.core.nextQueuedContextExpiry();if(queuedContextExpiry)times.push(Date.parse(queuedContextExpiry));
   const memoryExpiry=this.core.nextMemoryExpiry();if(memoryExpiry)times.push(Date.parse(memoryExpiry));
   const flightDue=this.flights.nextDue();if(flightDue)times.push(Date.parse(flightDue));
+  const nodeDue=this.nodes.nextDue();if(nodeDue)times.push(Date.parse(nodeDue));
   const due=this.store.db.all<{next_due_at:string}>('SELECT next_due_at FROM schedule_state ORDER BY next_due_at LIMIT 1')[0];
   if(due)times.push(Date.parse(due.next_due_at));
   const retry=this.store.db.all<{due_at:string}>('SELECT due_at FROM retry_queue ORDER BY due_at LIMIT 1')[0];if(retry&&this.core.options.executionEnabled)times.push(Date.parse(retry.due_at));
