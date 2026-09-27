@@ -436,7 +436,7 @@ async function outboxReconcileOnLoad(){
  // screen far longer than a reload should. Only fires when reconciliation
  // actually found something, so a page with no outbox history never issues
  // an extra read. Bug found while making V-A5 pass (ARCHITECTURE_V2 A5).
- if(foundAccepted)refresh();
+ if(foundAccepted)refresh(true);
  for(const conversationId of new Set([...outboxRecords.values()].map(r=>r.conversation_id)))outboxDrain(conversationId);
 }
 function items(kind){return snapshot?.objects?.filter(x=>x.kind===kind)??[];}
