@@ -9,7 +9,7 @@ import { snapshotControl, verifyControl } from './backup-control.mjs';
 
 export const MAX_EXPORT_BYTES = 4 * 1024 * 1024;
 export const MAX_EXPORT_ROWS = 10000;
-const sqlHash = '0b6b7b223f3088aa93eeb4a43e2808d1e028e90ac782c0acb8829b72aedec3bc';
+const sqlHash = '60be6afb4a7f18a2e4ea768747451784444f2c937ef20a853bddd0dd56d6f307';
 const schemaPins = {
   9: '15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c',
   10: '682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4',

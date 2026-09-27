@@ -164,20 +164,31 @@ test('wrong journal identity, false stop, and pre-expiry stop never report retir
   }
 });
 
-test('either held kernel lock prevents retirement despite matching native-stop journal', async t => {
+// G3 (GROK_ALIGNMENT A2): CHANGED from the pre-G3 "a held lock refuses
+// retirement" expectation. A contended native-home or session lock is no
+// longer refused: the retirement inspection kills the live holder's process
+// group and takes over, so a foreign/stale holder no longer prevents a
+// truthful journal from being reported as retired.
+test('a held kernel lock is reclaimed by retirement inspection rather than blocking it', async t => {
   for (const which of ['nativeHome', 'stateDirectory']) {
-    const f = await fixture(t); expiredForInspection(f); let holder;
-    try {
-      await assert.rejects(runHostedOwnerManager(f.config, f.request, { control: f.control, now: futureForStaging(f),
-        launch: async path => {
-          await stopped(path);
-          const { config } = await readOwnerAlphaConfig(path);
-          holder = spawn('bash', [resolve('scripts/with-executor-lock.sh'), config[which], process.execPath,
-            '-e', 'console.log("locked"); process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
-          await once(holder.stdout, 'data');
-        } }));
-      assert.deepEqual(f.calls.map(c => c.type), ['manifest']);
-    } finally { if (holder) { const exited = once(holder, 'exit'); holder.stdin.end(); await exited; } }
+    const f = await fixture(t); expiredForInspection(f); let holder, holderExited;
+    assert.equal(await runHostedOwnerManager(f.config, f.request, { control: f.control, now: futureForStaging(f),
+      launch: async path => {
+        await stopped(path);
+        const { config } = await readOwnerAlphaConfig(path);
+        holder = spawn('bash', [resolve('scripts/with-executor-lock.sh'), config[which], process.execPath,
+          '-e', 'console.log("locked"); process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
+        await once(holder.stdout, 'data');
+        // Registered before any lock contention: a contended lock now (G3)
+        // kills a live holder as part of takeover, so the 'exit' listener
+        // must be armed before that can happen or the event is missed and
+        // this hangs forever.
+        holderExited = once(holder, 'exit');
+      } }), 'RETIREMENT_REPORTED');
+    assert.deepEqual(f.calls.map(c => c.type), ['manifest', 'retirement']);
+    const [, signal] = await holderExited;
+    assert.ok(typeof signal === 'string' && signal.startsWith('SIG'),
+      'the live holder must be genuinely killed by takeover, not merely outlast a refusal');
   }
 });
 

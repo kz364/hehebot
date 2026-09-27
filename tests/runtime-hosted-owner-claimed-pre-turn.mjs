@@ -232,16 +232,32 @@ test('stopped direct child and both free locks do not attest a surviving helper 
   } finally { const exit = once(helper, 'exit'); helper.stdin.end(); await exit; }
 });
 
-test('both kernel locks are required and a direct helper invocation cannot assert their ownership', async t => {
+// G3 (GROK_ALIGNMENT A2): CHANGED from the pre-G3 "a held lock refuses
+// evidence production" expectation. A contended native_home or session lock
+// is no longer refused: the real nested lock chain inside
+// produceClaimedPreTurnEvidence kills the live holder's process group and
+// takes over, so a foreign/stale holder no longer blocks evidence from a
+// fully valid, otherwise-reviewed request. A bare `--write-locked`
+// invocation that holds no lock of its own is still refused, since `held()`
+// requires an fd, not merely a claim.
+test('a held kernel lock is reclaimed by claimed pre-turn evidence production rather than blocking it', async t => {
   for (const key of ['native_home', 'session']) {
     const f = await fixture(t), holder = spawn('bash', [lockScript, f.request.roots[key].path, process.execPath, '-e',
       'console.log("locked");process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
     await once(holder.stdout, 'data');
+    // Registered before any lock contention: a contended lock now (G3) kills a
+    // live holder as part of takeover, so the 'exit' listener must be armed
+    // before that can happen or the event is missed and this hangs forever.
+    const exited = once(holder, 'exit');
     try {
-      await assert.rejects(produceClaimedPreTurnEvidence(f.requestPath, f.sha256));
+      const evidence = await produceClaimedPreTurnEvidence(f.requestPath, f.sha256);
+      assert.equal(evidence.kind, 'claimed-pre-turn-quarantine-v1');
       await assert.rejects(run(process.execPath, [producer, '--write-locked', f.requestPath, f.sha256]));
-      await assert.rejects(stat(f.markerPath), { code: 'ENOENT' });
-    } finally { const exit = once(holder, 'exit'); holder.stdin.end(); await exit; }
+      assert.ok(await stat(f.markerPath).then(() => true, () => false));
+      const [, signal] = await exited;
+      assert.ok(typeof signal === 'string' && signal.startsWith('SIG'),
+        'the live holder must be genuinely killed by takeover, not merely outlast a refusal');
+    } finally { holder.stdin.end(); }
   }
 });
 

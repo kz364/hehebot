@@ -12,6 +12,18 @@ function run(directory, code) {
   child.stderr.resume();
   return child;
 }
+// G3: with-executor-lock.sh no longer just refuses a contended lock -- it
+// kills the live holder's process group and takes over. A read-only "is this
+// still contended" probe (used by the descendant-containment fixture below to
+// observe kernel-level flock exclusivity across a *voluntary* parent exit,
+// without disturbing the very processes it is trying to observe) must not go
+// through that wrapper. It calls flock(1) directly instead: same nonblocking
+// contended-exit-code semantics with no takeover side effects.
+function probe(directory, code) {
+  const child = spawn('flock', ['--nonblock', '--conflict-exit-code', '73', directory, process.execPath, '-e', code], { stdio: ['ignore', 'pipe', 'pipe'] });
+  child.stderr.resume();
+  return child;
+}
 
 // G3 (GROK_ALIGNMENT A2, AGENTS.md trap 1): CHANGED from the pre-G3 "second
 // executor is simply refused (exit 73), the first holder keeps running"
@@ -46,12 +58,24 @@ test('G3: an unreclaimable lock reports RECOVERY_REQUIRED after the retry budget
   const holder = run(directory, "process.stdout.write('ready'); setInterval(()=>{},1000)");
   t.after(() => { if (holder.exitCode === null && holder.signalCode === null) holder.kill(); });
   await once(holder.stdout, 'data');
-  // Overwrite the real holder's recorded pid with one that cannot be killed
-  // (already-exited), so the takeover's kill is a genuine no-op and the real
-  // holder survives for the whole retry window.
-  await writeFile(join(directory, 'holder.pid'), '1\n');
+  // The holder's identity now comes only from the kernel's own lock table
+  // (lslocks), never from a self-reported bookkeeping file -- so genuine
+  // unreclaimability can no longer be simulated by planting a bogus pid.
+  // Simulate the realistic case instead: lslocks is present on PATH but
+  // cannot produce a match (e.g. a sandboxed/degraded environment without
+  // /proc/locks visibility). current_holder_pid() then correctly returns
+  // nothing, kill_holder() is a deliberate no-op, and the contender must
+  // wait out the full retry budget and fail closed rather than ever
+  // fabricating a holder to kill.
+  const shimDir = await mkdtemp(join(tmpdir(), 'hehe-lock-shim-'));
+  t.after(() => rm(shimDir, { recursive: true, force: true }));
+  await writeFile(join(shimDir, 'lslocks'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   const start = Date.now();
-  const contender = run(directory, 'process.exit(0)');
+  const contender = spawn('bash', [script, directory, process.execPath, '-e', 'process.exit(0)'], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, PATH: `${shimDir}:${process.env.PATH}` },
+  });
+  contender.stderr.resume();
   const [code] = await once(contender, 'exit');
   const elapsed = Date.now() - start;
   assert.equal(code, 75);
@@ -184,7 +208,7 @@ for (const inherit of [true, false]) test(
     async function checkContender(expected) {
       const marker = join(directory, 'contender-entered');
       await rm(marker, { force: true });
-      const contender = run(directory, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'entered')`);
+      const contender = probe(directory, `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'entered')`);
       const timer = setTimeout(() => contender.kill('SIGKILL'), 5000);
       try {
         assert.deepEqual(await once(contender, 'exit'), [expected, null]);

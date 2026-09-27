@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { once } from 'node:events';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { produceUnusedEvidence } from '../runtime/hosted-owner-unused.mjs';
 import { prepareHostedOwnerManager } from '../runtime/hosted-owner-manager.mjs';
@@ -114,19 +114,33 @@ test('empty, partial and symlink transition directories are never attested or ch
   }
 });
 
-test('held native-home flock refuses before consumption; internal helper cannot substitute a boolean lock claim', async t => {
+// G3 (GROK_ALIGNMENT A2): CHANGED from the pre-G3 "a held lock refuses
+// consumption" expectation. A contended native-home lock is no longer
+// refused: produceUnusedEvidence's own lock chain kills the live holder's
+// process group and takes over, so a foreign/stale holder no longer blocks a
+// fully valid, otherwise-reviewed request from being consumed.
+test('a held native-home flock is reclaimed by unused evidence production rather than blocking it', async t => {
   const f = await fixture(t);
   const holder = spawn('bash', [lockScript, f.request.review.native_home.path, process.execPath, '-e',
     'console.log("locked");process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
   await once(holder.stdout, 'data');
-  try {
-    await assert.rejects(produceUnusedEvidence(f.requestPath, f.sha256));
-    await assert.rejects(run(process.execPath, [producer, '--reserve', f.requestPath, f.sha256]));
-    assert.deepEqual(await readdir(f.config.sessionsDirectory), []);
-  } finally { const exit = once(holder, 'exit'); holder.stdin.end(); await exit; }
+  // Registered before any lock contention: a contended lock now (G3) kills a
+  // live holder as part of takeover, so the 'exit' listener must be armed
+  // before that can happen or the event is missed and this hangs forever.
+  const exited = once(holder, 'exit');
+  const evidence = await produceUnusedEvidence(f.requestPath, f.sha256);
+  assert.equal(evidence.kind, 'unused-before-staging-v1');
+  // The transition is now consumed by that successful production; a second,
+  // independent (unlocked) --reserve attempt still fails on its own terms.
+  await assert.rejects(run(process.execPath, [producer, '--reserve', f.requestPath, f.sha256]));
+  assert.deepEqual(await readdir(f.config.sessionsDirectory), [basename(f.directory)]);
+  const [, signal] = await exited;
+  assert.ok(typeof signal === 'string' && signal.startsWith('SIG'),
+    'the live holder must be genuinely killed by takeover, not merely outlast a refusal');
+  holder.stdin.end();
 });
 
-test('interruption after exclusive reservation leaves a consumed directory with no evidence report', async t => {
+test('a held transition-directory lock is reclaimed by evidence write rather than blocking it', async t => {
   const f = await fixture(t);
   const { stdout } = await run('bash', [lockScript, f.request.review.native_home.path, process.execPath,
     producer, '--reserve', f.requestPath, f.sha256]);
@@ -138,12 +152,21 @@ test('interruption after exclusive reservation leaves a consumed directory with 
   const holder = spawn('bash', [lockScript, f.directory, process.execPath, '-e',
     'console.log("locked");process.stdin.resume();'], { stdio: ['pipe', 'pipe', 'pipe'] });
   await once(holder.stdout, 'data');
-  try {
-    await assert.rejects(run('bash', [lockScript, f.request.review.native_home.path,
-      'bash', lockScript, f.directory, process.execPath, producer, '--write', f.requestPath, f.sha256, stdout.trim()]),
-    error => error.code === 73);
-    assert.deepEqual(await readdir(f.directory), ['unused-reservation.json']);
-  } finally { const exit = once(holder, 'exit'); holder.stdin.end(); await exit; }
+  // Registered before any lock contention: a contended lock now (G3) kills a
+  // live holder as part of takeover, so the 'exit' listener must be armed
+  // before that can happen or the event is missed and this hangs forever.
+  const exited = once(holder, 'exit');
+  // G3 (GROK_ALIGNMENT A2): CHANGED from the pre-G3 "a held transition-
+  // directory lock refuses the write" expectation. The nested lock chain
+  // kills the live holder's process group and takes over, so the write with
+  // a valid reservation ticket now succeeds instead of being refused.
+  await run('bash', [lockScript, f.request.review.native_home.path,
+    'bash', lockScript, f.directory, process.execPath, producer, '--write', f.requestPath, f.sha256, stdout.trim()]);
+  assert.deepEqual((await readdir(f.directory)).sort(), ['unused-before-staging.json', 'unused-reservation.json']);
+  const [, signal] = await exited;
+  assert.ok(typeof signal === 'string' && signal.startsWith('SIG'),
+    'the live holder must be genuinely killed by takeover, not merely outlast a refusal');
+  holder.stdin.end();
 });
 
 test('racing and delayed real managers cannot both acquire the transition with the unused fence', async t => {
