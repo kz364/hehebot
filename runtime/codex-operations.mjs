@@ -18,7 +18,7 @@ const uuid = value => {
  * supported native coverage, external effects and recovery are established.
  */
 export class CodexOperations {
-  constructor({ journal, attemptId, runId, attempt, startedAt, deadlineAt, textOnlyProfile = null, backgroundRole = null, shellOperationTimeoutMs = /** @type {number | undefined} */ (undefined) }) {
+  constructor({ journal, attemptId, runId, attempt, startedAt, deadlineAt, textOnlyProfile = null, backgroundRole = null, grok = false, shellOperationTimeoutMs = /** @type {number | undefined} */ (undefined) }) {
     if (!journal?.get || !/^[a-zA-Z0-9_-]{1,128}$/.test(attemptId ?? '') ||
         !/^[0-9a-f-]{36}$/i.test(runId ?? '') || !Number.isSafeInteger(attempt) || attempt < 1 ||
         !Number.isFinite(Date.parse(startedAt)) || !Number.isFinite(Date.parse(deadlineAt)) ||
@@ -31,6 +31,7 @@ export class CodexOperations {
       ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}) });
     this.textOnlyProfile = textOnlyProfile && structuredClone(textOnlyProfile);
     this.backgroundRole = backgroundRole;
+    this.grok = grok === true;
   }
 
   async snapshot() {
@@ -83,7 +84,15 @@ export class CodexOperations {
       /^[a-f0-9]{64}$/.test(row.backgroundReceipt.output_sha256 ?? '') &&
       row.backgroundReceipt.thread_id === row.threadId && row.backgroundReceipt.turn_id === row.nativeRunId &&
       !Object.keys(row.childTurns ?? {}).length && !Object.keys(row.childObligations ?? {}).length;
-    add(['coverage'], 'tool', textOnlySettled || backgroundSettled ? 'settled' : 'unknown');
+    // G8 (GROK_ALIGNMENT A1/A3): in grok execution mode a terminal root with no
+    // observed native descendants covers the attempt. Its individual tool
+    // records below still report their own status, and the Worker still refuses
+    // completion while any of them, a lock, a question or an effect is open.
+    // Grok mode disables native multi-agent, so descendants are not expected;
+    // if one is observed, coverage stays unknown and the run stays visible.
+    const grokSettled = this.grok && row?.rootSettled === true &&
+      !Object.keys(row.childTurns ?? {}).length && !Object.keys(row.childObligations ?? {}).length;
+    add(['coverage'], 'tool', textOnlySettled || backgroundSettled || grokSettled ? 'settled' : 'unknown');
     add(['root'], 'inference', row?.rootSettled === true ? 'settled'
       : row?.status === 'cancelling' ? 'cancelling' : row?.status === 'running' ? 'active' : 'unknown');
     if (!row) return operations;

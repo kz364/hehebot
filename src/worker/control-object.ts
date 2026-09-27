@@ -35,6 +35,7 @@ import {parseOwnerAlphaBackground,type BackgroundGenerationView,type BackgroundM
 import {HostedWakeDeliveryError,parseHostedOwnerWake,sendHostedOwnerWake,type HostedOwnerWake} from './hosted-owner-wake';
 import {TestCampaign,parseTestCampaignGrant} from '../core/test-campaign';
 import {parseTestAuthConfig} from './test-auth';
+import {parseExecutionMode,type ExecutionMode} from '../core/execution-mode';
 export type TriggerPolicy={routine_id:string;event_types:string[]};
 /** Per-socket Hibernation API attachment (GROK_ALIGNMENT A6). `cursor` is the
  * last sequence delivered to this socket; null means the socket has not
@@ -59,6 +60,7 @@ export class PersonalControl extends DurableObject<Env> {
  private ownerBindingSha256:string|undefined;
  private hostedOwnerAlpha:boolean;
  private hostedWake:HostedOwnerWake|undefined;
+ private executionMode:ExecutionMode|undefined;
  constructor(ctx:DurableObjectState,env:Env){
   super(ctx,env);
   const db:Database={
@@ -88,9 +90,12 @@ export class PersonalControl extends DurableObject<Env> {
   if(background)assertBackgroundSecrets(env.HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN,env.HEHEBOT_OWNER_ALPHA_BACKGROUND_HOST_SIGNING_KEY,env.HEHEBOT_OWNER_ALPHA_BACKGROUND_TASK_SIGNING_KEY,env.RUNTIME_TOKEN);
   requireThat(!successor||!!hosted,'INVALID_CONFIGURATION','Owner-alpha successor requires the original hosted owner-alpha configuration.',503);
   this.hostedOwnerAlpha=!!hosted;
+  // G8: explicit Grok-aligned execution mode (default off; see core/execution-mode.ts).
+  const executionMode=parseExecutionMode(env);
+  this.executionMode=executionMode;
   this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN,!!bootstrap||!!warm||!!background);
   requireThat(!(bootstrap||warm||background)||!!this.hostedWake,'INVALID_CONFIGURATION','Automatic owner alpha requires its private wake destination.',503);
-  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:warm||background?hosted?.policy:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaWarm:warm,ownerAlphaBackground:background,ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:warm||background?hosted?.policy:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaWarm:warm,ownerAlphaBackground:background,ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true'||executionMode==='grok',coordinatorInbox:executionMode==='grok',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
@@ -399,7 +404,7 @@ export class PersonalControl extends DurableObject<Env> {
   const state=this.lifecycle.get(),alpha=this.core.ownerAlpha.policy,generation=this.core.ownerAlpha.activeGeneration();
   const warm=!!generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-warm-generation';
   const background=!!generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-background-generation';
-  return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(alpha?{owner_alpha:alpha}:{}),
+  return {phase:state.phase,epoch:state.epoch,execution_enabled:this.core.options.executionEnabled,...(this.executionMode?{execution_mode:this.executionMode}:{}),...(alpha?{owner_alpha:alpha}:{}),
    ...(generation?background?{owner_alpha_background_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:warm?{owner_alpha_warm_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{owner_alpha_generation:{epoch:generation.epoch,boot_id:generation.boot_id,transition_id:generation.transition_id}}:{}),
    ...(this.hostedOwnerAlpha?{owner_alpha_hosted:true}:{}),...(this.ownerBindingSha256?{owner_binding_sha256:this.ownerBindingSha256}:{})};
  }

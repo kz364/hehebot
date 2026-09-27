@@ -122,6 +122,7 @@ test('ordinary service retains over-budget counts for Worker refusal instead of 
   let receipt;
   const service = createCodexService(f.config, { ...f.dependencies, control: { request: async (type, payload) => {
     if (type === 'memory-prepare') return { ...preparation, sha256: createHash('sha256').update(JSON.stringify(preparation)).digest('hex') };
+    if (type === 'claim' && payload.lane === 'background') return null; // The task lane claims separately.
     if (type === 'claim') { receipt = payload.memory_budget; return null; } // Worker owns the persisted waiting transition.
     return request(type, payload);
   } } });
@@ -975,6 +976,7 @@ test('declared shell deadline flows from service config through journal events i
   const service = createCodexService(serviceConfig, { ...f.dependencies, operations: undefined,
     control: { request: async (type, payload) => {
       if (type === 'memory-prepare') return preparedMemory('88888888-0000-4000-8000-0000000000e1');
+      if (type === 'claim' && payload.lane === 'background') return null;
       if (type === 'claim') return { submission_key: '88888888-0000-4000-8000-0000000000e1:1', deadline_at: attemptDeadline,
         run: { id: '88888888-0000-4000-8000-0000000000e1', persona_id: 'bot', current_attempt: 1, updated_at: new Date().toISOString(), context_json: memoryContext(payload) } };
       if (type === 'heartbeat') { heartbeats.push(payload.operations); return { lease_until: new Date(f.dependencies.now() + 60000).toISOString(), cancellations: [] }; }

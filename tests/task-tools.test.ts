@@ -113,6 +113,26 @@ describe('hehebot_list_tasks / hehebot_task_detail scoping',()=>{
    other,bot,JSON.stringify({schema_version:1,persona:{id:null},routine:null,memories:[],skills:[],scope_key:null,instruction:'x',room_id:null,context_events:[],authorization_policy_ids:[]}),coordinatorId,f.core.now(),f.core.now());
   expect(boundary.taskDetail({identity,run_id:coordinatorId,attempt:1,task_run_id:other}).task.id).toBe(other);
  });
+ it('G8: a later coordinator turn of the same persona sees and manages tasks an earlier turn started; another persona does not',()=>{
+  const a=start('Research hotels','brief a').resource_id!;runTask(a);
+  const first=coordinatorId;
+  admitCoordinator(); // the "how's it going?" turn: a new coordinator run
+  expect(coordinatorId).not.toBe(first);
+  expect(boundary.taskList({identity,run_id:coordinatorId,attempt:1}).tasks.map(t=>t.id)).toEqual([a]);
+  expect(boundary.taskDetail({identity,run_id:coordinatorId,attempt:1,task_run_id:a}).task).toMatchObject({id:a,status:'running'});
+  const receipt=boundary.accept({identity,run_id:coordinatorId,attempt:1,idempotency_key:randomUUID(),
+   command:{schema_version:1,type:'run.followup',payload:{run_id:a,text:'Also check reviews'}}});
+  expect(receipt.status).toBe('applied');
+  // Same task moved to another persona's conversation: invisible and unmanageable.
+  const other=randomUUID(),existing=f.store.get(bot,'persona');
+  f.store.put(other,'persona',{...existing.body,id:other,name:'Other bot'},0,'owner',f.core.now());
+  f.db.exec('UPDATE runs SET persona_id=? WHERE id=?',other,a);
+  f.db.exec('UPDATE runs SET persona_id=? WHERE id=?',other,first);
+  expect(boundary.taskList({identity,run_id:coordinatorId,attempt:1}).tasks).toEqual([]);
+  expect(()=>boundary.taskDetail({identity,run_id:coordinatorId,attempt:1,task_run_id:a})).toThrowError(expect.objectContaining({code:'NOT_FOUND'}));
+  expect(()=>boundary.accept({identity,run_id:coordinatorId,attempt:1,idempotency_key:randomUUID(),
+   command:{schema_version:1,type:'run.cancel',payload:{run_id:a,reason:'nope'}}})).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
+ });
  it('a background task run may not call the task tools at all',()=>{
   const a=start('A','brief').resource_id!;runTask(a);
   expect(()=>boundary.taskList({identity,run_id:a,attempt:1})).toThrowError(expect.objectContaining({code:'FORBIDDEN'}));
