@@ -79,6 +79,19 @@ describe('provider-managed Sprite idle lifecycle', () => {
     const next = life.registerBoot(randomUUID()); life.ready(next);
     expect(life.claim(next)?.run.id).toBe(nextRun);
   });
+  it('an unsettled operation of a dead (interrupted) run does not block the idle wake (trap 4)', async () => {
+    // Live 2026-09-27: an interrupted browser-takeover run kept an 'unknown'
+    // tool operation; sleep was admitted, but every later wake failed with
+    // "Live work prevents idle admission" and queued messages never ran.
+    const { run } = await completeAndPermitIdle();
+    f.db.exec("UPDATE runs SET status='interrupted' WHERE id=?", run);
+    f.db.exec("INSERT INTO operations(id,run_id,attempt,kind,status,started_at,deadline_at,last_progress_at) VALUES(?,?,1,'tool','unknown',?,?,?)",
+      randomUUID(), run, '2026-09-10T00:00:30.000Z', '2026-09-10T00:10:00.000Z', '2026-09-10T00:00:30.000Z');
+    const nextRun = enqueue(); await life.drive(provider);
+    expect(life.get()).toMatchObject({ phase: 'BOOTING', epoch: 2 });
+    const next = life.registerBoot(randomUUID()); life.ready(next);
+    expect(life.claim(next)?.run.id).toBe(nextRun);
+  });
   it('idle permission and paused observation never authorize observeStopped cleanup', async () => {
     await completeAndPermitIdle();
     const paused: RuntimeObservation = { phase: 'unknown', executionStopped: false, executionPaused: true, persistentState: 'retained', observedAt: 0 };

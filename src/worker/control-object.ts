@@ -27,6 +27,7 @@ import { TokenUsageSnapshots } from '../core/token-usage';
 import { MeteringLedger, meteringSummary, parseMeteringRates } from '../core/metering';
 import { MemoryReadRetention } from '../core/memory-read-retention';
 import { ControlError, requireThat, safeError } from '../core/errors';
+import { debugLog } from '../core/debug';
 import { createProvider, ProviderError, type ProviderConfig, type RuntimeRef } from '../providers';
 import validateRuntime from '../generated/validate-runtime.js';
 import type { RuntimeCommand } from '../core/runtime-types';
@@ -415,8 +416,11 @@ export class PersonalControl extends DurableObject<Env> {
   // Core.accept still validates the complete envelope and idempotency receipt.
   const activation=!!input&&typeof input==='object'&&'type' in input&&input.type==='owner-alpha.activate';
   if(activation)this.rate(owner+':write',60);else await this.beforeRequest(owner+':write',60);
+  const startedAt=Date.now();
   const result=this.core.accept(owner,key,hash,input);
   if(!activation||result.status==='applied')await this.arm();
+  const type=!!input&&typeof input==='object'&&'type' in input&&typeof (input as {type:unknown}).type==='string'?(input as {type:string}).type:'unknown';
+  debugLog(this.env,'commands','command',{type,status:result.status,ms:Date.now()-startedAt});
   return result;
  });}
  submitTest(actor:string,campaignId:string,key:string){return this.rpc(async()=>{
@@ -504,8 +508,21 @@ export class PersonalControl extends DurableObject<Env> {
   return {accepted:true};
  });}
  async runtime(input:unknown,authority?:RuntimeGenerationAuthority|RuntimeTaskGrant){return this.rpc(async()=>{
+  const startedAt=Date.now();
+  let type='unknown';
+  try{
+   const result=await this.runtimeInner(input,authority,value=>{type=value;});
+   debugLog(this.env,'control','rpc',{type,ms:Date.now()-startedAt,outcome:'ok'});
+   return result;
+  }catch(error){
+   debugLog(this.env,'control','rpc',{type,ms:Date.now()-startedAt,outcome:'error',code:error instanceof ControlError?error.code:'unknown'});
+   throw error;
+  }
+ });}
+ private async runtimeInner(input:unknown,authority:RuntimeGenerationAuthority|RuntimeTaskGrant|undefined,onType:(type:string)=>void){
   requireThat(validateRuntime(input),'INVALID_INPUT','Invalid runtime envelope.',422);
   const command=input as RuntimeCommand;
+  onType(command.type);
   const generation=this.core.ownerAlpha.activeGeneration();
   // Warm and background generations are reachable only through their versioned
   // routes; legacy runtime credentials never become a bypass into them.
@@ -535,7 +552,7 @@ export class PersonalControl extends DurableObject<Env> {
   const alpha=this.core.ownerAlpha.policy;
   if(command.type==='status')return this.statusSummary();
   return this.execute(command,!!alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','bot-message','pass-turn','token-usage','metering','steer-pending','agent-routines','agent-skill','agent-task-list','agent-task-detail'].includes(command.type)||!!(alpha.text_only&&command.type==='complete')||!!(alpha.background_first_root&&command.type==='native-child')));
- });}
+ }
  private statusSummary(){
   const state=this.lifecycle.get(),alpha=this.core.ownerAlpha.policy,generation=this.core.ownerAlpha.activeGeneration();
   const warm=!!generation&&'kind' in generation.authority&&generation.authority.kind==='owner-message-warm-generation';
@@ -1032,7 +1049,10 @@ export class PersonalControl extends DurableObject<Env> {
   if(shouldSetAlarm(fromAlarm?null:await this.ctx.storage.getAlarm(),next))await this.ctx.storage.setAlarm(next);
  }
  protected sendHostedWake(command:{epoch:number;operationId:string}):Promise<void>{
-  return sendHostedOwnerWake(this.hostedWake!,command,this.env.PROVIDER_TOKEN!,this.env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN!);
+  const startedAt=Date.now();
+  return sendHostedOwnerWake(this.hostedWake!,command,this.env.PROVIDER_TOKEN!,this.env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN!)
+   .then(()=>{debugLog(this.env,'wake','request',{epoch:command.epoch,ms:Date.now()-startedAt,outcome:'ok'});})
+   .catch(error=>{debugLog(this.env,'wake','request',{epoch:command.epoch,ms:Date.now()-startedAt,outcome:'error',code:error instanceof HostedWakeDeliveryError?error.phase:'unknown'});throw error;});
  }
  async alarm():Promise<void>{
   let failed=false;
@@ -1048,7 +1068,7 @@ export class PersonalControl extends DurableObject<Env> {
    }
    if(this.core.options.executionEnabled)this.progress.sweep();
    if(this.core.options.executionEnabled){const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);await this.lifecycle.drive(provider);}
-  }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code,
+  }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code,message:safeError(error).message,
    ...(error instanceof ProviderError?{provider_code:error.code,provider_status:error.status??null}:{error_name:error instanceof Error?error.name:typeof error})}));}
   finally{this.broadcastStreamCommit();await this.arm(failed?300000:0,true);}
  }

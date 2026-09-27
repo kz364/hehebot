@@ -757,7 +757,12 @@ export function createCodexService(config, dependencies) {
                 // survives across tasks (the gateway locks it per attempt).
                 ...(config.browser.persistentProfiles ? { profileDir: join(config.stateDirectory, 'browser-profiles',
                   /^[A-Za-z0-9_-]{1,64}$/.test(run.persona_id) ? run.persona_id : fail('TASK_GRANT_CONFLICT')) } : {}),
-                ...(config.browser.limits ? { limits: config.browser.limits } : {}) };
+                ...(config.browser.limits ? { limits: config.browser.limits } : {}),
+                // Thread the same debug gate and state directory as the rest of
+                // this service (debugLog.enabled already factors config.debug
+                // and HEHEBOT_DEBUG): the gateway is a separate process, so it
+                // builds its own JSONL logger from this rather than a live object.
+                ...(debugLog.enabled ? { debug: true, stateDirectory: config.stateDirectory } : {}) };
               const existingBrowser = await journal.putIfAbsent(browserKey, browserGrant);
               if (existingBrowser && JSON.stringify(existingBrowser) !== JSON.stringify(browserGrant)) fail('TASK_GRANT_CONFLICT');
               mcpServers.hehebot_browser = {

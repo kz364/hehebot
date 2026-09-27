@@ -1207,6 +1207,8 @@ test('browser grant: takeover tool, a Codex tool timeout above the takeover wait
   const grant = JSON.parse(await readFile(browser.env.HEHEBOT_BROWSER_GATEWAY_CONFIG, 'utf8'));
   assert.equal(grant.profileDir, join(f.directory, 'browser-profiles', 'bot'));
   assert.deepEqual(grant.limits, { takeoverMs: 300000 });
+  assert.equal(grant.debug, undefined, 'debug is off by default, so the gateway config carries no debug/stateDirectory fields');
+  assert.equal(grant.stateDirectory, undefined);
   const invalid = createCodexService({ ...v2, browser: { dir: '/opt/hehebot-browser', persistentProfiles: 'yes' } }, f.dependencies);
   await assert.rejects(invalid.start(), error => ['SERVICE_RECOVERY_REQUIRED', 'INVALID_SERVICE_CONFIGURATION'].includes(error.code));
 });
@@ -1260,4 +1262,20 @@ test('browser_request_takeover carries its own heartbeat deadline, matching the 
   const later = heartbeats.at(-1).find(op => op.id === takeover.id);
   assert.ok(Date.parse(later.deadline_at) > f.dependencies.now(),
     'two and a half minutes in, the takeover operation deadline has not yet passed');
+});
+
+test('browser grant: debug logging is threaded to the gateway (as its own process) only when the service debug gate is on', async t => {
+  const f = await fixture(t);
+  const v2 = { ...f.config, disposableTest: undefined, executionMode: 'v2', ownerBindingSha256: 'a'.repeat(64) };
+  const controlWithBrowser = { request: async (type, payload) => type === 'status' ? { epoch: 1, phase: 'BOOTING', execution_enabled: true, execution_mode: 'v2', owner_binding_sha256: 'a'.repeat(64) }
+    : type === 'claim' && payload.lane !== 'background'
+    ? { submission_key: 'run:1', run: { id: 'run', current_attempt: 1, persona_id: 'bot', context_json: JSON.stringify({ ...JSON.parse(memoryContext(payload)), persona: { body: { tool_policy_ids: [BROWSER_POLICY] } } }) } }
+    : f.dependencies.control.request(type, payload) };
+  const service = createCodexService({ ...v2, debug: true, browser: { dir: '/opt/hehebot-browser' } }, { ...f.dependencies, control: controlWithBrowser });
+  t.after(() => service.stop().catch(() => {}));
+  await service.start();
+  const browser = f.calls.find(call => call.method === 'thread/start').params.config.mcp_servers.hehebot_browser;
+  const grant = JSON.parse(await readFile(browser.env.HEHEBOT_BROWSER_GATEWAY_CONFIG, 'utf8'));
+  assert.equal(grant.debug, true);
+  assert.equal(grant.stateDirectory, f.directory);
 });

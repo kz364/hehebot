@@ -919,7 +919,7 @@ export class LifecycleCore {
    const queued=this.claimableWork();
    if(!queued||!['STOPPED','IDLE_PERMITTED'].includes(state.phase))return;
    requireThat(state.phase==='IDLE_PERMITTED'||state.epoch===0,'CAPABILITY_UNAVAILABLE','Existing ownership requires a clean idle handoff.');
-   requireThat(!this.store.db.all("SELECT id FROM runs WHERE status IN ('claimed','running','finishing','cancelling') LIMIT 1").length&&!this.store.db.all("SELECT id FROM operations WHERE status!='settled' LIMIT 1").length,'CAPABILITY_UNAVAILABLE','Live work prevents idle admission.');
+   requireThat(!this.store.db.all("SELECT id FROM runs WHERE status IN ('claimed','running','finishing','cancelling') LIMIT 1").length&&!this.store.db.all("SELECT o.id FROM operations o JOIN runs r ON r.id=o.run_id WHERE o.status!='settled' AND r.status IN ('claimed','running','finishing','cancelling') LIMIT 1").length,'CAPABILITY_UNAVAILABLE','Live work prevents idle admission.');
    const observedState=state,idleObservation=await provider.observe(ref);state=this.get();
    // Observation is an await boundary. A different alarm/boot may have won.
    if(state.epoch!==observedState.epoch||state.boot_id!==observedState.boot_id||state.provider_ref_json!==observedState.provider_ref_json||state.provider_operation_id!==observedState.provider_operation_id)return;
