@@ -8,6 +8,7 @@ import { createSpritesWakeHandler } from './sprites-wake-service.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const HEX64 = /^[a-f0-9]{64}$/;
+const WAKE_HOLD_MS = 120000;
 const CONFIG_KEYS = ['portalOrigin', 'runtimeTokenFile', 'wakeTokenFile', 'accessClientIdFile', 'accessClientSecretFile',
   'tlsCAFile', 'ownerBindingSha256', 'installationId', 'stateRoot', 'binary', 'nativeHome', 'personas',
   'restrictedPermissions', 'port', 'maintainIntervalMs'];
@@ -42,7 +43,7 @@ export function createV2Runtime(input, dependencies = {}) {
         config.maintainIntervalMs < 250 || config.maintainIntervalMs > 10000)) fail('INVALID_SERVICE_CONFIGURATION');
   const { createService, serviceDependencies = {}, readSecret = privateFile, now = Date.now,
     report = value => console.info(JSON.stringify(value)),
-    wait = ms => new Promise(ok => setTimeout(ok, ms)) } = dependencies;
+    wait = ms => new Promise(ok => setTimeout(ok, ms)), holdWake } = dependencies;
   if (typeof createService !== 'function') fail('INVALID_SERVICE_CONFIGURATION');
   const interval = config.maintainIntervalMs ?? 2000;
   let current = null, pendingEpoch = null;
@@ -102,7 +103,11 @@ export function createV2Runtime(input, dependencies = {}) {
     if (driving) { pendingEpoch = Math.max(pendingEpoch ?? 0, epoch); return; }
     driving = drive(epoch).finally(() => { driving = null; });
   };
+  // A Sprite pauses once the wake request is answered and no activity is held,
+  // freezing boot until the next request. Hold activity before acknowledging;
+  // the service's own activity hold takes over during start.
   const handler = createSpritesWakeHandler({ token: readSecret(config.wakeTokenFile), onWake,
+    ...(holdWake ? { prepareWake: async ({ epoch }) => { await holdWake(epoch); return () => {}; } } : {}),
     onFailure: failure => report({ event: 'v2.wake_failed', code: failure }) });
   return {
     handler,
@@ -124,7 +129,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   try {
     const config = JSON.parse(privateFile(process.env.HEHEBOT_V2_CONFIG));
     const { createSpriteCodexService } = await import('./sprites-codex-service.mjs');
-    const runtime = createV2Runtime(config, { createService: createSpriteCodexService });
+    const { SpritesTasksClient } = await import('../.local/codex-service/sprites.mjs');
+    const { createSpritesTaskTransport } = await import('./sprites-task-transport.mjs');
+    const tasks = new SpritesTasksClient(createSpritesTaskTransport({ timeoutMs: 3000 }), Date.now);
+    const runtime = createV2Runtime(config, { createService: createSpriteCodexService,
+      holdWake: epoch => tasks.hold({ id: `hehebot-v2-wake-${epoch}`, expiresAt: Date.now() + WAKE_HOLD_MS }) });
     const server = runtime.server();
     server.listen(config.port ?? 8080, '0.0.0.0', () => console.info(JSON.stringify({ event: 'v2.service_listening', port: config.port ?? 8080 })));
     const stop = () => server.close(() => process.exit(0));
