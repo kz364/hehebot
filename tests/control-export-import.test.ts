@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tmpdir as osTmpdir } from 'node:os';
+import { realpathSync as realPath } from 'node:fs';
+// The backup scripts refuse symlinked path components; macOS tmpdir() is under the /var symlink.
+const tmpdir = () => realPath(osTmpdir());
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { importControlExport, MAX_EXPORT_BYTES } from '../scripts/import-control-export.mjs';
 import { verifyControl } from '../scripts/backup-control.mjs';

@@ -9,7 +9,7 @@ import { snapshotControl, verifyControl } from './backup-control.mjs';
 
 export const MAX_EXPORT_BYTES = 4 * 1024 * 1024;
 export const MAX_EXPORT_ROWS = 10000;
-const sqlHash = '60be6afb4a7f18a2e4ea768747451784444f2c937ef20a853bddd0dd56d6f307';
+const sqlHash = 'bf85f5e3aaa81390b0f7d6f1401d85e909ddab9319cbeec0530ad16f00e7d005';
 const schemaPins = {
   9: '15bf82e1965b24b0620dfe9a6541ce74759320113c3ed230fe2048f6e10ee01c',
   10: '682c042d228bff9b09816e47ee175ccce8f71702e7d1148e76412fe75dd1aec4',
@@ -179,6 +179,7 @@ CREATE INDEX runs_parent ON runs(parent_run_id,id); PRAGMA foreign_keys=ON;`);
         // Importing events may advance sqlite_sequence; replace it only after all other tables.
         if (table.name === 'sqlite_sequence') db.exec('DELETE FROM sqlite_sequence');
         const statement = db.prepare(`INSERT INTO ${quote(table.name)} (${table.columns.map(quote).join(',')}) VALUES(${table.columns.map(() => '?').join(',')})`);
+        statement.setReadBigInts(true); // run() reports lastInsertRowid; int64 row ids exceed Number.
         for (const row of table.rows) statement.run(...row.map(cell));
       }
       exactRows(db, input.tables); // Reject affinity conversion, REAL results, or lost int64 precision.

@@ -1,7 +1,10 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir as osTmpdir } from 'node:os';
+import { realpathSync as realPath } from 'node:fs';
+// The backup scripts refuse symlinked path components; macOS tmpdir() is under the /var symlink.
+const tmpdir = () => realPath(osTmpdir());
 import { join } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { bindOwnerAuth, issueRuntimeTaskToken, type AuthConfig } from '../src/worker/auth';

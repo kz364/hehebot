@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { constants, createReadStream } from 'node:fs';
-import { copyFile, mkdtemp, rm } from 'node:fs/promises';
+import { copyFile, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +14,8 @@ import { publishInventoriedBackup } from './prune-control-backups.mjs';
  */
 export async function createControlBackup(snapshotDirectory, backupDirectory, { id, recipient, ageBinary, now }) {
   await verifyControl(snapshotDirectory);
-  const frozen = await mkdtemp(join(tmpdir(), 'hehebot-create-'));
+  // verifyControl refuses symlinked components, and macOS tmpdir() sits under the /var symlink.
+  const frozen = await mkdtemp(join(await realpath(tmpdir()), 'hehebot-create-'));
   try {
     for (const name of ['control.sqlite', 'manifest.json']) {
       await copyFile(join(snapshotDirectory, name), join(frozen, name), constants.COPYFILE_EXCL);

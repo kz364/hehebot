@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tmpdir as osTmpdir } from 'node:os';
+import { realpathSync as realPath } from 'node:fs';
+// The backup scripts refuse symlinked path components; macOS tmpdir() is under the /var symlink.
+const tmpdir = () => realPath(osTmpdir());
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 
 const fault = vi.hoisted(() => ({ call: 0, at: 0, after: false, afterInventoryRename: false, receiptRename: '' }));
@@ -24,7 +27,7 @@ vi.mock('node:fs/promises', async importOriginal => {
 });
 import { applyControlBackups, reviewControlBackups, controlBackupPruneStatus, withBackupDirectoryLock, CONFIRM_LOCAL_DELETION } from '../scripts/prune-control-backups.mjs';
 
-const age = resolve('.local/age-v1.3.2/age/age'), keygen = resolve('.local/age-v1.3.2/age/age-keygen');
+const age = process.env.HEHEBOT_AGE_BIN ?? resolve('.local/age-v1.3.2/age/age'), keygen = process.env.HEHEBOT_AGE_KEYGEN_BIN ?? resolve('.local/age-v1.3.2/age/age-keygen');
 const cli = decodeURIComponent(new URL('../scripts/prune-control-backups.mjs', import.meta.url).pathname);
 const now = '2026-09-28T17:00:00.000Z'; // Tuesday00:00 Jakarta.
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
