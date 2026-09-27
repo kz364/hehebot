@@ -824,6 +824,16 @@ export class LifecycleCore {
   if(!this.core.options.executionEnabled)return;
   if(this.options.idleMode){
    requireThat(provider.capabilities.stopMode==='provider-idle','CAPABILITY_UNAVAILABLE','Provider idle mode does not match the configured lifecycle.');
+   if(state.phase==='RECOVERY_REQUIRED'&&!this.core.ownerAlpha.policy&&this.claimableWork()){
+    // V3 (ARCHITECTURE_V2 A2, AGENTS.md trap 1): same successor path as the
+    // stop-capable branch below. The epoch advance fences the retiring
+    // generation; the Sprite's flock takeover handles a live process.
+    const observedState=state,observation=await provider.observe(ref);state=this.get();
+    if(state.epoch!==observedState.epoch||state.phase!=='RECOVERY_REQUIRED'||state.provider_operation_id!==observedState.provider_operation_id)return;
+    requireThat(provider.capabilities.explicitWake&&observation.persistentState==='retained','CAPABILITY_UNAVAILABLE','The same persistent runtime is not confirmed available.');
+    const {epoch}=this.advanceGeneration('GENERATION_ADVANCED');
+    await this.requestWake(provider,ref,this.get(),epoch);return;
+   }
    requireThat(!['RECOVERY_REQUIRED','STOPPING','STOP_COMMITTED'].includes(state.phase),'CAPABILITY_UNAVAILABLE','Unsettled work needs explicit recovery; provider idle cannot prove termination.');
    const queued=this.claimableWork();
    if(!queued||!['STOPPED','IDLE_PERMITTED'].includes(state.phase))return;

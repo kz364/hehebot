@@ -85,13 +85,18 @@ describe('provider-managed Sprite idle lifecycle', () => {
     expect(() => life.observeStopped(paused)).toThrowError(expect.objectContaining({ code: 'CAPABILITY_UNAVAILABLE' }));
     expect(life.get().phase).toBe('IDLE_PERMITTED');
   });
-  it('uncertain recovery refuses wake/stop/replacement and preserves queued work', async () => {
+  it('recovery with queued work starts a successor epoch (A2) without a stop and preserves the queued run', async () => {
     const run = enqueue(); f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',epoch=1");
+    await life.drive(provider);
+    expect(life.get()).toMatchObject({ phase: 'BOOTING', epoch: 2 });
+    expect(provider.calls).toEqual([{ action: 'wake', epoch: 2 }]); expect(f.store.run(run).status).toBe('queued');
+    const identity = life.registerBoot(randomUUID()); life.ready(identity);
+    expect(life.claim(identity)!.run.id).toBe(run);
+  });
+  it('recovery without queued work stays put and makes no provider call', async () => {
+    f.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',epoch=1");
     await expect(life.drive(provider)).rejects.toMatchObject({ code: 'CAPABILITY_UNAVAILABLE' });
-    expect(life.get()).toMatchObject({ phase: 'RECOVERY_REQUIRED', epoch: 1 });
-    expect(provider.calls).toEqual([]); expect(f.store.run(run).status).toBe('queued');
-    expect(f.db.all('SELECT * FROM attempts')).toHaveLength(0);
-    expect(f.db.all('SELECT * FROM retry_queue')).toHaveLength(0);
+    expect(life.get()).toMatchObject({ phase: 'RECOVERY_REQUIRED', epoch: 1 }); expect(provider.calls).toEqual([]);
   });
   it('a noninitial STOPPED epoch cannot silently adopt a retained resource', async () => {
     enqueue(); f.db.exec("UPDATE lifecycle SET epoch=3,phase='STOPPED'");
