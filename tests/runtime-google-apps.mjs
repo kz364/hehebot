@@ -119,9 +119,11 @@ test('invites, disabled tools, ungranted runs and foreign connectors are decline
   }
   f.onNotification(started('foreign', 'create_file', {}, 'connector_other'));
   assert.deepEqual(answerOf(await f.onUserInput(approval('foreign')), 'foreign'), [APPROVAL_CANCEL]);
+  f.onNotification(started('new-tool', 'purge_mailbox', {}));
+  assert.deepEqual(answerOf(await f.onUserInput(approval('new-tool')), 'new-tool'), [APPROVAL_CANCEL]);
   assert.equal(calls.length, 0);
   assert.deepEqual(decisions.map(d => d.reason), ['INVITES_NOT_ALLOWED', 'INVITES_NOT_ALLOWED',
-    ...GOOGLE_DISABLED_TOOLS.map(() => 'TOOL_DISABLED'), 'CONNECTOR_NOT_GRANTED']);
+    ...GOOGLE_DISABLED_TOOLS.map(() => 'TOOL_DISABLED'), 'CONNECTOR_NOT_GRANTED', 'TOOL_NOT_ALLOWLISTED']);
 
   const ungranted = fence({ grants: ['0f7d99a8-9dcc-4150-b555-da7944e2554c'] });
   ungranted.f.onNotification(started('call-6', 'create_draft', {}));

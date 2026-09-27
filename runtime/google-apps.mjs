@@ -179,6 +179,8 @@ export function createGoogleAppsFence({ control, identity, apps, resolveRun, per
           !question.options?.some(option => option?.label === APPROVAL_ACCEPT)) return refuse('APPROVAL_SHAPE_MISMATCH');
       if (![apps.gmail, apps.calendar].includes(connectorId)) return refuse('CONNECTOR_NOT_GRANTED');
       if (GOOGLE_DISABLED_TOOLS.includes(tool)) return refuse('TOOL_DISABLED');
+      // Writes are allowlisted per connector: a tool Google adds later is refused until reviewed.
+      if (!(connectorId === apps.gmail ? GMAIL_WRITE_TOOLS : CALENDAR_WRITE_TOOLS).includes(tool)) return refuse('TOOL_NOT_ALLOWLISTED');
       if (connectorId === apps.calendar && attendeeEmails(item.arguments).some(email => !apps.ownerEmails.includes(email))) return refuse('INVITES_NOT_ALLOWED');
       const k = key(params.threadId, params.itemId);
       if (effects.has(k)) return refuse('DUPLICATE_APPROVAL');
