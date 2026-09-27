@@ -1210,3 +1210,54 @@ test('browser grant: takeover tool, a Codex tool timeout above the takeover wait
   const invalid = createCodexService({ ...v2, browser: { dir: '/opt/hehebot-browser', persistentProfiles: 'yes' } }, f.dependencies);
   await assert.rejects(invalid.start(), error => ['SERVICE_RECOVERY_REQUIRED', 'INVALID_SERVICE_CONFIGURATION'].includes(error.code));
 });
+
+// Regression for the live 2026-09-27 browser-takeover incident: the Codex-side
+// mcp_servers.hehebot_browser.tool_timeout_sec was correctly raised above the
+// takeover wait (see the test above), but the Worker's own operation watchdog
+// (src/core/lifecycle.ts watchdog(), fed by the `operations` heartbeat snapshot
+// built here) still capped every mcpCalls entry at the generic two-minute
+// default and cancelled the run out from under the owner about two minutes
+// into the takeover, regardless of the raised Codex timeout. The emitted
+// heartbeat operation for browser_request_takeover must instead carry a
+// deadline that matches (or exceeds) the takeover wait.
+test('browser_request_takeover carries its own heartbeat deadline, matching the takeover wait, not the generic two minutes', async t => {
+  const f = await fixture(t), request = f.dependencies.control.request;
+  const heartbeats = [];
+  const v2 = { ...f.config, disposableTest: undefined, executionMode: 'v2', ownerBindingSha256: 'a'.repeat(64) };
+  const service = createCodexService({ ...v2, browser: { dir: '/opt/hehebot-browser', limits: { takeoverMs: 300000 } } }, { ...f.dependencies, operations: undefined,
+    control: { request: async (type, payload) => {
+      if (type === 'status') return { epoch: 1, phase: 'BOOTING', execution_enabled: true, execution_mode: 'v2', owner_binding_sha256: 'a'.repeat(64) };
+      if (type === 'memory-prepare') return preparedMemory('88888888-0000-4000-8000-0000000000e1');
+      if (type === 'claim' && payload.lane !== 'background') return { submission_key: '88888888-0000-4000-8000-0000000000e1:1',
+        deadline_at: new Date(f.dependencies.now() + 1200000).toISOString(),
+        run: { id: '88888888-0000-4000-8000-0000000000e1', current_attempt: 1, persona_id: 'bot', updated_at: new Date(f.dependencies.now()).toISOString(),
+          context_json: JSON.stringify({ ...JSON.parse(memoryContext(payload)), persona: { body: { tool_policy_ids: [BROWSER_POLICY] } } }) } };
+      if (type === 'heartbeat') { heartbeats.push(payload.operations); return { lease_until: new Date(f.dependencies.now() + 60000).toISOString(), cancellations: [] }; }
+      return request(type, payload);
+    } } });
+  t.after(() => service.stop().catch(() => {}));
+  await service.start();
+  const browser = f.calls.find(call => call.method === 'thread/start').params.config.mcp_servers.hehebot_browser;
+  assert.equal(browser.tool_timeout_sec, 360, 'the Codex-side tool timeout still matches the takeover wait');
+  const native = await service.observe();
+  f.transport.emit('notification', { method: 'item/started', params: { threadId: native.threadId, turnId: native.nativeRunId,
+    item: { id: 'takeover-call', type: 'mcpToolCall', status: 'inProgress', tool: 'browser_request_takeover' } } });
+  f.transport.emit('notification', { method: 'item/started', params: { threadId: native.threadId, turnId: native.nativeRunId,
+    item: { id: 'other-call', type: 'mcpToolCall', status: 'inProgress', tool: 'browser_snapshot' } } });
+  for (let i = 0; i < 100 && (await service.supervisor.operations()).length < 5; i++)
+    await new Promise(resolve => setTimeout(resolve, 10));
+  await service.supervisor.heartbeat();
+  const startedAt = new Date(f.dependencies.now()).toISOString();
+  const operations = heartbeats.at(-1);
+  const takeover = operations.find(op => op.started_at === startedAt && op.deadline_at === new Date(Date.parse(startedAt) + 360000).toISOString());
+  const other = operations.find(op => op.started_at === startedAt && op.deadline_at === new Date(Date.parse(startedAt) + 120000).toISOString());
+  assert.ok(takeover, 'browser_request_takeover carries the takeover-matched deadline into the emitted heartbeat');
+  assert.ok(other, 'an unrelated browser tool call still carries the generic two-minute deadline');
+  // Advancing past the old, wrong two-minute cutoff must not make the watchdog
+  // see the takeover call as overdue: its emitted deadline is still in the
+  // future. Renew the lease in 50s steps (the fixture's heartbeat grants 60s).
+  for (let i = 0; i < 3; i++) { f.advance(50000); await service.supervisor.heartbeat(); }
+  const later = heartbeats.at(-1).find(op => op.id === takeover.id);
+  assert.ok(Date.parse(later.deadline_at) > f.dependencies.now(),
+    'two and a half minutes in, the takeover operation deadline has not yet passed');
+});

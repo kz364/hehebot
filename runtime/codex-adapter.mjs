@@ -464,8 +464,14 @@ export class CodexAdapter {
       // Persist starts even if history omits them. Root completion cannot remove
       // these obligations; command recovery requires an exact status-bearing item.
       Object.defineProperty(obligations, itemKey, { value: status, enumerable: true, writable: true, configurable: true });
+      // An MCP call's tool name is recorded once, at its first observed item, so
+      // CodexOperations can grant a named tool (e.g. browser_request_takeover) its
+      // own operation deadline instead of the generic two-minute default. Immutable
+      // thereafter: `prior` is only undefined on this first observation.
+      const mcpCallTools = field === 'mcpCalls' && prior === undefined && typeof params.item.tool === 'string' &&
+        params.item.tool && params.item.tool.length <= 128 ? { ...owner.mcpCallTools, [itemKey]: params.item.tool } : undefined;
       // An MCP terminal response settles only the invocation, not external effects.
-      return saveOperation(field, itemKey, prior, status, { [field]: obligations });
+      return saveOperation(field, itemKey, prior, status, { [field]: obligations, ...(mcpCallTools ? { mcpCallTools } : {}) });
     }
     if (notification?.method !== 'turn/completed') return row;
     if (params?.threadId !== row.threadId || params?.turn?.id !== row.nativeRunId) fail('SETTLEMENT_IDENTITY_MISMATCH');

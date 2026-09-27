@@ -66,6 +66,12 @@ export function createCodexService(config, dependencies) {
   // Frozen at composition time: later mutation of the caller's config object
   // never changes a running service's declared shell-operation deadline.
   const shellOperationTimeoutMs = config.shellOperationTimeoutMs;
+  // browser_request_takeover blocks the whole time the owner has the browser
+  // (up to takeoverMs), same as the Codex-side tool_timeout_sec below. Every
+  // other clocked MCP call keeps CodexOperations' generic two-minute bound;
+  // only this named tool needs its own, matching the mcp_servers override.
+  const mcpCallTimeoutsMs = config.browser
+    ? { browser_request_takeover: browserLimits(config.browser.limits ?? {}).takeoverMs + 60000 } : undefined;
   const { tasks, fetchImpl, prepareNative = async () => {},
     launch = spawnCodex, now = Date.now, onRecovery = () => {},
     checkVersion = async binary => {
@@ -105,7 +111,7 @@ export function createCodexService(config, dependencies) {
         attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at,
         deadlineAt: row.claim.deadline_at, textOnlyProfile: row.claim.text_only ?? null,
         backgroundRole: alphaBackground ? row.claim.role : null, v2Mode,
-        ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}) }).snapshot());
+        ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}), ...(mcpCallTimeoutsMs ? { mcpCallTimeoutsMs } : {}) }).snapshot());
     }
     return snapshots;
   });
@@ -122,7 +128,7 @@ export function createCodexService(config, dependencies) {
       snapshots.push(...await new CodexOperations({ journal, attemptId: row.attemptId, runId: row.claim.run.id,
         attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at,
         deadlineAt: row.claim.deadline_at, textOnlyProfile: null, backgroundRole: null, v2Mode,
-        ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}) }).snapshot());
+        ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}), ...(mcpCallTimeoutsMs ? { mcpCallTimeoutsMs } : {}) }).snapshot());
     }
     return snapshots;
   });
@@ -254,7 +260,7 @@ export function createCodexService(config, dependencies) {
             Object.keys(native.childObligations ?? {}).length) continue;
         const snapshot = await new CodexOperations({ journal, attemptId: row.attemptId, runId: row.claim.run.id,
           attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at, deadlineAt: row.claim.deadline_at,
-          v2Mode, ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}) }).snapshot();
+          v2Mode, ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}), ...(mcpCallTimeoutsMs ? { mcpCallTimeoutsMs } : {}) }).snapshot();
         if (snapshot.some(operation => operation.status !== 'settled')) continue;
         // Publish the settled projection before asking the Worker to complete.
         const cancellations = await sup.heartbeat();

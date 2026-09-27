@@ -76,6 +76,15 @@ and each client's Target auto-attach events would reach the other client.
   blocking tool call keeps the turn live. This was verified in `execution-supervisor.mjs` `maintain()`.
 - **Codex timeout:** Codex's MCP `tool_timeout_sec` for `hehebot_browser` is set to takeover timeout + 60 s. Codex's 60 s
   default would otherwise cut the tool off.
+- **Worker-side operation watchdog (fixed live 2026-09-28):** the runtime's own heartbeat also projects every open MCP
+  call as an `operations` entry the Worker's `watchdog()` (`src/core/lifecycle.ts`) can mark `DEADLINE_EXCEEDED` if it
+  outlives its deadline. That deadline defaulted to a flat two minutes for every MCP call (`codex-operations.mjs`), same
+  as an unclocked shell command -- so even with the Codex-side `tool_timeout_sec` above correctly raised, the Worker
+  cancelled the run out from under the owner about two minutes into a takeover. `codex-service.mjs` now declares an
+  explicit `mcpCallTimeoutsMs: { browser_request_takeover: <takeover timeout + 60 s> }`; `codex-adapter.mjs` records
+  each MCP call's tool name once, at its first observed item (`mcpCallTools`, forwarded by `codex-events.mjs`'s
+  `project()`); and `codex-operations.mjs` looks up a named tool's declared timeout instead of the generic default,
+  same mechanism as the existing `shellOperationTimeoutMs` override for clocked shell commands.
 - **While the owner has control,** every other browser tool call is refused with a tool error. At most 3 takeovers are
   allowed per attempt.
 

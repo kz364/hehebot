@@ -76,10 +76,17 @@ export class CodexEventRouter {
     }
     // Only explicit user-visible agent messages retain bounded display text.
     // Command/tool payloads and reasoning are never projected into previews.
+    // An MCP call's tool name is forwarded (bounded, best-effort) so
+    // CodexOperations can grant a named long-running tool (e.g.
+    // browser_request_takeover) its own operation deadline; an out-of-bounds
+    // or missing name simply means no named deadline, never a routing failure.
+    const mcpTool = params?.item?.type === 'mcpToolCall' && typeof params.item.tool === 'string' &&
+      params.item.tool.length > 0 && params.item.tool.length <= 128 ? params.item.tool : undefined;
     const notification = turn
       ? { method, params: { threadId, turn: { id: turnId, status: params.turn.status } } }
       : { method, params: { threadId, turnId, item: { id: params.item.id, type: params.item.type,
-        ...(boundaryOnly ? {} : { status: params.item.status }) } } };
+        ...(boundaryOnly ? {} : { status: params.item.status }),
+        ...(mcpTool !== undefined ? { tool: mcpTool } : {}) } } };
     if (spawn) Object.assign(notification.params.item, { tool: 'spawnAgent', senderThreadId: threadId, receiverThreadIds: [...params.item.receiverThreadIds] });
     if (collab) Object.assign(notification.params.item, { tool: params.item.tool, senderThreadId: threadId });
     if (activity) notification.params.item = { id: params.item.id, type: 'subAgentActivity',

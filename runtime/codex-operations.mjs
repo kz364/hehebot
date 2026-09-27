@@ -18,24 +18,30 @@ const uuid = value => {
  * supported native coverage, external effects and recovery are established.
  */
 export class CodexOperations {
-  constructor({ journal, attemptId, runId, attempt, startedAt, deadlineAt, textOnlyProfile = null, backgroundRole = null, v2Mode = false, shellOperationTimeoutMs = /** @type {number | undefined} */ (undefined) }) {
+  constructor({ journal, attemptId, runId, attempt, startedAt, deadlineAt, textOnlyProfile = null, backgroundRole = null, v2Mode = false,
+      shellOperationTimeoutMs = /** @type {number | undefined} */ (undefined),
+      mcpCallTimeoutsMs = /** @type {Record<string, number> | undefined} */ (undefined) }) {
     if (!journal?.get || !/^[a-zA-Z0-9_-]{1,128}$/.test(attemptId ?? '') ||
         !/^[0-9a-f-]{36}$/i.test(runId ?? '') || !Number.isSafeInteger(attempt) || attempt < 1 ||
         !Number.isFinite(Date.parse(startedAt)) || !Number.isFinite(Date.parse(deadlineAt)) ||
         Date.parse(deadlineAt) <= Date.parse(startedAt) ||
         shellOperationTimeoutMs !== undefined && (typeof shellOperationTimeoutMs !== 'number' ||
-          !Number.isSafeInteger(shellOperationTimeoutMs) || shellOperationTimeoutMs < 120001 || shellOperationTimeoutMs > 600000)
+          !Number.isSafeInteger(shellOperationTimeoutMs) || shellOperationTimeoutMs < 120001 || shellOperationTimeoutMs > 600000) ||
+        mcpCallTimeoutsMs !== undefined && (!mcpCallTimeoutsMs || typeof mcpCallTimeoutsMs !== 'object' || Array.isArray(mcpCallTimeoutsMs) ||
+          Object.entries(mcpCallTimeoutsMs).some(([tool, ms]) => !/^[a-zA-Z0-9_]{1,128}$/.test(tool) ||
+            !Number.isSafeInteger(ms) || ms < 120001 || ms > 7200000))
       ) fail('INVALID_OPERATION_CONFIGURATION');
     this.journal = journal;
     this.binding = Object.freeze({ attemptId, runId, attempt, startedAt, deadlineAt,
-      ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}) });
+      ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}),
+      ...(mcpCallTimeoutsMs !== undefined ? { mcpCallTimeoutsMs: Object.freeze({ ...mcpCallTimeoutsMs }) } : {}) });
     this.textOnlyProfile = textOnlyProfile && structuredClone(textOnlyProfile);
     this.backgroundRole = backgroundRole;
     this.v2Mode = v2Mode === true;
   }
 
   async snapshot() {
-    const { attemptId, runId, attempt, startedAt, deadlineAt, shellOperationTimeoutMs } = this.binding;
+    const { attemptId, runId, attempt, startedAt, deadlineAt, shellOperationTimeoutMs, mcpCallTimeoutsMs } = this.binding;
     const row = await this.journal.get(attemptId);
     const operations = [];
     const add = (key, kind, status, timing = undefined, timeoutMs = undefined) => {
@@ -121,6 +127,8 @@ export class CodexOperations {
       }
       if (owner.operationTimes !== undefined && (!owner.operationTimes || typeof owner.operationTimes !== 'object' || Array.isArray(owner.operationTimes))) fail('INVALID_OPERATION_TIMING');
       const clocks = new Map(Object.entries(owner.operationTimes ?? {}));
+      if (owner.mcpCallTools !== undefined && (!owner.mcpCallTools || typeof owner.mcpCallTools !== 'object' || Array.isArray(owner.mcpCallTools) ||
+          Object.values(owner.mcpCallTools).some(tool => typeof tool !== 'string' || !tool || tool.length > 128))) fail('INVALID_OPERATION_INVENTORY');
       const takeClock = (field, id) => {
         const key = JSON.stringify([field, id]), timing = clocks.get(key);
         clocks.delete(key);
@@ -137,7 +145,8 @@ export class CodexOperations {
       for (const field of ['commands', 'mcpCalls', 'fileChanges', 'dynamicCalls', 'webSearches', 'sleeps', 'compactions', 'collabCalls', 'imageGenerations', 'reasoningItems', 'planItems']) {
         const terminal = ['webSearches', 'sleeps', 'compactions', 'imageGenerations', 'reasoningItems', 'planItems'].includes(field) ? ['completed']
           : ['completed', 'failed', ...(['commands', 'fileChanges'].includes(field) ? ['declined'] : field === 'collabCalls' ? ['interrupted'] : [])];
-        for (const [id, value] of entries(owner[field])) add([identity, field, id], ['reasoningItems', 'planItems'].includes(field) ? 'inference' : 'tool', status(value, terminal), takeClock(field, id), field === 'commands' ? shellOperationTimeoutMs : undefined);
+        for (const [id, value] of entries(owner[field])) add([identity, field, id], ['reasoningItems', 'planItems'].includes(field) ? 'inference' : 'tool', status(value, terminal), takeClock(field, id),
+          field === 'commands' ? shellOperationTimeoutMs : field === 'mcpCalls' ? mcpCallTimeoutsMs?.[owner.mcpCallTools?.[id]] : undefined);
       }
       for (const [id, spawn] of entries(owner.spawns)) {
         const timing = takeClock('spawns', id);

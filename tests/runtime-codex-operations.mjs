@@ -404,3 +404,59 @@ test('shell-operation deadline boundaries are accepted and frozen with the bindi
   assert.ok(Object.isFrozen(undeclared.binding));
   assert.ok(!Object.hasOwn(undeclared.binding, 'shellOperationTimeoutMs'), 'an undeclared binding keeps its exact shape');
 });
+
+// Regression for the live 2026-09-27 browser-takeover incident: the MCP tool
+// timeout Codex is given (mcp_servers.hehebot_browser.tool_timeout_sec) was
+// correctly raised above the takeover wait, but this separate runtime-side
+// operation watchdog still capped every mcpCalls entry at the generic
+// two-minute default, regardless of tool_timeout_sec, so the Worker's
+// watchdog() (src/core/lifecycle.ts) saw an overdue operation at 120s and
+// cancelled the run out from under the owner mid-takeover.
+test('a named MCP call keeps its own declared deadline; other MCP calls stay at two minutes', async t => {
+  const f = await fixture(t);
+  await f.journal.putIfAbsent('attempt-a', { status: 'running', threadId: 'root', nativeRunId: 'turn',
+    mcpCalls: { takeover: 'inProgress', other: 'inProgress' },
+    mcpCallTools: { takeover: 'browser_request_takeover' },
+    operationTimes: {
+      '["mcpCalls","takeover"]': { startedAt: '2026-09-14T01:10:00.000Z', lastProgressAt: '2026-09-14T01:10:00.000Z' },
+      '["mcpCalls","other"]': { startedAt: '2026-09-14T01:10:00.000Z', lastProgressAt: '2026-09-14T01:10:00.000Z' },
+    } });
+  const declared = await new CodexOperations({ ...f.config,
+    mcpCallTimeoutsMs: { browser_request_takeover: 360000 } }).snapshot();
+  const takeover = declared.find(op => op.started_at === '2026-09-14T01:10:00.000Z' && op.deadline_at === '2026-09-14T01:16:00.000Z');
+  assert.ok(takeover, 'the named tool call carries its own declared six-minute deadline');
+  assert.equal(declared.filter(op => op.started_at === '2026-09-14T01:10:00.000Z' && op.deadline_at === '2026-09-14T01:12:00.000Z').length, 1,
+    'the unnamed MCP call still expires at the generic two-minute default');
+  // A nearer attempt deadline hard-clamps the declared MCP bound too.
+  const clamped = await new CodexOperations({ ...f.config, deadlineAt: '2026-09-14T01:11:30.000Z',
+    mcpCallTimeoutsMs: { browser_request_takeover: 360000 } }).snapshot();
+  assert.equal(clamped.find(op => op.id === takeover.id).deadline_at, '2026-09-14T01:11:30.000Z',
+    'the named tool call is clamped to the admitted attempt deadline');
+  // Without the declaration the exact same journal (including the recorded
+  // tool name) reverts to the generic two-minute bound for every MCP call.
+  const undeclared = await f.operations.snapshot();
+  assert.equal(undeclared.find(op => op.id === takeover.id).deadline_at, '2026-09-14T01:12:00.000Z',
+    'without a declared timeout the named call still expires at two minutes');
+});
+
+for (const invalid of [120000, 7200001, 0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '240000', null, [], { '': 200000 }, { valid: 120000 }, { 'bad tool': 200000 }]) {
+  test(`MCP call timeout map must hold explicit safe integers in range: ${JSON.stringify(invalid)}`, () => {
+    assert.throws(() => new CodexOperations({ journal: { get: async () => null }, attemptId: 'attempt-a',
+      runId: '01234567-0123-4123-a123-012345678901', attempt: 1,
+      startedAt: '2026-09-14T01:00:00.000Z', deadlineAt: '2026-09-14T01:20:00.000Z',
+      mcpCallTimeoutsMs: typeof invalid === 'object' && invalid !== null && !Array.isArray(invalid) ? invalid : { tool: invalid } }),
+      { code: 'INVALID_OPERATION_CONFIGURATION' });
+  });
+}
+
+test('MCP call timeout boundaries are accepted and frozen with the binding', () => {
+  const base = { journal: { get: async () => null }, attemptId: 'attempt-a', runId: '01234567-0123-4123-a123-012345678901',
+    attempt: 1, startedAt: '2026-09-14T01:00:00.000Z', deadlineAt: '2026-09-14T01:20:00.000Z' };
+  for (const value of [120001, 7200000]) {
+    const operations = new CodexOperations({ ...base, mcpCallTimeoutsMs: { browser_request_takeover: value } });
+    assert.ok(Object.isFrozen(operations.binding), 'the declared MCP timeouts are frozen with the binding');
+    assert.equal(operations.binding.mcpCallTimeoutsMs.browser_request_takeover, value);
+  }
+  const undeclared = new CodexOperations(base);
+  assert.ok(!Object.hasOwn(undeclared.binding, 'mcpCallTimeoutsMs'), 'an undeclared binding keeps its exact shape');
+});

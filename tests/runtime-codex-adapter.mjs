@@ -566,6 +566,29 @@ test('concurrent command starts survive root completion and omitted history unti
   assert.equal(restored.sleepReadiness().allowed, false);
 });
 
+// Regression for the live 2026-09-27 browser-takeover incident: CodexOperations
+// needs the observed MCP tool's name, keyed by its item id and recorded once at
+// its first observation, so it can grant a named long-running tool (e.g.
+// browser_request_takeover) its own operation deadline instead of the generic
+// two-minute default that cancelled the run mid-takeover.
+test('an MCP tool call records its tool name once, at its first observation, and never again', async t => {
+  const { adapter, journal } = await fixture(t);
+  await adapter.submit(input);
+  const mcpItem = (id, status, tool) => ({
+    method: status === 'inProgress' ? 'item/started' : 'item/completed',
+    params: { threadId: 'thread-a', turnId: 'turn-b', item: { id, type: 'mcpToolCall', status, ...(tool !== undefined ? { tool } : {}) } },
+  });
+  await adapter.observe(input.attemptId, mcpItem('call-a', 'inProgress', 'browser_request_takeover'));
+  assert.deepEqual((await journal.get(input.attemptId)).mcpCallTools, { 'call-a': 'browser_request_takeover' });
+  // Completion carries no tool field; the recorded name must not be erased or overwritten.
+  await adapter.observe(input.attemptId, mcpItem('call-a', 'completed'));
+  assert.deepEqual((await journal.get(input.attemptId)).mcpCallTools, { 'call-a': 'browser_request_takeover' });
+  // A call whose start omits a tool name (or reports one over the length bound) records none.
+  await adapter.observe(input.attemptId, mcpItem('call-b', 'inProgress'));
+  await adapter.observe(input.attemptId, mcpItem('call-c', 'inProgress', 'x'.repeat(129)));
+  assert.deepEqual((await journal.get(input.attemptId)).mcpCallTools, { 'call-a': 'browser_request_takeover' });
+});
+
 for (const child of [false, true]) test(`exact ${child ? 'child' : 'root'} command history recovers missed exits without adopting other work`, async t => {
   const { adapter, journal, cwd } = await fixture(t);
   await adapter.submit(input);
