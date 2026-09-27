@@ -141,17 +141,39 @@ like it could carry those (`token`, `secret`, `password`, `credential`,
 backstop — callers should still only ever pass ids, types, sizes, durations
 and error codes.
 
-On the Worker side, `HEHEBOT_DEBUG` is documented as a hook for the same
-kind of structured `console.log(JSON.stringify({...}))` lines around runtime
-RPCs and alarms, visible in `wrangler tail` — wire it into
-`src/worker/control-object.ts` the same way if/when that visibility is
-needed; it was not added in this pass to keep the Worker's hot path
-unchanged by default off logging that doesn't yet have a concrete consumer.
+The browser gateway (`runtime/browser-gateway.mjs`, spawned by
+`codex-service.mjs` as its own MCP server process per task) and the takeover
+module (`runtime/browser-takeover.mjs`) build their own `debug-log.mjs`
+logger from the browser grant's `debug`/`stateDirectory` fields — set by
+`codex-service.mjs` only when its own debug gate (`config.debug` or
+`HEHEBOT_DEBUG=1`) is on — or from `HEHEBOT_DEBUG=1` in the gateway process's
+own environment. Logged per tool call: tool name, classification
+(`read`/`action`), duration in ms, and outcome (`ok`/`error`/`timeout`/
+`refused`, with an error code where one applies); separately, repeat/budget
+stops, browser restarts, CAPTCHA/blocker detections, and takeover open/end
+(plus one `browser_takeover`/`session` line with outcome/duration/viewed from
+the takeover module itself). Never logged: typed text, a URL's query string,
+page content or screenshots — a navigated URL is logged as origin+path only.
 
-Browser gateway call logging (tool name, duration, outcome) is not yet wired
-into `runtime/browser-gateway.mjs`; the runtime-side control-RPC and
-lifecycle logging above already covers everything demanded of it except that
-one surface. This is the one "left for follow-up" item under Task step 4.
+On the Worker side, `HEHEBOT_DEBUG` (optional in the `Env` type; not a
+`wrangler.jsonc` var) gates the same kind of structured
+`console.log(JSON.stringify({...}))` lines, visible with `npx wrangler tail
+--env hehebot`, via the tiny helper `src/core/debug.ts` (a no-op unless
+`HEHEBOT_DEBUG==='1'`, so it costs nothing when off). Wired into
+`src/worker/control-object.ts`: every `/v1/commands` command (`type`,
+`status`, `ms`), every runtime RPC the control object handles (`type`, `ms`,
+`outcome`, and the error code on failure), hosted-owner wake requests
+(`epoch`, `ms`, `outcome`), and `src/worker/index.ts`'s `scheduled()` Cron
+handler (`status`, `ms`). Never logged: message/reply text, tokens, or
+headers.
+
+To enable Worker-side debug logging on a deployed installation: `wrangler
+secret put HEHEBOT_DEBUG --env hehebot` and enter `1` (or set it as a plain
+`var` in `wrangler.jsonc` if you don't need it kept secret — either way the
+Worker only checks for the exact string `"1"`). Tail it live with `npx
+wrangler tail --env hehebot`. Unset the secret (or set it to anything other
+than `1`) to turn it back off; there is no restart needed since every log
+call re-reads `env.HEHEBOT_DEBUG`.
 
 ## Reconciling with Fly Cost Explorer
 

@@ -9,6 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { ControlClient, ControlClientError } from './control-client.mjs';
 import { readAccessCredentials } from './agent-tools.mjs';
 import { CdpConnection, connectRelay, relayUrl, runTakeover, takeoverResultText } from './browser-takeover.mjs';
+import { createDebugLog } from './debug-log.mjs';
 
 /** Hehebot-fenced browser boundary (AGENTS.md: mutating tools pass through a
  * hehebot gateway with an epoch-bound effect permit). Codex talks to this MCP
@@ -44,6 +45,9 @@ const rpcError = (id, code, message) => ({ jsonrpc: '2.0', id: id ?? null, error
 const toolError = (id, text) => ({ jsonrpc: '2.0', id, result: { isError: true, content: [{ type: 'text', text }] } });
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const hasFilename = args => !!args && typeof args === 'object' && Object.hasOwn(args, 'filename');
+// Debug logging never carries a query string or page content -- origin+path only.
+const urlOriginPath = value => { if (typeof value !== 'string') return undefined; try { const u = new URL(value); return `${u.origin}${u.pathname}`; } catch { return undefined; } };
+const NO_DEBUG_LOG = Object.freeze({ log() {} });
 
 export function browserLimits(overrides = {}) {
   const limits = { ...BROWSER_LIMIT_DEFAULTS, ...overrides };
@@ -59,7 +63,7 @@ export function browserLimits(overrides = {}) {
  * runs one owner takeover: ({ takeoverId, timeoutMs, onProgress }) →
  * { outcome, url, title, viewed } (runtime/browser-takeover.mjs). */
 const PROGRESS_THROTTLE_MS = 5000;
-export function createBrowserGateway({ child, controlClient, config, limits = browserLimits(), now = Date.now, takeover = null }) {
+export function createBrowserGateway({ child, controlClient, config, limits = browserLimits(), now = Date.now, takeover = null, debugLog = NO_DEBUG_LOG }) {
   if (!child || typeof child.request !== 'function' || typeof child.restart !== 'function' ||
       !controlClient || typeof controlClient.request !== 'function' || !config?.identity || !config.runId || !config.attempt) throw new Error('INVALID_CONFIGURATION');
   let upstreamTools = null, calls = 0, lastFingerprint = null, repeats = 0, lastReport = 0, unreported = false, takeoverActive = false, takeovers = 0;
@@ -104,14 +108,20 @@ export function createBrowserGateway({ child, controlClient, config, limits = br
   const requestTakeover = async (id, args) => {
     const reason = typeof args?.reason === 'string' ? args.reason.trim() : '';
     if (!args || typeof args !== 'object' || Array.isArray(args) || Object.keys(args).some(key => key !== 'reason') || !reason || reason.length > 500) return rpcError(id, -32602, 'Invalid tool name or arguments');
-    if (++takeovers > MAX_TAKEOVERS) return toolError(id, `The owner was already asked ${MAX_TAKEOVERS} times in this task. Tell the owner with hehebot_send_message what is blocking you and stop.`);
+    const startedAt = now();
+    if (++takeovers > MAX_TAKEOVERS) {
+      debugLog.log('browser', 'tool_call', { tool: TAKEOVER_TOOL, classification: 'takeover', ms: now() - startedAt, outcome: 'refused', code: 'MAX_TAKEOVERS' });
+      return toolError(id, `The owner was already asked ${MAX_TAKEOVERS} times in this task. Tell the owner with hehebot_send_message what is blocking you and stop.`);
+    }
     const takeoverId = randomUUID();
     takeoverActive = true;
     try {
       try {
         await controlClient.request('browser-takeover', { ...ref, takeover_id: takeoverId, action: 'open', reason, timeout_ms: limits.takeoverMs });
+        debugLog.log('browser', 'takeover_open', { ms: now() - startedAt });
       } catch (error) {
         const code = error instanceof ControlClientError ? error.code : 'TAKEOVER_UNAVAILABLE';
+        debugLog.log('browser', 'tool_call', { tool: TAKEOVER_TOOL, classification: 'takeover', ms: now() - startedAt, outcome: 'refused', code });
         return toolError(id, `Could not ask the owner to take over (${code}). Tell the owner with hehebot_send_message what is needed, and stop.`);
       }
       const onProgress = () => { void Promise.resolve().then(() => controlClient.request('progress', { ...ref, source: 'browser' })).catch(() => {}); };
@@ -119,6 +129,8 @@ export function createBrowserGateway({ child, controlClient, config, limits = br
       try { result = await takeover({ takeoverId, timeoutMs: limits.takeoverMs, onProgress }); }
       catch { result = { outcome: 'failed', url: '', title: '', viewed: false }; }
       await controlClient.request('browser-takeover', { ...ref, takeover_id: takeoverId, action: 'end', outcome: result.outcome }).catch(() => {});
+      debugLog.log('browser', 'takeover_end', { outcome: result.outcome, ms: now() - startedAt, viewed: result.viewed });
+      debugLog.log('browser', 'tool_call', { tool: TAKEOVER_TOOL, classification: 'takeover', ms: now() - startedAt, outcome: result.outcome });
       // The owner may have changed the page: identical-call detection starts over.
       lastFingerprint = null; repeats = 0;
       return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: takeoverResultText(result, limits.takeoverMs) }] } };
@@ -141,13 +153,21 @@ export function createBrowserGateway({ child, controlClient, config, limits = br
     if (takeoverActive) return toolError(message.id, 'The owner is controlling the browser right now. Wait for browser_request_takeover to return.');
     if (name === TAKEOVER_TOOL && takeover) return requestTakeover(message.id, args);
     if (!BROWSER_TOOLS.includes(name) || typeof args !== 'object' || Array.isArray(args) || hasFilename(args)) return rpcError(message.id, -32602, 'Invalid tool name or arguments');
+    const classification = BROWSER_ACTION_TOOLS.includes(name) ? 'action' : 'read';
     // Stuck detection, cheapest layer: budget and identical-action loops.
-    if (++calls > limits.maxActions) return toolError(message.id, `Browser action budget (${limits.maxActions}) for this task is used up. Report progress to the owner and stop.`);
+    if (++calls > limits.maxActions) {
+      debugLog.log('browser', 'budget_stop', { tool: name, calls, limit: limits.maxActions });
+      return toolError(message.id, `Browser action budget (${limits.maxActions}) for this task is used up. Report progress to the owner and stop.`);
+    }
     const fingerprint = digest({ name, args });
     repeats = fingerprint === lastFingerprint ? repeats + 1 : 1; lastFingerprint = fingerprint;
-    if (repeats > limits.repeatLimit) return toolError(message.id, `The same browser call was repeated ${repeats} times without a different result. Change approach, or report to the owner that you are stuck.`);
-    const action = BROWSER_ACTION_TOOLS.includes(name);
+    if (repeats > limits.repeatLimit) {
+      debugLog.log('browser', 'repeat_stop', { tool: name, repeats, limit: limits.repeatLimit });
+      return toolError(message.id, `The same browser call was repeated ${repeats} times without a different result. Change approach, or report to the owner that you are stuck.`);
+    }
+    const action = classification === 'action';
     let effectId = null;
+    const startedAt = now();
     if (action) {
       effectId = randomUUID();
       try {
@@ -157,28 +177,37 @@ export function createBrowserGateway({ child, controlClient, config, limits = br
         await controlClient.request('effect-result', { ...ref, effect_id: effectId, status: 'dispatched', receipt: { tool: name } });
       } catch (error) {
         const code = error instanceof ControlClientError ? error.code : 'EFFECT_PERMIT_FAILED';
+        debugLog.log('browser', 'tool_call', { tool: name, classification, ms: now() - startedAt, outcome: 'refused', code });
         return toolError(message.id, `Browser action not performed: the permit was refused (${code}). Nothing was clicked or typed.`);
       }
     }
     const settle = (status, receipt) => effectId
       ? controlClient.request('effect-result', { ...ref, effect_id: effectId, status, receipt }).catch(() => {}) : Promise.resolve();
+    const urlDetail = urlOriginPath(args.url);
     let result;
     try { result = await child.request('tools/call', { name, arguments: args }, { timeoutMs: limits.callMs }); }
     catch (error) {
+      const ms = now() - startedAt;
       // A hung or dead browser: its state is unknown. Restart it; an action's
       // outcome stays unknown for the owner to reconcile, never replayed.
       // A busy persistent profile means no browser was started: nothing happened.
       if (error?.code === 'BROWSER_PROFILE_BUSY') {
         await settle('failed', { tool: name, reason: 'BROWSER_PROFILE_BUSY' });
+        debugLog.log('browser', 'tool_call', { tool: name, classification, ms, outcome: 'error', code: 'BROWSER_PROFILE_BUSY', ...(urlDetail ? { url: urlDetail } : {}) });
         return toolError(message.id, 'The browser profile is in use by another task; nothing was done. Try again later or tell the owner.');
       }
       await child.restart().catch(() => {});
+      debugLog.log('browser', 'restart', { tool: name, reason: error?.code ?? 'BROWSER_CALL_FAILED' });
       await settle('outcome_unknown', { tool: name, reason: error?.code ?? 'BROWSER_CALL_FAILED' });
+      debugLog.log('browser', 'tool_call', { tool: name, classification, ms, outcome: error?.code === 'BROWSER_CALL_TIMEOUT' ? 'timeout' : 'error', code: error?.code ?? 'BROWSER_CALL_FAILED', ...(urlDetail ? { url: urlDetail } : {}) });
       return toolError(message.id, `Browser call ${error?.code === 'BROWSER_CALL_TIMEOUT' ? `timed out after ${limits.callMs} ms` : 'failed'}; the browser was restarted and the page state is lost.${action ? ' Whether the action happened is unknown: do not repeat it; tell the owner if it matters.' : ''}`);
     }
     await settle(result?.isError ? 'failed' : 'confirmed', { tool: name, error: !!result?.isError });
     noteProgress(result);
-    return { jsonrpc: '2.0', id: message.id, result: withNote(result ?? { content: [] }, blockerNote(result)) };
+    const note = blockerNote(result);
+    if (note) debugLog.log('browser', 'blocker', { tool: name });
+    debugLog.log('browser', 'tool_call', { tool: name, classification, ms: now() - startedAt, outcome: result?.isError ? 'error' : 'ok', ...(urlDetail ? { url: urlDetail } : {}) });
+    return { jsonrpc: '2.0', id: message.id, result: withNote(result ?? { content: [] }, note) };
   };
 }
 
@@ -363,19 +392,26 @@ async function readPrivate(path, limit) {
   return readFile(path, 'utf8');
 }
 
-const CONFIG_KEYS = ['origin', 'tokenFile', 'accessClientIdFile', 'accessClientSecretFile', 'identity', 'runId', 'attempt', 'browserDir', 'outputDir', 'profileDir', 'limits'];
+const CONFIG_KEYS = ['origin', 'tokenFile', 'accessClientIdFile', 'accessClientSecretFile', 'identity', 'runId', 'attempt', 'browserDir', 'outputDir', 'profileDir', 'limits', 'debug', 'stateDirectory'];
 export async function runBrowserGatewayCli() {
   let config;
   try { config = JSON.parse(await readPrivate(process.env[CONFIG_ENV], 65536)); } catch { throw new Error('INVALID_CONFIGURATION'); }
   if (!config || Object.keys(config).some(key => !CONFIG_KEYS.includes(key)) || typeof config.browserDir !== 'string' || !config.browserDir.startsWith('/') ||
       typeof config.outputDir !== 'string' || !config.outputDir.startsWith('/') ||
-      config.profileDir !== undefined && (typeof config.profileDir !== 'string' || !config.profileDir.startsWith('/'))) throw new Error('INVALID_CONFIGURATION');
+      config.profileDir !== undefined && (typeof config.profileDir !== 'string' || !config.profileDir.startsWith('/')) ||
+      config.debug !== undefined && typeof config.debug !== 'boolean' ||
+      config.stateDirectory !== undefined && (typeof config.stateDirectory !== 'string' || !config.stateDirectory.startsWith('/'))) throw new Error('INVALID_CONFIGURATION');
   const limits = browserLimits(config.limits ?? {});
   await mkdir(config.outputDir, { recursive: true, mode: 0o700 });
   const token = (await readPrivate(config.tokenFile, 16384)).trim();
   const access = await readAccessCredentials(config);
   const controlClient = new ControlClient({ origin: config.origin, token, ...access });
   const child = spawnPlaywright({ browserDir: config.browserDir, outputDir: config.outputDir, limits, profileDir: config.profileDir ?? null });
+  // Debug logging (docs/METERING.md), no-op unless config.debug or
+  // HEHEBOT_DEBUG=1 (the same gate codex-service.mjs uses): one JSONL line per
+  // tool call under the shared state directory's logs/ folder.
+  const debugLog = createDebugLog({ enabled: config.debug === true || process.env.HEHEBOT_DEBUG === '1', stateDirectory: config.stateDirectory });
+  if (debugLog.enabled) void debugLog.rotate();
   // Owner takeover relay: same origin, runtime token and Access service token
   // as ControlClient, over an outbound WebSocket (docs/BROWSER_TAKEOVER.md).
   const headers = { Authorization: `Bearer ${token}`,
@@ -384,10 +420,10 @@ export async function runBrowserGatewayCli() {
     const cdp = await CdpConnection.connect(await child.cdpEndpoint());
     try {
       const url = relayUrl(config.origin, { takeoverId, runId: config.runId, attempt: config.attempt, identity: config.identity });
-      return await runTakeover({ cdp, timeoutMs, onProgress, openRelay: onMessage => connectRelay({ url, headers, onMessage }) });
+      return await runTakeover({ cdp, timeoutMs, onProgress, openRelay: onMessage => connectRelay({ url, headers, onMessage }), debugLog });
     } finally { cdp.close(); }
   };
-  const handle = createBrowserGateway({ child, controlClient, config, limits, takeover });
+  const handle = createBrowserGateway({ child, controlClient, config, limits, takeover, debugLog });
   const write = async response => { if (!process.stdout.write(JSON.stringify(response) + '\n')) await once(process.stdout, 'drain'); };
   const pending = new Set();
   let buffered = '';

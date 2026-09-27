@@ -7,6 +7,7 @@ import {parseOwnerAlphaBackground} from '../core/owner-alpha-background';
 import {authenticateTestPrincipal,parseTestAuthConfig} from './test-auth';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { digest, json, parseJson, readBounded } from './http';
+import { debugLog } from '../core/debug';
 export { PersonalControl };
 export default {
  async fetch(request:Request,env:Env):Promise<Response>{
@@ -233,8 +234,10 @@ export default {
   * an owner request: no Access/local auth applies. runScheduledBackup() itself
   * no-ops if BACKUPS/HEHEBOT_BACKUP_AGE_RECIPIENT are unconfigured. */
  async scheduled(_controller:ScheduledController,env:Env,_ctx:ExecutionContext):Promise<void>{
+  const startedAt=Date.now();
   const control=env.CONTROL.getByName(env.INSTALLATION_ID);
   const result=unwrap(await control.runScheduledBackup());
   if(result.status==='failed')console.error(JSON.stringify({event:'backup.scheduled_failed',error_code:result.error_code}));
+  debugLog(env,'scheduled','backup',{status:result.status,ms:Date.now()-startedAt});
  }
 } satisfies ExportedHandler<Env>;
