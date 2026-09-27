@@ -91,10 +91,10 @@
         "INSTALLATION_ID": "personal-v2",
         "AUTH_MODE": "access",
         "ACCESS_ISSUER": "https://ancient-waterfall-b4eb.cloudflareaccess.com",
-        "ACCESS_AUD": "",
+        "ACCESS_AUD": "c4d1faa41babeb6086e82798a4ad1cdc5362fecbf0353d6faa28c45671b48639",
         "OWNER_SUB": "9c18b1ac-5bde-5b20-91de-92d06d4b030f",
-        "EXECUTION_ENABLED": "false",
-        "PROVIDER_CONFIG": "{}",
+        "EXECUTION_ENABLED": "true",
+        "PROVIDER_CONFIG": "{\"provider\":\"fly-sprites\",\"ref\":{\"provider\":\"fly-sprites\",\"id\":\"hehebot-test\"},\"service\":\"hehebot\",\"lifecycleVerified\":true,\"wakeUrl\":\"https://hehebot-test-b2xo6.sprites.app/\"}",
         "ACTION_POLICY_IDS": "[]",
         "TOOL_POLICY_IDS": "[]",
         "HEHEBOT_WHATSAPP_READ_POLICIES": "{}",
@@ -103,7 +103,7 @@
         "FLIGHT_RESTORE_VERIFIED": "false",
         "FLIGHT_RESTORE_POLICY_ID": "",
         "NATIVE_DELEGATIONS": "{}",
-        "HEHEBOT_EXECUTION_MODE": ""
+        "HEHEBOT_EXECUTION_MODE": "v2"
       },
       "durable_objects": {
         "bindings": [
