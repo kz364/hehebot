@@ -15,6 +15,7 @@ import {EffectLedger} from './effects';
 import {ResourceLedger} from './resources';
 import {OutputPreviews} from './output-preview';
 import {TokenUsageSnapshots} from './token-usage';
+import {DEFAULT_METERING_RATES,meteringSummary} from './metering';
 import {captureWhatsAppReadPolicies} from './whatsapp-access';
 import {GRANTABLE_TOOL_POLICIES} from './agent-commands';
 import {OwnerAlpha,ownerAlphaSuccessorSha256} from './owner-alpha';
@@ -802,6 +803,7 @@ export class ControlCore {
     SUM(status IN ('claimed','running','finishing','cancelling')) AS active,SUM(status='waiting') AS waiting,SUM(status IN ('recovery_required','interrupted')) AS recovery
     FROM runs WHERE status IN ('queued','claimed','running','finishing','waiting','cancelling','recovery_required','interrupted') GROUP BY persona_id ORDER BY persona_id`)},
    monitoring:controlMonitoring(this.store,now,this.budget,this.options.executionEnabled),
+   metering:meteringSummary(this.store,now,this.options.meteringRates??DEFAULT_METERING_RATES),
    objects:after===undefined?(['persona','room','routine','memory','skill'] as const).flatMap(kind=>this.store.list(kind)):undefined,
    skill_enablements:after===undefined?this.store.db.all<{skill_id:string;persona_id:string;skill_revision:number;enabled:number}>('SELECT skill_id,persona_id,skill_revision,enabled FROM skill_enablements ORDER BY skill_id,persona_id').map(row=>({...row,enabled:Boolean(row.enabled)})):undefined,
    skill_proposals:after===undefined?this.store.db.all<{id:string;skill_id:string;proposal_revision:number;expected_skill_revision:number;body_json:string;provenance_json:string;status:string;executable_files_changed:number;created_at:string;reviewed_at:string|null}>("SELECT id,skill_id,proposal_revision,expected_skill_revision,body_json,provenance_json,status,executable_files_changed,created_at,reviewed_at FROM skill_proposals ORDER BY created_at,id").map(({body_json,provenance_json,executable_files_changed,...row})=>({...row,body:JSON.parse(body_json),provenance:JSON.parse(provenance_json),executable_files_changed:Boolean(executable_files_changed)})):undefined,

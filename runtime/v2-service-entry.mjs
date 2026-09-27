@@ -11,7 +11,8 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
 const HEX64 = /^[a-f0-9]{64}$/;
 const CONFIG_KEYS = ['portalOrigin', 'runtimeTokenFile', 'wakeTokenFile', 'accessClientIdFile', 'accessClientSecretFile',
   'tlsCAFile', 'ownerBindingSha256', 'installationId', 'stateRoot', 'binary', 'nativeHome', 'personas',
-  'restrictedPermissions', 'port', 'maintainIntervalMs', 'memoryTokenizers', 'host', 'wakeHoldMs', 'browser'];
+  'restrictedPermissions', 'port', 'maintainIntervalMs', 'memoryTokenizers', 'host', 'wakeHoldMs', 'browser',
+  'debug', 'metering'];
 // Codes that are safe to report; anything else may carry transport detail.
 const REPORTABLE = ['CONTROL_NOT_BOOTABLE', 'OWNER_BINDING_MISMATCH', 'SERVICE_RECOVERY_REQUIRED', 'EXECUTOR_FENCED',
   'NATIVE_STOP_UNCONFIRMED', 'CONTROL_HTTP_ERROR', 'CONTROL_TIMEOUT', 'CONTROL_TRANSPORT_FAILED', 'DRAIN_OUTCOME_UNKNOWN',
@@ -42,7 +43,10 @@ export function createV2Runtime(input, dependencies = {}) {
       config.maintainIntervalMs !== undefined && (!Number.isInteger(config.maintainIntervalMs) ||
         config.maintainIntervalMs < 250 || config.maintainIntervalMs > 10000) ||
       config.host !== undefined && !HOST_NAMES.includes(config.host) ||
-      config.wakeHoldMs !== undefined && (!Number.isInteger(config.wakeHoldMs) || config.wakeHoldMs < 1000 || config.wakeHoldMs > 600000)) fail('INVALID_SERVICE_CONFIGURATION');
+      config.wakeHoldMs !== undefined && (!Number.isInteger(config.wakeHoldMs) || config.wakeHoldMs < 1000 || config.wakeHoldMs > 600000) ||
+      config.debug !== undefined && typeof config.debug !== 'boolean' ||
+      config.metering !== undefined && (!config.metering || typeof config.metering !== 'object' ||
+        Object.keys(config.metering).some(key => !['sampleIntervalMs', 'reportIntervalMs'].includes(key)))) fail('INVALID_SERVICE_CONFIGURATION');
   const { createService, serviceDependencies = {}, readSecret = privateFile, now = Date.now,
     report = value => console.info(JSON.stringify(value)),
     wait = ms => new Promise(ok => setTimeout(ok, ms)), holdWake } = dependencies;
@@ -55,6 +59,8 @@ export function createV2Runtime(input, dependencies = {}) {
     ...(config.restrictedPermissions !== undefined ? { restrictedPermissions: config.restrictedPermissions } : {}),
     ...(config.memoryTokenizers !== undefined ? { memoryTokenizers: config.memoryTokenizers } : {}),
     ...(config.browser !== undefined ? { browser: config.browser } : {}),
+    ...(config.debug !== undefined ? { debug: config.debug } : {}),
+    ...(config.metering !== undefined ? { metering: config.metering } : {}),
     ...(config.nativeHome ? { nativeHome: config.nativeHome } : {}),
     ...(config.tlsCAFile ? { tlsCAFile: config.tlsCAFile } : {}),
     ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}) });

@@ -22,6 +22,7 @@ import { TaskSteering } from '../core/task-steering';
 import { OutputPreviews } from '../core/output-preview';
 import { BotMessages } from '../core/bot-messages';
 import { TokenUsageSnapshots } from '../core/token-usage';
+import { MeteringLedger, meteringSummary, parseMeteringRates } from '../core/metering';
 import { MemoryReadRetention } from '../core/memory-read-retention';
 import { ControlError, requireThat, safeError } from '../core/errors';
 import { createProvider, ProviderError, type ProviderConfig, type RuntimeRef } from '../providers';
@@ -100,7 +101,7 @@ export class PersonalControl extends DurableObject<Env> {
   this.executionMode=executionMode;
   this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN,!!bootstrap||!!warm||!!background);
   requireThat(!(bootstrap||warm||background)||!!this.hostedWake,'INVALID_CONFIGURATION','Automatic owner alpha requires its private wake destination.',503);
-  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:warm||background?hosted?.policy:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaWarm:warm,ownerAlphaBackground:background,ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true'||executionMode==='v2',coordinatorInbox:executionMode==='v2',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:warm||background?hosted?.policy:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaWarm:warm,ownerAlphaBackground:background,ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true'||executionMode==='v2',coordinatorInbox:executionMode==='v2',meteringRates:parseMeteringRates(env.HEHEBOT_METERING_RATES),whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
@@ -279,6 +280,7 @@ export class PersonalControl extends DurableObject<Env> {
   new OutputPreviews(this.store,()=>this.core.now()).prune();
   new TokenUsageSnapshots(this.store,()=>this.core.now()).prune();
   new MemoryReadRetention(this.store,()=>this.core.now()).prune();
+  new MeteringLedger(this.store,()=>this.core.now()).prune(new Date(Date.parse(this.core.now())-400*86400000).toISOString().slice(0,10));
  }
  async accept(owner:string,key:string,hash:string,input:unknown){return this.rpc(async()=>{
   // Even rejected activation must leave retained predecessor history untouched.
@@ -404,7 +406,7 @@ export class PersonalControl extends DurableObject<Env> {
   }
   const alpha=this.core.ownerAlpha.policy;
   if(command.type==='status')return this.statusSummary();
-  return this.execute(command,!!alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','bot-message','token-usage','steer-pending','agent-routines','agent-skill','agent-task-list','agent-task-detail'].includes(command.type)||!!(alpha.text_only&&command.type==='complete')||!!(alpha.background_first_root&&command.type==='native-child')));
+  return this.execute(command,!!alpha&&(['boot','ready','claim','heartbeat','submitted','coordinator-release','output-preview','bot-message','token-usage','metering','steer-pending','agent-routines','agent-skill','agent-task-list','agent-task-detail'].includes(command.type)||!!(alpha.text_only&&command.type==='complete')||!!(alpha.background_first_root&&command.type==='native-child')));
  });}
  private statusSummary(){
   const state=this.lifecycle.get(),alpha=this.core.ownerAlpha.policy,generation=this.core.ownerAlpha.activeGeneration();
@@ -427,6 +429,17 @@ export class PersonalControl extends DurableObject<Env> {
     }catch(error){
      if(!(error instanceof ControlError)||error.code!=='USAGE_FENCED')throw error;
      result={accepted:false,reason:'USAGE_FENCED'};
+    }
+    break;
+   }
+   case 'metering':{
+    const {identity,...report}=command.payload;
+    try{
+     new MeteringLedger(this.store,()=>this.core.now()).record(identity,report,this.lifecycle);
+     result={accepted:true};
+    }catch(error){
+     if(!(error instanceof ControlError)||error.code!=='STALE_EPOCH')throw error;
+     result={accepted:false,reason:'STALE_EPOCH'};
     }
     break;
    }

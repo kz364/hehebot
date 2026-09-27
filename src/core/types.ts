@@ -70,4 +70,4 @@ export type Options = { testCampaignGrant?:TestCampaignGrant;ownerAlphaBootstrap
  // V4 (ARCHITECTURE_V2 A4): gates the per-persona coordinator inbox (steer-or-batch
  // routing of message.send) and the task.event coordinator wake. Off by default so
  // every pre-existing message.send/completion test keeps its prior behavior.
- coordinatorInbox?: boolean };
+ coordinatorInbox?: boolean; meteringRates?: import('./metering').MeteringRates };

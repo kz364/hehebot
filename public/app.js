@@ -534,7 +534,7 @@ function render(){
  const searchSelection=JSON.stringify([selected,selectionVersion,recoveryView?.kind]);
  if(conversationSearchSelection!==searchSelection){$('conversation-search').value='';conversationSearchSelection=searchSelection;}
  $('conversation-search-panel').hidden=managedSelected()||Boolean(recoveryView);
- renderBudget();renderMonitoring();renderTaskStrip();renderRoster();
+ renderBudget();renderMetering();renderMonitoring();renderTaskStrip();renderRoster();
  for(const [kind,target] of [['room','rooms']]){
   $(target).replaceChildren();
   for(const object of items(kind).filter(x=>!x.body.archived)){
@@ -1252,6 +1252,12 @@ function renderBudget(){
    const key=crypto.randomUUID();openEditor(`Allow once: ${name}`,[node('p','Allow only this scheduled run despite the budget wait. This does not enable runtime execution, grant connector permissions, or change the monthly cap.','hint')],()=>command('budget.override',{run_id:run.id,expected_revision:budget.revision},key));
   },'quiet'));$('budget-waits').append(row);
  }
+}
+function renderMetering(){
+ const metering=snapshot.metering;$('metering-panel').hidden=!metering;if(!metering)return;
+ const line=(label,period)=>node('p',`${label}: ${dollars(period.estimated_usd*100)} est. · ${Math.round(period.awake_minutes)} min awake`,'hint');
+ $('metering-summary').replaceChildren(line('Today',metering.today),line('Last 7 days',metering.last_7_days),line('Month to date',metering.month_to_date),
+  node('p',`${metering.tokens.total_tokens_in_retained_snapshots.toLocaleString()} tokens in retained run snapshots (not a daily total)`,'hint'));
 }
 $('edit-budget').onclick=()=>{
  const budget=snapshot.budget;if(!budget)return;const key=crypto.randomUUID();

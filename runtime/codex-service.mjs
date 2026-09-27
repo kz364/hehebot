@@ -17,6 +17,8 @@ import { CodexQuestionBinding } from './codex-questions.mjs';
 import { ExecutionSupervisor } from './execution-supervisor.mjs';
 import { createMemoryCounter, memoryTokenizerMap } from './memory-read.mjs';
 import { SpritesActivityGuard } from './sprites-activity-guard.mjs';
+import { createMeteringSampler } from './metering-sampler.mjs';
+import { createDebugLog } from './debug-log.mjs';
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 import { stageWarmClaim, warmGenerationBinding } from './owner-alpha-warm-binding.mjs';
 import { backgroundProfileSha256, backgroundGenerationBinding, backgroundGenerationPolicy, stageBackgroundClaim, validateBackgroundProfile } from './owner-alpha-background-binding.mjs';
@@ -70,6 +72,7 @@ export function createCodexService(config, dependencies) {
       if (result.stdout.trim() !== `codex-cli ${PINNED_CODEX}`) fail('CODEX_VERSION_MISMATCH');
     } } = dependencies;
   let phase = 'stopped', journal, control, transport, adapter, router, supervisor, activity;
+  let debugLog = { enabled: false, log() {}, async rotate() {} }, meteringSampler = null;
   let taskSupervisor = null, taskAdmission;
   let ownsIntent = false, stopping, questions, questionNotification, admission;
   let alpha = null, textOnlyProfile = null, textOnlyVerification = null, textOnlyCatalogContent = null, commandedConfigContent = null;
@@ -328,7 +331,7 @@ export function createCodexService(config, dependencies) {
       } else if (config.backgroundProfile !== undefined) fail('INVALID_SERVICE_CONFIGURATION');
       if (config.textOnlyProfile !== undefined && !alpha?.text_only) fail('INVALID_SERVICE_CONFIGURATION');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs', 'backgroundTaskLane', 'executionMode', 'ownerBindingSha256', 'memoryTokenizers', 'browser'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs', 'backgroundTaskLane', 'executionMode', 'ownerBindingSha256', 'memoryTokenizers', 'browser', 'debug', 'metering'].includes(key)) ||
         config.nativeHome !== undefined && (!alpha && !v2Mode || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.browser !== undefined && (!v2Mode || !config.browser || typeof config.browser !== 'object' ||
           Object.keys(config.browser).some(key => !['dir', 'limits'].includes(key)) || typeof config.browser.dir !== 'string' || !isAbsolute(config.browser.dir) ||
@@ -336,6 +339,14 @@ export function createCodexService(config, dependencies) {
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean' ||
         config.memoryTokenizers !== undefined && (() => { try { memoryTokenizerMap(config.memoryTokenizers); return false; } catch { return true; } })() ||
+        // Debug: optional structured JSONL logging under the state directory (no
+        // secrets/payload bodies), default off. Metering: optional sampler
+        // interval overrides, default off the fixed 15s/60s cadence.
+        config.debug !== undefined && typeof config.debug !== 'boolean' ||
+        config.metering !== undefined && (!config.metering || typeof config.metering !== 'object' ||
+          Object.keys(config.metering).some(key => !['sampleIntervalMs', 'reportIntervalMs'].includes(key)) ||
+          config.metering.sampleIntervalMs !== undefined && (!Number.isInteger(config.metering.sampleIntervalMs) || config.metering.sampleIntervalMs < 1000 || config.metering.sampleIntervalMs > 300000) ||
+          config.metering.reportIntervalMs !== undefined && (!Number.isInteger(config.metering.reportIntervalMs) || config.metering.reportIntervalMs < 1000 || config.metering.reportIntervalMs > 900000)) ||
         // The background task lane is a plain ordinary-execution concern: it is
         // never offered on an owner-alpha/hosted staged boot (single-lane always).
         config.backgroundTaskLane !== undefined && (typeof config.backgroundTaskLane !== 'boolean' || alpha) ||
@@ -372,6 +383,24 @@ export function createCodexService(config, dependencies) {
         const configuredControl = new ControlClient({ origin: config.portalOrigin, token, fetchImpl,
           ...(alphaWarm ? { principal: 'warm-host' } : alphaBackground ? { principal: 'background-host' } : {}), ...access });
         control = dependencies.control ?? configuredControl;
+        debugLog = createDebugLog({ enabled: config.debug === true || process.env.HEHEBOT_DEBUG === '1', stateDirectory: config.stateDirectory, now });
+        if (debugLog.enabled) {
+          void debugLog.rotate();
+          // Every control RPC, one line: type, latency, outcome/error code. Never
+          // the payload -- it can carry message text, ids and durations only.
+          const rawRequest = control.request.bind(control);
+          control.request = async (type, payload) => {
+            const startedAt = now();
+            try {
+              const result = await rawRequest(type, payload);
+              debugLog.log('control', 'rpc', { type, ms: now() - startedAt, outcome: 'ok' });
+              return result;
+            } catch (error) {
+              debugLog.log('control', 'rpc', { type, ms: now() - startedAt, outcome: 'error', code: error?.code ?? 'unknown' });
+              throw error;
+            }
+          };
+        }
         journal = new FileJournal(join(config.stateDirectory, 'journal'));
         const bootId = alphaGeneration?.boot_id ?? randomUUID();
         assertStarting();
@@ -757,6 +786,18 @@ export function createCodexService(config, dependencies) {
         await starting(() => journal.update('service', { phase: 'running' }));
         assertStarting();
         phase = 'running';
+        // V2 self-metering (no Fly usage API exists for Sprites): sample cgroup
+        // CPU/memory and report periodically. Fire-and-forget, fenced by the
+        // same epoch/boot identity as heartbeat; never blocks or fails the run.
+        if (v2Mode) {
+          meteringSampler = createMeteringSampler({
+            report: sample => control.request('metering', { identity, ...sample }).catch(() => {}),
+            ...(config.metering?.sampleIntervalMs ? { sampleIntervalMs: config.metering.sampleIntervalMs } : {}),
+            ...(config.metering?.reportIntervalMs ? { reportIntervalMs: config.metering.reportIntervalMs } : {}),
+            now, onDebug: debugLog.enabled ? entry => debugLog.log('metering', entry.event, entry) : undefined,
+          });
+          meteringSampler.start();
+        }
         return dispatched;
       } catch (error) {
         recover(); await service.stop();
@@ -821,6 +862,7 @@ export function createCodexService(config, dependencies) {
     stop() {
       return stopping ??= (async () => {
         phase = 'recovery';
+        if (meteringSampler) { meteringSampler.stop(); meteringSampler = null; }
         questions?.close();
         if (questionNotification) { transport?.off('notification', questionNotification); transport?.off('disconnect', recover); }
         supervisor?.disconnect(); taskSupervisor?.disconnect(); router?.close(); transport?.close();
