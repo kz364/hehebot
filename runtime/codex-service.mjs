@@ -734,7 +734,9 @@ export function createCodexService(config, dependencies) {
         return dispatched;
       } catch (error) {
         recover(); await service.stop();
-        fail(error.code === 'NATIVE_COMPATIBILITY_GATE_BLOCKED' ? error.code : 'SERVICE_RECOVERY_REQUIRED');
+        // Keep the underlying identifier (never its message) so operators can see why start failed.
+        const cause = typeof error?.code === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(error.code) ? error.code : error?.name ?? 'unknown';
+        throw Object.assign(new Error('SERVICE_RECOVERY_REQUIRED'), { code: error.code === 'NATIVE_COMPATIBILITY_GATE_BLOCKED' ? error.code : 'SERVICE_RECOVERY_REQUIRED', causeCode: String(cause).slice(0, 64) });
       }
     },
     async observe(attemptId = undefined) {

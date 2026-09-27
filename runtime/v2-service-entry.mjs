@@ -77,7 +77,7 @@ export function createV2Runtime(input, dependencies = {}) {
         await wait(interval);
       }
     } catch (error) {
-      report({ event: 'v2.failed', epoch, code: code(error), replayAllowed: false });
+      report({ event: 'v2.failed', epoch, code: code(error), ...(typeof error?.causeCode === 'string' ? { cause: error.causeCode } : {}), replayAllowed: false });
     } finally {
       try { await service?.stop(); }
       catch (error) { report({ event: 'v2.stop_failed', epoch, code: code(error) }); }
