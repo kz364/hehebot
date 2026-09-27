@@ -2776,6 +2776,107 @@
         "type",
         "payload"
       ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "node-request"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "request_key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "capability": {
+              "enum": [
+                "ping",
+                "messages.search"
+              ]
+            },
+            "args": {
+              "type": "object",
+              "maxProperties": 8
+            },
+            "deadline_ms": {
+              "type": "integer",
+              "minimum": 60000,
+              "maximum": 86400000
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "request_key",
+            "capability",
+            "args"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "node-result"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "request_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "park": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "request_id"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
     }
   ]
 }

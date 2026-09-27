@@ -13,6 +13,7 @@ import type {NativeQuestionInput} from './native-questions';
 import type {WhatsAppReadRequest} from './whatsapp-access';
 import type {TextOnlyProfile} from './owner-alpha';
 import type {MemoryBudgetReceipt} from './memory-context';
+import type {NodeRequestInput,NodePollInput} from './node-bridge';
 type Base={identity:Identity};type Attempt={run_id:string;attempt:number};
 export type TextOnlyReceipt=TextOnlyProfile&{thread_id:string;turn_id:string;output_sha256:string};
 export type BackgroundReceipt={thread_id:string;turn_id:string;output_sha256:string};
@@ -56,5 +57,7 @@ export type RuntimePayloads={
  'agent-task-detail':AgentTaskDetail;
  'memory-read-prepare':AgentMemoryRead;
  'memory-read-reserve':AgentMemoryReserve;
+ 'node-request':Base & NodeRequestInput;
+ 'node-result':Base & NodePollInput;
 };
 export type RuntimeCommand={ [K in keyof RuntimePayloads]:{type:K;payload:RuntimePayloads[K]} }[keyof RuntimePayloads];

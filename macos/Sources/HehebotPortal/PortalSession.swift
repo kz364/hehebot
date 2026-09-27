@@ -4,7 +4,8 @@ import CryptoKit
 import PortalPolicy
 import WebKit
 
-/// This class has no command submission, retry queue or page-to-native message handler.
+/// This class has no command submission or retry queue. Its only page-to-native
+/// channel is the one-way NotificationBridge registered in connect().
 @MainActor
 final class PortalSession: NSObject, ObservableObject, WKNavigationDelegate, WKUIDelegate {
     @Published private(set) var webView: WKWebView?
@@ -54,9 +55,12 @@ final class PortalSession: NSObject, ObservableObject, WKNavigationDelegate, WKU
             return
         }
         // Defense in depth, not a substitute for the App Sandbox entitlement boundary.
-        // No native message handler is registered; this script can only remove web APIs.
+        // This script can only remove web APIs; it adds no capability.
         settings.userContentController.addUserScript(WKUserScript(source: script,
             injectionTime: .atDocumentStart, forMainFrameOnly: false))
+        // The single, one-way notification bridge (origin/frame/shape checked natively).
+        settings.userContentController.add(NotificationBridge(portal: configuration.portal),
+            contentWorld: .page, name: NotificationRequest.handlerName)
         let view = RestrictedWebView(frame: .zero, configuration: settings)
         view.navigationDelegate = self
         view.uiDelegate = self

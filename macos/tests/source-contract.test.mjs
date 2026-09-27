@@ -31,16 +31,32 @@ test('WebKit integration wires exact policy, response cancellation and isolated 
   assert.ok(!session.includes('WKWebsiteDataStore.default'));
 });
 
-test('native opening only exposes configured root; no host bridge, agent or replay loop', () => {
+test('native opening only exposes configured root; only the one-way notification bridge, no agent or replay loop', () => {
   assert.equal((session.match(/NSWorkspace.shared.open/g) || []).length, 1);
   assert.ok(session.includes('NSWorkspace.shared.open(configuration.portal.url)'));
   assert.ok(app.includes('Button("Open Portal in Default Browser") { session.openPortalInBrowser() }'));
-  const sources = readdirSync(new URL('Sources/HehebotPortal/', root))
-    .filter(file => file.endsWith('.swift')).map(file => read(`Sources/HehebotPortal/${file}`)).join('\n');
-  for (const prohibited of [/WKScriptMessageHandler/, /evaluateJavaScript\(/, /Process\(/,
+  const files = readdirSync(new URL('Sources/HehebotPortal/', root)).filter(file => file.endsWith('.swift'));
+  const sources = files.map(file => read(`Sources/HehebotPortal/${file}`)).join('\n');
+  for (const prohibited of [/evaluateJavaScript\(/, /WKScriptMessageHandlerWithReply/, /replyHandler/,
     /Timer\./, /\.reload\(/, /\.goBack\(/, /loadFileURL/, /URLSession\.shared/, /setValue\(/]) {
     assert.doesNotMatch(sources, prohibited);
   }
+  // E12: exactly one page-to-native handler (NotificationBridge), registered once,
+  // validated by the Foundation policy (origin/main frame/shape) before any effect.
+  const bridge = read('Sources/HehebotPortal/NotificationBridge.swift');
+  assert.equal((sources.match(/WKScriptMessageHandler/g) || []).length, 1);
+  assert.match(bridge, /final class NotificationBridge: NSObject, WKScriptMessageHandler/);
+  assert.match(bridge, /NotificationRequest\(body: message.body, isMainFrame: message.frameInfo.isMainFrame/);
+  assert.match(bridge, /UserDefaults.standard.bool\(forKey: Self.enabledKey\)/);
+  assert.equal((sources.match(/userContentController.add\(/g) || []).length, 1);
+  assert.ok(session.includes('userContentController.add(NotificationBridge(portal: configuration.portal)'));
+  // The only process launched is /bin/launchctl with fixed vectors (Mac node start/stop/status).
+  for (const file of files) {
+    if (file !== 'NodeControl.swift') assert.doesNotMatch(read(`Sources/HehebotPortal/${file}`), /Process\(/, file);
+  }
+  const node = read('Sources/HehebotPortal/NodeControl.swift');
+  assert.match(node, /executableURL = URL\(fileURLWithPath: MacNodeAgent.launchctl\)/);
+  assert.match(node, /arguments = MacNodeAgent.arguments\(action, uid: getuid\(\), home: NSHomeDirectory\(\)\)/);
   assert.equal((session.match(/view.load\(/g) || []).length, 1);
   assert.ok(session.includes('view.load(URLRequest(url: configuration.portal.url))'));
   assert.ok(app.includes('.id(ObjectIdentifier(webView))'));

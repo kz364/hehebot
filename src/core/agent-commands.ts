@@ -4,6 +4,8 @@ import type {LifecycleCore,Identity} from './lifecycle';
 import {parseCommand,type ControlCore} from './control';
 import type {Command,ContextSnapshot,RoutinePut,MemoryPut,Run} from './types';
 import {MEMORY_TOKENIZER,MEMORY_READ_POLICY,projectMemory} from './memory-context';
+import {MAC_MESSAGES_POLICY} from './node-bridge';
+export {MAC_MESSAGES_POLICY} from './node-bridge';
 
 // Stable IDs in the existing UUID tool-policy registry. Installing code does not
 // grant these capabilities: operator configuration and persona adoption are required.
@@ -14,6 +16,7 @@ export const BROWSER_POLICY='0f7d99a8-9dcc-4150-b555-da7944e2554c';
  * deployment's TOOL_POLICY_IDS allows are shown). */
 export const GRANTABLE_TOOL_POLICIES=Object.freeze([
  {id:BROWSER_POLICY,label:'Browser use',description:'Browse the live web through the Hehebot browser gateway. Clicks and typing are recorded as effects.'},
+ {id:MAC_MESSAGES_POLICY,label:'Mac: read Messages',description:'Search recent SMS/iMessage text on the paired Mac (read-only, no attachments). Requests wait while the Mac is offline.'},
 ]);
 export const ROUTINE_MANAGE_POLICY='f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 export {MEMORY_READ_POLICY} from './memory-context';

@@ -211,6 +211,12 @@ The paired Mac keeps an outbound WebSocket to the Durable Object. The Worker que
 node requests (`enqueued_at`, `deadline`). When the Mac is offline, requests park
 durably, and the Sprite is never kept awake just to wait for it.
 
+Implementation notes (docs/MAC_NODE.md): the queue, pairing hash and node-token hash
+live in `runtime_metadata` rather than new tables, so no schema migration is needed. The
+pairing code comes from a dedicated owner route, not a `/v1/commands` receipt, so the
+secret never enters the durable command ledger. A settled parked request wakes the
+runtime through an ordinary coordinator run (A4 causal depth), not a separate channel.
+
 ## 2. What we deliberately do not adopt
 
 - **Temporal or another durable-workflow engine.** A3 gives the needed property:

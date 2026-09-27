@@ -1,12 +1,16 @@
 # Hehebot native macOS source foundation
 
-Independent SwiftUI + WKWebView remote-only client for the same HTTPS portal. This is **source awaiting macOS compilation and acceptance**, not a released replacement for `desktop/`. No upstream application code, assets, branding, npm dependencies, Chromium, local agent, task database, scheduler, command queue or model credentials are included. Apple SDK frameworks and the Swift standard library are the only dependencies.
+Independent SwiftUI + WKWebView remote-only client for the same HTTPS portal. It now **builds and passes its tests on the owner's Mac** (Xcode 27 / Swift 6.4, 2026-09-28) as an unsigned app; live sign-in, notification and node acceptance are still pending. It is not a released replacement for `desktop/`. No upstream application code, assets, branding, npm dependencies, Chromium, local agent, task database, scheduler, command queue or model credentials are included. Apple SDK frameworks and the Swift standard library are the only dependencies.
 
 The minimum deployment target is **macOS 14.0**, with **Xcode 15 / Swift 5.9 / macOS 14 SDK or newer** for building. This is a real API requirement: [`WKWebsiteDataStore.init(forIdentifier:)`](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/init(foridentifier:)) became available on macOS 14. Do not lower the target by substituting the shared default store or private WebKit APIs. API availability is documented; compatibility has not been demonstrated on Mac hardware.
 
 ## Native behavior
 
 - One SwiftUI portal window, standard application/Edit/Window menus, a Portal menu, and a native Settings window. No full native chat renderer.
+- A menu bar item (open/connect/lock the portal, start/stop the Mac node, quit). The Dock icon and window behave as a normal app.
+- **Cloudflare Access login.** Settings has an *Access team* helper that adds `https://<team>.cloudflareaccess.com` as a login origin (for this deployment, `https://ancient-waterfall-b4eb.cloudflareaccess.com`). Also add your identity provider's origin if Access redirects to one (not needed for one-time PIN). Login happens in the same per-portal store; the Access cookie then authorizes the portal.
+- **Native notifications** (off by default). When enabled in Settings, the portal posts `{title, body}` to `window.webkit.messageHandlers.hehebotNotify` for new bot messages while the window is hidden or unfocused, and the app shows a local notification. Authorization is requested only when the owner turns the toggle on, and only in the bundled `.app`.
+- **Mac node control.** Start/Stop run `/bin/launchctl bootstrap|bootout gui/<uid> ~/Library/LaunchAgents/com.hehebot.mac-node.plist` with fixed argument vectors. Installing and pairing the node is separate (`mac-node/install-launchd.sh`, see `docs/MAC_NODE.md`). An App Sandbox release cannot manage launchd jobs and would need a separately reviewed helper.
 - First run is disconnected. Configure the portal and explicit login origins in Settings, save, then choose **Connect to Portal**. Persisted settings are validated on launch, but launch does not connect automatically.
 - Configuration is non-secret `UserDefaults` data in `com.hehebot.native-portal`; never enter tokens or credentials. HTTPS origins only, no path/query/fragment/userinfo, no whitespace, wildcard, Unicode hostname, or IPv6 literal. ASCII punycode names are permitted. Port 443 and host case normalize; other ports remain distinct. No loopback HTTP exception.
 - Changing the portal field clears the proposed login list. Saving validated settings destroys the current view without carrying navigation history into the new configuration. Each canonical portal origin selects a deterministic SHA-256-derived 128-bit data-store identifier; login origins use that portal's store, not a global identity-provider cookie jar. Returning to a portal intentionally reuses its store.
@@ -15,7 +19,7 @@ The minimum deployment target is **macOS 14.0**, with **Xcode 15 / Swift 5.9 / m
 
 ## Security boundaries and intentional restrictions
 
-Navigation actions (including frames) and navigation responses must have the exact configured HTTPS portal or an explicitly configured HTTPS login origin. No origin is learned from page content. Popups/new windows are rejected even for trusted origins. Attachment responses, unrenderable MIME types, explicit downloads, file pickers, file drag/drop, default WebKit context menus, JavaScript dialogs and media capture requests are denied. TLS trust stays with the OS; HTTP authentication and client-certificate requests are cancelled. There is no page-to-native message handler, custom URL-scheme handler, filesystem/process/credential bridge, or permissive TLS/ATS override.
+Navigation actions (including frames) and navigation responses must have the exact configured HTTPS portal or an explicitly configured HTTPS login origin. No origin is learned from page content. Popups/new windows are rejected even for trusted origins. Attachment responses, unrenderable MIME types, explicit downloads, file pickers, file drag/drop, default WebKit context menus, JavaScript dialogs and media capture requests are denied. TLS trust stays with the OS; HTTP authentication and client-certificate requests are cancelled. The only page-to-native message handler is the one-way `hehebotNotify` bridge: main frame only, exact portal origin (never a login origin), exactly `{title, body}` strings (control characters stripped, 80/240 character caps), rate limited to 3 per 10 s, nothing returned to the page. There is no custom URL-scheme handler, filesystem/credential bridge, page-reachable process launch, or permissive TLS/ATS override.
 
 `Permissions.js` removes privacy-sensitive web entry points at document start in all frames, including geolocation, clipboard APIs, media, notifications, motion, hardware APIs, file pickers and credential/passkey APIs. It adds no host capability. This is **defense in depth, not a universal WebKit permission delegate or an OS security boundary**. macOS 14 does not expose a supported catch-all permission-denial callback. The intended signed app uses only App Sandbox + outbound-network entitlements, with no location/camera/microphone/file-access/automation entitlement or privacy usage description. The unsigned build helper does **not** apply entitlements; do not treat that output as permission-accepted or use it for untrusted production pages. Actual permission denial, all-frame timing and context-menu behavior require hostile-page checks on macOS. The source does not use private preferences or beta geolocation delegates to conceal this gap.
 
@@ -30,7 +34,7 @@ Do not enable arbitrary page-to-OS access to hide remaining gaps.
 
 Navigation-level 401/403 responses discard the view and display a rejected-session message. TLS/network failures and WebKit content-process termination also stop rather than automatically reload. Reconnect always creates a fresh view and GETs the configured root; it never calls reload/back, replays a POST, submits a task, retries an effect or infers task completion. A network failure may follow a successfully admitted command: inspect remote task history before resending anything. Login-origin redirects remain allowed so explicitly configured authentication can occur in the same store. The shell cannot see API fetch/SSE 401/403 responses through navigation delegates, or distinguish a server's 200 login page from normal content. API/session revocation and task reconciliation remain portal/control-plane duties; the native lock is available without trusting a page's login claim.
 
-No shell polling, wake loop, stream integration, notifications or updater is implemented. Hidden-page activity remains WebKit/portal behavior; do not claim energy savings or release of every background stream from this source.
+No shell polling, wake loop, native stream integration or updater is implemented; notifications come only from the page bridge above. Hidden-page activity remains WebKit/portal behavior; do not claim energy savings or release of every background stream from this source.
 
 ## Verification available without accounts
 
@@ -39,10 +43,12 @@ From the repository root:
 ```sh
 node --test macos/tests/*.test.mjs
 bash -n macos/scripts/build-app.sh
+swift test --package-path macos          # 7 XCTests on this Mac
+bash macos/scripts/build-app.sh          # unsigned app in macos/dist/ (gitignored), then --self-test
 git diff --check
 ```
 
-The Node suite executes the permission-removal JavaScript in a synthetic VM and checks deterministic source wiring/manifests. It does **not** execute Swift, simulate WebKit accurately, or prove runtime isolation. Four XCTest methods independently exercise actual Foundation-based origin/configuration/navigation/response policy, including hostile origins, non-default ports, popups, downloads and revocation boundaries:
+The Node suite executes the permission-removal JavaScript in a synthetic VM and checks deterministic source wiring/manifests. `HehebotPortal --self-test` prints one JSON line (policy, bundled permission script, notification policy, node-control arguments, bundle id) and exits without opening a window, web view, notification or launchd call. The Node suite does **not** execute Swift, simulate WebKit accurately, or prove runtime isolation. Four XCTest methods independently exercise actual Foundation-based origin/configuration/navigation/response policy, including hostile origins, non-default ports, popups, downloads and revocation boundaries:
 
 ```sh
 swift test --package-path macos
@@ -97,4 +103,4 @@ Before acceptance, record OS/Xcode/architecture, build/test output and inspected
 5. Apply and inspect the intended sandbox entitlements only in a separately authorized signing workflow. Verify camera/microphone/location/clipboard/notification/passkey/hardware requests from top-level and child frames produce no unsolicited OS permission grant or prompt. A failure is a release blocker, not a reason to grant broader entitlements.
 6. Accessibility/VoiceOver, menu focus, light/dark rendering and resizing; later, separately authorized real login/SSO/cookie lifecycle, Intel/Apple Silicon behavior and idle/hidden/closed CPU/memory/energy/stream teardown. None are established by Linux tests.
 
-Signing, notarization, updates, notifications, account login, owner-Mac installation and energy acceptance remain unimplemented or unverified release work. No production execution/native-verification flag is changed. `desktop/` remains untouched as the reference contract.
+Signing, notarization and updates remain unimplemented. Live Access login, notification delivery, node start/stop, owner-Mac installation and energy acceptance remain unverified. No production execution/native-verification flag is changed. `desktop/` remains untouched as the reference contract.

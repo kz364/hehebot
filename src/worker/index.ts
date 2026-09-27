@@ -119,8 +119,28 @@ export default {
     requireThat(event.schema_version===1&&typeof event.type==='string'&&event.type.length<=80&&event.data&&typeof event.data==='object'&&!Array.isArray(event.data)&&Object.keys(event).every(k=>['schema_version','type','data'].includes(k)),'INVALID_INPUT','Invalid event envelope.',422);
     return json(unwrap(await control.trigger(source,auth.eventId,await digest(raw,true),event.type,event.data as Record<string,unknown>)),202);
    }
+   // ARCHITECTURE_V2 A9: paired Mac node routes. Not owner (Access JWT)
+   // authenticated: the edge admits the node's Cloudflare Access service token,
+   // and the Durable Object checks the one-time pairing code / node token.
+   if(path==='/node/exchange'){
+    requireThat(request.method==='POST'&&!url.search,'NOT_FOUND','Route unavailable.',404);
+    requireThat(!request.headers.has('Origin'),'ORIGIN_REJECTED','Browsers cannot pair nodes.',403);
+    requireThat(request.headers.get('Content-Type')?.split(';')[0]==='application/json','INVALID_INPUT','Use application/json.',422);
+    const input=parseJson(await readBounded(request,1024));
+    requireThat(input&&typeof input==='object'&&!Array.isArray(input)&&Object.keys(input).every(k=>['code','name'].includes(k)),'INVALID_INPUT','Send code and optional name.',422);
+    const body=input as {code?:unknown;name?:unknown};
+    return json(unwrap(await control.exchangeNodePairing(body.code,body.name)));
+   }
+   if(path==='/node/stream'){
+    requireThat(request.method==='GET'&&!url.search,'NOT_FOUND','Route unavailable.',404);
+    requireThat((request.headers.get('Upgrade')??'').toLowerCase()==='websocket','UPGRADE_REQUIRED','A WebSocket upgrade is required.',426);
+    return control.fetch(request);
+   }
    // Auth is applied before assets as well as API. Local dev is loopback-only.
    const owner=await authenticateOwner(request,env);
+   if(path==='/v1/nodes'&&request.method==='GET')return json(unwrap(await control.getNodeStatus(owner)));
+   if(path==='/v1/nodes/pair'&&request.method==='POST'){assertSameOrigin(request);return json(unwrap(await control.createNodePairing(owner)));}
+   if(path==='/v1/nodes/revoke'&&request.method==='POST'){assertSameOrigin(request);return json(unwrap(await control.revokeNode(owner)));}
    if(path==='/v1/stream'){
     // ARCHITECTURE_V2 A6: same owner authentication and same-origin check as
     // every other /v1 route; only the transport differs. The Durable Object

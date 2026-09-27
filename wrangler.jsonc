@@ -96,7 +96,7 @@
         "EXECUTION_ENABLED": "true",
         "PROVIDER_CONFIG": "{\"provider\":\"fly-sprites\",\"ref\":{\"provider\":\"fly-sprites\",\"id\":\"hehebot-test\"},\"service\":\"hehebot\",\"lifecycleVerified\":true,\"wakeUrl\":\"https://hehebot-test-b2xo6.sprites.app/\"}",
         "ACTION_POLICY_IDS": "[]",
-        "TOOL_POLICY_IDS": "[\"0f7d99a8-9dcc-4150-b555-da7944e2554c\"]",
+        "TOOL_POLICY_IDS": "[\"0f7d99a8-9dcc-4150-b555-da7944e2554c\",\"f1503d17-e75d-4c90-9c9c-2012628b3aea\"]",
         "HEHEBOT_WHATSAPP_READ_POLICIES": "{}",
         "TRIGGER_CONFIG": "{}",
         "NATIVE_VERIFIED": "false",
