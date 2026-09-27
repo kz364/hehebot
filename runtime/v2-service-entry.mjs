@@ -4,14 +4,14 @@ import { lstatSync, readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createSpritesWakeHandler } from './sprites-wake-service.mjs';
+import { createSpritesWakeHandler as createWakeHandler } from './sprites-wake-service.mjs';
+import { HOST_NAMES, loadHost } from './hosts/index.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const HEX64 = /^[a-f0-9]{64}$/;
-const WAKE_HOLD_MS = 120000;
 const CONFIG_KEYS = ['portalOrigin', 'runtimeTokenFile', 'wakeTokenFile', 'accessClientIdFile', 'accessClientSecretFile',
   'tlsCAFile', 'ownerBindingSha256', 'installationId', 'stateRoot', 'binary', 'nativeHome', 'personas',
-  'restrictedPermissions', 'port', 'maintainIntervalMs'];
+  'restrictedPermissions', 'port', 'maintainIntervalMs', 'memoryTokenizers', 'host', 'wakeHoldMs'];
 // Codes that are safe to report; anything else may carry transport detail.
 const REPORTABLE = ['CONTROL_NOT_BOOTABLE', 'OWNER_BINDING_MISMATCH', 'SERVICE_RECOVERY_REQUIRED', 'EXECUTOR_FENCED',
   'NATIVE_STOP_UNCONFIRMED', 'CONTROL_HTTP_ERROR', 'CONTROL_TIMEOUT', 'CONTROL_TRANSPORT_FAILED', 'DRAIN_OUTCOME_UNKNOWN',
@@ -25,7 +25,7 @@ export function privateFile(path) {
   return readFileSync(path, 'utf8').trim();
 }
 
-/** G8 Sprite runtime for v2 execution mode (ARCHITECTURE_V2 A1-A4).
+/** G8 host-neutral runtime for v2 execution mode (ARCHITECTURE_V2 A1-A4).
  * Wake -> fresh boot directory -> codex-service with both lanes (coordinator and
  * task) -> maintain/settle -> once both lanes are idle past the grace period,
  * ask the Worker to prepare and commit sleep -> stop native and wait for the
@@ -40,7 +40,9 @@ export function createV2Runtime(input, dependencies = {}) {
       !(typeof config.ownerBindingSha256 === 'string' && HEX64.test(config.ownerBindingSha256) || config.ownerBindingSha256 === null) || !isAbsolute(config.stateRoot ?? '') || !isAbsolute(config.binary ?? '') ||
       typeof config.installationId !== 'string' || !config.personas || typeof config.personas !== 'object' ||
       config.maintainIntervalMs !== undefined && (!Number.isInteger(config.maintainIntervalMs) ||
-        config.maintainIntervalMs < 250 || config.maintainIntervalMs > 10000)) fail('INVALID_SERVICE_CONFIGURATION');
+        config.maintainIntervalMs < 250 || config.maintainIntervalMs > 10000) ||
+      config.host !== undefined && !HOST_NAMES.includes(config.host) ||
+      config.wakeHoldMs !== undefined && (!Number.isInteger(config.wakeHoldMs) || config.wakeHoldMs < 1000 || config.wakeHoldMs > 600000)) fail('INVALID_SERVICE_CONFIGURATION');
   const { createService, serviceDependencies = {}, readSecret = privateFile, now = Date.now,
     report = value => console.info(JSON.stringify(value)),
     wait = ms => new Promise(ok => setTimeout(ok, ms)), holdWake } = dependencies;
@@ -51,6 +53,7 @@ export function createV2Runtime(input, dependencies = {}) {
     stateDirectory, binary: config.binary, portalOrigin: config.portalOrigin, runtimeTokenFile: config.runtimeTokenFile,
     installationId: config.installationId, personas: config.personas,
     ...(config.restrictedPermissions !== undefined ? { restrictedPermissions: config.restrictedPermissions } : {}),
+    ...(config.memoryTokenizers !== undefined ? { memoryTokenizers: config.memoryTokenizers } : {}),
     ...(config.nativeHome ? { nativeHome: config.nativeHome } : {}),
     ...(config.tlsCAFile ? { tlsCAFile: config.tlsCAFile } : {}),
     ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}) });
@@ -103,11 +106,11 @@ export function createV2Runtime(input, dependencies = {}) {
     if (driving) { pendingEpoch = Math.max(pendingEpoch ?? 0, epoch); return; }
     driving = drive(epoch).finally(() => { driving = null; });
   };
-  // A Sprite pauses once the wake request is answered and no activity is held,
-  // freezing boot until the next request. Hold activity before acknowledging;
-  // the service's own activity hold takes over during start.
-  const handler = createSpritesWakeHandler({ token: readSecret(config.wakeTokenFile), onWake,
-    ...(holdWake ? { prepareWake: async ({ epoch }) => { await holdWake(epoch); return () => {}; } } : {}),
+  // Hosts that pause between requests (hosts/*.mjs holdWake) keep activity
+  // before the wake is acknowledged; the service's own hold takes over during start.
+  const holdMs = config.wakeHoldMs ?? 120000;
+  const handler = createWakeHandler({ token: readSecret(config.wakeTokenFile), onWake,
+    ...(holdWake ? { prepareWake: async ({ epoch }) => { await holdWake(epoch, { holdMs }); return () => {}; } } : {}),
     onFailure: failure => report({ event: 'v2.wake_failed', code: failure }) });
   return {
     handler,
@@ -128,12 +131,8 @@ export function createV2Runtime(input, dependencies = {}) {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
     const config = JSON.parse(privateFile(process.env.HEHEBOT_V2_CONFIG));
-    const { createSpriteCodexService } = await import('./sprites-codex-service.mjs');
-    const { SpritesTasksClient } = await import('../.local/codex-service/sprites.mjs');
-    const { createSpritesTaskTransport } = await import('./sprites-task-transport.mjs');
-    const tasks = new SpritesTasksClient(createSpritesTaskTransport({ timeoutMs: 3000 }), Date.now);
-    const runtime = createV2Runtime(config, { createService: createSpriteCodexService,
-      holdWake: epoch => tasks.hold({ id: `hehebot-v2-wake-${epoch}`, expiresAt: Date.now() + WAKE_HOLD_MS }) });
+    const host = await loadHost(config.host);
+    const runtime = createV2Runtime(config, { createService: host.createService, ...(host.holdWake ? { holdWake: host.holdWake } : {}) });
     const server = runtime.server();
     server.listen(config.port ?? 8080, '0.0.0.0', () => console.info(JSON.stringify({ event: 'v2.service_listening', port: config.port ?? 8080 })));
     const stop = () => server.close(() => process.exit(0));

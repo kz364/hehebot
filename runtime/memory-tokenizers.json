@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "description": "Default model -> tokenizer encoding map for memory budgets. Override or extend per install with `memoryTokenizers` in the runtime service config. A model not listed runs with the Worker's bounded unbudgeted memory snapshot and an owner-visible notice.",
+  "models": {
+    "gpt-5": "o200k_base",
+    "gpt-5.4": "o200k_base",
+    "gpt-5.5": "o200k_base",
+    "gpt-5-codex": "o200k_base"
+  }
+}

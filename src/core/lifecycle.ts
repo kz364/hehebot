@@ -13,6 +13,8 @@ import {appendBotMessageEvent} from './bot-messages';
 import type {Command} from './types';
 const hex64=/^[0-9a-f]{64}$/;
 export type Phase='STOPPED'|'START_REQUESTED'|'BOOTING'|'READY'|'DRAINING'|'STOP_COMMITTED'|'STOPPING'|'RECOVERY_REQUIRED'|'IDLE_PERMITTED';
+export type SuccessorBackoff={baseMs:number;maxMs:number;notifyAfter:number};
+type BackoffState={failures:number;next_at:string|null;last_code:string|null;notified:boolean};
 export type Lifecycle={singleton:number;provider_ref_json:string;boot_id:string|null;epoch:number;phase:Phase;desired_state:'RUN'|'STOP';lease_until:string|null;last_heartbeat:string|null;queue_sequence:number;stop_token:string|null;provider_operation_id:string|null;wake_after_stop:number};
 export type Identity={epoch:number;boot_id:string};
 export type CoordinatorOutcome='completed'|'failed'|'interrupted';
@@ -27,7 +29,9 @@ function operationTime(value:string):string {
  return canonical;
 }
 export class LifecycleCore {
- constructor(public store:Store,public core:ControlCore,private options:{idleMode?:boolean}={}){}
+ constructor(public store:Store,public core:ControlCore,private options:{idleMode?:boolean;bootDeadlineMs?:number;backoff?:SuccessorBackoff}={}){}
+ /** Wake->ready window when configured; otherwise the historical 120 s/90 s windows. */
+ private bootWindow(fallback:number):number{return this.options.bootDeadlineMs??fallback;}
  get():Lifecycle{return this.store.db.all<Lifecycle>('SELECT * FROM lifecycle WHERE singleton=1')[0];}
  initialize(ref:RuntimeRef|Record<string,never>):void{this.store.db.exec("INSERT OR IGNORE INTO lifecycle(singleton,provider_ref_json,epoch,phase,desired_state,queue_sequence,wake_after_stop) VALUES(1,?,0,'STOPPED','STOP',0,0)",JSON.stringify(ref));
   // A never-started lifecycle adopts a runtime configured after first boot; any started one keeps its ref.
@@ -276,12 +280,25 @@ export class LifecycleCore {
    requireThat(!state.boot_id||state.boot_id===bootId,'STALE_EPOCH','Another boot already owns this epoch.');
    requireThat(/^[0-9a-f-]{36}$/i.test(bootId),'INVALID_INPUT','Invalid boot identity.',422);
    const generation=this.core.ownerAlpha.activeGeneration();
-   this.store.db.exec('UPDATE lifecycle SET boot_id=?,lease_until=?,last_heartbeat=? WHERE singleton=1',bootId,new Date(generation?Math.min(Date.parse(generation.policy.expires_at),this.core.options.now().getTime()+90000):this.core.options.now().getTime()+90000).toISOString(),this.core.now());
+   this.store.db.exec('UPDATE lifecycle SET boot_id=?,lease_until=?,last_heartbeat=? WHERE singleton=1',bootId,new Date(generation?Math.min(Date.parse(generation.policy.expires_at),this.core.options.now().getTime()+90000):this.core.options.now().getTime()+this.bootWindow(90000)).toISOString(),this.core.now());
    return {epoch:state.epoch,boot_id:bootId};
   });
  }
  ready(identity:Identity):void {
-  this.store.db.transaction(()=>{this.identity(identity,true);this.store.db.exec("UPDATE lifecycle SET phase='READY' WHERE singleton=1");this.touch();});
+  this.store.db.transaction(()=>{this.identity(identity,true);this.store.db.exec("UPDATE lifecycle SET phase='READY' WHERE singleton=1");
+   if(this.options.bootDeadlineMs!==undefined)this.store.db.exec('UPDATE lifecycle SET lease_until=? WHERE singleton=1',new Date(this.core.options.now().getTime()+90000).toISOString());
+   this.touch();});
+ }
+ /** The runtime reports its own failed boot/run loop: end the generation now
+  * instead of waiting for the lease (A2 fencing; successor per backoff). */
+ abandon(identity:Identity,code:string):void {
+  this.store.db.transaction(()=>{
+   const state=this.get();
+   requireThat(identity.epoch===state.epoch&&identity.boot_id===state.boot_id&&['BOOTING','READY','DRAINING'].includes(state.phase),'STALE_EPOCH','The executor no longer owns this runtime.');
+   this.store.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',desired_state='STOP',lease_until=? WHERE singleton=1",this.core.now());
+   this.interruptGeneration(state.epoch,identity.boot_id,'RUNTIME_ABANDONED');
+   const backoff=this.backoffState();this.setBackoff({...backoff,last_code:code.slice(0,64)});
+  });
  }
  heartbeat(identity:Identity,operations:HeartbeatOperation[]):{lease_until:string;cancellations:string[]} {
   requireThat(operations.length<=100,'INVALID_INPUT','Too many operation records.',422);
@@ -341,7 +358,7 @@ export class LifecycleCore {
     'Historical context and checkpoint exceed the combined read limit. Stored data was retained and no attempt was started.':
     'Memory preparation blocked before execution. No memory was truncated and no attempt was started.'},this.core.now());
  }
- claim(identity:Identity,personaModels?:Record<string,string>,memoryBudget?:MemoryBudgetReceipt,memoryReadPersonas:string[]=[],lane:'coordinator'|'background'='coordinator'):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
+ claim(identity:Identity,personaModels?:Record<string,string>,memoryBudget?:MemoryBudgetReceipt,memoryReadPersonas:string[]=[],lane:'coordinator'|'background'='coordinator',memoryNotice?:{code:'MEMORY_TOKENIZER_UNCONFIGURED';model:string}):{run:Run;submission_key:string;deadline_at:string;owner_alpha_background?:true;text_only?:import('./owner-alpha').TextOnlyProfile}|null {
   return this.store.db.transaction(()=>{
    const state=this.identity(identity);requireThat(state.phase==='READY','STALE_EPOCH','Runtime is draining.');
    requireThat(this.core.options.executionEnabled||this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Execution has not been enabled.');
@@ -451,6 +468,11 @@ export class LifecycleCore {
    if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='claimed' WHERE id=?",run.occurrence_id);
    for(const event of context.context_events)this.store.db.exec('UPDATE consumer_cursors SET consumed_sequence=MAX(consumed_sequence,?) WHERE consumer_id=? AND conversation_id=?',event.sequence,run.persona_id,context.room_id);
    const textOnly=this.core.ownerAlpha.textOnly(run.id);
+    // Degraded, not refused: memory came from the bounded snapshot because the
+    // runtime has no tokenizer configured for this model. Say so once per run.
+    if(memoryNotice&&!this.store.db.all("SELECT 1 FROM events WHERE type='notice' AND cause_id=? AND json_extract(payload_json,'$.reason')='MEMORY_TOKENIZER_UNCONFIGURED' LIMIT 1",run.command_id).length)
+     this.store.event(this.core.options.uuid(),run.persona_id,'notice','system',run.command_id,{kind:'degraded',reason:memoryNotice.code,model:memoryNotice.model,
+      message:`Memory was not token-budgeted: model ${memoryNotice.model} has no tokenizer configured. Add it to memoryTokenizers in the runtime config.`},this.core.now());
    this.touch();return {run:this.store.run(run.id),submission_key:submissionKey,deadline_at:deadline,...(this.core.ownerAlpha.backgroundRoot(run.id)?{owner_alpha_background:true as const}:{}),...(textOnly?{text_only:textOnly}:{})};
   });
  }
@@ -601,6 +623,7 @@ export class LifecycleCore {
      this.core.enqueueTaskEvent({id:run.id,persona_id:run.persona_id,parent_run_id:run.parent_run_id,title:run.title},result.status,
       result.status==='completed'?result.text.slice(0,2000):result.status==='waiting'?'The task is waiting for input.':`Reason: ${result.error_code??'unknown'}.`);
    }
+   if(result.status==='completed')this.resetBackoff();
    if(run.occurrence_id&&result.status!=='waiting')this.store.db.exec('UPDATE occurrences SET status=? WHERE id=?',result.status==='completed'?'completed':'failed',run.occurrence_id);
    // Settlement and follow-up enqueueing do not change id, role or current_attempt.
    if(result.status==='failed'&&result.error_code)this.scheduleRetry(run,result.error_code);
@@ -625,6 +648,7 @@ export class LifecycleCore {
    requireThat(state.phase==='DRAINING'&&state.stop_token===token&&state.queue_sequence===queueSequence&&!this.active(),'SLEEP_DENIED','New work or activity invalidated the stop.');
    requireThat(Object.keys(checkpoint).length>0,'INVALID_INPUT','A checkpoint receipt is required.',422);
    this.store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('checkpoint',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(checkpoint));
+   this.resetBackoff();
    if(this.options.idleMode)this.store.db.exec("UPDATE lifecycle SET phase='IDLE_PERMITTED',desired_state='STOP',boot_id=NULL,lease_until=NULL WHERE singleton=1");
    else this.store.db.exec("UPDATE lifecycle SET phase='STOP_COMMITTED',desired_state='STOP' WHERE singleton=1");
   });
@@ -758,7 +782,7 @@ export class LifecycleCore {
     'CAPABILITY_UNAVAILABLE','Generation advance requires an expired lease, recovery, or a stopped runtime.');
    const priorEpoch=state.epoch,priorBootId=state.boot_id,epoch=priorEpoch+1;
    this.store.db.exec("UPDATE lifecycle SET epoch=?,boot_id=NULL,phase='BOOTING',desired_state='RUN',lease_until=?,last_heartbeat=NULL,stop_token=NULL WHERE singleton=1",
-    epoch,new Date(this.core.options.now().getTime()+90000).toISOString());
+    epoch,new Date(this.core.options.now().getTime()+this.bootWindow(90000)).toISOString());
    if(priorBootId)this.interruptGeneration(priorEpoch,priorBootId,reason);
    return {epoch};
   });
@@ -815,9 +839,34 @@ export class LifecycleCore {
  }
  private async requestWake(provider:RuntimeProvider,ref:RuntimeRef,state:Lifecycle,targetEpoch?:number):Promise<void> {
   const operation=this.core.options.uuid(),epoch=targetEpoch??state.epoch+1;
-  this.store.db.transaction(()=>{this.store.db.exec("UPDATE lifecycle SET phase='START_REQUESTED',epoch=?,boot_id=NULL,provider_operation_id=?,wake_after_stop=0,lease_until=? WHERE singleton=1",epoch,operation,new Date(this.core.options.now().getTime()+120000).toISOString());this.store.db.exec("INSERT INTO controller_operations(id,kind,epoch,status,created_at) VALUES(?,'wake',?,'pending',?)",operation,epoch,this.core.now());});
-  try{await provider.wake(ref,{operationId:operation,epoch});this.store.db.exec("UPDATE lifecycle SET phase='BOOTING',lease_until=? WHERE singleton=1 AND provider_operation_id=? AND phase='START_REQUESTED'",new Date(this.core.options.now().getTime()+120000).toISOString(),operation);this.store.db.exec("UPDATE controller_operations SET status='submitted' WHERE id=?",operation);}
+  this.store.db.transaction(()=>{this.store.db.exec("UPDATE lifecycle SET phase='START_REQUESTED',epoch=?,boot_id=NULL,provider_operation_id=?,wake_after_stop=0,lease_until=? WHERE singleton=1",epoch,operation,new Date(this.core.options.now().getTime()+this.bootWindow(120000)).toISOString());this.store.db.exec("INSERT INTO controller_operations(id,kind,epoch,status,created_at) VALUES(?,'wake',?,'pending',?)",operation,epoch,this.core.now());});
+  try{await provider.wake(ref,{operationId:operation,epoch});this.store.db.exec("UPDATE lifecycle SET phase='BOOTING',lease_until=? WHERE singleton=1 AND provider_operation_id=? AND phase='START_REQUESTED'",new Date(this.core.options.now().getTime()+this.bootWindow(120000)).toISOString(),operation);this.store.db.exec("UPDATE controller_operations SET status='submitted' WHERE id=?",operation);}
   catch(error){this.store.db.exec("UPDATE controller_operations SET status='unknown',error_code='TEMPORARY_UNAVAILABLE' WHERE id=?",operation);this.store.db.exec("UPDATE lifecycle SET phase='RECOVERY_REQUIRED',desired_state='STOP' WHERE singleton=1 AND provider_operation_id=?",operation);throw error;}
+ }
+ private backoffState():BackoffState{
+  const row=this.store.db.all<{value_json:string}>("SELECT value_json FROM runtime_metadata WHERE key='successor_backoff'")[0];
+  return row?JSON.parse(row.value_json) as BackoffState:{failures:0,next_at:null,last_code:null,notified:false};
+ }
+ private setBackoff(value:BackoffState):void{
+  this.store.db.exec("INSERT INTO runtime_metadata(key,value_json) VALUES('successor_backoff',?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",JSON.stringify(value));
+ }
+ /** Clears the failed-start streak once the runtime demonstrably works. */
+ private resetBackoff():void{if(this.backoffState().failures>0)this.setBackoff({failures:0,next_at:null,last_code:null,notified:false});}
+ private successorDelayed():boolean{const next=this.backoffState().next_at;return next!==null&&next>this.core.now();}
+ /** Count this successor start; schedule the next allowed one and tell the owner once a streak is long. */
+ private admitSuccessor():boolean{
+  if(this.successorDelayed())return false;
+  const policy=this.options.backoff;const prior=this.backoffState();const failures=prior.failures+1;
+  const delay=policy?Math.min(policy.maxMs,policy.baseMs*2**(failures-1)):0;
+  const notify=!!policy&&failures>=policy.notifyAfter&&!prior.notified;
+  this.setBackoff({failures,next_at:delay?new Date(this.core.options.now().getTime()+delay).toISOString():null,last_code:prior.last_code,notified:prior.notified||notify});
+  if(notify){
+   const run=this.nextClaimableRun()??this.nextClaimableRun('background');
+   if(run)this.store.event(this.core.options.uuid(),run.persona_id,'notice','system',run.command_id,
+    {kind:'runtime',reason:'RUNTIME_START_FAILING',failures,last_code:prior.last_code,next_retry_at:delay?new Date(this.core.options.now().getTime()+delay).toISOString():null,
+     message:`The runtime failed to start ${failures} times in a row${prior.last_code?` (${prior.last_code})`:''}. Retrying with backoff; queued work is kept.`},this.core.now());
+  }
+  return true;
  }
  async drive(provider:RuntimeProvider):Promise<void> {
   this.watchdog();this.retryDue();let state=this.get();const ref=JSON.parse(state.provider_ref_json) as RuntimeRef;
@@ -825,12 +874,14 @@ export class LifecycleCore {
   if(this.options.idleMode){
    requireThat(provider.capabilities.stopMode==='provider-idle','CAPABILITY_UNAVAILABLE','Provider idle mode does not match the configured lifecycle.');
    if(state.phase==='RECOVERY_REQUIRED'&&!this.core.ownerAlpha.policy&&this.claimableWork()){
+    if(this.successorDelayed())return;
     // V3 (ARCHITECTURE_V2 A2, AGENTS.md trap 1): same successor path as the
     // stop-capable branch below. The epoch advance fences the retiring
     // generation; the Sprite's flock takeover handles a live process.
     const observedState=state,observation=await provider.observe(ref);state=this.get();
     if(state.epoch!==observedState.epoch||state.phase!=='RECOVERY_REQUIRED'||state.provider_operation_id!==observedState.provider_operation_id)return;
     requireThat(provider.capabilities.explicitWake&&observation.persistentState==='retained','CAPABILITY_UNAVAILABLE','The same persistent runtime is not confirmed available.');
+    if(!this.admitSuccessor())return;
     const {epoch}=this.advanceGeneration('GENERATION_ADVANCED');
     await this.requestWake(provider,ref,this.get(),epoch);return;
    }

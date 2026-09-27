@@ -694,7 +694,8 @@ export class ControlCore {
   const parentDepth=(JSON.parse(parent.context_json) as ContextSnapshot).causal_depth??0;
   const depth=parentDepth+1;
   if(depth>3)return; // Loop bound (ARCHITECTURE_V2 A4): no further automatic wake.
-  const line=`Task "${task.title??task.id}" is now ${status}. ${summary}`.slice(0,4000);
+  const posted=this.store.db.all<{n:number}>('SELECT COUNT(*) AS n FROM bot_messages WHERE run_id=?',task.id)[0]?.n??0;
+  const line=`Task "${task.title??task.id}" is now ${status}.${posted?` The task already posted ${posted} message(s) to the owner.`:''} ${summary}`.slice(0,4000);
   const wakeKey=`task_wake:${task.persona_id}`;
   const pending=this.store.db.all<{value_json:string}>('SELECT value_json FROM runtime_metadata WHERE key=?',wakeKey)[0];
   if(pending){

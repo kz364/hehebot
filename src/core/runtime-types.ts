@@ -34,7 +34,8 @@ export type RuntimePayloads={
  'native-child':Base & {child:NativeChildReceipt;started?:boolean};
  'resource-acquire':Base & Attempt & {resources:string[]};
  'resource-release':Base & Attempt & {resources:string[]};
- boot:{boot_id:string};ready:Base;claim:Base & {persona_models?:Record<string,string>;memory_budget?:MemoryBudgetReceipt;memory_read_personas?:string[];lane?:'coordinator'|'background'};
+ boot:{boot_id:string};ready:Base;claim:Base & {persona_models?:Record<string,string>;memory_budget?:MemoryBudgetReceipt;memory_read_personas?:string[];lane?:'coordinator'|'background';memory_notice?:{code:'MEMORY_TOKENIZER_UNCONFIGURED';model:string}};
+ abandon:Base & {code:string};
  'memory-prepare':Base & {persona_models:Record<string,string>;memory_read_personas?:string[]};
  heartbeat:Base & {operations:HeartbeatOperation[]};
  submitted:Base & Attempt & {native_ref:string};

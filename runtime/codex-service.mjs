@@ -14,7 +14,7 @@ import { CodexOperations } from './codex-operations.mjs';
 import { spawnCodex } from './codex-transport.mjs';
 import { CodexQuestionBinding } from './codex-questions.mjs';
 import { ExecutionSupervisor } from './execution-supervisor.mjs';
-import { countSelectedModelMemory } from './memory-read.mjs';
+import { createMemoryCounter, memoryTokenizerMap } from './memory-read.mjs';
 import { SpritesActivityGuard } from './sprites-activity-guard.mjs';
 import { ownerAlphaPolicy } from './owner-alpha-policy.mjs';
 import { stageWarmClaim, warmGenerationBinding } from './owner-alpha-warm-binding.mjs';
@@ -270,6 +270,7 @@ export function createCodexService(config, dependencies) {
     get journal() { return journal; },
     async start() {
       if (phase !== 'stopped') fail('SERVICE_ALREADY_STARTED');
+      let bootIdentity = null;
       // Hosted composition requires a pinned owner and real activity custody.
       // Control admission needs its separate explicit hosted policy and marker.
       if (hosted && (typeof config.hostedOwnerBindingSha256 !== 'string' ||
@@ -326,10 +327,11 @@ export function createCodexService(config, dependencies) {
       } else if (config.backgroundProfile !== undefined) fail('INVALID_SERVICE_CONFIGURATION');
       if (config.textOnlyProfile !== undefined && !alpha?.text_only) fail('INVALID_SERVICE_CONFIGURATION');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs', 'backgroundTaskLane', 'executionMode', 'ownerBindingSha256'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs', 'backgroundTaskLane', 'executionMode', 'ownerBindingSha256', 'memoryTokenizers'].includes(key)) ||
         config.nativeHome !== undefined && (!alpha && !v2Mode || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean' ||
+        config.memoryTokenizers !== undefined && (() => { try { memoryTokenizerMap(config.memoryTokenizers); return false; } catch { return true; } })() ||
         // The background task lane is a plain ordinary-execution concern: it is
         // never offered on an owner-alpha/hosted staged boot (single-lane always).
         config.backgroundTaskLane !== undefined && (typeof config.backgroundTaskLane !== 'boolean' || alpha) ||
@@ -420,6 +422,7 @@ export function createCodexService(config, dependencies) {
         } else if (status?.phase !== 'BOOTING' || status.execution_enabled !== true || !Number.isSafeInteger(status.epoch)) fail('CONTROL_NOT_BOOTABLE');
         const identity = await starting(() => control.request('boot', { boot_id: bootId }));
         if (identity?.epoch !== (alphaGeneration?.epoch ?? (alpha ? 1 : status.epoch)) || identity.boot_id !== bootId) fail('INVALID_BOOT_IDENTITY');
+        bootIdentity = identity;
         await starting(() => journal.update('service', { phase: 'starting', identity }));
         // Only local supervised execution has no provider hold. Hosted alpha
         // retains the provider Task on stop/uncertainty; it cannot prove sleep.
@@ -689,10 +692,11 @@ export function createCodexService(config, dependencies) {
             }
           }
         };
+        const memoryCounter = createMemoryCounter(memoryTokenizerMap(config.memoryTokenizers ?? {}));
         supervisor = new ExecutionSupervisor({ control, native, journal, identity, installationId: config.installationId,
           personas: config.personas, events: router, activity, operations, now, onRecovery: recover,
           admission: admit,
-          ...(!alpha ? { memoryCounter: countSelectedModelMemory } : {}),
+          ...(!alpha ? { memoryCounter } : {}),
           ...(alphaWarm ? { claimStage: claim => stageWarmClaim(claim, {
             installationId: config.installationId, stateDirectory: config.stateDirectory,
             generation: { epoch: alphaGeneration.epoch, boot_id: alphaGeneration.boot_id,
@@ -736,6 +740,10 @@ export function createCodexService(config, dependencies) {
         recover(); await service.stop();
         // Keep the underlying identifier (never its message) so operators can see why start failed.
         const cause = typeof error?.code === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(error.code) ? error.code : error?.name ?? 'unknown';
+        // v2: report the failed boot so the Worker ends this generation now
+        // instead of waiting out the boot deadline. Best effort; the deadline
+        // still covers a runtime that cannot reach the Worker.
+        if (v2Mode && bootIdentity) await control.request('abandon', { identity: bootIdentity, code: String(cause).replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 64) || 'unknown' }).catch(() => {});
         throw Object.assign(new Error('SERVICE_RECOVERY_REQUIRED'), { code: error.code === 'NATIVE_COMPATIBILITY_GATE_BLOCKED' ? error.code : 'SERVICE_RECOVERY_REQUIRED', causeCode: String(cause).slice(0, 64) });
       }
     },

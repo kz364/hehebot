@@ -14,6 +14,7 @@ import { exportControl } from '../core/control-export';
 import { TimelineRetention } from '../core/timeline-retention';
 import { ResultRetention } from '../core/result-retention';
 import { LifecycleCore } from '../core/lifecycle';
+import { parseLifecycleTimings } from '../core/lifecycle-config';
 import { EffectLedger } from '../core/effects';
 import { RootChildEffects } from '../core/root-child-effects';
 import { TaskSteering } from '../core/task-steering';
@@ -100,7 +101,7 @@ export class PersonalControl extends DurableObject<Env> {
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
   try{idleMode=createProvider(JSON.parse(env.PROVIDER_CONFIG) as ProviderConfig).capabilities.stopMode==='provider-idle';}catch{}
-  this.lifecycle=new LifecycleCore(this.store,this.core,{idleMode});
+  this.lifecycle=new LifecycleCore(this.store,this.core,{idleMode,...parseLifecycleTimings(env)});
   this.flights=new FlightRestoreIntegration(this.store,this.core,this.lifecycle,{enabled:env.FLIGHT_RESTORE_VERIFIED==='true',policyId:env.FLIGHT_RESTORE_POLICY_ID??''});
   this.ctx.blockConcurrencyWhile(async()=>{try{
    if(!db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_versions'").length)db.exec(schema.replace('PRAGMA foreign_keys = ON;',''));
@@ -477,7 +478,8 @@ export class PersonalControl extends DurableObject<Env> {
    case 'boot':result=this.lifecycle.registerBoot(command.payload.boot_id);break;
    case 'ready':this.lifecycle.ready(command.payload.identity);break;
    case 'memory-prepare':result=this.lifecycle.prepareMemory(command.payload.identity,command.payload.persona_models,command.payload.memory_read_personas);break;
-   case 'claim':result=this.lifecycle.claim(command.payload.identity,command.payload.persona_models,command.payload.memory_budget,command.payload.memory_read_personas,command.payload.lane);break;
+   case 'claim':result=this.lifecycle.claim(command.payload.identity,command.payload.persona_models,command.payload.memory_budget,command.payload.memory_read_personas,command.payload.lane,command.payload.memory_notice);break;
+   case 'abandon':this.lifecycle.abandon(command.payload.identity,command.payload.code);break;
    case 'heartbeat':result=this.lifecycle.heartbeat(command.payload.identity,command.payload.operations);break;
    case 'submitted':this.lifecycle.submitted(command.payload.identity,command.payload.run_id,command.payload.attempt,command.payload.native_ref);break;
    case 'coordinator-release':{

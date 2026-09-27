@@ -50,6 +50,19 @@
     {
       "type":"object","additionalProperties":false,
       "properties": {
+        "type":{"const":"abandon"},
+        "payload": {
+          "type":"object","additionalProperties":false,
+          "properties": {
+            "identity":{"$ref":"#/$defs/runtimeIdentity"},
+            "code":{"type":"string","pattern":"^[A-Za-z0-9_.-]{1,64}$"}
+          },"required":["identity","code"]
+        }
+      },"required":["type","payload"]
+    },
+    {
+      "type":"object","additionalProperties":false,
+      "properties": {
         "type":{"const":"memory-prepare"},
         "payload": {
           "type":"object","additionalProperties":false,
@@ -552,6 +565,7 @@
           "additionalProperties": false,
           "properties": {
             "memory_budget": {"$ref":"#/$defs/memoryBudget"},
+            "memory_notice": {"type":"object","additionalProperties":false,"properties":{"code":{"const":"MEMORY_TOKENIZER_UNCONFIGURED"},"model":{"type":"string","pattern":"^[a-zA-Z0-9._-]{1,128}$"}},"required":["code","model"]},
             "memory_read_personas":{"type":"array","maxItems":256,"uniqueItems":true,"items":{"type":"string","format":"uuid"}},
             "lane": {"type":"string","enum":["coordinator","background"]},
             "persona_models": {

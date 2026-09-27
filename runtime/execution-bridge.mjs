@@ -20,7 +20,8 @@ function coordinatorGuidance(allowedTools = []) {
   const lines = allowedTools.map(name => TASK_TOOL_GUIDANCE[name]).filter(Boolean);
   if (!lines.length) return undefined;
   return ['You are the coordinator for this conversation. Reply to the owner only through hehebot_send_message.',
-    ...lines, 'When a background task completes, fails, is cancelled or needs input, you are woken with its result; relay it to the owner via hehebot_send_message.'].join(' ');
+    ...lines, 'When a background task completes, fails, is cancelled or needs input, you are woken with its result; relay it to the owner via hehebot_send_message. ' +
+    'If the wake says the task already posted its result to the owner, do not repeat it and do not send a bare acknowledgement such as "Done."; send nothing unless you have something to add.'].join(' ');
 }
 // V4b (ARCHITECTURE_V2 A4, docs/AGENT_MODEL.md): concise instructions composed
 // only into a coordinator task run's own isolated turn (never the coordinator's).
@@ -111,7 +112,7 @@ export class ExecutionBridge {
       if (prior && !['complete', 'released'].includes(prior.phase)) return prior;
       if (prior?.phase === 'released' && !prior.families?.find(row => row.attemptId === prior.attemptId)?.coordinatorRelease?.acknowledged) return prior;
       if ((prior?.families ?? []).filter(row => row.phase !== 'complete').length >= 32) return prior;
-      let preparation, memory_budget;
+      let preparation, memory_budget, memory_notice;
       if (this.memoryCounter) {
         // Preparation/counting cannot own an attempt. Do not journal claim_unknown
         // until a claim can actually be sent, and never fall back on count failure.
@@ -130,19 +131,29 @@ export class ExecutionBridge {
             typeof preparation.global !== 'string' || typeof preparation.scoped !== 'string') fail('INVALID_MEMORY_PREPARATION');
         const { schema_version, run_id, attempt, selected_model, global, scoped } = preparation;
         if (hash({ schema_version, run_id, attempt, selected_model, global, scoped }) !== preparation.sha256) fail('INVALID_MEMORY_PREPARATION');
-        const counts = await this.memoryCounter({ selected_model, global, scoped });
-        if (counts?.schema_version !== 1 || counts.selected_model !== selected_model ||
-            counts.tokenizer !== 'gpt-tokenizer@4.0.0/o200k_base/ordinary-v1' ||
-            ![counts.global_tokens, counts.scoped_tokens].every(count => Number.isSafeInteger(count) && count >= 0)) fail('INVALID_MEMORY_COUNT');
-        memory_budget = { schema_version, run_id, attempt, selected_model, sha256: preparation.sha256,
-          tokenizer: counts.tokenizer, global_tokens: counts.global_tokens, scoped_tokens: counts.scoped_tokens };
+        let counts;
+        // Degrade, don't crash: a model with no configured tokenizer claims
+        // without a budget (the Worker uses its bounded snapshot) and the owner
+        // sees a notice. Any other counting failure still refuses the claim.
+        try { counts = await this.memoryCounter({ selected_model, global, scoped }); }
+        catch (error) {
+          if (error?.code !== 'MEMORY_MODEL_UNSUPPORTED') throw error;
+          memory_notice = { code: 'MEMORY_TOKENIZER_UNCONFIGURED', model: selected_model };
+        }
+        if (!memory_notice) {
+          if (counts?.schema_version !== 1 || counts.selected_model !== selected_model ||
+              counts.tokenizer !== 'gpt-tokenizer@4.0.0/o200k_base/ordinary-v1' ||
+              ![counts.global_tokens, counts.scoped_tokens].every(count => Number.isSafeInteger(count) && count >= 0)) fail('INVALID_MEMORY_COUNT');
+          memory_budget = { schema_version, run_id, attempt, selected_model, sha256: preparation.sha256,
+            tokenizer: counts.tokenizer, global_tokens: counts.global_tokens, scoped_tokens: counts.scoped_tokens };
+        }
       }
       // An unanswered claim can already own work. Never issue another claim after restart.
       if (prior) await this.journal.update(this.cursor, { phase: 'claim_unknown', claim: null, attemptId: null, nativeRunId: null, result: null });
       else await this.journal.putIfAbsent(this.cursor, { phase: 'claim_unknown', identity: this.identity });
       let claim;
       try { claim = await this.control.request('claim', { identity: this.identity, persona_models,
-        ...(this.lane === 'background' ? { lane: 'background' } : {}), ...(memory_budget ? { memory_budget, memory_read_personas } : {}) }); }
+        ...(this.lane === 'background' ? { lane: 'background' } : {}), ...(memory_budget ? { memory_budget, memory_read_personas } : {}), ...(memory_notice ? { memory_notice } : {}) }); }
       catch { return this.journal.update(this.cursor, { phase: 'claim_unknown' }); }
       if (claim === null) return this.journal.update(this.cursor, { phase: 'complete' });
       if (!claim?.run?.id || !Number.isSafeInteger(claim.run.current_attempt) ||

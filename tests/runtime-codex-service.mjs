@@ -101,16 +101,37 @@ test('ordinary memory read grant persists the admitted model and baseline, never
   await service.stop();
 });
 
-for (const model of ['gpt-5-NOT-A-MODEL', 'gpt-5.5-unreviewed', 'gpt-4', 'GPT-5.5']) test(`ordinary service refuses unmapped ${model} before claim, without prefix fallback`, async t => {
-  const f = await fixture(t);
+// Degrade, don't crash: an unmapped model (exact match only, no prefix
+// fallback) claims without a token budget and tells the Worker why.
+for (const model of ['gpt-5-NOT-A-MODEL', 'gpt-5.5-unreviewed', 'gpt-4', 'GPT-5.5']) test(`ordinary service degrades unmapped ${model} to an unbudgeted claim, without prefix fallback`, async t => {
+  const f = await fixture(t), request = f.dependencies.control.request, claims = [];
   f.config.personas.bot.model = model;
-  const service = createCodexService(f.config, f.dependencies);
+  const service = createCodexService(f.config, { ...f.dependencies, control: { request: async (type, payload) => {
+    if (type === 'claim' && payload.lane !== 'background') claims.push(payload);
+    return request(type, payload);
+  } } });
   t.after(() => service.stop());
-  await assert.rejects(service.start(), { code: 'SERVICE_RECOVERY_REQUIRED' });
+  await service.start();
   assert.ok(f.calls.includes('memory-prepare'));
-  assert.equal(f.calls.includes('claim'), false);
-  assert.equal(f.calls.some(call => call.method === 'thread/start'), false);
-  assert.equal(await service.journal.get(service.supervisor.bridge.cursor), null);
+  assert.equal(claims.length, 1);
+  assert.equal(claims[0].memory_budget, undefined);
+  assert.deepEqual(claims[0].memory_notice, { code: 'MEMORY_TOKENIZER_UNCONFIGURED', model });
+  await service.stop();
+});
+
+test('memoryTokenizers config maps a new model to a budgeted claim', async t => {
+  const f = await fixture(t), request = f.dependencies.control.request, claims = [];
+  f.config.personas.bot.model = 'gpt-5.6-luna';
+  const service = createCodexService({ ...f.config, memoryTokenizers: { 'gpt-5.6-luna': 'o200k_base' } }, { ...f.dependencies, control: { request: async (type, payload) => {
+    if (type === 'claim' && payload.lane !== 'background') claims.push(payload);
+    return request(type, payload);
+  } } });
+  t.after(() => service.stop());
+  await service.start();
+  assert.equal(claims.length, 1);
+  assert.equal(claims[0].memory_budget?.selected_model, 'gpt-5.6-luna');
+  assert.equal(claims[0].memory_notice, undefined);
+  await service.stop();
 });
 
 test('ordinary service retains over-budget counts for Worker refusal instead of truncating or skipping preparation', async t => {

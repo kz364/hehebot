@@ -356,9 +356,13 @@ async function outboxForget(nonce){
  outboxSaveLocalStorageMirror();
 }
 function outboxForConversation(id){return [...outboxRecords.values()].filter(r=>r.conversation_id===id).sort((a,b)=>a.created_at.localeCompare(b.created_at)||a.nonce.localeCompare(b.nonce));}
+// The stream can deliver the committed echo before the send's POST resolves;
+// a later 'accepted' must not resurrect a record already echoed.
+const outboxEchoed=new Set();
 async function outboxSetPhase(record,phase,extra={}){
+ if(outboxEchoed.has(record.nonce))return;
  Object.assign(record,extra,{phase});
- if(phase==='echoed'){outboxRecords.delete(record.nonce);await outboxForget(record.nonce);return;}
+ if(phase==='echoed'){outboxEchoed.add(record.nonce);outboxRecords.delete(record.nonce);await outboxForget(record.nonce);return;}
  outboxRecords.set(record.nonce,record);await outboxPersist(record);
 }
 async function outboxEnqueue(conversationId,text){
@@ -617,6 +621,12 @@ function render(){
      const m=node('article',undefined,'message bot');const h=node('div',undefined,'message-head');h.append(node('strong',object?.body.name??'Assistant'),node('time',time(event.created_at)),node('span','(legacy)','status'));
      m.append(h,node('div',legacyText,'message-body'));timeline.append(m);
     }
+   }else if(event.type==='notice'&&['degraded','runtime'].includes(event.payload.kind)&&typeof event.payload.message==='string'){
+    // Owner-visible degraded operation (e.g. memory without a token budget,
+    // runtime failing to start): always shown, never search-filtered.
+    const e=node('div',undefined,'event');e.setAttribute('role','status');
+    e.append(node('span',event.payload.kind==='runtime'?'Runtime':'Degraded','status'),node('span',event.payload.message));
+    timeline.append(e);
    }else if(event.type==='notice'&&event.payload.kind==='needs_you'){
     // V2: a needs_you notice is owner-visible uncertainty, not a search-filtered
     // bubble -- it must always render, even when a text query is active.
