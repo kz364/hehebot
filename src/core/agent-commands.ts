@@ -8,6 +8,8 @@ import {MEMORY_TOKENIZER,MEMORY_READ_POLICY,projectMemory} from './memory-contex
 // Stable IDs in the existing UUID tool-policy registry. Installing code does not
 // grant these capabilities: operator configuration and persona adoption are required.
 export const SKILL_PROPOSE_POLICY='46b2cbdd-d227-4f54-bffa-33148aad0134';
+// Browser use via runtime/browser-gateway.mjs (same value as BROWSER_POLICY there).
+export const BROWSER_POLICY='0f7d99a8-9dcc-4150-b555-da7944e2554c';
 export const ROUTINE_MANAGE_POLICY='f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 export {MEMORY_READ_POLICY} from './memory-context';
 

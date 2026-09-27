@@ -11,7 +11,7 @@ const fail = code => { throw Object.assign(new Error(code), { code }); };
 const HEX64 = /^[a-f0-9]{64}$/;
 const CONFIG_KEYS = ['portalOrigin', 'runtimeTokenFile', 'wakeTokenFile', 'accessClientIdFile', 'accessClientSecretFile',
   'tlsCAFile', 'ownerBindingSha256', 'installationId', 'stateRoot', 'binary', 'nativeHome', 'personas',
-  'restrictedPermissions', 'port', 'maintainIntervalMs', 'memoryTokenizers', 'host', 'wakeHoldMs'];
+  'restrictedPermissions', 'port', 'maintainIntervalMs', 'memoryTokenizers', 'host', 'wakeHoldMs', 'browser'];
 // Codes that are safe to report; anything else may carry transport detail.
 const REPORTABLE = ['CONTROL_NOT_BOOTABLE', 'OWNER_BINDING_MISMATCH', 'SERVICE_RECOVERY_REQUIRED', 'EXECUTOR_FENCED',
   'NATIVE_STOP_UNCONFIRMED', 'CONTROL_HTTP_ERROR', 'CONTROL_TIMEOUT', 'CONTROL_TRANSPORT_FAILED', 'DRAIN_OUTCOME_UNKNOWN',
@@ -54,6 +54,7 @@ export function createV2Runtime(input, dependencies = {}) {
     installationId: config.installationId, personas: config.personas,
     ...(config.restrictedPermissions !== undefined ? { restrictedPermissions: config.restrictedPermissions } : {}),
     ...(config.memoryTokenizers !== undefined ? { memoryTokenizers: config.memoryTokenizers } : {}),
+    ...(config.browser !== undefined ? { browser: config.browser } : {}),
     ...(config.nativeHome ? { nativeHome: config.nativeHome } : {}),
     ...(config.tlsCAFile ? { tlsCAFile: config.tlsCAFile } : {}),
     ...(config.accessClientIdFile ? { accessClientIdFile: config.accessClientIdFile, accessClientSecretFile: config.accessClientSecretFile } : {}) });

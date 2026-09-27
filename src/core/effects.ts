@@ -35,7 +35,9 @@ export class EffectLedger {
   requireThat(run.current_attempt===input.attempt&&run.status==='running','REVISION_CONFLICT','Effect is not associated with a running attempt.');
   requireThat(run.context_json!==null,'CONTEXT_PREPARATION_LIMIT','Historical context exceeds the effect authorization read limit. Stored context and effects were retained.');
   const context=JSON.parse(run.context_json) as ContextSnapshot;
-  if(input.classification!=='read_only')requireThat(context.authorization_policy_ids.includes(input.authorization_ref),'FORBIDDEN','This effect is not authorized by the run policy.',403);
+  // Routine action policies, or a tool policy granted to this run's persona
+  // snapshot (a task's snapshot carries only its admitted capabilities).
+  if(input.classification!=='read_only')requireThat(context.authorization_policy_ids.includes(input.authorization_ref)||(context.persona?.body?.tool_policy_ids??[]).includes(input.authorization_ref),'FORBIDDEN','This effect is not authorized by the run policy.',403);
   if(input.classification==='idempotent')requireThat(input.provider_idempotency_key,'INVALID_INPUT','Idempotent effects require a provider key.',422);
   const existing=this.store.db.all<Pick<EffectIntent,'id'|'request_digest'|'run_id'|'classification'|'authorization_ref'|'provider_idempotency_key'>&{status:string}>('SELECT id,request_digest,run_id,classification,authorization_ref,provider_idempotency_key,status FROM effects WHERE action_key=?',input.action_key)[0];
   if(existing){requireThat(existing.request_digest===input.request_digest&&existing.run_id===input.run_id&&existing.classification===input.classification&&existing.authorization_ref===input.authorization_ref&&existing.provider_idempotency_key===input.provider_idempotency_key,'IDEMPOTENCY_CONFLICT','Effect key conflicts with an existing action.');return {id:existing.id,status:existing.status};}

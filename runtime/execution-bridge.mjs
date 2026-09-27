@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { BROWSER_POLICY } from './browser-gateway.mjs';
 
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -16,8 +17,10 @@ const TASK_TOOL_GUIDANCE = Object.freeze({
   hehebot_queue_followup: 'hehebot_queue_followup delivers as the task\'s next turn once its current turn ends.',
   hehebot_cancel_task: 'Call hehebot_cancel_task to stop a task the owner no longer wants.',
 });
-function coordinatorGuidance(allowedTools = []) {
+const BROWSER_GUIDANCE = 'Browser tools reach the live web. If a page needs a login, verification code or CAPTCHA, tell the owner what is needed and stop; never repeat a page action whose outcome was unknown.';
+function coordinatorGuidance(allowedTools = [], grants = []) {
   const lines = allowedTools.map(name => TASK_TOOL_GUIDANCE[name]).filter(Boolean);
+  if (lines.length && grants.includes(BROWSER_POLICY)) lines.push(`${BROWSER_GUIDANCE} To let a background task browse, pass capabilities ["${BROWSER_POLICY}"] to hehebot_start_task.`);
   if (!lines.length) return undefined;
   return ['You are the coordinator for this conversation. Reply to the owner only through hehebot_send_message.',
     ...lines, 'When a background task completes, fails, is cancelled or needs input, you are woken with its result; relay it to the owner via hehebot_send_message. ' +
@@ -25,8 +28,9 @@ function coordinatorGuidance(allowedTools = []) {
 }
 // V4b (ARCHITECTURE_V2 A4, docs/AGENT_MODEL.md): concise instructions composed
 // only into a coordinator task run's own isolated turn (never the coordinator's).
-function taskExecutorGuidance(personaName) {
+function taskExecutorGuidance(personaName, grants = []) {
   return `You are a task executor${personaName ? ` for ${personaName}` : ''}. ` +
+    (grants.includes(BROWSER_POLICY) ? `${BROWSER_GUIDANCE} ` : '') +
     'Post progress or results with hehebot_send_message sparingly, not for every step. ' +
     'Your final answer is relayed to the owner by the coordinator; you do not talk to the owner directly.';
 }
@@ -203,10 +207,10 @@ export class ExecutionBridge {
           ...(claim.run.current_attempt > 1 && claim.run.checkpoint_json
             ? { durable_checkpoint: JSON.parse(claim.run.checkpoint_json) } : {}),
           ...(claim.run.role !== 'background' && claim.role === undefined
-            ? (guidance => guidance ? { coordinator_guidance: guidance } : {})(coordinatorGuidance(persona.allowedTools))
+            ? (guidance => guidance ? { coordinator_guidance: guidance } : {})(coordinatorGuidance(persona.allowedTools, context.persona?.body?.tool_policy_ids ?? []))
             : {}),
           ...(claim.run.role === 'background' && claim.role === undefined && context.coordinator_task
-            ? { task_guidance: taskExecutorGuidance(persona.agentId) } : {}) }),
+            ? { task_guidance: taskExecutorGuidance(persona.agentId, context.persona?.body?.tool_policy_ids ?? []) } : {}) }),
       };
       await this.journal.update(this.cursor, { phase: 'submission_unknown', attemptId: input.attemptId });
       let submitted;

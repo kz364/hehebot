@@ -5,6 +5,7 @@ import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { AGENT_TOOL_NAMES, readAccessCredentials } from './agent-tools.mjs';
+import { BROWSER_POLICY, BROWSER_TOOLS, browserLimits } from './browser-gateway.mjs';
 import { ControlClient } from './control-client.mjs';
 import { FileJournal } from './file-journal.mjs';
 import { CodexAdapter, PINNED_CODEX, RESTRICTED_CODEX_FEATURES, projectOutputMessage } from './codex-adapter.mjs';
@@ -327,8 +328,11 @@ export function createCodexService(config, dependencies) {
       } else if (config.backgroundProfile !== undefined) fail('INVALID_SERVICE_CONFIGURATION');
       if (config.textOnlyProfile !== undefined && !alpha?.text_only) fail('INVALID_SERVICE_CONFIGURATION');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs', 'backgroundTaskLane', 'executionMode', 'ownerBindingSha256', 'memoryTokenizers'].includes(key)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs', 'backgroundTaskLane', 'executionMode', 'ownerBindingSha256', 'memoryTokenizers', 'browser'].includes(key)) ||
         config.nativeHome !== undefined && (!alpha && !v2Mode || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
+        config.browser !== undefined && (!v2Mode || !config.browser || typeof config.browser !== 'object' ||
+          Object.keys(config.browser).some(key => !['dir', 'limits'].includes(key)) || typeof config.browser.dir !== 'string' || !isAbsolute(config.browser.dir) ||
+          (() => { try { browserLimits(config.browser.limits ?? {}); return false; } catch { return true; } })()) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean' ||
         config.memoryTokenizers !== undefined && (() => { try { memoryTokenizerMap(config.memoryTokenizers); return false; } catch { return true; } })() ||
@@ -668,6 +672,24 @@ export function createCodexService(config, dependencies) {
               tools: Object.fromEntries(allowedTools.map(name => [name, { approval_mode: 'approve' }])),
               ...(permissions ? { enabled_tools: allowedTools } : {}),
             } };
+            // Browser use only through the hehebot-browser gateway, and only when
+            // the Worker-side grant (persona tool policy, or the task's admitted
+            // capabilities) includes it. Approval is the gateway's fence.
+            if (config.browser && (taskContext.persona?.body?.tool_policy_ids ?? []).includes(BROWSER_POLICY)) {
+              const browserKey = `browser-${input.attemptId}`;
+              const browserGrant = { origin: grant.origin, tokenFile: grant.tokenFile,
+                ...(grant.accessClientIdFile ? { accessClientIdFile: grant.accessClientIdFile, accessClientSecretFile: grant.accessClientSecretFile } : {}),
+                identity, runId: run.id, attempt: run.current_attempt, browserDir: config.browser.dir,
+                outputDir: join(config.stateDirectory, 'browser', input.attemptId), ...(config.browser.limits ? { limits: config.browser.limits } : {}) };
+              const existingBrowser = await journal.putIfAbsent(browserKey, browserGrant);
+              if (existingBrowser && JSON.stringify(existingBrowser) !== JSON.stringify(browserGrant)) fail('TASK_GRANT_CONFLICT');
+              mcpServers.hehebot_browser = {
+                command: process.execPath, args: [fileURLToPath(new URL('./browser-gateway.mjs', import.meta.url))],
+                env: { HEHEBOT_BROWSER_GATEWAY_CONFIG: journal.path(browserKey), ...(config.tlsCAFile ? { NODE_EXTRA_CA_CERTS: config.tlsCAFile } : {}) },
+                tools: Object.fromEntries(BROWSER_TOOLS.map(name => [name, { approval_mode: 'approve' }])),
+                ...(permissions ? { enabled_tools: [...BROWSER_TOOLS] } : {}),
+              };
+            }
             // Fresh service-owned native home has no inherited global MCP config.
             return new CodexAdapter({ journal, cwd: workspace, rpc: adapter.rpc, testMode: !alpha,
               ownerAlpha: alpha ? { ...alpha, expires_at: row.claim.deadline_at } : null, now, mcpServers,
