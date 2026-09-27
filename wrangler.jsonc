@@ -48,7 +48,8 @@
     "NATIVE_VERIFIED": "false",
     "FLIGHT_RESTORE_VERIFIED": "false",
     "FLIGHT_RESTORE_POLICY_ID": "",
-    "NATIVE_DELEGATIONS": "{}"
+    "NATIVE_DELEGATIONS": "{}",
+    "HEHEBOT_EXECUTION_MODE": ""
   },
   "env": {
     "local": {
@@ -70,7 +71,39 @@
         "NATIVE_VERIFIED": "false",
         "FLIGHT_RESTORE_VERIFIED": "false",
         "FLIGHT_RESTORE_POLICY_ID": "",
-        "NATIVE_DELEGATIONS": "{}"
+        "NATIVE_DELEGATIONS": "{}",
+        "HEHEBOT_EXECUTION_MODE": ""
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "CONTROL",
+            "class_name": "PersonalControl"
+          }
+        ]
+      }
+    },
+    "grok": {
+      "name": "hehebot-grok",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "INSTALLATION_ID": "personal-grok",
+        "AUTH_MODE": "access",
+        "ACCESS_ISSUER": "",
+        "ACCESS_AUD": "",
+        "OWNER_SUB": "",
+        "EXECUTION_ENABLED": "false",
+        "PROVIDER_CONFIG": "{}",
+        "ACTION_POLICY_IDS": "[]",
+        "TOOL_POLICY_IDS": "[]",
+        "HEHEBOT_WHATSAPP_READ_POLICIES": "{}",
+        "TRIGGER_CONFIG": "{}",
+        "NATIVE_VERIFIED": "false",
+        "FLIGHT_RESTORE_VERIFIED": "false",
+        "FLIGHT_RESTORE_POLICY_ID": "",
+        "NATIVE_DELEGATIONS": "{}",
+        "HEHEBOT_EXECUTION_MODE": ""
       },
       "durable_objects": {
         "bindings": [

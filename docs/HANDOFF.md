@@ -54,6 +54,20 @@ still couldn't chat with a bot during a background task. See the traps in
      (several flaky) and the RETIREMENT_REPORTED / HOSTED_WAKE_OUTCOME_UNKNOWN assertions in
      test-codex-{background,hosted,warm}-manager.
 4. Pick the lowest open G row whose dependencies are merged (waves are listed in TODO).
+5. **G8 hosted runbook (owner-authorized only; branch `g8-hosted-wiring`; rehearse first: `node scripts/test-grok-mode-e2e.mjs`).**
+   Never touch the `hehebot` Sprite or `hehebot-portal`; everything below is a fresh `hehebot-grok` Worker/DO and a fresh Sprite.
+   - Secrets: `python3 scripts/setup-secrets.py --generate` (RUNTIME_TOKEN, SPRITE_WAKE_TOKEN) and `--store PROVIDER_TOKEN` (Sprites org token, kaspar-hidayat).
+     Create a Cloudflare Access app for the `hehebot-grok` hostname; note its issuer, AUD and your `sub`.
+   - Sprite: `~/.local/bin/sprite create hehebot-grok-test -o kaspar-hidayat`; `sprite exec -s hehebot-grok-test` to install Node ≥22.16 and the repo at
+     this branch, run `bash scripts/setup-codex.sh && bash scripts/build-codex-service.sh`, `codex login --device-auth` into the chosen nativeHome, write a
+     0600 `HEHEBOT_GROK_CONFIG` JSON (portalOrigin, token files, Access service-token files, ownerBindingSha256, stateRoot, binary, nativeHome, personas),
+     then register service `hehebot-grok` = `bash scripts/with-executor-lock.sh <stateRoot>/lock node runtime/grok-service-entry.mjs` on port 8080.
+   - Worker: `npx wrangler secret put {RUNTIME_TOKEN,PROVIDER_TOKEN,SPRITE_WAKE_TOKEN} --env grok`, then `npx wrangler deploy --env grok
+     --var EXECUTION_ENABLED:true --var HEHEBOT_EXECUTION_MODE:grok --var OWNER_SUB:<sub> --var ACCESS_ISSUER:<iss> --var ACCESS_AUD:<aud> --var
+     PROVIDER_CONFIG:'{"provider":"fly-sprites","ref":{"provider":"fly-sprites","id":"hehebot-grok-test"},"service":"hehebot-grok","lifecycleVerified":true,"wakeUrl":"https://<sprite-url>/"}'`.
+   - Scenario: ask for hotel research, ask a status question while it runs, see the result relayed, then confirm the Sprite sleeps (~65 s idle).
+   - Cost: Sprite billed only while awake; Worker/DO on the free tier; model usage on the owner's ChatGPT plan; stays within the ≤$10 budget.
+   - Rollback: redeploy `--env grok` with `EXECUTION_ENABLED:false` and empty `HEHEBOT_EXECUTION_MODE`, or `npx wrangler delete --env grok`; `sprite destroy hehebot-grok-test`.
 
 ### Code map for the G rows
 

@@ -29,6 +29,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 // construction in native.submit below.
 const COORDINATOR_ONLY_TASK_TOOLS = Object.freeze(['hehebot_start_task', 'hehebot_list_tasks',
   'hehebot_task_detail', 'hehebot_steer_task', 'hehebot_queue_followup', 'hehebot_cancel_task']);
+// G8: grok execution mode may grant the coordinator task tools under the
+// restricted native profile; owner-alpha keeps its narrower read-only set.
+const RESTRICTED_TOOLS = Object.freeze(['hehebot_list_routines', 'hehebot_read_skill', 'hehebot_send_message']);
+const GROK_RESTRICTED_TOOLS = Object.freeze([...RESTRICTED_TOOLS, ...COORDINATOR_ONLY_TASK_TOOLS]);
+// Idle grace before the runtime asks to sleep. The Worker's own prepare-sleep
+// grace is 60s from its last activity touch; the margin absorbs clock skew so
+// a denied prepare-sleep (which fences this executor) stays unlikely.
+const GROK_IDLE_GRACE_MS = 65000;
 const ownerAlphaGeneration = value => {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       Object.keys(value).sort().join(',') !== 'boot_id,epoch,transition_id' ||
@@ -67,6 +75,10 @@ export function createCodexService(config, dependencies) {
   let alphaGeneration = null, alphaWarm = null, alphaBackground = null, backgroundProfile = null;
   let verifyTextOnlyCurrent;
   const hosted = Object.hasOwn(config, 'hostedOwnerBindingSha256');
+  // G8: explicit Grok-aligned ordinary execution (GROK_ALIGNMENT A1-A4). It is
+  // never an owner-alpha, hosted-alpha or disposable-test composition.
+  const grok = config.executionMode === 'grok';
+  let grokSleepAllowed = false;
   const taskControllers = new Map();
   const assertStarting = () => {
     if (phase !== 'starting') fail('SERVICE_RECOVERY_REQUIRED');
@@ -87,7 +99,7 @@ export function createCodexService(config, dependencies) {
       snapshots.push(...await new CodexOperations({ journal, attemptId: row.attemptId, runId: row.claim.run.id,
         attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at,
         deadlineAt: row.claim.deadline_at, textOnlyProfile: row.claim.text_only ?? null,
-        backgroundRole: alphaBackground ? row.claim.role : null,
+        backgroundRole: alphaBackground ? row.claim.role : null, grok,
         ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}) }).snapshot());
     }
     return snapshots;
@@ -104,7 +116,7 @@ export function createCodexService(config, dependencies) {
       if (!row.nativeRunId || row.phase === 'complete') continue;
       snapshots.push(...await new CodexOperations({ journal, attemptId: row.attemptId, runId: row.claim.run.id,
         attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at,
-        deadlineAt: row.claim.deadline_at, textOnlyProfile: null, backgroundRole: null,
+        deadlineAt: row.claim.deadline_at, textOnlyProfile: null, backgroundRole: null, grok,
         ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}) }).snapshot());
     }
     return snapshots;
@@ -207,6 +219,49 @@ export function createCodexService(config, dependencies) {
     })().catch(error => { recover(); throw error; }).finally(() => { taskAdmission = null; });
     return taskAdmission;
   };
+  // G8 (GROK_ALIGNMENT A1/A3): the trusted settlement driver for grok mode. A
+  // root turn that is terminal, has no native descendants and whose projected
+  // operations are all settled completes its attempt with the turn's final
+  // assistant text. Completion never gates a committed hehebot_send_message
+  // (A1); it only closes the attempt so the lane, the task.event wake and
+  // sleep can proceed. The Worker re-checks operations, locks, questions and
+  // effects and stays authoritative; a refusal leaves the run live and visible
+  // and is retried on the next maintenance tick, never replayed natively.
+  const grokResult = async (row, native, cancelled) => {
+    if (row.result) return row.result;
+    if (cancelled) return { status: 'cancelled', text: '' };
+    if (native.nativeOutcome !== 'completed') return native.nativeOutcome === 'interrupted'
+      ? { status: 'cancelled', text: '', error_code: 'NATIVE_INTERRUPTED' }
+      : { status: 'failed', text: '', error_code: 'NATIVE_TURN_FAILED' };
+    const readback = await transport.request('thread/read', { threadId: native.threadId, includeTurns: true });
+    const turn = readback?.thread?.turns?.find(value => value?.id === native.nativeRunId);
+    const finals = (turn?.items ?? []).filter(item => item?.type === 'agentMessage' && typeof item.text === 'string' &&
+      (item.phase === undefined || item.phase === null || item.phase === 'final_answer'));
+    return { status: 'completed', text: (finals.at(-1)?.text ?? '').slice(0, 32000) };
+  };
+  const settleGrok = async sup => {
+    if (!grok || !sup || sup.phase !== 'running') return;
+    for (const row of await sup.bridge.families()) {
+      if (!row.nativeRunId || !row.claim?.run || !['running', 'complete_pending'].includes(row.phase)) continue;
+      try {
+        const native = await adapter.requireRun(row.attemptId);
+        if (native.rootSettled !== true || Object.keys(native.childTurns ?? {}).length ||
+            Object.keys(native.childObligations ?? {}).length) continue;
+        const snapshot = await new CodexOperations({ journal, attemptId: row.attemptId, runId: row.claim.run.id,
+          attempt: row.claim.run.current_attempt, startedAt: row.claim.run.updated_at, deadlineAt: row.claim.deadline_at,
+          grok, ...(shellOperationTimeoutMs !== undefined ? { shellOperationTimeoutMs } : {}) }).snapshot();
+        if (snapshot.some(operation => operation.status !== 'settled')) continue;
+        // Publish the settled projection before asking the Worker to complete.
+        const cancellations = await sup.heartbeat();
+        const result = await grokResult(row, native, cancellations.includes(row.claim.run.id));
+        await sup.complete({ attemptId: row.attemptId, nativeRunId: row.nativeRunId, rootSettled: true,
+          toolsSettled: true, childrenSettled: true, effectsSettled: true, outputCommitted: true, result });
+      } catch (error) {
+        if (error?.code === 'EXECUTOR_FENCED') throw error;
+        // Worker refusal or transport uncertainty: the run stays live and visible.
+      }
+    }
+  };
   const service = {
     get phase() { return phase; },
     get supervisor() { return supervisor; },
@@ -237,7 +292,17 @@ export function createCodexService(config, dependencies) {
             Object.keys(config.personas ?? {}).length !== 1 || !config.personas?.[alpha.persona_id] ||
             config.ownerQuestions === true || config.restrictedPermissions === false) fail('INVALID_SERVICE_CONFIGURATION');
         config.restrictedPermissions = true;
+      } else if (grok) {
+        // A loopback-only local control plane has no owner binding (AUTH_MODE
+        // local); any other origin must pin the Access owner binding.
+        let grokOrigin; try { grokOrigin = new URL(config.portalOrigin); } catch { fail('INVALID_SERVICE_CONFIGURATION'); }
+        const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(grokOrigin.hostname);
+        if (config.disposableTest !== undefined || hosted || config.backgroundTaskLane === false ||
+            !(typeof config.ownerBindingSha256 === 'string' && /^[a-f0-9]{64}$/.test(config.ownerBindingSha256) ||
+              config.ownerBindingSha256 === null && loopback) ||
+            config.ownerQuestions === true) fail('INVALID_SERVICE_CONFIGURATION');
       } else if (config.disposableTest !== true) fail('NATIVE_COMPATIBILITY_GATE_BLOCKED');
+      if (config.executionMode !== undefined && !grok || config.ownerBindingSha256 !== undefined && !grok) fail('INVALID_SERVICE_CONFIGURATION');
       if (config.ownerAlphaGeneration !== undefined) {
         alphaGeneration = ownerAlphaGeneration(config.ownerAlphaGeneration);
         if (!hosted || !alpha || (alpha.text_only ? !textOnlyProfile : alpha.background_first_root !== true)) fail('INVALID_SERVICE_CONFIGURATION');
@@ -261,8 +326,8 @@ export function createCodexService(config, dependencies) {
       } else if (config.backgroundProfile !== undefined) fail('INVALID_SERVICE_CONFIGURATION');
       if (config.textOnlyProfile !== undefined && !alpha?.text_only) fail('INVALID_SERVICE_CONFIGURATION');
       if (Object.keys(config).some(key => !['disposableTest', 'stateDirectory', 'binary', 'portalOrigin',
-        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs', 'backgroundTaskLane'].includes(key)) ||
-        config.nativeHome !== undefined && (!alpha || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
+        'runtimeTokenFile', 'tlsCAFile', 'installationId', 'personas', 'accessClientIdFile', 'accessClientSecretFile', 'ownerQuestions', 'restrictedPermissions', 'ownerAlpha', 'ownerAlphaGeneration', 'ownerAlphaWarm', 'ownerAlphaBackground', 'backgroundProfile', 'nativeHome', 'hostedOwnerBindingSha256', 'textOnlyProfile', 'shellOperationTimeoutMs', 'backgroundTaskLane', 'executionMode', 'ownerBindingSha256'].includes(key)) ||
+        config.nativeHome !== undefined && (!alpha && !grok || typeof config.nativeHome !== 'string' || !isAbsolute(config.nativeHome)) ||
         config.ownerQuestions !== undefined && typeof config.ownerQuestions !== 'boolean' ||
         config.restrictedPermissions !== undefined && typeof config.restrictedPermissions !== 'boolean' ||
         // The background task lane is a plain ordinary-execution concern: it is
@@ -281,7 +346,10 @@ export function createCodexService(config, dependencies) {
         if (persona.allowedTools.includes('hehebot_search_skills') &&
             (alpha || !persona.allowedTools.includes('hehebot_propose_skill'))) fail('INVALID_SERVICE_CONFIGURATION');
         if (alpha && persona.allowedTools.includes('hehebot_read_memory')) fail('INVALID_SERVICE_CONFIGURATION');
-        if (config.restrictedPermissions && persona.allowedTools.some(tool => !['hehebot_list_routines', 'hehebot_read_skill', 'hehebot_send_message'].includes(tool))) fail('INVALID_SERVICE_CONFIGURATION');
+        if (config.restrictedPermissions && persona.allowedTools.some(tool => !(grok ? GROK_RESTRICTED_TOOLS : RESTRICTED_TOOLS).includes(tool))) fail('INVALID_SERVICE_CONFIGURATION');
+        // Grok task runs carry no memory budget (only the coordinator lane
+        // prepares memory), so the memory tool is not offered in this mode.
+        if (grok && persona.allowedTools.includes('hehebot_read_memory')) fail('INVALID_SERVICE_CONFIGURATION');
       }
       phase = 'starting';
       try {
@@ -341,7 +409,12 @@ export function createCodexService(config, dependencies) {
               JSON.stringify(ownerAlphaPolicy(status.owner_alpha)) !== JSON.stringify(alpha) ||
               JSON.stringify(ownerAlphaGeneration(status.owner_alpha_generation)) !== JSON.stringify(alphaGeneration)) fail('CONTROL_NOT_BOOTABLE');
         } else if (Object.hasOwn(status ?? {}, 'owner_alpha_generation')) fail('CONTROL_NOT_BOOTABLE');
-        else if (alpha) {
+        else if (grok) {
+          // The control plane must itself be in grok mode for this exact owner.
+          if (status?.phase !== 'BOOTING' || status.execution_enabled !== true || status.execution_mode !== 'grok' ||
+              !Number.isSafeInteger(status.epoch) || (status.owner_binding_sha256 ?? null) !== config.ownerBindingSha256 ||
+              Object.hasOwn(status, 'owner_alpha')) fail('CONTROL_NOT_BOOTABLE');
+        } else if (alpha) {
           if (status?.phase !== 'STOPPED' || status.epoch !== 0 || status.execution_enabled !== false ||
               JSON.stringify(ownerAlphaPolicy(status.owner_alpha)) !== JSON.stringify(alpha)) fail('CONTROL_NOT_BOOTABLE');
         } else if (status?.phase !== 'BOOTING' || status.execution_enabled !== true || !Number.isSafeInteger(status.epoch)) fail('CONTROL_NOT_BOOTABLE');
@@ -366,7 +439,7 @@ export function createCodexService(config, dependencies) {
         const configOverrides = { ...(config.restrictedPermissions ? {
           web_search: 'disabled',
           ...Object.fromEntries(Object.entries(RESTRICTED_CODEX_FEATURES).map(([key, value]) => [`features.${key}`, value])),
-          ...(alpha ? { 'agents.enabled': false, 'features.multi_agent': false, 'features.multi_agent_v2': false } : {}),
+          ...(alpha || grok ? { 'agents.enabled': false, 'features.multi_agent': false, 'features.multi_agent_v2': false } : {}),
         } : {}), ...(textOnlyProfile?.startupConfig ?? {}) };
         let permissions;
         if (config.restrictedPermissions) {
@@ -480,7 +553,10 @@ export function createCodexService(config, dependencies) {
           testMode: !alpha, ownerAlpha: alpha, now, permissionsProfile: permissions?.name, textOnlyProfile });
         const native = {
           admissionReadiness: () => adapter.admissionReadiness(),
-          sleepReadiness: () => adapter.sleepReadiness(),
+          // G8 (GROK_ALIGNMENT A3): in grok mode sleep readiness is the service's
+          // own both-lanes-idle observation (see service.sleep); the Worker's
+          // prepare/commit-sleep predicate stays authoritative.
+          sleepReadiness: () => grok ? { allowed: grokSleepAllowed, blockers: grokSleepAllowed ? [] : ['GROK_LANES_NOT_IDLE'] } : adapter.sleepReadiness(),
           cancel: id => adapter.cancel(id),
           submit: async input => {
             input = { ...input };
@@ -639,7 +715,11 @@ export function createCodexService(config, dependencies) {
         if (taskLaneEnabled) {
           taskSupervisor = new ExecutionSupervisor({ control, native, journal, identity, installationId: config.installationId,
             personas: config.personas, events: router, activity, operations: taskOperations, now, onRecovery: recover,
-            admission: admitTask, memoryCounter: countSelectedModelMemory, lane: 'background' });
+            // No memoryCounter: memory-prepare only ever prepares the coordinator
+            // lane's next run, so a counted task-lane claim either stalls (no
+            // coordinator queued) or is refused by claim(). Task runs carry no
+            // memory budget by design (their context is the task.start snapshot).
+            admission: admitTask, lane: 'background' });
         }
         await starting(() => control.request('ready', { identity }));
         const dispatched = await starting(() => supervisor.start());
@@ -680,7 +760,31 @@ export function createCodexService(config, dependencies) {
       if (taskSupervisor) await taskSupervisor.maintain();
       const result = await admit();
       if (taskSupervisor) await admitTask();
+      if (grok) {
+        try { await settleGrok(supervisor); await settleGrok(taskSupervisor); }
+        catch (error) { recover(); throw error; }
+      }
       return result;
+    },
+    /** G8 (GROK_ALIGNMENT A3): both lanes idle for the grace period, then the
+     * coordinator supervisor's existing drain asks the Worker to prepare and
+     * commit sleep. The Worker's live-current-generation predicate decides;
+     * a denial fences this executor (supervisor recovery), never retries. */
+    async sleep(checkpoint) {
+      if (!grok) fail('SLEEP_DENIED');
+      if (phase !== 'running') fail('SERVICE_RECOVERY_REQUIRED');
+      for (const sup of [supervisor, taskSupervisor].filter(Boolean)) {
+        const families = await sup.bridge.families();
+        const cursor = await journal.get(sup.bridge.cursor);
+        if (cursor && cursor.phase !== 'complete' || families.some(row => row.phase !== 'complete') ||
+            sup.idleSince === null || now() - sup.idleSince < GROK_IDLE_GRACE_MS) fail('SLEEP_DENIED');
+      }
+      // Stop the task lane's own timer so it cannot heartbeat into the commit.
+      if (taskSupervisor) await taskSupervisor.quiesce();
+      grokSleepAllowed = true;
+      try { await supervisor.drain(checkpoint); }
+      finally { grokSleepAllowed = false; }
+      return { sleeping: supervisor.phase === 'sleeping' };
     },
     stop() {
       return stopping ??= (async () => {

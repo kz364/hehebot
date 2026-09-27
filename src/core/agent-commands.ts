@@ -11,6 +11,14 @@ export const SKILL_PROPOSE_POLICY='46b2cbdd-d227-4f54-bffa-33148aad0134';
 export const ROUTINE_MANAGE_POLICY='f0ff3ead-1e31-4f83-bbc2-aa25f069a962';
 export {MEMORY_READ_POLICY} from './memory-context';
 
+/** G8 (GROK_ALIGNMENT A4): tasks belong to the persona's conversation, not to
+ * the single coordinator turn that started them. A later coordinator turn of
+ * the same persona (the next owner message or a task.event wake) must see and
+ * manage them, or "how's it going?" cannot be answered from hehebot_list_tasks.
+ * Visible: this run's own background children (including native children, as
+ * before), plus hehebot_start_task tasks started by any coordinator run of the
+ * same persona. Binds: (run.id, run.persona_id). */
+const VISIBLE_TASK_SQL=`t.role='background' AND (t.parent_run_id=? OR (json_extract(t.context_json,'$.coordinator_task')=1 AND t.persona_id=? AND EXISTS(SELECT 1 FROM runs p WHERE p.id=t.parent_run_id AND p.role='coordinator' AND p.persona_id=t.persona_id)))`;
 export type AgentCommand=Extract<Command,{type:'skill.propose'|'routine.put'|'routine.run'|'routine.delete'|'task.start'|'run.steer'|'run.followup'|'run.cancel'}>;
 export type AgentScope={identity:Identity;run_id:string;attempt:number};
 export type AgentCommandRequest=AgentScope & {idempotency_key:string;command:AgentCommand};
@@ -137,16 +145,16 @@ export class AgentCommandBoundary {
   const activeStatuses=['queued','claimed','running','finishing','cancelling','recovery_required'];
   const stateFilter=request.state==='active'?activeStatuses:request.state?[request.state]:null;
   const rows=this.core.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>(
-   `SELECT id,title,status,updated_at FROM runs WHERE parent_run_id=? AND role='background' ${stateFilter?`AND status IN (${stateFilter.map(()=>'?').join(',')})`:''} AND id>? ORDER BY id LIMIT 21`,
-   run.id,...(stateFilter??[]),request.after??'');
+   `SELECT id,title,status,updated_at FROM runs t WHERE ${VISIBLE_TASK_SQL} ${stateFilter?`AND status IN (${stateFilter.map(()=>'?').join(',')})`:''} AND id>? ORDER BY id LIMIT 21`,
+   run.id,run.persona_id,...(stateFilter??[]),request.after??'');
   return {tasks:rows.slice(0,20),next_cursor:rows.length>20?rows[19].id:null};
  }
  taskDetail(request:AgentTaskDetail){
   const {run}=this.admitted(request);
   requireThat(run.role!=='background','FORBIDDEN','A background task may not inspect tasks.',403);
   const target=this.core.store.db.all<Pick<Run,'id'|'title'|'status'|'current_attempt'|'error_code'|'created_at'|'updated_at'>&{parent_run_id:string|null}>(
-   'SELECT id,title,status,current_attempt,error_code,created_at,updated_at,parent_run_id FROM runs WHERE id=?',request.task_run_id)[0];
-  requireThat(target&&target.parent_run_id===run.id,'NOT_FOUND','Task unavailable.',404);
+   `SELECT id,title,status,current_attempt,error_code,created_at,updated_at,parent_run_id FROM runs t WHERE id=? AND ${VISIBLE_TASK_SQL}`,request.task_run_id,run.id,run.persona_id)[0];
+  requireThat(target,'NOT_FOUND','Task unavailable.',404);
   const attempt=this.core.store.db.all<{result_json:string|null}>('SELECT result_json FROM attempts WHERE run_id=? AND attempt=?',target.id,target.current_attempt)[0];
   let result:{status:string;text:string}|null=null;
   if(attempt?.result_json){const parsed=JSON.parse(attempt.result_json) as {status:string;text?:string};if(typeof parsed.text==='string')result={status:parsed.status,text:parsed.text};}
@@ -186,11 +194,12 @@ export class AgentCommandBoundary {
    actor=`runtime-task:${run.id}`;
   }else if(supplied.type==='run.steer'||supplied.type==='run.followup'||supplied.type==='run.cancel'){
    requireThat(run.role!=='background','FORBIDDEN','A background task may not manage tasks.',403);
-   const target=this.core.store.db.all<{id:string;role:string;parent_run_id:string|null;current_attempt:number;context_json:string}>('SELECT id,role,parent_run_id,current_attempt,context_json FROM runs WHERE id=?',supplied.payload.run_id)[0];
-   // Scoped to hehebot_start_task's own children only — never the pre-existing
+   const target=this.core.store.db.all<{id:string;role:string;parent_run_id:string|null;current_attempt:number;context_json:string}>(
+    `SELECT id,role,parent_run_id,current_attempt,context_json FROM runs t WHERE id=? AND ${VISIBLE_TASK_SQL}`,supplied.payload.run_id,run.id,run.persona_id)[0];
+   // Scoped to hehebot_start_task-created tasks only — never the pre-existing
    // native-child parent/child hierarchy, which also uses role='background'
    // with a parent_run_id but is not a coordinator-managed task.
-   const isOwnTask=!!target&&target.role==='background'&&target.parent_run_id===run.id&&!!(JSON.parse(target.context_json) as ContextSnapshot).coordinator_task;
+   const isOwnTask=!!target&&!!(JSON.parse(target.context_json) as ContextSnapshot).coordinator_task;
    requireThat(isOwnTask,'FORBIDDEN','A coordinator may only manage its own tasks.',403);
    // The model cannot know the task's current native attempt; the tool only
    // supplies task_run_id/text, and the Worker binds the live attempt here.
