@@ -31,7 +31,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual([{id:'run-1',status:'waiting',context_json:'{"synthetic":"preserve context"}',command_id:'command-1',occurrence_id:null,persona_id:'object-1',routine_id:null,current_attempt:0,error_code:null,checkpoint_json:null,created_at:'2026-09-01T00:00:00.000Z',updated_at:'2026-09-01T00:00:00.000Z',role:'coordinator',parent_run_id:null,title:null}]);
    expect(db.all("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('native_task_links','resource_locks','task_followups','skill_proposals','skill_enablements')")).toHaveLength(5);
    expect(db.all('SELECT * FROM room_publications')).toEqual([]);
-   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(18);
+   migrateApplication(db,'2026-09-11T00:00:00Z');expect(db.all('SELECT * FROM schema_versions')).toHaveLength(19);
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=2')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=3')[0].applied_at).toBe('2026-09-10T00:00:00Z');
    expect(db.all<{applied_at:string}>('SELECT applied_at FROM schema_versions WHERE version=4')[0].applied_at).toBe('2026-09-10T00:00:00Z');
@@ -59,7 +59,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM runs')).toEqual(before);
    sqlite.exec('DROP INDEX room_publications_cause');
    migrateApplication(db,'2026-09-12T00:00:00Z');
-   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:18}]);
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:19}]);
   }finally{sqlite.close();}
  });
  it('preserves v7 followups and foreign keys, and rolls back a failed table replacement',()=>{
@@ -168,7 +168,7 @@ describe('application v1 migration',()=>{
    expect(db.all('SELECT * FROM sqlite_schema ORDER BY name')).toEqual(schema);
    expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:16}]);
    sqlite.exec('DROP TRIGGER reject_v17');migrateApplication(db,'2026-09-12T00:00:00Z');
-   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:18}]);
+   expect(db.all('SELECT MAX(version) AS version FROM schema_versions')).toEqual([{version:19}]);
    db.exec("INSERT INTO bot_messages VALUES('run-1:1:key','run-1',1,7,'tool','2026-09-01T00:00:00.000Z')");
    expect(()=>db.exec("INSERT INTO bot_messages VALUES('run-1:1:key','run-1',1,8,'final_text','2026-09-01T00:00:00.000Z')")).toThrow();
    expect(()=>db.exec("INSERT INTO bot_messages VALUES('other-key','run-1',1,9,'unexpected','2026-09-01T00:00:00.000Z')")).toThrow();

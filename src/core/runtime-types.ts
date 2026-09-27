@@ -24,6 +24,9 @@ export type RuntimePayloads={
  'question-resolve':Base & {question_id:string;connection_id:string};
  'output-preview':Base & OutputPreview;
  'bot-message':Base & BotMessageInput;
+ // V9 (ARCHITECTURE_V2 A8): hehebot_pass_turn's RPC. Records an explicit PASS
+ // for the calling attempt's scheduled room turn; see RoomTurns.pass().
+ 'pass-turn':Base & Attempt;
  'token-usage':Base & TokenUsageSnapshot;
  'steer-pending':Base & {targets:SteeringTarget[]};
  'steer-result':Base & SteeringTarget & {command_id:string;status:SteeringOutcome};

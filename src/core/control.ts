@@ -24,7 +24,8 @@ import {OwnerAlphaBackground} from './owner-alpha-background';
 import {TestCampaign} from './test-campaign';
 import {timelineExpirySql} from './timeline-retention';
 import {memorySourceDigest,memorySnapshot as readMemorySnapshot} from './memory-context';
-import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
+import {RoomTurns} from './room-turns';
+import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoomTurnEnvelope, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
  THEN MIN(strftime('%Y-%m-%dT%H:%M:%fZ',r.created_at,'+30 days'),strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(c.accepted_at,r.created_at),'+90 days'))
@@ -47,6 +48,7 @@ export class ControlCore {
  readonly bootstrap:OwnerAlphaBootstrap;
  readonly warm:OwnerAlphaWarm;
  readonly background:OwnerAlphaBackground;
+ readonly roomTurns:RoomTurns;
  constructor(public store:Store,public options:Options){
   requireThat(!options.ownerAlpha||!options.executionEnabled,'INVALID_CONFIGURATION','Owner alpha cannot enable production execution.',503);
   requireThat(!options.ownerAlphaSuccessor||!options.executionEnabled,'INVALID_CONFIGURATION','Owner alpha successor cannot enable production execution.',503);
@@ -64,6 +66,7 @@ export class ControlCore {
   this.bootstrap=new OwnerAlphaBootstrap(this);
   this.warm=new OwnerAlphaWarm(this);
   this.background=new OwnerAlphaBackground(this);
+  this.roomTurns=new RoomTurns(this);
  }
  now(){return this.options.now().toISOString();}
  schedulePreview(cron:string,timezone:string){
@@ -257,6 +260,13 @@ export class ControlCore {
     // construction, and this flag defaults off, so every pre-existing
     // message.send test keeps its prior one-run-per-message behavior.
     if(this.options.coordinatorInbox&&this.options.executionEnabled&&target.kind==='persona')return this.routeInboxMessage(target.id,commandId,command.payload.text,now);
+    // V9 (ARCHITECTURE_V2 A8): a room target under the scheduler flag becomes a
+    // scheduled turn for the default responder instead of a bare coordinator
+    // enqueue. root_cause_id is this owner message's own just-committed event
+    // id, so contribution/hop bookkeeping is keyed to it. Off by default (and
+    // for a persona target) so the pre-existing one-run-per-message behavior
+    // is unchanged.
+    if(this.options.roomTurns&&target.kind==='room')return this.roomTurns.scheduleOwnerTurn(target.id,commandId,commandId,command.payload.text)??commandId;
     return this.enqueue(persona,command.payload.text,commandId,null,null,target.kind==='room'?target.id:null);
    }
    case 'persona.put': {
@@ -582,7 +592,7 @@ export class ControlCore {
   const scopeKey=`${personaId}/${routineId?`routine/${routineId}`:roomId?`room/${roomId}`:'personal'}`;
   return {...(history?{conversation_history:history}:{}),...(Object.keys(whatsapp).length?{whatsapp_read_policies:whatsapp}:{}),schema_version:1,persona,routine,memories,skills:new SkillCatalog(this.store,()=>this.now(),this.options.uuid).enabled(personaId),scope_key:scopeKey,instruction,room_id:roomId,context_events:contextEvents,context_history_gap:contextHistoryGap,task_summaries:this.store.db.all<{id:string;title:string|null;status:string;updated_at:string}>("SELECT id,title,status,updated_at FROM runs WHERE role='background' AND persona_id=? AND json_extract(context_json,'$.scope_key')=? ORDER BY updated_at DESC,id LIMIT 30",personaId,scopeKey),authorization_policy_ids:routine?.body.action_policy_ids??[]};
  }
- enqueue(personaId:string,instruction:string,commandId:string|null,routineId:string|null,occurrenceId:string|null,roomId:string|null=null,skill?:StoredObject<SkillBody>):string {
+ enqueue(personaId:string,instruction:string,commandId:string|null,routineId:string|null,occurrenceId:string|null,roomId:string|null=null,skill?:StoredObject<SkillBody>,roomTurn?:RoomTurnEnvelope):string {
   const id=this.options.uuid(),now=this.now();
   // A background-generation candidate uses the restricted per-task snapshot at
   // enqueue too, not only at claim; no shared memories, history or task titles.
@@ -596,6 +606,7 @@ export class ControlCore {
    context=this.context(personaId,instruction,routineId,roomId,commandId,[]);memoryBlocked=true;
   }
   if(skill){context.skills=[skill];context.skill_invocation={skill_id:skill.id,skill_revision:skill.revision};}
+  if(roomTurn)context.room_turn=roomTurn;
   const admitted=this.options.executionEnabled||(!this.bootstrap.assignedManifest()&&this.ownerAlpha.available()&&this.ownerAlpha.directMessage(personaId,commandId,routineId,occurrenceId,roomId))||this.warmMessageAdmitted(personaId,commandId,routineId,occurrenceId,roomId)||this.backgroundMessageAdmitted(personaId,commandId,routineId,occurrenceId,roomId);
   let status=admitted&&!memoryBlocked?'queued':'waiting',reason:string|null=memoryBlocked?'MEMORY_PREPARATION_LIMIT':admitted?null:'CAPABILITY_UNAVAILABLE';
   this.store.db.exec('INSERT INTO runs(id,command_id,occurrence_id,persona_id,routine_id,context_json,status,error_code,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)',id,commandId,occurrenceId,personaId,routineId,JSON.stringify(context),status,reason,now,now);
@@ -713,6 +724,13 @@ export class ControlCore {
   const runId=this.enqueue(task.persona_id,line,null,null,null,null);
   this.store.db.exec('UPDATE runs SET context_json=json_set(context_json,\'$.causal_depth\',?) WHERE id=?',depth,runId);
   this.store.db.exec('INSERT INTO runtime_metadata(key,value_json) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json',wakeKey,JSON.stringify({run_id:runId,at:now}));
+ }
+ /** V9 (ARCHITECTURE_V2 A8): lifecycle.complete()/interruptRuns() call this
+  * once a room-turn run reaches a genuinely terminal state (no automatic
+  * retry pending), from inside their own transaction. Delegates outcome
+  * recording and next-turn scheduling to RoomTurns. */
+ roomTurnSettled(run:Pick<Run,'id'|'persona_id'>,roomTurn:RoomTurnEnvelope,attempt:number,result:{status:string;error_code?:string}):void {
+  this.roomTurns.settle(run,roomTurn,attempt,result);
  }
  private noteRunnable(){
   this.store.db.exec("UPDATE lifecycle SET queue_sequence=queue_sequence+1,desired_state='RUN',stop_token=CASE WHEN phase='DRAINING' THEN NULL ELSE stop_token END,wake_after_stop=CASE WHEN phase IN ('STOP_COMMITTED','STOPPING') THEN 1 ELSE wake_after_stop END,phase=CASE WHEN phase='DRAINING' THEN 'READY' ELSE phase END WHERE singleton=1");

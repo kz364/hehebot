@@ -205,6 +205,24 @@ deadline_ms, is_winding_down, root_cause_id }`. The member replies with
 ERROR`. The existing limits apply: one default responder, at most 3 bot
 contributions per owner message, hop depth 2 and fan-out 2.
 
+**Implemented (V9, migration v19, `Options.roomTurns`, default off):** the
+envelope is `RoomTurnEnvelope` in `src/core/types.ts`, carrying `hop` alongside
+the fields above so the scheduler (not the model) tracks depth; `root_cause_id`
+is the triggering owner message's own event id, so per-message contribution
+counting is keyed to it across hand-offs. `new_messages` reuses the existing
+`consumer_cursors` position for that member/room. The explicit pass is the tool
+`hehebot_pass_turn` / RPC `pass-turn` (mirrors `hehebot_send_message` /
+`bot-message`), not a bare `hehebot_send_message` with no text. Serialization
+("one room member at a time") is `room_turn_log` rows with `outcome IS NULL`;
+a second owner message or a second mention arriving while busy queues in
+`room_turn_pending` (kinds `owner`/`candidate`) and is dequeued when the current
+turn settles, which is how fan-out 2 stays sequential rather than concurrent.
+Hand-off targets a member named or `@mentioned` by name in the outgoing
+`bot.message` text (case-insensitive literal match), not a structured
+tool argument. This mechanism is additive: the pre-existing model-initiated
+`room.publish action_request` fan-out (its own `causalCount<=3` cap) is
+untouched and runs independently when a bot chooses to use it instead.
+
 ### A9. The Mac node pulls
 
 The paired Mac keeps an outbound WebSocket to the Durable Object. The Worker queues

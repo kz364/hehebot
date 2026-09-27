@@ -594,7 +594,12 @@ function render(){
   for(const event of conversation){
    if(event.type==='message.user'||event.type==='bot.message'){
     if(!matches.has(event))continue;
-    const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot'));const h=node('div',undefined,'message-head');h.append(node('strong',event.type==='message.user'?'You':object?.body.name??'Assistant'),node('time',time(event.created_at)));m.append(h);
+    const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot'));const h=node('div',undefined,'message-head');
+    // V9 (ARCHITECTURE_V2 A8): in a room, a bot.message is attributed to
+    // whichever member actually sent it (event.actor_id), not the room's own
+    // name -- object?.body.name is only correct for a persona's own thread.
+    const attribution=event.type==='message.user'?'You':(object?.kind==='room'?items('persona').find(p=>p.id===event.actor_id)?.body.name:object?.body.name)??'Assistant';
+    h.append(node('strong',attribution),node('time',time(event.created_at)));m.append(h);
     if(event.type==='bot.message'&&event.payload.task_run_id){
      const task=runs.find(x=>x.id===event.payload.task_run_id);
      h.append(node('span',`task: ${task?.title??String(event.payload.task_run_id).slice(0,8)}`,'status'));
@@ -649,6 +654,14 @@ function render(){
     const e=node('div',undefined,'event');e.setAttribute('role','status');e.append(node('span','Follow-up expired','status'),node('span','A deferred follow-up expired after 90 days without delivery. Send a fresh follow-up on the task if it is still needed.'));timeline.append(e);
    }else if(event.type==='run.input_expired'){
     const e=node('div',undefined,'event');e.setAttribute('role','status');const skillRun=Boolean(event.payload?.skill_id||event.payload?.skill_invocation);e.append(node('span','Request expired','status'),node('span',skillRun?'An unstarted Run once request expired after 30 days. Open the current approved skill and supply fresh input.':'A queued request expired after 90 days without starting. Send a fresh request if it is still needed.'));timeline.append(e);
+   }else if(event.type==='room.turn'){
+    // V9 (ARCHITECTURE_V2 A8): turn scheduling/outcomes are collapsed, muted
+    // activity lines -- never a bubble, never search-filtered (A7: only
+    // owner.message/bot.message are bubbles).
+    const name=items('persona').find(p=>p.id===event.payload.member_id)?.body.name??String(event.payload.member_id).slice(0,8);
+    const e=node('div',undefined,'event activity');e.setAttribute('role','status');
+    const label=event.payload.phase==='started'?`Waiting for ${name}…`:`${name}: ${{SENT:'replied',PASS:'passed',SKIPPED:'turn skipped (limit reached)',TIMEOUT:'turn timed out',ERROR:'turn failed'}[event.payload.outcome]??event.payload.outcome}`;
+    e.append(node('span','Room turn','status'),node('span',label));timeline.append(e);
    }else if(event.type.startsWith('room.')){const e=node('div',undefined,'event');e.append(node('span',event.type==='room.context_update'?'Context update':'Room update'),node('span',event.payload.text??''));timeline.append(e);}
   }
   // V5 outbox (ARCHITECTURE_V2 A5): unresolved sends render as owner bubbles,

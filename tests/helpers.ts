@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { Store, type Database, type SqlValue } from '../src/core/store';
 import { ControlCore, DEFAULT_BOTS } from '../src/core/control';
-import type { Command, RoutinePut } from '../src/core/types';
+import type { Command, Options, RoutinePut } from '../src/core/types';
 
 export class TestDatabase implements Database {
   readonly sqlite: DatabaseSync;
@@ -23,12 +23,12 @@ export class TestDatabase implements Database {
   }
   close(): void { this.sqlite.close(); }
 }
-export function fixture(executionEnabled = false) {
+export function fixture(executionEnabled = false, overrides: Partial<Options> = {}) {
   let clock = new Date('2026-09-10T00:00:00.000Z');
   const db = new TestDatabase();
   db.exec("INSERT INTO lifecycle(singleton,provider_ref_json,phase,desired_state) VALUES(1,'{}','STOPPED','STOP')");
   const store = new Store(db);
-  const core = new ControlCore(store, { executionEnabled, actionPolicyIds: [], toolPolicyIds: [], now: () => new Date(clock), uuid: randomUUID });
+  const core = new ControlCore(store, { executionEnabled, actionPolicyIds: [], toolPolicyIds: [], now: () => new Date(clock), uuid: randomUUID, ...overrides });
   core.seed();
   return { db, store, core, setNow(value: string) { clock = new Date(value); },
     accept(command: Command, key = randomUUID()) {

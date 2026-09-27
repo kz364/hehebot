@@ -10,7 +10,7 @@ import addFormats from 'ajv-formats';
 import { ControlClient, ControlClientError } from './control-client.mjs';
 import { prepareMemoryDelivery, deferMemoryResponse, materializeMemoryResponse } from './memory-read.mjs';
 
-export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills', 'hehebot_read_memory', 'hehebot_send_message', 'hehebot_start_task', 'hehebot_list_tasks', 'hehebot_task_detail', 'hehebot_steer_task', 'hehebot_queue_followup', 'hehebot_cancel_task']);
+export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills', 'hehebot_read_memory', 'hehebot_send_message', 'hehebot_start_task', 'hehebot_list_tasks', 'hehebot_task_detail', 'hehebot_steer_task', 'hehebot_queue_followup', 'hehebot_cancel_task', 'hehebot_pass_turn']);
 // Minted once per agent-tools process; part of the deterministic message_key so
 // retries of the same JSON-RPC call within one process dedupe at the Worker.
 const SERVER_INSTANCE_ID = randomUUID();
@@ -111,6 +111,9 @@ export function buildToolDefinitions(contracts) {
         idempotency_key: resolveRefs(contracts.$defs.uuid, contracts), task_run_id: resolveRefs(contracts.$defs.uuid, contracts),
       }, required: ['idempotency_key', 'task_run_id'],
     } },
+    { name: AGENT_TOOL_NAMES[15], description: 'Only available on a scheduled room turn (ARCHITECTURE_V2 A8). Explicitly pass this turn without sending a message, when there is nothing useful to add. Prefer this over sending a bare acknowledgement.', inputSchema: {
+      type: 'object', additionalProperties: false, properties: { reason: { type: 'string', maxLength: 2000 } },
+    } },
   ]);
 }
 
@@ -190,6 +193,18 @@ export function createAgentToolsHandler({ controlClient, config, contracts, memo
           const status = error instanceof ControlClientError ? error.status : undefined;
           return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text',
             text: `hehebot_send_message failed: ${code}${status ? ` (${status})` : ''}. No message was committed for this call; retry or reword.` }] } };
+        }
+      }
+      if (name === 'hehebot_pass_turn') {
+        try {
+          const result = await controlClient.request('pass-turn', { identity: clone(config.identity), run_id: config.runId, attempt: config.attempt });
+          if (!result || result.accepted !== true) throw new Error('INVALID_PASS_RECEIPT');
+          return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify({ passed: true }) }] } };
+        } catch (error) {
+          const code = error instanceof ControlClientError ? error.code : 'AGENT_TOOL_FAILED';
+          const status = error instanceof ControlClientError ? error.status : undefined;
+          return { jsonrpc: '2.0', id: message.id, result: { isError: true, content: [{ type: 'text',
+            text: `hehebot_pass_turn failed: ${code}${status ? ` (${status})` : ''}. This is only available on a scheduled room turn.` }] } };
         }
       }
       if (name === 'hehebot_list_tasks') {

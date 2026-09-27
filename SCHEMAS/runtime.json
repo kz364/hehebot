@@ -790,6 +790,41 @@
       "additionalProperties": false,
       "properties": {
         "type": {
+          "const": "pass-turn"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
           "const": "steer-pending"
         },
         "payload": {
