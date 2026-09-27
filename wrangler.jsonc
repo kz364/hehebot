@@ -106,7 +106,8 @@
         "HEHEBOT_EXECUTION_MODE": "v2",
         "HEHEBOT_BOOT_DEADLINE_MS": "15000",
         "HEHEBOT_STUCK_POLICY": "{\"no_progress_ms\":300000,\"nudge_grace_ms\":120000}",
-        "HEHEBOT_SUCCESSOR_BACKOFF": "{\"base_ms\":5000,\"max_ms\":300000,\"notify_after\":3}"
+        "HEHEBOT_SUCCESSOR_BACKOFF": "{\"base_ms\":5000,\"max_ms\":300000,\"notify_after\":3}",
+        "HEHEBOT_BACKUP_AGE_RECIPIENT": ""
       },
       "durable_objects": {
         "bindings": [
@@ -114,6 +115,17 @@
             "name": "CONTROL",
             "class_name": "PersonalControl"
           }
+        ]
+      },
+      "r2_buckets": [
+        {
+          "binding": "BACKUPS",
+          "bucket_name": "hehebot-backups"
+        }
+      ],
+      "triggers": {
+        "crons": [
+          "0 20 * * *"
         ]
       }
     }

@@ -24,6 +24,7 @@ import {OwnerAlphaBackground} from './owner-alpha-background';
 import {TestCampaign} from './test-campaign';
 import {timelineExpirySql} from './timeline-retention';
 import {memorySourceDigest,memorySnapshot as readMemorySnapshot} from './memory-context';
+import {KEEP_BACKUPS,readBackupLast} from './scheduled-backup';
 import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
@@ -794,7 +795,8 @@ export class ControlCore {
    alphaSummary={owner_alpha:true,owner_alpha_session:{persona_id:policy.persona_id,expires_at:policy.expires_at,max_runs:policy.max_runs,admitted_runs:alpha.admittedRuns,max_task_seconds:policy.max_task_seconds}};
   }
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
-   settings:{timezone:'Asia/Jakarta',grantable_tools:GRANTABLE_TOOL_POLICIES.filter(x=>this.options.toolPolicyIds.includes(x.id))},
+   settings:{timezone:'Asia/Jakarta',grantable_tools:GRANTABLE_TOOL_POLICIES.filter(x=>this.options.toolPolicyIds.includes(x.id)),
+    backup:this.options.backupsConfigured?{enabled:true,kept:KEEP_BACKUPS,...readBackupLast(this.store)}:{enabled:false}},
    budget:this.budget.summary(),
    questions,
    roster:new RosterLedger(this.store,()=>now).summary(),
