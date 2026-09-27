@@ -579,8 +579,11 @@ export class LifecycleCore {
    this.store.db.exec("INSERT INTO outbox(id,run_id,destination,payload_json,status,created_at,updated_at) VALUES(?,?,'portal',?,'delivered',?,?) ON CONFLICT(run_id,destination) DO UPDATE SET payload_json=excluded.payload_json,status='delivered',updated_at=excluded.updated_at",this.core.options.uuid(),runId,JSON.stringify(result),now,now);
    this.store.event(this.core.options.uuid(),run.persona_id,'run.result','runtime',run.command_id,{run_id:runId,role:run.role,title:run.title,...result},now);
    // A1 fallback: a completed attempt that sent no hehebot_send_message still
-   // reaches the owner. This never fires twice for the same attempt.
-   if(result.status==='completed'&&result.text.length>0&&!this.store.db.all('SELECT 1 FROM bot_messages WHERE run_id=? AND attempt=? LIMIT 1',runId,attempt).length)
+   // reaches the owner. This never fires twice for the same attempt. A
+   // coordinator task's result is relayed by the woken coordinator instead
+   // (A4), so posting its final text too would show the owner the result twice.
+   const relayedByCoordinator=!!this.core.options.coordinatorInbox&&this.store.db.all<{task:number|null}>("SELECT json_extract(context_json,'$.coordinator_task') AS task FROM runs WHERE id=?",runId)[0]?.task===1;
+   if(result.status==='completed'&&result.text.length>0&&!relayedByCoordinator&&!this.store.db.all('SELECT 1 FROM bot_messages WHERE run_id=? AND attempt=? LIMIT 1',runId,attempt).length)
     appendBotMessageEvent(this.store,this.core.options.uuid,now,{id:runId,persona_id:run.persona_id,role:run.role},attempt,result.text,'final_text',null,`${runId}:${attempt}:final_text`);
    if(['completed','failed','cancelled'].includes(result.status))this.core.flushFollowups(runId);
    // G4 (GROK_ALIGNMENT A4): a task the coordinator started (hehebot_start_task,

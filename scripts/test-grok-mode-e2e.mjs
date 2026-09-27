@@ -291,15 +291,14 @@ try {
   assert.equal(new Set(thread.map(event => event.id)).size, thread.length);
   report.thread = thread.map(event => ({ type: event.type, text: event.payload.text, origin: event.payload.origin ?? null,
     task: event.payload.task_run_id ? 'task' : null }));
-  // The task's final text is published by the A1 final_text fallback (it sent
-  // no message); the coordinator relays separately. Everything else is a
-  // committed hehebot_send_message.
+  // The task's final text is NOT a bubble: the coordinator is woken by the
+  // task.event and relays it (A4), so the owner sees the result once. Every
+  // bubble is a committed hehebot_send_message.
   assert.deepEqual(report.thread, [
     { type: 'message.user', text: FIRST, origin: null, task: null },
     { type: 'bot.message', text: ACK, origin: 'tool', task: null },
     { type: 'message.user', text: SECOND, origin: null, task: null },
     { type: 'bot.message', text: STATUS, origin: 'tool', task: null },
-    { type: 'bot.message', text: TASK_RESULT, origin: 'final_text', task: 'task' },
     { type: 'bot.message', text: RELAY, origin: 'tool', task: null },
   ]);
   assert.equal(new Set(thread.map(event => event.payload.text)).size, thread.length, 'no duplicate bubbles');
