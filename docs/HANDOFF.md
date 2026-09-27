@@ -88,8 +88,9 @@ still couldn't chat with a bot during a background task. See the traps in
 
 ### State
 
-- G0–G2 and G4–G7 are done locally on `grok-alignment` (not pushed). G3 is merged but needs
-  Linux evidence for the lock takeover. Next is **G8** (hosted alpha on the new path), which
+- G0–G7 are done locally on `grok-alignment` (not pushed); on Linux (test Sprite `hehebot-ci`,
+  run tests attached — Sprites pause when idle) full vitest and the runtime suite pass except 3
+  pre-existing setpriv cases. G8 local prep and `scripts/test-grok-mode-e2e.mjs` pass. Next is **G8** (hosted alpha on the new path), which
   needs owner authorization: Worker deploy, live Codex calls, and Fly credentials (owner approved
   ≤ $10 Fly spend on 2026-09-27). `coordinatorInbox` is off by default until G8 enables it.
 - The deployed portal and the Sprite are unchanged. The hosted trial work from
