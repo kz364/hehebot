@@ -1068,7 +1068,7 @@ export class PersonalControl extends DurableObject<Env> {
    }
    if(this.core.options.executionEnabled)this.progress.sweep();
    if(this.core.options.executionEnabled){const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);await this.lifecycle.drive(provider);}
-  }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code,
+  }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code,message:safeError(error).message,
    ...(error instanceof ProviderError?{provider_code:error.code,provider_status:error.status??null}:{error_name:error instanceof Error?error.name:typeof error})}));}
   finally{this.broadcastStreamCommit();await this.arm(failed?300000:0,true);}
  }
