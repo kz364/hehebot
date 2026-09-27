@@ -189,5 +189,13 @@ export default {
    if(status>=500)console.error(JSON.stringify({event:'request.failed',request_id:requestId,code:safeError(error).code}));
    const response=json({error:safeError(error),request_id:requestId},status);if(status===429)response.headers.set('Retry-After','60');return response;
   }
+ },
+ /** V-Backups Cron Trigger (env.hehebot: 03:00 Asia/Jakarta = 20:00 UTC). Not
+  * an owner request: no Access/local auth applies. runScheduledBackup() itself
+  * no-ops if BACKUPS/HEHEBOT_BACKUP_AGE_RECIPIENT are unconfigured. */
+ async scheduled(_controller:ScheduledController,env:Env,_ctx:ExecutionContext):Promise<void>{
+  const control=env.CONTROL.getByName(env.INSTALLATION_ID);
+  const result=unwrap(await control.runScheduledBackup());
+  if(result.status==='failed')console.error(JSON.stringify({event:'backup.scheduled_failed',error_code:result.error_code}));
  }
 } satisfies ExportedHandler<Env>;

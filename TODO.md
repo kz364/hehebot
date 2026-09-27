@@ -52,7 +52,7 @@ Acceptance IDs refer to ARCHITECTURE_V2 §4. Schema version is 18 today.
 
 | Done | Item | Deliverable |
 | --- | --- | --- |
-| [ ] | **Backups** (old E10) | Nightly encrypted export of Worker state + runtime config/auth references off-host, and one restore test. No purge/expiry proof program. |
+| [x] | **Backups** (old E10) | Nightly encrypted export of Worker state + runtime config/auth references off-host, and one restore test. No purge/expiry proof program. Built and tested locally: Worker Cron Trigger (`wrangler.jsonc` env.hehebot, 20:00 UTC) → DO logical export → in-Worker age-encryption (age-encryption 0.3.1, BSD-3-Clause) → R2 (`BACKUPS`/`hehebot-backups`, 14-day retention) → `scripts/restore-control-backup.mjs` e2e-verified against the pinned age CLI and `import-control-export.mjs`. See `docs/BACKUPS.md`. **Live verification pending:** bucket + recipient not created/set (HARD CONSTRAINTS forbid it from here); first real nightly run and one live restore remain owner-performed. |
 | [ ] | **WhatsApp** (old E09) | Decide if the family-chat routine is worth it; if yes, fix the pinned SDK `structuredContent` incompatibility and pair. |
 | [ ] | **Production flags** (old E14) | Record what is live and flip the production gates for this single-owner installation. |
 | [ ] | **Mac app** (old E12) | Build/render the SwiftUI shell on the Mac, sign in, notifications; pairs with V10. Owner keeps this. |

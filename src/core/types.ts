@@ -70,4 +70,8 @@ export type Options = { testCampaignGrant?:TestCampaignGrant;ownerAlphaBootstrap
  // V4 (ARCHITECTURE_V2 A4): gates the per-persona coordinator inbox (steer-or-batch
  // routing of message.send) and the task.event coordinator wake. Off by default so
  // every pre-existing message.send/completion test keeps its prior behavior.
- coordinatorInbox?: boolean };
+ coordinatorInbox?: boolean;
+ // V-Backups: whether nightly R2 backup is wired (BACKUPS bucket binding and
+ // HEHEBOT_BACKUP_AGE_RECIPIENT var both set). Off by default; state() only
+ // reports a backup summary when this is true.
+ backupsConfigured?: boolean };

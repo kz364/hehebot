@@ -1,6 +1,14 @@
 // Secret names only; values are set through Wrangler secret bindings, never committed.
+// No top-level import: this file must stay an ambient script (not a module),
+// or the global `interface Env`/`declare namespace Cloudflare` merges below
+// silently stop applying. Reference workers-types inline instead.
+type __R2Bucket = import('@cloudflare/workers-types').R2Bucket;
 declare namespace Cloudflare {
  interface Env { HEHEBOT_TEST_REVOKED?:string; }
+ // V-Backups: R2 binding and age recipient are only present in the env.hehebot
+ // named environment (see wrangler.jsonc); optional here so other envs/tests
+ // that omit them still type-check. Absent/empty means the feature is off.
+ interface Env { BACKUPS?:__R2Bucket; HEHEBOT_BACKUP_AGE_RECIPIENT?:string; }
  interface Env { HEHEBOT_TEST_ACCESS?:string; HEHEBOT_TEST_CAMPAIGN?:string; }
  interface Env { HEHEBOT_OWNER_ALPHA_BOOTSTRAP?:string; HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN?:string; HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY?:string; }
  interface Env { HEHEBOT_OWNER_ALPHA_WAKE?:string; HEHEBOT_OWNER_ALPHA_WAKE_TOKEN?:string; }
@@ -10,6 +18,7 @@ declare namespace Cloudflare {
 }
 
 interface Env { HEHEBOT_TEST_REVOKED?:string; }
+interface Env { BACKUPS?:__R2Bucket; HEHEBOT_BACKUP_AGE_RECIPIENT?:string; }
 interface Env { HEHEBOT_TEST_ACCESS?:string; HEHEBOT_TEST_CAMPAIGN?:string; }
 interface Env { HEHEBOT_OWNER_ALPHA_BOOTSTRAP?:string; HEHEBOT_OWNER_ALPHA_MANAGER_TOKEN?:string; HEHEBOT_OWNER_ALPHA_TASK_SIGNING_KEY?:string; }
 interface Env { HEHEBOT_OWNER_ALPHA_WAKE?:string; HEHEBOT_OWNER_ALPHA_WAKE_TOKEN?:string; }

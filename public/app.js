@@ -534,7 +534,7 @@ function render(){
  const searchSelection=JSON.stringify([selected,selectionVersion,recoveryView?.kind]);
  if(conversationSearchSelection!==searchSelection){$('conversation-search').value='';conversationSearchSelection=searchSelection;}
  $('conversation-search-panel').hidden=managedSelected()||Boolean(recoveryView);
- renderBudget();renderMonitoring();renderTaskStrip();renderRoster();
+ renderBudget();renderMonitoring();renderBackupStatus();renderTaskStrip();renderRoster();
  for(const [kind,target] of [['room','rooms']]){
   $(target).replaceChildren();
   for(const object of items(kind).filter(x=>!x.body.archived)){
@@ -1239,6 +1239,13 @@ function renderMonitoring(){
  const messages={HEARTBEAT_UNKNOWN:'Runtime heartbeat has not been verified.',HEARTBEAT_STALE:'Runtime heartbeat is overdue.',QUEUE_DELAYED:'Ready requests have waited over two minutes.',CANCEL_UNCONFIRMED:'Cancellation is not confirmed. Do not replay the action.',RECOVERY_REQUIRED:'Tasks need recovery review before resuming.',OUTCOME_UNKNOWN:'External outcomes are unknown. Reconcile before retrying.',OPERATION_OVERDUE:'Recorded operations exceeded their deadline.',SCHEDULE_DELAYED:'Scheduling is more than five minutes behind.',BACKUP_UNVERIFIED:'No coordinated backup has been verified.'};
  const signature=JSON.stringify(m.alerts),target=$('monitoring-alerts');
  if(target.dataset.signature!==signature){target.dataset.signature=signature;target.replaceChildren(...m.alerts.map(alert=>node('p',`${messages[alert.code]??alert.code}${alert.count===undefined?'':` (${alert.count})`}`,alert.severity==='error'?'hint danger':'hint')));}
+}
+function renderBackupStatus(){
+ const backup=snapshot.settings?.backup,el=$('backup-status');
+ if(!backup?.enabled){el.hidden=true;return;}
+ el.hidden=false;
+ if(!backup.at){el.textContent='Backups enabled · first nightly run pending';return;}
+ el.textContent=`${backup.ok?'Last backup':'Last backup attempt failed'}: ${time(backup.at)} · ${backup.kept} kept${backup.ok?'':` (${backup.error_code})`}`;
 }
 function renderBudget(){
  const budget=snapshot.budget;$('budget-panel').hidden=!budget;if(!budget)return;

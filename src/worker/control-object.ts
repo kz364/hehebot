@@ -11,6 +11,7 @@ import { Store, type Database, type SqlValue } from '../core/store';
 import { ControlCore } from '../core/control';
 import { SkillCatalog } from '../core/skills';
 import { exportControl } from '../core/control-export';
+import { reconcileBackupNotice, runScheduledBackup as runScheduledBackupCore } from '../core/scheduled-backup';
 import { TimelineRetention } from '../core/timeline-retention';
 import { ResultRetention } from '../core/result-retention';
 import { LifecycleCore } from '../core/lifecycle';
@@ -100,7 +101,7 @@ export class PersonalControl extends DurableObject<Env> {
   this.executionMode=executionMode;
   this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN,!!bootstrap||!!warm||!!background);
   requireThat(!(bootstrap||warm||background)||!!this.hostedWake,'INVALID_CONFIGURATION','Automatic owner alpha requires its private wake destination.',503);
-  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:warm||background?hosted?.policy:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaWarm:warm,ownerAlphaBackground:background,ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true'||executionMode==='v2',coordinatorInbox:executionMode==='v2',whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:warm||background?hosted?.policy:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaWarm:warm,ownerAlphaBackground:background,ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true'||executionMode==='v2',coordinatorInbox:executionMode==='v2',backupsConfigured:!!env.BACKUPS&&!!env.HEHEBOT_BACKUP_AGE_RECIPIENT,whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
@@ -279,7 +280,19 @@ export class PersonalControl extends DurableObject<Env> {
   new OutputPreviews(this.store,()=>this.core.now()).prune();
   new TokenUsageSnapshots(this.store,()=>this.core.now()).prune();
   new MemoryReadRetention(this.store,()=>this.core.now()).prune();
+  // Staleness can be detected between cron-triggered backup attempts, e.g. if
+  // the trigger itself stops firing; check on every request too so the owner
+  // sees BACKUP_STALE without waiting for the next scheduled run.
+  reconcileBackupNotice(this.store,this.core.options.uuid,new Date(this.core.now()));
  }
+ /** V-Backups: nightly off-host encrypted export, invoked by the Worker's
+  * scheduled() handler (Cron Trigger), never by an owner request. Does
+  * nothing if BACKUPS/HEHEBOT_BACKUP_AGE_RECIPIENT are unconfigured. */
+ async runScheduledBackup(){return this.rpc(async()=>{
+  const result=await runScheduledBackupCore(this.store,{BACKUPS:this.env.BACKUPS,HEHEBOT_BACKUP_AGE_RECIPIENT:this.env.HEHEBOT_BACKUP_AGE_RECIPIENT},new Date(this.core.now()),this.core.options.uuid);
+  await this.arm();
+  return result;
+ });}
  async accept(owner:string,key:string,hash:string,input:unknown){return this.rpc(async()=>{
   // Even rejected activation must leave retained predecessor history untouched.
   // Core.accept still validates the complete envelope and idempotency receipt.
