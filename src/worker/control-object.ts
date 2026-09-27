@@ -15,6 +15,7 @@ import { TimelineRetention } from '../core/timeline-retention';
 import { ResultRetention } from '../core/result-retention';
 import { LifecycleCore } from '../core/lifecycle';
 import { parseLifecycleTimings } from '../core/lifecycle-config';
+import { ProgressWatchdog, parseStuckPolicy } from '../core/progress-watchdog';
 import { EffectLedger } from '../core/effects';
 import { RootChildEffects } from '../core/root-child-effects';
 import { TaskSteering } from '../core/task-steering';
@@ -57,6 +58,7 @@ export class PersonalControl extends DurableObject<Env> {
  private store:Store;
  private core:ControlCore;
  private lifecycle:LifecycleCore;
+ private progress:ProgressWatchdog;
  private flights:FlightRestoreIntegration;
  private retention:TimelineRetention;
  private resultRetention:ResultRetention;
@@ -104,6 +106,7 @@ export class PersonalControl extends DurableObject<Env> {
   let idleMode=false;
   try{idleMode=createProvider(JSON.parse(env.PROVIDER_CONFIG) as ProviderConfig).capabilities.stopMode==='provider-idle';}catch{}
   this.lifecycle=new LifecycleCore(this.store,this.core,{idleMode,...parseLifecycleTimings(env)});
+  this.progress=new ProgressWatchdog(this.store,this.core,parseStuckPolicy(env.HEHEBOT_STUCK_POLICY));
   this.flights=new FlightRestoreIntegration(this.store,this.core,this.lifecycle,{enabled:env.FLIGHT_RESTORE_VERIFIED==='true',policyId:env.FLIGHT_RESTORE_POLICY_ID??''});
   this.ctx.blockConcurrencyWhile(async()=>{try{
    if(!db.all("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_versions'").length)db.exec(schema.replace('PRAGMA foreign_keys = ON;',''));
@@ -482,6 +485,7 @@ export class PersonalControl extends DurableObject<Env> {
    case 'memory-prepare':result=this.lifecycle.prepareMemory(command.payload.identity,command.payload.persona_models,command.payload.memory_read_personas);break;
    case 'claim':result=this.lifecycle.claim(command.payload.identity,command.payload.persona_models,command.payload.memory_budget,command.payload.memory_read_personas,command.payload.lane,command.payload.memory_notice);break;
    case 'abandon':this.lifecycle.abandon(command.payload.identity,command.payload.code);break;
+   case 'progress':this.progress.record(command.payload.identity,command.payload.run_id,command.payload.attempt,command.payload.source,this.lifecycle);break;
    case 'heartbeat':result=this.lifecycle.heartbeat(command.payload.identity,command.payload.operations);break;
    case 'submitted':this.lifecycle.submitted(command.payload.identity,command.payload.run_id,command.payload.attempt,command.payload.native_ref);break;
    case 'coordinator-release':{
@@ -802,6 +806,7 @@ export class PersonalControl extends DurableObject<Env> {
     // Delivery is already non-replayable. Keep the normal lease watchdog cadence.
     catch(error){console.error(JSON.stringify({event:'control.owner_alpha_wake_unknown',code:safeError(error).code,...(error instanceof HostedWakeDeliveryError?{phase:error.phase,upstream_status:error.upstreamStatus}:{})}));}
    }
+   if(this.core.options.executionEnabled)this.progress.sweep();
    if(this.core.options.executionEnabled){const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);await this.lifecycle.drive(provider);}
   }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code,
    ...(error instanceof ProviderError?{provider_code:error.code,provider_status:error.status??null}:{error_name:error instanceof Error?error.name:typeof error})}));}

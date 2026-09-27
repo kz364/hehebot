@@ -2,490 +2,1646 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$defs": {
     "memoryBudget": {
-      "type":"object","additionalProperties":false,
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "schema_version":{"const":1},
-        "run_id":{"type":"string","format":"uuid"},
-        "attempt":{"type":"integer","minimum":1},
-        "selected_model":{"type":"string","pattern":"^[a-zA-Z0-9._-]{1,128}$"},
-        "sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},
-        "tokenizer":{"const":"gpt-tokenizer@4.0.0/o200k_base/ordinary-v1"},
-        "global_tokens":{"type":"integer","minimum":0,"maximum":9007199254740991},
-        "scoped_tokens":{"type":"integer","minimum":0,"maximum":9007199254740991}
+        "schema_version": {
+          "const": 1
+        },
+        "run_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "selected_model": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "tokenizer": {
+          "const": "gpt-tokenizer@4.0.0/o200k_base/ordinary-v1"
+        },
+        "global_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "scoped_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
       },
-      "required":["schema_version","run_id","attempt","selected_model","sha256","tokenizer","global_tokens","scoped_tokens"]
+      "required": [
+        "schema_version",
+        "run_id",
+        "attempt",
+        "selected_model",
+        "sha256",
+        "tokenizer",
+        "global_tokens",
+        "scoped_tokens"
+      ]
     },
     "tokenCounts": {
-      "type":"object","additionalProperties":false,
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "inputTokens":{"type":"integer","minimum":0,"maximum":9007199254740991},
-        "cachedInputTokens":{"type":"integer","minimum":0,"maximum":9007199254740991},
-        "cacheWriteInputTokens":{"type":"integer","minimum":0,"maximum":9007199254740991},
-        "outputTokens":{"type":"integer","minimum":0,"maximum":9007199254740991},
-        "reasoningOutputTokens":{"type":"integer","minimum":0,"maximum":9007199254740991},
-        "totalTokens":{"type":"integer","minimum":0,"maximum":9007199254740991}
-      },"required":["inputTokens","cachedInputTokens","cacheWriteInputTokens","outputTokens","reasoningOutputTokens","totalTokens"]
+        "inputTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cachedInputTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "cacheWriteInputTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "outputTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "reasoningOutputTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "totalTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "inputTokens",
+        "cachedInputTokens",
+        "cacheWriteInputTokens",
+        "outputTokens",
+        "reasoningOutputTokens",
+        "totalTokens"
+      ]
     },
     "runtimeIdentity": {
-      "type":"object","additionalProperties":false,
-      "properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},
-      "required":["epoch","boot_id"]
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "epoch": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "boot_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "epoch",
+        "boot_id"
+      ]
     },
     "effectIntent": {
-      "type":"object","additionalProperties":false,
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "id":{"type":"string","format":"uuid"},
-        "run_id":{"type":"string","format":"uuid"},
-        "attempt":{"type":"integer","minimum":1},
-        "action_key":{"type":"string","minLength":1,"maxLength":256},
-        "classification":{"enum":["read_only","idempotent","mutation"]},
-        "authorization_ref":{"type":"string","minLength":1,"maxLength":256},
-        "request_digest":{"type":"string","minLength":1,"maxLength":256},
-        "provider_idempotency_key":{"anyOf":[{"type":"string","minLength":1,"maxLength":256},{"type":"null"}]}
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "run_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "action_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "classification": {
+          "enum": [
+            "read_only",
+            "idempotent",
+            "mutation"
+          ]
+        },
+        "authorization_ref": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "request_digest": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "provider_idempotency_key": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
       },
-      "required":["id","run_id","attempt","action_key","classification","authorization_ref","request_digest","provider_idempotency_key"]
+      "required": [
+        "id",
+        "run_id",
+        "attempt",
+        "action_key",
+        "classification",
+        "authorization_ref",
+        "request_digest",
+        "provider_idempotency_key"
+      ]
     }
   },
   "oneOf": [
     {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"abandon"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "code":{"type":"string","pattern":"^[A-Za-z0-9_.-]{1,64}$"}
-          },"required":["identity","code"]
-        }
-      },"required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"memory-prepare"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "memory_read_personas":{"type":"array","maxItems":256,"uniqueItems":true,"items":{"type":"string","format":"uuid"}},
-            "persona_models":{"type":"object","maxProperties":256,"propertyNames":{"format":"uuid"},"additionalProperties":{"type":"string","pattern":"^[a-zA-Z0-9._-]{1,128}$"}}
-          },"required":["identity","persona_models"]
-        }
-      },"required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"token-usage"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "run_id":{"type":"string","format":"uuid"},
-            "attempt":{"type":"integer","minimum":1,"maximum":9007199254740991},
-            "native_ref":{"type":"string","minLength":1,"maxLength":256},
-            "version":{"type":"integer","minimum":1,"maximum":9007199254740991},
-            "usage":{"type":"object","additionalProperties":false,"properties":{
-              "total":{"$ref":"#/$defs/tokenCounts"},"last":{"$ref":"#/$defs/tokenCounts"},
-              "modelContextWindow":{"type":["integer","null"],"minimum":0,"maximum":9007199254740991}
-            },"required":["total","last","modelContextWindow"]}
-          },"required":["identity","run_id","attempt","native_ref","version","usage"]
-        }
-      },"required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"coordinator-release"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "run_id":{"type":"string","format":"uuid"},
-            "attempt":{"type":"integer","minimum":1},
-            "native_ref":{"type":"string","minLength":1,"maxLength":256},
-            "outcome":{"enum":["completed","failed","interrupted"]}
-          },
-          "required":["identity","run_id","attempt","native_ref","outcome"]
-        }
-      },
-      "required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"whatsapp-read-authorize"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "run_id":{"type":"string","format":"uuid"},
-            "attempt":{"type":"integer","minimum":1},
-            "name":{"enum":["whatsapp_get_chat_messages","whatsapp_search_messages"]},
-            "chatId":{"type":"string","minLength":1,"maxLength":256}
-          },
-          "required":["identity","run_id","attempt","name","chatId"]
-        }
-      },
-      "required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"question-record"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "run_id":{"type":"string","format":"uuid"},
-            "attempt":{"type":"integer","minimum":1},
-            "question":{
-              "type":"object","additionalProperties":false,
-              "properties":{
-                "id":{"type":"string","format":"uuid"},
-                "connection_id":{"type":"string","format":"uuid"},
-                "request_id":{"anyOf":[{"type":"integer","minimum":-9007199254740991,"maximum":9007199254740991},{"type":"string","minLength":1,"maxLength":128}]},
-                "callback_deadline_at":{"type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"},
-                "params":{
-                  "type":"object","additionalProperties":false,
-                  "properties":{
-                    "threadId":{"type":"string","minLength":1,"maxLength":256},
-                    "turnId":{"type":"string","minLength":1,"maxLength":256},
-                    "itemId":{"type":"string","minLength":1,"maxLength":256},
-                    "isBlocking":{"type":"boolean"},
-                    "autoResolutionMs":{"anyOf":[{"type":"null"},{"type":"integer","minimum":0,"maximum":9007199254740991}]},
-                    "questions":{"type":"array","minItems":1,"maxItems":3,"items":{
-                      "type":"object","additionalProperties":false,
-                      "properties":{
-                        "id":{"type":"string","minLength":1,"maxLength":128},
-                        "header":{"type":"string","minLength":1,"maxLength":80},
-                        "question":{"type":"string","minLength":1,"maxLength":2000},
-                        "isOther":{"type":"boolean"},"isSecret":{"const":false},
-                        "options":{"anyOf":[{"type":"null"},{"type":"array","maxItems":3,"items":{
-                          "type":"object","additionalProperties":false,
-                          "properties":{"label":{"type":"string","minLength":1,"maxLength":200},"description":{"type":"string","minLength":1,"maxLength":1000}},
-                          "required":["label","description"]
-                        }}]}
-                      },"required":["id","header","question"]
-                    }}
-                  },"required":["threadId","turnId","itemId","isBlocking","questions"]
-                }
-              },"required":["id","connection_id","request_id","params"]
-            }
-          },"required":["identity","run_id","attempt","question"]
-        }
-      },"required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties":{
-        "type":{"const":"question-take"},
-        "payload":{
-          "type":"object","additionalProperties":false,
-          "properties":{
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "question_id":{"type":"string","format":"uuid"},
-            "connection_id":{"type":"string","format":"uuid"}
-          },"required":["identity","question_id","connection_id"]
-        }
-      },"required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties":{
-        "type":{"const":"question-resolve"},
-        "payload":{
-          "type":"object","additionalProperties":false,
-          "properties":{
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "question_id":{"type":"string","format":"uuid"},
-            "connection_id":{"type":"string","format":"uuid"}
-          },"required":["identity","question_id","connection_id"]
-        }
-      },"required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"output-preview"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "run_id":{"type":"string","format":"uuid"},
-            "attempt":{"type":"integer","minimum":1},
-            "native_ref":{"type":"string","minLength":1,"maxLength":256},
-            "version":{"type":"integer","minimum":1,"maximum":9007199254740991},
-            "text":{"type":"string","maxLength":8192},
-            "truncated":{"type":"boolean"}
-          },
-          "required":["identity","run_id","attempt","native_ref","version","text","truncated"]
-        }
-      },
-      "required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"bot-message"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "run_id":{"type":"string","format":"uuid"},
-            "attempt":{"type":"integer","minimum":1},
-            "message_key":{"type":"string","minLength":1,"maxLength":512},
-            "text":{"type":"string","minLength":1,"maxLength":32768},
-            "reply_to_event_id":{"type":"string","format":"uuid"}
-          },
-          "required":["identity","run_id","attempt","message_key","text"]
-        }
-      },
-      "required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"steer-pending"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "targets":{"type":"array","minItems":1,"maxItems":101,"uniqueItems":true,"items":{
-              "type":"object","additionalProperties":false,
-              "properties":{"run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1}},
-              "required":["run_id","attempt"]
-            }}
-          },
-          "required":["identity","targets"]
-        }
-      },
-      "required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"steer-result"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "run_id":{"type":"string","format":"uuid"},
-            "attempt":{"type":"integer","minimum":1},
-            "command_id":{"type":"string","format":"uuid"},
-            "status":{"enum":["accepted","outcome_unknown","not_delivered"]}
-          },
-          "required":["identity","run_id","attempt","command_id","status"]
-        }
-      },
-      "required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"budget-report"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "run_id":{"type":"string","format":"uuid"},
-            "attempt":{"type":"integer","minimum":1},
-            "report": {
-              "type":"object","additionalProperties":false,
-              "properties": {
-                "period":{"type":"string","pattern":"^[0-9]{4}-(0[1-9]|1[0-2])$"},
-                "projected_cents":{"type":"integer","minimum":0,"maximum":1000000000},
-                "observed_at":{"type":"string","format":"date-time"},
-                "source_ref":{"type":"string","minLength":1,"maxLength":128,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}
-              },
-              "required":["period","projected_cents","observed_at","source_ref"]
-            }
-          },
-          "required":["identity","run_id","attempt","report"]
-        }
-      },
-      "required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"root-child-effect-intent"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "root_run_id":{"type":"string","format":"uuid"},
-            "root_attempt":{"type":"integer","minimum":1},
-            "effect":{"$ref":"#/$defs/effectIntent"},
-            "resources":{"type":"array","minItems":0,"maxItems":8,"uniqueItems":true,"items":{"type":"string","pattern":"^[a-zA-Z0-9:._/-]{1,256}$"}}
-          },
-          "required":["identity","root_run_id","root_attempt","effect","resources"],
-          "allOf":[{
-            "if":{"properties":{"effect":{"properties":{"classification":{"enum":["idempotent","mutation"]}}}}},
-            "then":{"properties":{"resources":{"minItems":1}}}
-          }]
-        }
-      },
-      "required":["type","payload"]
-    },
-    {
-      "type":"object","additionalProperties":false,
-      "properties": {
-        "type":{"const":"root-child-effect-result"},
-        "payload": {
-          "type":"object","additionalProperties":false,
-          "properties": {
-            "identity":{"$ref":"#/$defs/runtimeIdentity"},
-            "root_run_id":{"type":"string","format":"uuid"},
-            "root_attempt":{"type":"integer","minimum":1},
-            "run_id":{"type":"string","format":"uuid"},
-            "attempt":{"type":"integer","minimum":1},
-            "effect_id":{"type":"string","format":"uuid"},
-            "status":{"enum":["dispatched","confirmed","failed","outcome_unknown"]},
-            "receipt":{"type":["object","null"]}
-          },
-          "required":["identity","root_run_id","root_attempt","run_id","attempt","effect_id","status","receipt"]
-        }
-      },
-      "required":["type","payload"]
-    },
-    {
-      "type":"object", "additionalProperties":false,
-      "properties": {
-        "type":{"const":"memory-read-prepare"},
-        "payload": {
-          "type":"object", "additionalProperties":false,
-          "properties": {
-            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
-            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
-            "read_id":{"type":"string","format":"uuid"},"memory_id":{"type":"string","format":"uuid"},"revision":{"type":"integer","minimum":1},
-            "offset":{"type":"integer","minimum":0,"maximum":16000},"limit":{"type":"integer","minimum":1,"maximum":2000}
-          },"required":["identity","run_id","attempt","read_id","memory_id","revision","offset","limit"]
-        }
-      },"required":["type","payload"]
-    },
-    {
-      "type":"object", "additionalProperties":false,
-      "properties": {
-        "type":{"const":"memory-read-reserve"},
-        "payload": {
-          "type":"object", "additionalProperties":false,
-          "properties": {
-            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
-            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
-            "read_id":{"type":"string","format":"uuid"},"memory_id":{"type":"string","format":"uuid"},"revision":{"type":"integer","minimum":1},
-            "offset":{"type":"integer","minimum":0,"maximum":16000},"limit":{"type":"integer","minimum":1,"maximum":2000},
-            "sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},"selected_model":{"type":"string","pattern":"^[a-zA-Z0-9._-]{1,128}$"},
-            "tokenizer":{"const":"gpt-tokenizer@4.0.0/o200k_base/ordinary-v1"},"tokens":{"type":"integer","minimum":1,"maximum":131072}
-          },"required":["identity","run_id","attempt","read_id","memory_id","revision","offset","limit","sha256","selected_model","tokenizer","tokens"]
-        }
-      },"required":["type","payload"]
-    },
-    {
-      "type":"object", "additionalProperties":false,
-      "properties": {
-        "type":{"const":"agent-skill-search"},
-        "payload": {
-          "type":"object", "additionalProperties":false,
-          "properties": {
-            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
-            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
-            "query":{"type":"string","minLength":1,"maxLength":200},"after":{"type":"string","format":"uuid"}
-          },"required":["identity","run_id","attempt","query"]
-        }
-      },"required":["type","payload"]
-    },
-    {
-      "type":"object", "additionalProperties":false,
-      "properties": {
-        "type":{"const":"agent-skill"},
-        "payload": {
-          "type":"object", "additionalProperties":false,
-          "properties": {
-            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
-            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
-            "skill_id":{"type":"string","format":"uuid"}
-          },"required":["identity","run_id","attempt","skill_id"]
-        }
-      },"required":["type","payload"]
-    },
-    {
-      "type":"object", "additionalProperties":false,
-      "properties": {
-        "type":{"const":"agent-routines"},
-        "payload": {
-          "type":"object", "additionalProperties":false,
-          "properties": {
-            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
-            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
-            "id":{"type":"string","format":"uuid"},"after":{"type":"string","format":"uuid"}
-          },"required":["identity","run_id","attempt"]
-        }
-      },"required":["type","payload"]
-    },
-    {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "agent-command" },
+        "type": {
+          "const": "abandon"
+        },
         "payload": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "identity": {
-              "type": "object", "additionalProperties": false,
-              "properties": {
-                "epoch": { "type": "integer", "minimum": 1 },
-                "boot_id": { "type": "string", "format": "uuid" }
-              },
-              "required": ["epoch", "boot_id"]
+              "$ref": "#/$defs/runtimeIdentity"
             },
-            "run_id": { "type": "string", "format": "uuid" },
-            "attempt": { "type": "integer", "minimum": 1 },
-            "idempotency_key": { "type": "string", "minLength": 16, "maxLength": 128 },
-            "command": {
-              "type": "object", "additionalProperties": false,
-              "properties": {
-                "schema_version": { "const": 1 },
-                "type": { "enum": ["skill.propose", "routine.put", "routine.run", "routine.delete", "task.start", "run.steer", "run.followup", "run.cancel"] },
-                "payload": { "type": "object", "maxProperties": 16 }
-              },
-              "required": ["schema_version", "type", "payload"]
+            "code": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.-]{1,64}$"
             }
           },
-          "required": ["identity", "run_id", "attempt", "idempotency_key", "command"]
+          "required": [
+            "identity",
+            "code"
+          ]
         }
       },
-      "required": ["type", "payload"]
+      "required": [
+        "type",
+        "payload"
+      ]
     },
     {
-      "type":"object", "additionalProperties":false,
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "type":{"const":"agent-task-list"},
+        "type": {
+          "const": "memory-prepare"
+        },
         "payload": {
-          "type":"object", "additionalProperties":false,
+          "type": "object",
+          "additionalProperties": false,
           "properties": {
-            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
-            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
-            "state":{"enum":["active","completed","failed","cancelled","waiting"]},"after":{"type":"string","format":"uuid"}
-          },"required":["identity","run_id","attempt"]
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "memory_read_personas": {
+              "type": "array",
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "persona_models": {
+              "type": "object",
+              "maxProperties": 256,
+              "propertyNames": {
+                "format": "uuid"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+              }
+            }
+          },
+          "required": [
+            "identity",
+            "persona_models"
+          ]
         }
-      },"required":["type","payload"]
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
     },
     {
-      "type":"object", "additionalProperties":false,
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "type":{"const":"agent-task-detail"},
+        "type": {
+          "const": "token-usage"
+        },
         "payload": {
-          "type":"object", "additionalProperties":false,
+          "type": "object",
+          "additionalProperties": false,
           "properties": {
-            "identity":{"type":"object","additionalProperties":false,"properties":{"epoch":{"type":"integer","minimum":1},"boot_id":{"type":"string","format":"uuid"}},"required":["epoch","boot_id"]},
-            "run_id":{"type":"string","format":"uuid"},"attempt":{"type":"integer","minimum":1},
-            "task_run_id":{"type":"string","format":"uuid"}
-          },"required":["identity","run_id","attempt","task_run_id"]
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "native_ref": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "usage": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "total": {
+                  "$ref": "#/$defs/tokenCounts"
+                },
+                "last": {
+                  "$ref": "#/$defs/tokenCounts"
+                },
+                "modelContextWindow": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "total",
+                "last",
+                "modelContextWindow"
+              ]
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "native_ref",
+            "version",
+            "usage"
+          ]
         }
-      },"required":["type","payload"]
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "coordinator-release"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "native_ref": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "outcome": {
+              "enum": [
+                "completed",
+                "failed",
+                "interrupted"
+              ]
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "native_ref",
+            "outcome"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "whatsapp-read-authorize"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "name": {
+              "enum": [
+                "whatsapp_get_chat_messages",
+                "whatsapp_search_messages"
+              ]
+            },
+            "chatId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "name",
+            "chatId"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "question-record"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "question": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "connection_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "request_id": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  ]
+                },
+                "callback_deadline_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+                },
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "threadId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "turnId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "itemId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    },
+                    "isBlocking": {
+                      "type": "boolean"
+                    },
+                    "autoResolutionMs": {
+                      "anyOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      ]
+                    },
+                    "questions": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 3,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "header": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 80
+                          },
+                          "question": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 2000
+                          },
+                          "isOther": {
+                            "type": "boolean"
+                          },
+                          "isSecret": {
+                            "const": false
+                          },
+                          "options": {
+                            "anyOf": [
+                              {
+                                "type": "null"
+                              },
+                              {
+                                "type": "array",
+                                "maxItems": 3,
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 200
+                                    },
+                                    "description": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 1000
+                                    }
+                                  },
+                                  "required": [
+                                    "label",
+                                    "description"
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "header",
+                          "question"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "threadId",
+                    "turnId",
+                    "itemId",
+                    "isBlocking",
+                    "questions"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "connection_id",
+                "request_id",
+                "params"
+              ]
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "question"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "question-take"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "question_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "connection_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "identity",
+            "question_id",
+            "connection_id"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "question-resolve"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "question_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "connection_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "identity",
+            "question_id",
+            "connection_id"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "output-preview"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "native_ref": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 8192
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "native_ref",
+            "version",
+            "text",
+            "truncated"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "bot-message"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "message_key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32768
+            },
+            "reply_to_event_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "message_key",
+            "text"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "steer-pending"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "targets": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 101,
+              "uniqueItems": true,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "run_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "attempt": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "run_id",
+                  "attempt"
+                ]
+              }
+            }
+          },
+          "required": [
+            "identity",
+            "targets"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "steer-result"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "command_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "status": {
+              "enum": [
+                "accepted",
+                "outcome_unknown",
+                "not_delivered"
+              ]
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "command_id",
+            "status"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "budget-report"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "report": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "period": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$"
+                },
+                "projected_cents": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000
+                },
+                "observed_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "source_ref": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                }
+              },
+              "required": [
+                "period",
+                "projected_cents",
+                "observed_at",
+                "source_ref"
+              ]
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "report"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "root-child-effect-intent"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "root_run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "root_attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "effect": {
+              "$ref": "#/$defs/effectIntent"
+            },
+            "resources": {
+              "type": "array",
+              "minItems": 0,
+              "maxItems": 8,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9:._/-]{1,256}$"
+              }
+            }
+          },
+          "required": [
+            "identity",
+            "root_run_id",
+            "root_attempt",
+            "effect",
+            "resources"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "effect": {
+                    "properties": {
+                      "classification": {
+                        "enum": [
+                          "idempotent",
+                          "mutation"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "resources": {
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "root-child-effect-result"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "root_run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "root_attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "effect_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "status": {
+              "enum": [
+                "dispatched",
+                "confirmed",
+                "failed",
+                "outcome_unknown"
+              ]
+            },
+            "receipt": {
+              "type": [
+                "object",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "identity",
+            "root_run_id",
+            "root_attempt",
+            "run_id",
+            "attempt",
+            "effect_id",
+            "status",
+            "receipt"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "memory-read-prepare"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "epoch": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "boot_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "epoch",
+                "boot_id"
+              ]
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "read_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "memory_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16000
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "read_id",
+            "memory_id",
+            "revision",
+            "offset",
+            "limit"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "memory-read-reserve"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "epoch": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "boot_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "epoch",
+                "boot_id"
+              ]
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "read_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "memory_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16000
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "selected_model": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+            },
+            "tokenizer": {
+              "const": "gpt-tokenizer@4.0.0/o200k_base/ordinary-v1"
+            },
+            "tokens": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 131072
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "read_id",
+            "memory_id",
+            "revision",
+            "offset",
+            "limit",
+            "sha256",
+            "selected_model",
+            "tokenizer",
+            "tokens"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "agent-skill-search"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "epoch": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "boot_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "epoch",
+                "boot_id"
+              ]
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "after": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "query"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "agent-skill"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "epoch": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "boot_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "epoch",
+                "boot_id"
+              ]
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "skill_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "skill_id"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "agent-routines"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "epoch": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "boot_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "epoch",
+                "boot_id"
+              ]
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "after": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "agent-command"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "epoch": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "boot_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "epoch",
+                "boot_id"
+              ]
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "idempotency_key": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "command": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "schema_version": {
+                  "const": 1
+                },
+                "type": {
+                  "enum": [
+                    "skill.propose",
+                    "routine.put",
+                    "routine.run",
+                    "routine.delete",
+                    "task.start",
+                    "run.steer",
+                    "run.followup",
+                    "run.cancel"
+                  ]
+                },
+                "payload": {
+                  "type": "object",
+                  "maxProperties": 16
+                }
+              },
+              "required": [
+                "schema_version",
+                "type",
+                "payload"
+              ]
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "idempotency_key",
+            "command"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "agent-task-list"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "epoch": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "boot_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "epoch",
+                "boot_id"
+              ]
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "state": {
+              "enum": [
+                "active",
+                "completed",
+                "failed",
+                "cancelled",
+                "waiting"
+              ]
+            },
+            "after": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "agent-task-detail"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "epoch": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "boot_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "epoch",
+                "boot_id"
+              ]
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "task_run_id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "task_run_id"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
     },
     {
       "type": "object",
@@ -564,14 +1720,48 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "memory_budget": {"$ref":"#/$defs/memoryBudget"},
-            "memory_notice": {"type":"object","additionalProperties":false,"properties":{"code":{"const":"MEMORY_TOKENIZER_UNCONFIGURED"},"model":{"type":"string","pattern":"^[a-zA-Z0-9._-]{1,128}$"}},"required":["code","model"]},
-            "memory_read_personas":{"type":"array","maxItems":256,"uniqueItems":true,"items":{"type":"string","format":"uuid"}},
-            "lane": {"type":"string","enum":["coordinator","background"]},
+            "memory_budget": {
+              "$ref": "#/$defs/memoryBudget"
+            },
+            "memory_notice": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "code": {
+                  "const": "MEMORY_TOKENIZER_UNCONFIGURED"
+                },
+                "model": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+                }
+              },
+              "required": [
+                "code",
+                "model"
+              ]
+            },
+            "memory_read_personas": {
+              "type": "array",
+              "maxItems": 256,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "lane": {
+              "type": "string",
+              "enum": [
+                "coordinator",
+                "background"
+              ]
+            },
             "persona_models": {
               "type": "object",
               "maxProperties": 256,
-              "propertyNames": { "format": "uuid" },
+              "propertyNames": {
+                "format": "uuid"
+              },
               "additionalProperties": {
                 "type": "string",
                 "pattern": "^[a-zA-Z0-9._-]{1,128}$"
@@ -834,24 +2024,63 @@
               ]
             },
             "text_only_receipt": {
-              "type":"object","additionalProperties":false,
+              "type": "object",
+              "additionalProperties": false,
               "properties": {
-                "profile_version":{"const":"codex-text-only-v1"},
-                "profile_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"},
-                "thread_id":{"type":"string","minLength":1,"maxLength":256},
-                "turn_id":{"type":"string","minLength":1,"maxLength":256},
-                "output_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"}
+                "profile_version": {
+                  "const": "codex-text-only-v1"
+                },
+                "profile_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "thread_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "turn_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "output_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
               },
-              "required":["profile_version","profile_sha256","thread_id","turn_id","output_sha256"]
+              "required": [
+                "profile_version",
+                "profile_sha256",
+                "thread_id",
+                "turn_id",
+                "output_sha256"
+              ]
             },
             "background_receipt": {
-              "type":"object","additionalProperties":false,
+              "type": "object",
+              "additionalProperties": false,
               "properties": {
-                "thread_id":{"type":"string","minLength":1,"maxLength":256},
-                "turn_id":{"type":"string","minLength":1,"maxLength":256},
-                "output_sha256":{"type":"string","pattern":"^[0-9a-f]{64}$"}
+                "thread_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "turn_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "output_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
               },
-              "required":["thread_id","turn_id","output_sha256"]
+              "required": [
+                "thread_id",
+                "turn_id",
+                "output_sha256"
+              ]
             }
           },
           "required": [
@@ -991,7 +2220,9 @@
                 "boot_id"
               ]
             },
-            "effect": { "$ref": "#/$defs/effectIntent" }
+            "effect": {
+              "$ref": "#/$defs/effectIntent"
+            }
           },
           "required": [
             "identity",
@@ -1107,7 +2338,9 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "started": { "type": "boolean" },
+            "started": {
+              "type": "boolean"
+            },
             "identity": {
               "type": "object",
               "additionalProperties": false,
@@ -1495,6 +2728,47 @@
             "identity",
             "run_id",
             "attempt"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "payload"
+      ]
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "progress"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "$ref": "#/$defs/runtimeIdentity"
+            },
+            "run_id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "source": {
+              "enum": [
+                "browser"
+              ]
+            }
+          },
+          "required": [
+            "identity",
+            "run_id",
+            "attempt",
+            "source"
           ]
         }
       },

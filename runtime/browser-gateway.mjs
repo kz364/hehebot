@@ -47,10 +47,12 @@ export function browserLimits(overrides = {}) {
 
 /** handle(message) for one attempt's gateway. `child` is a Playwright MCP
  * client: { request(method, params, { timeoutMs }), restart() }. */
-export function createBrowserGateway({ child, controlClient, config, limits = browserLimits() }) {
+const PROGRESS_THROTTLE_MS = 5000;
+export function createBrowserGateway({ child, controlClient, config, limits = browserLimits(), now = Date.now }) {
   if (!child || typeof child.request !== 'function' || typeof child.restart !== 'function' ||
       !controlClient || typeof controlClient.request !== 'function' || !config?.identity || !config.runId || !config.attempt) throw new Error('INVALID_CONFIGURATION');
-  let upstreamTools = null, calls = 0, lastFingerprint = null, repeats = 0;
+  let upstreamTools = null, calls = 0, lastFingerprint = null, repeats = 0, lastReport = 0, unreported = false;
+  const seen = new Set();
   const ref = { identity: structuredClone(config.identity), run_id: config.runId, attempt: config.attempt };
   const tools = async () => {
     if (!upstreamTools) {
@@ -68,6 +70,19 @@ export function createBrowserGateway({ child, controlClient, config, limits = br
     const text = (result?.content ?? []).filter(item => item?.type === 'text').map(item => item.text).join('\n').slice(0, 200000);
     return BLOCKERS.some(pattern => pattern.test(text))
       ? '\n\n[hehebot] This page appears to need a human (login, verification or CAPTCHA). Do not try to bypass it; tell the owner with hehebot_send_message what is needed and stop.' : '';
+  };
+  // Progress = a result the attempt has not seen before (new page, changed
+  // content). Reported to the Worker's stuck watchdog, throttled, best effort.
+  const noteProgress = result => {
+    if (result && !result.isError) {
+      const text = (result.content ?? []).map(item => item?.type === 'text' ? item.text : item?.type ?? '').join('\n');
+      const hash = digest(text);
+      if (!seen.has(hash)) { seen.add(hash); if (seen.size > 256) seen.delete(seen.values().next().value); unreported = true; }
+    }
+    if (unreported && now() - lastReport >= PROGRESS_THROTTLE_MS) {
+      unreported = false; lastReport = now();
+      void Promise.resolve().then(() => controlClient.request('progress', { ...ref, source: 'browser' })).catch(() => {});
+    }
   };
   const withNote = (result, note) => note ? { ...result, content: [...(result.content ?? []), { type: 'text', text: note }] } : result;
 
@@ -116,6 +131,7 @@ export function createBrowserGateway({ child, controlClient, config, limits = br
       return toolError(message.id, `Browser call ${error?.code === 'BROWSER_CALL_TIMEOUT' ? `timed out after ${limits.callMs} ms` : 'failed'}; the browser was restarted and the page state is lost.${action ? ' Whether the action happened is unknown: do not repeat it; tell the owner if it matters.' : ''}`);
     }
     await settle(result?.isError ? 'failed' : 'confirmed', { tool: name, error: !!result?.isError });
+    noteProgress(result);
     return { jsonrpc: '2.0', id: message.id, result: withNote(result ?? { content: [] }, blockerNote(result)) };
   };
 }

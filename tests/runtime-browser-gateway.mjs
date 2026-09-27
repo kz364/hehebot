@@ -39,10 +39,11 @@ test('arbitrary code, local files and filename arguments are refused before the 
 test('reads skip the ledger; actions are permitted, dispatched and confirmed in order', async () => {
   const f = fixture();
   await f.invoke('browser_navigate', { url: 'https://example.com' });
-  assert.equal(f.requests.length, 0);
+  const ledger = () => f.requests.filter(([type]) => type !== 'progress');
+  assert.equal(ledger().length, 0);
   const result = await f.invoke('browser_click', { element: 'More', target: 'e3' });
   assert.equal(result.result.isError, undefined);
-  assert.deepEqual(f.requests.map(([type, payload]) => type === 'effect-intent' ? `${type}:${payload.effect.classification}:${payload.effect.authorization_ref}` : `${type}:${payload.status}`),
+  assert.deepEqual(ledger().map(([type, payload]) => type === 'effect-intent' ? `${type}:${payload.effect.classification}:${payload.effect.authorization_ref}` : `${type}:${payload.status}`),
     [`effect-intent:mutation:${BROWSER_POLICY}`, 'effect-result:dispatched', 'effect-result:confirmed']);
 });
 
@@ -89,4 +90,24 @@ test('the gateway policy id matches the Worker constant', async () => {
   const { readFile } = await import('node:fs/promises');
   const source = await readFile(new URL('../src/core/agent-commands.ts', import.meta.url), 'utf8');
   assert.match(source, new RegExp(`BROWSER_POLICY='${BROWSER_POLICY}'`));
+});
+
+test('new page content reports progress, throttled; repeats of seen content do not', async () => {
+  let clock = 0, page = 'a';
+  const requests = [];
+  const child = { async request(method) { return method === 'tools/list' ? { tools: upstream } : { content: [{ type: 'text', text: `page ${page}` }] }; }, async restart() {} };
+  const handle = createBrowserGateway({ child, controlClient: { async request(type, payload) { requests.push([type, payload]); return {}; } }, config,
+    limits: browserLimits({ callMs: 2000, actionMs: 500, navigationMs: 1000, repeatLimit: 10, maxActions: 50 }), now: () => clock });
+  let id = 0;
+  const call = async (url) => { await handle({ jsonrpc: '2.0', id: ++id, method: 'tools/call', params: { name: 'browser_navigate', arguments: { url } } }); await new Promise(ok => setImmediate(ok)); };
+  const progress = () => requests.filter(([type]) => type === 'progress');
+  clock = 10000; await call('https://a.example');
+  assert.equal(progress().length, 1);
+  assert.deepEqual(progress()[0][1], { identity, run_id: config.runId, attempt: 1, source: 'browser' });
+  page = 'b'; clock = 11000; await call('https://b.example');
+  assert.equal(progress().length, 1, 'throttled');
+  page = 'a'; clock = 17000; await call('https://a2.example');
+  assert.equal(progress().length, 2, 'unreported progress flushes after the window');
+  clock = 30000; await call('https://a3.example');
+  assert.equal(progress().length, 2, 'already-seen content is not progress');
 });

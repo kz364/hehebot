@@ -16,6 +16,7 @@ import {ResourceLedger} from './resources';
 import {OutputPreviews} from './output-preview';
 import {TokenUsageSnapshots} from './token-usage';
 import {captureWhatsAppReadPolicies} from './whatsapp-access';
+import {GRANTABLE_TOOL_POLICIES} from './agent-commands';
 import {OwnerAlpha,ownerAlphaSuccessorSha256} from './owner-alpha';
 import {OwnerAlphaBootstrap} from './owner-alpha-bootstrap';
 import {OwnerAlphaWarm} from './owner-alpha-warm';
@@ -793,7 +794,7 @@ export class ControlCore {
    alphaSummary={owner_alpha:true,owner_alpha_session:{persona_id:policy.persona_id,expires_at:policy.expires_at,max_runs:policy.max_runs,admitted_runs:alpha.admittedRuns,max_task_seconds:policy.max_task_seconds}};
   }
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
-   settings:{timezone:'Asia/Jakarta'},
+   settings:{timezone:'Asia/Jakarta',grantable_tools:GRANTABLE_TOOL_POLICIES.filter(x=>this.options.toolPolicyIds.includes(x.id))},
    budget:this.budget.summary(),
    questions,
    roster:new RosterLedger(this.store,()=>now).summary(),

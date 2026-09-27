@@ -33,3 +33,8 @@ it('a persona without the grant cannot', () => {
   const run = running(otherBot);
   expect(() => effects.intent(click(run))).toThrow(/not authorized/);
 });
+it('the portal is offered only the tool switches this deployment authorizes', () => {
+  expect(f.core.state().settings.grantable_tools).toEqual([expect.objectContaining({ id: BROWSER_POLICY, label: 'Browser use' })]);
+  f.core.options.toolPolicyIds.length = 0;
+  expect(f.core.state().settings.grantable_tools).toEqual([]);
+});
