@@ -47,6 +47,10 @@ beforeEach(() => {
 afterEach(() => f.close());
 
 describe('bot.ask consult', () => {
+  it('tells the asking bot which name goes with which bot_id', () => {
+    expect(f.core.context(bot, 'x', null, null).askable_bots).toEqual([{ id: otherBot, name: 'Inbox Triage' }, { id: travel, name: 'Travel' }]);
+    expect(f.core.context(travel, 'x', null, null)).not.toHaveProperty('askable_bots');
+  });
   it('passes the Worker runtime RPC schema (the agent-command envelope lists bot.ask)', () => {
     expect(validateRuntime({ type: 'agent-command', payload: { identity, run_id: randomUUID(), attempt: 1, idempotency_key: randomUUID(),
       command: { schema_version: 1, type: 'bot.ask', payload: { bot_id: travel, question: 'Q?' } } } })).toBe(true);

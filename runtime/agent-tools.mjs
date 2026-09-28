@@ -129,7 +129,7 @@ export function buildToolDefinitions(contracts) {
       type: 'object', additionalProperties: false, properties: { reason: { type: 'string', maxLength: 2000 } },
     } },
     { name: AGENT_TOOL_NAMES[17], description: 'Ask another bot that is not in this conversation a question (ARCHITECTURE_V2 A8 consult). Returns immediately; the other bot answers in the background and you are woken with its answer. ' +
-      'Only bots this bot is allowed to ask are accepted. Never use it for a member of the current group room: name them in the room instead. The exchange is shown to the owner collapsed and never notifies them, so tell the owner the outcome yourself.', inputSchema: wrap(commandSchema(contracts, 'bot.ask')) },
+      'bot_id must be one of the ids listed in your guidance as bots you can ask; any other is refused. Never use it for a member of the current group room: name them in the room instead. The exchange is shown to the owner collapsed and never notifies them, so tell the owner the outcome yourself.', inputSchema: wrap(commandSchema(contracts, 'bot.ask')) },
   ]);
 }
 

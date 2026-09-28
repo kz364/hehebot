@@ -99,6 +99,10 @@ export type ContextSnapshot = {memory_budget?:import('./memory-context').MemoryB
  // A8 consult: the owner message a chain of consults and wakes started from,
  // carried on wake runs so the per-message ask budget survives the wake.
  consult_root?:string;
+ // A8 consult: names for the ids in persona.can_ask, so the model can pick the
+ // right bot_id for hehebot_ask_bot. Rebuilt with the context; never trusted
+ // for admission (control.ts re-reads can_ask).
+ askable_bots?:Array<{id:string;name:string;role?:string}>;
  schema_version: 1; persona: StoredObject<PersonaPut>; routine: StoredObject<RoutinePut> | null; memories: MemoryContextEntry[]; skills:StoredObject<SkillBody>[]; scope_key: string; instruction: string; room_id: string | null; context_events: TimelineEvent[]; authorization_policy_ids: string[] };
 export type TimelineEvent = { sequence: number; id: string; conversation_id: string | null; type: string; actor_id: string; cause_id: string | null; payload: Record<string, unknown>; created_at: string };
 export type Options = { testCampaignGrant?:TestCampaignGrant;ownerAlphaBootstrap?:OwnerAlphaBootstrapConfig;ownerAlphaWarm?:import('./owner-alpha-warm').WarmGenerationConfig;ownerAlphaBackground?:import('./owner-alpha-background').BackgroundGenerationConfig;ownerAlpha?:OwnerAlphaPolicy;ownerAlphaSuccessor?:OwnerAlphaSuccessor;ownerBindingSha256?:string;whatsappReadPolicies?:WhatsAppReadPolicies;delegations?:Record<string,string[]>;executionEnabled: boolean; actionPolicyIds: string[]; toolPolicyIds: string[]; now: () => Date; uuid: () => string;
