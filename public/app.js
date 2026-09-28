@@ -636,7 +636,8 @@ function render(){
   const botMessageRunIds=new Set(conversation.filter(e=>e.type==='bot.message').map(e=>e.payload?.run_id));
   timeline.dataset.kind=object?.kind??'';
   const personaName=id=>items('persona').find(p=>p.id===id)?.body.name;
-  const turnOpen=e=>e.type==='room.turn'&&e.payload.phase==='started'&&!conversation.some(x=>x.type==='room.turn'&&x.payload?.log_id===e.payload.log_id&&x.payload.phase==='settled');
+  // A turn is live for its 120s deadline plus slack; an older unsettled row is a dead record, not typing.
+  const turnOpen=e=>e.type==='room.turn'&&e.payload.phase==='started'&&Date.now()-Date.parse(e.created_at)<5*60000&&!conversation.some(x=>x.type==='room.turn'&&x.payload?.log_id===e.payload.log_id&&x.payload.phase==='settled');
   let lastBubble=null;
   for(const event of conversation){
    if(event.type==='message.user'||event.type==='bot.message'){
@@ -1338,7 +1339,7 @@ function cancelTask(run,reason){
 }
 const dollars=cents=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
 function renderMonitoring(){
- const m=snapshot.monitoring;$('monitoring-panel').hidden=!m;if(!m)return;$('monitoring-panel').classList.toggle('detail-only',!m.alerts.length);
+ const m=snapshot.monitoring;$('monitoring-panel').hidden=!m;if(!m)return;$('monitoring-panel').classList.toggle('detail-only',!m.alerts.some(alert=>alert.severity==='error'));
  const age=seconds=>seconds===null?'Unknown':`${Math.ceil(seconds)}s`;
  const rows=[['Ready requests',m.queue.count],['Oldest request',m.queue.count?age(m.queue.oldest_request_age_seconds):'None'],['Heartbeat age',m.lease.expected_running?age(m.lease.heartbeat_age_seconds):'Not expected'],['Recorded operations',m.operations.reduce((sum,row)=>sum+row.count,0)],['Resource locks',m.locks],['Uncertain effects',m.effects.find(row=>row.status==='outcome_unknown')?.count??0],['Schedule lag',age(m.schedules.lag_seconds)],['Backup verification','Not verified']];
  $('monitoring-stats').replaceChildren(...rows.map(([label,value])=>{const row=node('div');row.append(node('dt',label),node('dd',String(value)));return row;}));
