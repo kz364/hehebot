@@ -262,7 +262,9 @@ export class ControlCore {
     if(!this.options.ownerAlphaBackground&&!this.options.executionEnabled&&target.kind==='persona')this.background.assertMessageAdmissible(owner,commandId,target.id);
     // Carries the client's own Idempotency-Key so the portal's durable outbox
     // can recognize its own committed message as an echo (ARCHITECTURE_V2 A5).
-    this.store.event(commandId,target.id,'message.user',owner,null,{text:command.payload.text,idempotency_key:idempotencyKey},now);
+    const replyTo=this.replyTarget(target.id,command.payload.reply_to_event_id);
+    const instruction=ownerInstruction({text:command.payload.text,reply_to:replyTo});
+    this.store.event(commandId,target.id,'message.user',owner,null,{text:command.payload.text,idempotency_key:idempotencyKey,...(replyTo?{reply_to:replyTo}:{})},now);
     // With a warm generation configured, a candidate owner message either
     // admits or the whole command is rejected; no orphan unassigned run.
     if(this.options.ownerAlphaWarm&&!this.options.executionEnabled&&target.kind==='persona')this.warm.assertMessageAdmissible(owner,commandId,target.id);
@@ -273,15 +275,15 @@ export class ControlCore {
     // mutually exclusive with owner-alpha/bootstrap/warm/background by
     // construction, and this flag defaults off, so every pre-existing
     // message.send test keeps its prior one-run-per-message behavior.
-    if(this.options.coordinatorInbox&&this.options.executionEnabled&&target.kind==='persona')return this.routeInboxMessage(target.id,commandId,command.payload.text,now);
+    if(this.options.coordinatorInbox&&this.options.executionEnabled&&target.kind==='persona')return this.routeInboxMessage(target.id,commandId,instruction,now);
     // V9 (ARCHITECTURE_V2 A8): a room target under the scheduler flag becomes a
     // scheduled turn for the default responder instead of a bare coordinator
     // enqueue. root_cause_id is this owner message's own just-committed event
     // id, so contribution/hop bookkeeping is keyed to it. Off by default (and
     // for a persona target) so the pre-existing one-run-per-message behavior
     // is unchanged.
-    if(this.options.roomTurns&&target.kind==='room')return this.roomTurns.scheduleOwnerTurn(target.id,commandId,commandId,command.payload.text)??commandId;
-    return this.enqueue(persona,command.payload.text,commandId,null,null,target.kind==='room'?target.id:null);
+    if(this.options.roomTurns&&target.kind==='room')return this.roomTurns.scheduleOwnerTurn(target.id,commandId,commandId,instruction)??commandId;
+    return this.enqueue(persona,instruction,commandId,null,null,target.kind==='room'?target.id:null);
    }
    case 'persona.put': {
     const p=command.payload;
@@ -669,6 +671,17 @@ export class ControlCore {
   * persona so no un-consumed message is silently dropped. A run that is only
   * 'claimed' (native ack pending) is not yet steerable and falls through to
   * the batched-enqueue path, same as an idle inbox. */
+ /** An owner reply names a message already in the same conversation; the
+  * quoted snippet travels with the owner message so the bot sees what is
+  * being answered. */
+ private replyTarget(conversationId:string,eventId:string|undefined):ReplyTo|null {
+  if(eventId===undefined)return null;
+  const row=this.store.db.all<{type:string;actor_id:string;payload_json:string}>('SELECT type,actor_id,payload_json FROM events WHERE id=? AND conversation_id=?',eventId,conversationId)[0];
+  requireThat(row&&(row.type==='message.user'||row.type==='bot.message'),'INVALID_INPUT','That message is not in this conversation.',422);
+  let sender='You';
+  if(row.type==='bot.message'){try{sender=this.store.get<PersonaPut>(row.actor_id,'persona').body.name;}catch{sender='Assistant';}}
+  return {event_id:eventId,sender,text:String(JSON.parse(row.payload_json).text??'').slice(0,500)};
+ }
  private routeInboxMessage(personaId:string,commandId:string,text:string,now:string):string {
   const consumerId=`coordinator-inbox:${personaId}`;
   const advanceCursor=(sequence:number)=>this.store.db.exec(
@@ -697,9 +710,9 @@ export class ControlCore {
    }
   }
   const since=this.store.db.all<{consumed_sequence:number}>('SELECT consumed_sequence FROM consumer_cursors WHERE consumer_id=? AND conversation_id=?',consumerId,personaId)[0]?.consumed_sequence??0;
-  const rows=this.store.db.all<{sequence:number;text:string}>(
-   "SELECT sequence,json_extract(payload_json,'$.text') AS text FROM events WHERE conversation_id=? AND type='message.user' AND sequence>? ORDER BY sequence",personaId,since);
-  const instruction=rows.length?rows.map(row=>row.text).join('\n\n---\n\n'):text;
+  const rows=this.store.db.all<{sequence:number;payload_json:string}>(
+   "SELECT sequence,payload_json FROM events WHERE conversation_id=? AND type='message.user' AND sequence>? ORDER BY sequence",personaId,since);
+  const instruction=rows.length?rows.map(row=>ownerInstruction(JSON.parse(row.payload_json))).join('\n\n---\n\n'):text;
   const id=this.enqueue(personaId,instruction,commandId,null,null,null);
   if(rows.length)advanceCursor(rows.at(-1)!.sequence);
   return id;
@@ -908,4 +921,14 @@ export class ControlCore {
    unresolved_questions:questions,descendants_unsettled:descendants,retained_locks:locks.n,stale_locks:locks.stale>0,effects:effects.slice(0,20),effects_truncated:effects.length>20,
    can_decide_effects:terminated&&!operations,can_recover:terminated&&!operations&&!effects.length&&!descendants&&!locks.stale&&!questions};
  }
+}
+
+type ReplyTo={event_id:string;sender:string;text:string};
+/** What the model reads for an owner message: its text, prefixed with the
+ * quoted message it replies to, if any. */
+export function ownerInstruction(payload:{text?:unknown;reply_to?:ReplyTo|null}):string {
+ const text=String(payload.text??'');
+ if(!payload.reply_to)return text;
+ const who=payload.reply_to.sender==='You'?'your owner':payload.reply_to.sender;
+ return `[Replying to ${who}: "${payload.reply_to.text}"]\n\n${text}`;
 }

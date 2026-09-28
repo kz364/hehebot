@@ -58,6 +58,13 @@ Acceptance IDs refer to ARCHITECTURE_V2 §4. Schema version is 20 today (v19 = V
 | [~] | **Production flags** (old E14) | Record what is live and flip the production gates for this single-owner installation. Recorded under Operational state (v2 mode + execution enabled on `hehebot`). |
 | [x] | **Mac app** (old E12) | Build/render the SwiftUI shell on the Mac, sign in, notifications; pairs with V10. Builds/tests on the Mac; unsigned app via macos/scripts/build-app.sh. Local: done, live verification pending (pairing, FDA, Access service token). |
 
+## Portal UX (2026-09-28)
+
+- [x] Simple view by default, with a **Details** switch in the sidebar footer (per device; `?view=detailed` overrides).
+- [x] Messages-style redesign ([docs/PORTAL_UX.md](docs/PORTAL_UX.md)): grouped bubbles, time separators, typing dots, pill composer (Enter sends), phone chip row, and reply by swipe or ↩ (`message.send.reply_to_event_id`).
+- [ ] Browser fixture scripts (`scripts/test-portal-*.mjs`) time out on the base commit as well; their fixtures predate the current `/v1/state` shape.
+- [ ] Later: reactions/tapbacks, read receipts, dark mode, a Details switch on phones.
+
 ## Owner/account actions
 
 - [x] **Google:** Inbox Triage + Chief of Staff granted and live-verified 2026-09-28.

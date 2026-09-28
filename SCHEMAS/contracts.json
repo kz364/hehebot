@@ -292,6 +292,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 32768
+            },
+            "reply_to_event_id": {
+              "type": "string",
+              "format": "uuid"
             }
           },
           "required": [

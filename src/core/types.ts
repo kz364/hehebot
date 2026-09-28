@@ -46,7 +46,7 @@ export type PayloadMap = {
  'run.followup':{run_id:string;text:string};
  'task.start':{title:string;brief:string;capabilities?:string[]};
  'setup.adopt':{commands:Array<{schema_version:1;type:'persona.put';payload:PersonaPut}|{schema_version:1;type:'routine.put';payload:RoutinePut}>;monitoring_timezone:'Asia/Singapore'|'Asia/Jakarta';reviewed_hash:string};
- 'message.send': { conversation_id: string; text: string };
+ 'message.send': { conversation_id: string; text: string; reply_to_event_id?: string };
  'persona.put': PersonaPut; 'room.put': RoomPut; 'routine.put': RoutinePut; 'memory.put': MemoryPut;
  'routine.run': BasePut; 'routine.delete': BasePut;
  'memory.delete': BasePut & { purge_transcripts: boolean };

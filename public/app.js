@@ -366,8 +366,8 @@ async function outboxSetPhase(record,phase,extra={}){
  if(phase==='echoed'){outboxEchoed.add(record.nonce);outboxRecords.delete(record.nonce);await outboxForget(record.nonce);return;}
  outboxRecords.set(record.nonce,record);await outboxPersist(record);
 }
-async function outboxEnqueue(conversationId,text){
- const record={nonce:crypto.randomUUID(),conversation_id:conversationId,text,phase:'queued',created_at:new Date().toISOString(),tries:0};
+async function outboxEnqueue(conversationId,text,replyTo=null){
+ const record={nonce:crypto.randomUUID(),conversation_id:conversationId,text,phase:'queued',created_at:new Date().toISOString(),tries:0,...(replyTo?{reply_to:{event_id:replyTo.event_id,sender:replyTo.sender,text:replyTo.text.slice(0,500)}}:{})};
  outboxRecords.set(record.nonce,record);await outboxPersist(record);render();outboxDrain(conversationId);return record;
 }
 function outboxBackoffMs(tries){return Math.min(30000,1000*2**Math.max(0,tries-1));}
@@ -389,7 +389,7 @@ async function outboxDrain(conversationId){
    if(queue.some(r=>r!==head&&r.phase!=='accepted'&&(r.created_at<head.created_at||(r.created_at===head.created_at&&r.nonce<head.nonce))))break;
    await outboxSetPhase(head,'sending');render();
    try{
-    const response=await fetch('/v1/commands',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':head.nonce},body:JSON.stringify({schema_version:1,type:'message.send',payload:{conversation_id:head.conversation_id,text:head.text}})});
+    const response=await fetch('/v1/commands',{method:'POST',headers:{'Content-Type':'application/json','Idempotency-Key':head.nonce},body:JSON.stringify({schema_version:1,type:'message.send',payload:{conversation_id:head.conversation_id,text:head.text,...(head.reply_to?{reply_to_event_id:head.reply_to.event_id}:{})}})});
     let body=null;try{body=await response.json();}catch{}
     // Fetch the committed echo promptly instead of waiting on the 15s
     // fallback poll or a live /v1/stream push that may not exist yet.
@@ -514,7 +514,7 @@ async function refresh(force=false){
  }catch(e){$('connection').textContent='Offline';$('connection-dot').classList.remove('online');report(e.message);if(taskFeed)taskFeed.error=true;if(recoveryView?.kind==='tasks')recoveryView.page=null;render();}
  finally{loading=false;}
 }
-function choose(id){if(id==='connectors'&&!connectorsAllowed())return;selectionVersion++;connectorView=null;skillHistories.clear();routineHistory=null;routinePreflight=null;recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';lastSignature='';render();refresh(true);if(id==='connectors')loadConnectorCatalog();if(!managedSelected())$('message').focus();}
+function choose(id){if(id==='connectors'&&!connectorsAllowed())return;selectionVersion++;connectorView=null;skillHistories.clear();routineHistory=null;routinePreflight=null;recoveryView=null;taskFeed=null;selected=id;localStorage.setItem('personal.selected',id);$('message').value=localStorage.getItem('personal.draft.'+id)??'';growComposer();lastSignature='';render();refresh(true);if(id==='connectors')loadConnectorCatalog();if(!managedSelected())$('message').focus();}
 function recoveryUrl(view){return '/v1/conversations/'+view.conversationId+'/'+(view.kind==='tasks'?'tasks':'recovery')+(view.cursor?'?after='+encodeURIComponent(view.cursor):'');}
 async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=null){
  if(!alphaConversationAvailable(selected)){report('History and task pages are unavailable for this conversation in the owner-alpha session.');return;}
@@ -522,6 +522,44 @@ async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=nul
  const view={conversationId:selected,cursor,previous,kind,focusRun,page:null,request:1};recoveryView=view;report('');render();
  try{const page=await api(recoveryUrl(view));if(recoveryView===view&&selected===view.conversationId&&view.request===1){view.page=page;render();}}
  catch(e){if(recoveryView===view&&view.request===1){recoveryView=null;report(e.message);render();}}
+}
+// Replies (docs/PORTAL_UX.md): swipe a bubble right on touch, or use the
+// hover/focus ↩ button. The target must be a committed message.
+let replyTarget=null;
+function startReply(target){if(!target.event_id)return;replyTarget={...target,conversation_id:selected};renderReplyBar();$('message').focus();}
+function renderReplyBar(){
+ const active=Boolean(replyTarget&&replyTarget.conversation_id===selected);$('reply-bar').hidden=!active;
+ if(active){$('reply-bar-sender').textContent=`Replying to ${replyTarget.sender}`;$('reply-bar-text').textContent=replyTarget.text.slice(0,200);}
+}
+function replyFromEvent(conversation,id,object){
+ const e=conversation.find(x=>x.id===id);if(!e)return null;
+ const sender=e.type==='message.user'?'You':(items('persona').find(p=>p.id===e.actor_id)?.body.name??object?.body.name??'Assistant');
+ return {event_id:id,sender,text:e.payload.text??''};
+}
+function replyQuote(target){
+ const q=button('',()=>{const el=document.querySelector(`[data-event-id="${CSS.escape(target.event_id)}"]`);if(!el)return;el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');},'reply-quote');
+ q.append(node('strong',target.sender),node('span',target.text.slice(0,160)));q.setAttribute('aria-label',`In reply to ${target.sender}: ${target.text.slice(0,160)}`);return q;
+}
+function enableReply(el,target){
+ const b=button('↩',()=>startReply(target),'reply-button');b.setAttribute('aria-label',`Reply to ${target.sender}`);b.title='Reply';el.append(b);
+ let x0=null,y0=0,dx=0,active=false;
+ el.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'||e.target.closest('button'))return;x0=e.clientX;y0=e.clientY;dx=0;active=false;});
+ el.addEventListener('pointermove',e=>{
+  if(x0===null)return;const mx=e.clientX-x0,my=e.clientY-y0;
+  if(!active){if(Math.abs(my)>10&&Math.abs(my)>Math.abs(mx)){x0=null;return;}if(mx<=10)return;active=true;el.classList.add('swiping');try{el.setPointerCapture(e.pointerId);}catch{}}
+  dx=Math.max(0,Math.min(72,mx-10));el.style.transform=`translateX(${dx}px)`;
+  const armed=dx>=56;if(armed&&!el.classList.contains('swipe-armed'))navigator.vibrate?.(8);el.classList.toggle('swipe-armed',armed);
+ });
+ const end=()=>{if(x0===null)return;x0=null;el.classList.remove('swiping');el.style.transform='';const fire=active&&dx>=56;el.classList.remove('swipe-armed');active=false;if(fire)startReply(target);};
+ el.addEventListener('pointerup',end);el.addEventListener('pointercancel',end);
+}
+// Stable per-bot colour so rooms are easy to scan.
+function avatarFor(id,name){const a=node('span',String(name).slice(0,1),'bubble-avatar');let h=2166136261;for(const c of String(id))h=Math.imul(h^c.charCodeAt(0),16777619);h=(h>>>0)%360;a.style.background=`linear-gradient(180deg,hsl(${h} 60% 62%),hsl(${h} 55% 48%))`;return a;}
+function growComposer(){const t=$('message');$('composer').classList.toggle('is-empty',!t.value.trim());if(!t.clientWidth){t.style.height='';requestAnimationFrame(()=>{if(t.clientWidth)growComposer();});return;}t.style.height='auto';t.style.height=Math.min(t.scrollHeight,200)+'px';$('composer').classList.toggle('is-empty',!t.value.trim());}
+function separatorTime(iso){
+ const d=new Date(iso),today=new Date(),yesterday=new Date(Date.now()-86400000),hm=d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
+ if(d.toDateString()===today.toDateString())return `Today ${hm}`;if(d.toDateString()===yesterday.toDateString())return `Yesterday ${hm}`;
+ return `${d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})} ${hm}`;
 }
 // Simple view (default): chat plus whatever needs the owner. Detailed view
 // shows task records, room bookkeeping and runtime panels. Per-device only.
@@ -550,7 +588,7 @@ function render(){
  if(selected==='connectors'){renderConnectors();return;}
  if(skillsSelected()){renderSkills();return;}
  document.querySelector('.app').classList.remove('skills-mode');$('details').hidden=false;$('composer').hidden=false;$('show-details').hidden=false;$('edit-bot').hidden=false;
- const object=current();$('conversation-name').textContent=object?.body.name??'Choose a bot';$('conversation-type').textContent=object?.kind==='room'?'SHARED ROOM':'ASSISTANT';$('edit-bot').hidden=object?.kind!=='persona';
+ const object=current();$('conversation-name').textContent=object?.body.name??'Choose a bot';$('conversation-type').textContent=object?.kind==='room'?`Room · ${object.body.member_ids?.length??0} bots`:'Assistant';renderReplyBar();$('message').placeholder=object?`Message ${object.body.name}`:'Message';$('edit-bot').hidden=object?.kind!=='persona';
  $('runtime-state').textContent=names[snapshot.summary.phase]??snapshot.summary.phase;$('runtime-provider').textContent=snapshot.provider?.id??'Unconfigured';$('runtime-queued').textContent=snapshot.summary.queued_runs;$('runtime-waiting').textContent=snapshot.summary.blocked_runs;
  $('runtime-banner').hidden=snapshot.summary.execution_enabled;
  if(!alphaSeen&&!snapshot.summary.owner_alpha)$('runtime-banner-text').textContent='Your messages and routines are saved. The assistant is waiting for its runtime connection and sign-in before it can work.';
@@ -596,15 +634,24 @@ function render(){
   // bot.message per completed attempt); a completed run with retained text
   // and no such event is legacy data, shown once as a bubble marked (legacy).
   const botMessageRunIds=new Set(conversation.filter(e=>e.type==='bot.message').map(e=>e.payload?.run_id));
+  timeline.dataset.kind=object?.kind??'';
+  const personaName=id=>items('persona').find(p=>p.id===id)?.body.name;
+  const turnOpen=e=>e.type==='room.turn'&&e.payload.phase==='started'&&!conversation.some(x=>x.type==='room.turn'&&x.payload?.log_id===e.payload.log_id&&x.payload.phase==='settled');
+  let lastBubble=null;
   for(const event of conversation){
    if(event.type==='message.user'||event.type==='bot.message'){
     if(!matches.has(event))continue;
-    const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot'));const h=node('div',undefined,'message-head');
+    // Messages-style grouping: same sender within 5 minutes stacks tightly;
+    // a gap of 15+ minutes gets a centered time separator.
+    const who=event.type==='message.user'?'owner':event.actor_id,gap=lastBubble?Date.parse(event.created_at)-Date.parse(lastBubble.created_at):Infinity;
+    if(gap>15*60000)timeline.append(node('div',separatorTime(event.created_at),'time-separator'));
+    const grouped=Boolean(lastBubble&&lastBubble.who===who&&gap<5*60000&&!event.payload.task_run_id);lastBubble={who,created_at:event.created_at};
+    const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot')+(grouped?' grouped':''));m.dataset.eventId=event.id;const h=node('div',undefined,'message-head');
     // V9 (ARCHITECTURE_V2 A8): in a room, a bot.message is attributed to
     // whichever member actually sent it (event.actor_id), not the room's own
     // name -- object?.body.name is only correct for a persona's own thread.
     const attribution=event.type==='message.user'?'You':(object?.kind==='room'?items('persona').find(p=>p.id===event.actor_id)?.body.name:object?.body.name)??'Assistant';
-    h.append(node('strong',attribution),node('time',time(event.created_at)));m.append(h);
+    h.append(node('strong',attribution),node('time',time(event.created_at)));if(!grouped)m.append(h);
     if(event.type==='bot.message'&&event.payload.task_run_id){
      const task=runs.find(x=>x.id===event.payload.task_run_id);
      h.append(node('span',`task: ${task?.title??String(event.payload.task_run_id).slice(0,8)}`,'status'));
@@ -613,17 +660,22 @@ function render(){
      const invocation=event.payload.skill_invocation;
      m.append(node('p',`Run once · ${invocation.skill_name??invocation.skill_id} · captured revision ${invocation.skill_revision}`,'hint result-outcome'));
     }
-    m.append(node('div',event.payload.text??'','message-body'));timeline.append(m);
+    const target=event.payload.reply_to??(event.payload.reply_to_event_id?replyFromEvent(conversation,event.payload.reply_to_event_id,object):null);
+    if(target)m.append(replyQuote(target));
+    const body=node('div',event.payload.text??'','message-body');body.title=time(event.created_at);m.append(body);
+    if(event.type==='bot.message')m.prepend(avatarFor(event.actor_id,attribution));
+    enableReply(m,{event_id:event.id,sender:attribution,text:event.payload.text??''});
+    timeline.append(m);
    }else if(event.type==='run.result'){
     // Recorded outcomes are notices, not search-filtered bubbles: always shown.
     const outcome=['completed','failed','cancelled','waiting'].includes(event.payload.status)?statuses[event.payload.status]:'Unavailable';
-    const e=node('div',undefined,'event');if(simpleView()&&event.payload.status==='completed')e.hidden=true;
+    const e=node('div',undefined,'event');
     const label=node('span',`Recorded outcome: ${outcome}${event.payload.error_code?` · ${event.payload.error_code}`:''}`,'result-outcome');
     label.style.overflowWrap='anywhere';
     if(event.payload.title)label.append(node('span',` · ${event.payload.title}`));
     else if(event.payload.role==='background')label.append(node('span',' · Background task'));
     e.append(label);
-    timeline.append(e);
+    if(!simpleView()||event.payload.status!=='completed')timeline.append(e);
     // Legacy fallback only: a completed result with retained text but no
     // bot.message for this run predates V1 and would otherwise be silent.
     const legacyText=event.payload.status==='completed'&&event.payload.text&&!botMessageRunIds.has(event.payload.run_id)?event.payload.text:null;
@@ -659,7 +711,7 @@ function render(){
     if(run)e.append(button('Abandon',()=>cancelTask(run,'Owner abandoned the interrupted attempt.')));
     timeline.append(e);
    }else if(['run.accepted','run.cancellation_requested'].includes(event.type)){
-    const run=runs.find(x=>x.id===event.payload.run_id);if(!run)continue;if(simpleView()&&['completed','cancelled'].includes(run.status))continue;const e=node('div',undefined,'event');e.append(node('span',statuses[run.status]??run.status,'status'));
+    const run=runs.find(x=>x.id===event.payload.run_id);if(!run)continue;if(simpleView()&&(['completed','cancelled'].includes(run.status)||run.role==='coordinator'&&['queued','claimed','running','finishing'].includes(run.status)))continue;const e=node('div',undefined,'event');e.append(node('span',statuses[run.status]??run.status,'status'));
     if(run.status==='waiting')e.append(node('span',run.error_code==='CAPABILITY_UNAVAILABLE'?'Runtime connection required':run.error_code??'Input required'));
     if(['queued','claimed','running','waiting'].includes(run.status))e.append(button('Cancel',()=>cancelTask(run,'Owner requested cancellation.')));
     if(['failed','cancelled','recovery_required','interrupted','waiting'].includes(run.status)&&snapshot.summary.execution_enabled)e.append(button('Retry',()=>act(()=>command('run.retry',{run_id:run.id,expected_attempt:run.current_attempt}))));timeline.append(e);
@@ -674,7 +726,7 @@ function render(){
     // V9 (ARCHITECTURE_V2 A8): turn scheduling/outcomes are collapsed, muted
     // activity lines -- never a bubble, never search-filtered (A7: only
     // owner.message/bot.message are bubbles).
-    if(simpleView()&&(event.payload.phase==='started'?conversation.some(x=>x.type==='room.turn'&&x.payload?.log_id===event.payload.log_id&&x.payload.phase==='settled'):['SENT','PASS','SKIPPED'].includes(event.payload.outcome)))continue;
+    if(simpleView()&&(event.payload.phase==='started'||['SENT','PASS','SKIPPED'].includes(event.payload.outcome)))continue;
     const name=items('persona').find(p=>p.id===event.payload.member_id)?.body.name??String(event.payload.member_id).slice(0,8);
     const e=node('div',undefined,'event activity');e.setAttribute('role','status');
     const label=event.payload.phase==='started'?`Waiting for ${name}…`:`${name}: ${{SENT:'replied',PASS:'passed',SKIPPED:'turn skipped (limit reached)',TIMEOUT:'turn timed out',ERROR:'turn failed'}[event.payload.outcome]??event.payload.outcome}`;
@@ -687,11 +739,27 @@ function render(){
   for(const record of pendingOutbox){
    const m=node('article',undefined,'message user outbox-pending outbox-'+record.phase);
    const h=node('div',undefined,'message-head');h.append(node('strong','You'),node('time',time(record.created_at)));m.append(h);
+   if(record.reply_to)m.append(replyQuote(record.reply_to));
    m.append(node('div',record.text,'message-body'));
    const status=node('p',outboxLabels[record.phase]??'','hint outbox-status');status.setAttribute('role','status');m.append(status);
    timeline.append(m);
   }
-  for(const run of runs.filter(x=>view?.kind==='tasks'||(simpleView()?['queued','claimed','running','finishing','cancelling','waiting','recovery_required'].includes(x.status):x.role==='background')||['running','finishing','recovery_required'].includes(x.status)||previews.some(preview=>preview.run_id===x.id)||steering.some(receipt=>receipt.run_id===x.id))){
+  if(!view&&simpleView()){
+   // Typing bubbles: a bot working on a reply in this chat, or the member
+   // whose room turn is open. A streamed preview replaces the dots.
+   const typing=[];
+   if(object?.kind==='persona')for(const run of runs.filter(r=>r.persona_id===selected&&r.role==='coordinator'&&['claimed','running','finishing'].includes(r.status)))typing.push({id:object.id,name:object.body.name,text:previews.find(p=>p.run_id===run.id)?.text});
+   for(const e of conversation.filter(turnOpen))typing.push({id:e.payload.member_id,name:personaName(e.payload.member_id)??'A bot'});
+   for(const item of typing.slice(0,3)){
+    const m=node('article',undefined,'message bot typing');m.setAttribute('role','status');m.setAttribute('aria-label',`${item.name} is replying`);
+    m.append(avatarFor(item.id,item.name));const h=node('div',undefined,'message-head');h.append(node('strong',item.name));m.append(h);
+    const body=node('div',undefined,'message-body');
+    if(item.text)body.append(node('span',item.text,'provisional-text'));else body.append(...[0,1,2].map(()=>node('span',undefined,'typing-dot')));
+    m.append(body);timeline.append(m);
+   }
+  }
+  const activeRun=x=>['queued','claimed','running','finishing','cancelling','waiting'].includes(x.status);
+  for(const run of runs.filter(x=>view?.kind==='tasks'||(simpleView()?x.status==='recovery_required'||x.role!=='coordinator'&&activeRun(x):x.role==='background'||['running','finishing','recovery_required'].includes(x.status)||previews.some(preview=>preview.run_id===x.id)||steering.some(receipt=>receipt.run_id===x.id)))){
    const title=run.title??(run.role==='background'?'Background task':'Conversation task');
    const card=node('details',undefined,'task-card');card.dataset.runId=run.id;card.open=expanded.has(run.id)||view?.focusRun===run.id;card.append(node('summary',`${title} · ${statuses[run.status]??run.status}`));
    if(!simpleView())card.append(node('p',`Task ${run.id}`,'hint'));
@@ -1213,13 +1281,21 @@ function editSkillProposal(skill,source){
 }
 async function act(fn){try{report('');await fn();await refresh(true);}catch(e){report(e.message);}}
 $('review-alpha-session').onclick=()=>act(reviewAlphaSession);
-$('message').oninput=()=>{if(selected)localStorage.setItem('personal.draft.'+selected,$('message').value);$('draft-status').textContent='Unsent draft saved on this device';};
+$('message').oninput=()=>{if(selected)localStorage.setItem('personal.draft.'+selected,$('message').value);$('draft-status').textContent='Unsent draft saved on this device';growComposer();};
+// Enter sends on devices with a keyboard; Shift+Enter (or any Enter on touch) is a newline. Esc cancels a reply.
+$('message').onkeydown=e=>{
+ if(e.key==='Escape'&&replyTarget){replyTarget=null;renderReplyBar();return;}
+ if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&!matchMedia('(pointer: coarse)').matches){e.preventDefault();$('composer').requestSubmit();}
+};
+growComposer();
+$('cancel-reply').onclick=()=>{replyTarget=null;renderReplyBar();$('message').focus();};
 $('composer').onsubmit=async event=>{
  event.preventDefault();if(!selected||!$('message').value.trim())return;const text=$('message').value,conversation=selected;
  const blocked=alphaBlock();if(blocked||sending){renderAlphaSession();if(blocked)report(blocked);return;}
- report('');$('message').value='';try{localStorage.removeItem('personal.draft.'+conversation);}catch{}
+ report('');$('message').value='';growComposer();try{localStorage.removeItem('personal.draft.'+conversation);}catch{}
  $('draft-status').textContent='Queued to send';
- await outboxEnqueue(conversation,text);
+ const reply=replyTarget?.conversation_id===conversation?replyTarget:null;replyTarget=null;renderReplyBar();
+ await outboxEnqueue(conversation,text,reply);
  renderAlphaSession();
 };
 function field(label,name,value='',type='text'){const l=node('label',label,'field');let input;if(type==='textarea')input=node('textarea');else{input=node('input');input.type=type;}input.name=name;input.value=value;input.required=true;l.append(input);return l;}
