@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Chromium against synthetic state/receipts; no accounts or live skill mutations.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -37,9 +38,9 @@ const server=createServer(async(req,res)=>{
   if(path==='/v1/state')return offline?json({error:{message:'Synthetic offline state'}},503):json(state);
   if(path.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
   if(path.startsWith('/v1/conversations/'))return json({events:[],has_more:false,pruned_through:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+  const file=portalFiles[path];
   if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch{json({error:{message:'FIXTURE_REJECTED'}},400);}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
@@ -54,8 +55,11 @@ const open=async(decision='approve',id=proposal.id)=>{
  await click(`${card(id)} [data-action="skill-${decision}"]`);await wait('document.querySelector("#editor").open');
 };
 const affirm=()=>browser('check','#editor [name="affirm"]');
-const submit=()=>click('#editor-form button[type="submit"]');
-const close=()=>browser('press','Escape');
+const submit=async()=>{await browser('wait','--fn','!document.querySelector("#editor-form button[type=submit]").disabled');await click('#editor-form button[type="submit"]');};
+// agent-browser's `press Escape` wedges its daemon (Chromium relaunches) once a refresh has
+// re-rendered the editor's opener, so closes use the dialog's own button. The shared submit
+// button also stays disabled until the previous save's refresh settles.
+const close=async()=>{await browser('click','#close-editor');await browser('wait','--fn','!document.querySelector("#editor").open');};
 try{
  await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');
  await wait('document.querySelector("#connection").textContent==="Connected"');await click('#show-skills');await refresh();
@@ -76,7 +80,7 @@ try{
  await open();assert.equal(await evaluate('document.querySelector("#editor").getAttribute("aria-labelledby")'),'editor-title');
  assert.match((await browser('get','text','#editor')).stdout,/already-enabled bots for future tasks.*already-admitted tasks/s);
  await submit();assert.equal(commands.length,0);assert.equal(await evaluate('document.querySelector("#editor-form").checkValidity()'),false);
- await close();assert.equal(await evaluate('document.querySelector("#editor").open'),false);
+ await browser('press','Escape');await browser('wait','--fn','!document.querySelector("#editor").open');assert.equal(await evaluate('document.querySelector("#editor").open'),false);
  console.log('PASS: eleven exact field comparisons, ordered list changes, empty-list removal, unchanged fields, hostile markup as text, staged review, required private-facts affirmation and Escape.');
  for(const decision of ['approve','reject']){
   for(const change of ['proposal revision','proposal status','skill revision','skill missing','offline']){

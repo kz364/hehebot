@@ -4,6 +4,7 @@
 // A7 clean-thread split between bot.message bubbles and ephemeral provisional
 // text (V-A7), against a synthetic HTTP fixture — no real /v1/stream server.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -49,9 +50,9 @@ const server=createServer(async(req,res)=>{
  if(path.endsWith('/tasks'))return json({counts:{total:1,waiting:0,recovery:0},runs:state.runs,next_cursor:null});
  if(path.endsWith('/recovery'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],recovery:[],next_cursor:null});
  if(path.startsWith('/v1/conversations/'))return json({events:path.includes(bot)?events:[],has_more:false,pruned_through:0});
- const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+ const file=portalFiles[path];
  if(!file){res.writeHead(404);return res.end();}
- res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL('../public/'+file,import.meta.url)));
+ res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});

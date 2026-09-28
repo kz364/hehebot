@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Chromium + synthetic receipts, no accounts, native runtime or real deletion.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -34,16 +35,19 @@ const server=createServer(async(req,res)=>{
   if(path==='/v1/state')return offline?json({error:{message:'Synthetic offline state'}},503):json(state);
   if(path.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
   if(path.startsWith('/v1/conversations/'))return json({events:[],has_more:false,pruned_through:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+  const file=portalFiles[path];
   if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch{json({error:{message:'FIXTURE_REJECTED'}},400);}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
 const open=async()=>{await click('[data-action="delete-routine"]');await wait('document.querySelector("#editor").open');};
+// After a refresh re-renders the editor's opener, agent-browser's `press Escape` wedges its
+// daemon and relaunches Chromium; later closes use the dialog's own button.
+const closeEditor=async()=>{await click('#close-editor');await wait('!document.querySelector("#editor").open');};
 const confirm=()=>browser('check','#editor [name="confirm"]');
-const submit=()=>click('#editor-form button[type="submit"]');
+const submit=async()=>{await wait('!document.querySelector("#editor-form button[type=submit]").disabled');await click('#editor-form button[type="submit"]');};
 const reject=async()=>{await submit();await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,0);assert.match((await browser('get','text','#editor-error')).stdout,/stale or changed/);};
 try{
  await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');
@@ -55,20 +59,20 @@ try{
  await browser('screenshot',decodeURIComponent(new URL('routine-delete-confirmation.png',artifacts).pathname));
  await browser('press','Escape');assert.equal(await evaluate('document.querySelector("#editor").open'),false);
  await open();await confirm();routine.revision=8;await refresh();await reject();routine.revision=7;
- await browser('press','Escape');await refresh();await open();await confirm();
+ await closeEditor();await refresh();await open();await confirm();
  offline=true;await refresh();await reject();
  assert.equal(await evaluate('document.querySelector("[data-action=delete-routine]").disabled'),true);
  await browser('set','viewport','390','844','2');await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);
  assert.equal(await evaluate('document.querySelector("#editor-error").getAttribute("role")'),'alert');
  await browser('screenshot',decodeURIComponent(new URL('routine-delete-offline-narrow.png',artifacts).pathname));
- offline=false;await refresh();assert.equal(commands.length,0);await browser('press','Escape');
+ offline=false;await refresh();assert.equal(commands.length,0);await closeEditor();
  await browser('set','viewport','1280','900','2');await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
  await open();await confirm();routine.body.persona_id=other;await refresh();await reject();routine.body.persona_id=bot;
- await browser('press','Escape');await refresh();await open();await confirm();
+ await closeEditor();await refresh();await open();await confirm();
  // A selection change can occur behind the modal through another app event.
  await browser('eval',`document.querySelector('[data-persona-id="${other}"]').click()`);await refresh();await reject();
- await browser('press','Escape');await click(`[data-persona-id="${bot}"]`);await refresh();
+ await closeEditor();await click(`[data-persona-id="${bot}"]`);await refresh();
  await browser('set','viewport','1280','900','2');await open();await confirm();
  await browser('focus','#editor-form button[type="submit"]');await browser('press','Enter');
  await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,1);

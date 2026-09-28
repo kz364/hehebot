@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Real portal DOM with delayed, synthetic read-only history responses.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -43,9 +44,9 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname === `/v1/conversations/${beta}/events`) return json({ events: betaEvents, has_more: false });
     const file = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
-    if (!['index.html', 'app.js', 'style.css', 'import-setup.js'].includes(file)) { res.writeHead(404); res.end(); return; }
+    if (!Object.values(portalFiles).includes(file)) { res.writeHead(404); res.end(); return; }
     res.writeHead(200, { 'content-type': file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html' });
-    res.end(await readFile(new URL(`../public/${file}`, import.meta.url)));
+    res.end(await portalFile(file));
   } catch { res.destroy(); }
 });
 try {

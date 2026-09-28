@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Real portal DOM; synthetic HTTP receipts, never a live owner installation.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -29,9 +30,9 @@ const server=createServer(async(req,res)=>{
   assert.equal(req.method,'GET');
   if(path==='/v1/state')return json(state);
   if(path.startsWith('/v1/conversations/'))return json({events:[],has_more:false,pruned_through:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+  const file=portalFiles[path];
   if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch(error){res.writeHead(400);res.end(String(error));}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));

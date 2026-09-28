@@ -9,6 +9,7 @@
 // summaries, regressing and impossible count/generation/role combinations,
 // offline/reconnect, draft/pending preservation, and zero passive commands.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -64,10 +65,10 @@ const server=createServer(async(req,res)=>{
   return json({events:[...fixed,...sentEvents.filter(e=>e.conversation_id===id)]});
  }
  if(path.endsWith('/tasks')||path.endsWith('/recovery'))return json({runs:[],counts:{total:0,waiting:0,recovery:0},next_cursor:null});
- const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+ const file=portalFiles[path];
  if(!file){res.writeHead(404);return res.end();}
  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});
- res.end(await readFile(new URL('../public/'+file,import.meta.url)));
+ res.end(await portalFile(file));
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});

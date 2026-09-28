@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Real Chromium DOM, synthetic read-only responses, no polling to mask added requests.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -34,9 +35,9 @@ const server=createServer(async(req,res)=>{
   const events=url.pathname.includes(alpha)?[...recent,{...message(alpha,201,''),type:'run.input_expired'}]:url.pathname.includes(beta)?[message(beta,301,'Beta train 997')]:[message('room',401,'Room ferry 23')];
   return json({events,pruned_through:url.pathname.includes(alpha)?floor:0});
  }
- const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[url.pathname];
+ const file=portalFiles[url.pathname];
  if(!file){res.writeHead(404);res.end();return;}
- let content=await readFile(new URL(`../public/${file}`,import.meta.url),'utf8');
+ let content=await portalFile(file,'utf8');
  if(file==='index.html')content=content.replace('<head>','<head><script>window.setInterval=()=>0;</script>');
  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(content);
 });

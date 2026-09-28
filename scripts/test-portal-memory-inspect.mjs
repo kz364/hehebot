@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Synthetic Chromium only. Disable the five-second timer to count explicit refresh traffic.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -20,14 +21,17 @@ const browser=(...args)=>promisify(execFile)('agent-browser',['--session',sessio
 const evaluate=async code=>JSON.parse((await browser('eval',code)).stdout);
 const wait=code=>browser('wait','--fn',code);
 const server=createServer(async(req,res)=>{
- const path=new URL(req.url,'http://fixture').pathname;requests.push(`${req.method} ${path}`);
+ const path=new URL(req.url,'http://fixture').pathname;
+ // The live-stream probe (ARCHITECTURE_V2 A6) is refused so the page falls back to polling; keep it out of the read log.
+ if(path==='/v1/stream'){res.writeHead(426);res.end();return;}
+ requests.push(`${req.method} ${path}`);
  const json=value=>{res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify(value));};
  if(path==='/v1/state')return json(state);
  if(path.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
  if(path.endsWith('/events'))return json({events:[],has_more:false});
- const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+ const file=portalFiles[path];
  if(!file){res.writeHead(404);res.end();return;}
- let content=await readFile(new URL(`../public/${file}`,import.meta.url),'utf8');
+ let content=await portalFile(file,'utf8');
  if(file==='index.html')content=content.replace('<head>','<head><script>window.setInterval=()=>0;</script>');
  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(content);
 });
@@ -102,6 +106,6 @@ try{
  await capture('portal-memory-inspect-narrow.png');
  assert.equal(await evaluate('document.querySelector("#details").scrollWidth<=document.querySelector("#details").clientWidth'),true);
  assert.equal(requests.filter(row=>row.startsWith('POST ')).length,0);
- assert.ok(requests.filter(row=>row.includes('/v1/')).every(row=>/^GET \/v1\/(state|conversations\/[\w-]+\/(events|tasks))$/.test(row)));
+ assert.ok(requests.filter(row=>row.includes('/v1/')).every(row=>/^GET \/v1\/(state|nodes|conversations\/[\w-]+\/(events|tasks))$/.test(row)));
  console.log('PASS DPR2 desktop/narrow disclosures, no horizontal overflow; zero commands and no extra context/source fetches.');
 }finally{await browser('close').catch(()=>{});server.closeAllConnections();await new Promise(ok=>server.close(ok));}

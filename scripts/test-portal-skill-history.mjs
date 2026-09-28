@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Chromium against an HTTP fixture; no accounts or live skill mutations.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {randomUUID} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {readFile,mkdir} from 'node:fs/promises';
@@ -40,8 +41,8 @@ const server=createServer(async(req,res)=>{
   }
   if(url.pathname.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
   if(url.pathname.startsWith('/v1/conversations/'))return json({events:[],has_more:false,pruned_through:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[url.pathname];if(!file){res.writeHead(404);return res.end();}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  const file=portalFiles[url.pathname];if(!file){res.writeHead(404);return res.end();}
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch(error){json({error:{message:`FIXTURE_REJECTED: ${error.message}`}},400);}
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));

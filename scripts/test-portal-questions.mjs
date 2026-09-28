@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -49,15 +50,15 @@ const server = createServer(async (req, res) => {
     }
     if (path.endsWith('/tasks')) return json({ counts: { total: 0, waiting: 0, recovery: 0 }, runs: [], next_cursor: null });
     if (path.startsWith('/v1/conversations/')) return json({ events: [], has_more: false, pruned_through: 0 });
-    const file = { '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/import-setup.js': 'import-setup.js' }[path];
+    const file = portalFiles[path];
     if (!file) { res.writeHead(404); res.end(); return; }
     res.writeHead(200, { 'content-type': file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html' });
-    res.end(await readFile(new URL(`../public/${file}`, import.meta.url)));
+    res.end(await portalFile(file));
   } catch { res.writeHead(500); res.end(); }
 });
 await new Promise(ok => server.listen(0, '127.0.0.1', ok));
 const artifacts = new URL('../.amp/in/artifacts/', import.meta.url); await mkdir(artifacts, { recursive: true });
-const capture = name => browser('screenshot', new URL(`portal-questions-${name}.png`, artifacts).pathname);
+const capture = name => browser('screenshot', new URL(`portal-questions-${name}.png`, artifacts).pathname.replace(/%20/g,' '));
 const refresh = async () => { await browser('eval', 'document.querySelector("#refresh").click()'); await wait('document.querySelector("#connection").textContent==="Connected"'); };
 try {
   await browser('open', `http://127.0.0.1:${server.address().port}/?view=detailed`); await browser('set', 'viewport', '1280', '900', '2');

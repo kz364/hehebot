@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Chromium against synthetic HTTP only. No task execution, inference or live skill writes.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile,ambientPaths} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -21,8 +22,11 @@ const wait=code=>browser('wait','--fn',code);
 const click=async selector=>{await browser('eval',`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({behavior:'instant',block:'center'})`);await browser('click',selector);};
 const refresh=()=>browser('eval','document.querySelector("#refresh").onclick()');
 const set=(selector,value)=>browser('eval',`document.querySelector(${JSON.stringify(selector)}).value=${JSON.stringify(value)}`);
-const submit=()=>browser('eval','document.querySelector("#editor-form button[type=submit]").click()');
-const close=()=>browser('press','Escape');
+const submit=async()=>{await browser('wait','--fn','!document.querySelector("#editor-form button[type=submit]").disabled');await browser('eval','document.querySelector("#editor-form button[type=submit]").click()');};
+// agent-browser's `press Escape` wedges its daemon (Chromium relaunches) once a refresh has
+// re-rendered the editor's opener, so closes use the dialog's own button. The shared submit
+// button also stays disabled until the previous save's refresh settles.
+const close=async()=>{await browser('click','#close-editor');await browser('wait','--fn','!document.querySelector("#editor").open');};
 const affirm=()=>browser('eval','document.querySelector("#editor [name=affirm]").checked=true');
 const fill=async()=>{for(const [key,value] of Object.entries(body)){if(key==='contains_private_facts')continue;await set(`#editor [name=${key}]`,Array.isArray(value)?value.join('\n'):value);}};
 const open=async task=>{await wait(`!!document.querySelector('#timeline [data-run-id="${task.id}"] [data-action=skill-from-task]')`);await browser('eval',`document.querySelector('#timeline [data-run-id="${task.id}"]').open=true`);await click(`#timeline [data-run-id="${task.id}"] [data-action=skill-from-task]`);await wait('document.querySelector("#editor").open');};
@@ -47,8 +51,9 @@ const server=createServer(async(req,res)=>{
   if(url.pathname===`/v1/routines/${routineId}/runs`){assert.equal(url.search,'?limit=10');return json(page([taskA]));}
   if(url.pathname.endsWith('/tasks'))return json(page(state.runs.filter(r=>url.pathname.includes(r.persona_id)&&!['completed','failed','cancelled'].includes(r.status))));
   if(url.pathname.startsWith('/v1/conversations/'))return json({events:[],has_more:false,pruned_through:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[url.pathname];if(!file){assert.equal(url.pathname,'/favicon.ico');res.writeHead(404);return res.end();}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  if(ambientPaths.has(url.pathname)){res.writeHead(404);return res.end();}
+  const file=portalFiles[url.pathname];if(!file){assert.equal(url.pathname,'/favicon.ico');res.writeHead(404);return res.end();}
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch(error){failures.push(error.message);json({error:{message:'FIXTURE_REJECTED'}},400);}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));

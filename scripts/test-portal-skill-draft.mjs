@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Chromium against an HTTP fixture; no accounts or live skill mutations.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
@@ -34,9 +35,12 @@ const click = selector => browser('click', selector);
 const refresh = () => browser('eval', 'document.querySelector("#refresh").onclick()');
 const settle = () => new Promise(resolve => setTimeout(resolve, 300));
 const setValue = (name, value) => browser('eval', `(()=>{const e=document.querySelector('#editor [name=${JSON.stringify(name)}]');e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-const submit = () => browser('eval', 'document.querySelector("#editor-form button[type=submit]").click()');
+// The shared submit button stays disabled until the previous save's refresh settles.
+const submit = async () => { await browser('wait', '--fn', '!document.querySelector("#editor-form button[type=submit]").disabled'); await browser('eval', 'document.querySelector("#editor-form button[type=submit]").click()'); };
 const affirm = () => browser('check', '#editor [name="affirm"]');
-const close = () => browser('press', 'Escape');
+// agent-browser's `press Escape` wedges its daemon (Chromium relaunches) once a refresh has
+// re-rendered the editor's opener, so closes use the dialog's own button.
+const close = async () => { await browser('click', '#close-editor'); await browser('wait', '--fn', '!document.querySelector("#editor").open'); };
 
 function applyProposal(command) {
   if (state.skill_proposals.some(row => row.id === command.payload.proposal_id)) return;
@@ -69,10 +73,10 @@ const server = createServer(async (req, res) => {
     if (path === '/v1/state') return offline ? json({ error: { message: 'Synthetic offline state.' } }, 503) : json(state);
     if (path.endsWith('/tasks')) return json({ counts: { total: 0, waiting: 0, recovery: 0 }, runs: [], next_cursor: null });
     if (path.startsWith('/v1/conversations/')) return json({ events: [], has_more: false, pruned_through: 0 });
-    const file = { '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/import-setup.js': 'import-setup.js' }[path];
+    const file = portalFiles[path];
     if (!file) { res.writeHead(404); return res.end(); }
     res.writeHead(200, { 'content-type': file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html' });
-    res.end(await readFile(new URL(`../public/${file}`, import.meta.url)));
+    res.end(await portalFile(file));
   } catch (error) { json({ error: { message: `FIXTURE_REJECTED: ${error.message}` } }, 400); }
 });
 

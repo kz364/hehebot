@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Actual Chromium + synthetic HTTP only; no installed documents or live grants.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile,ambientPaths} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -26,8 +27,11 @@ const refresh=async()=>{
  const proposed=proposal.body.references,malformed=!Array.isArray(proposed)||proposed.some(r=>r===null);
  await wait(`(()=>{if(document.querySelector('#connection').textContent!==${JSON.stringify(offline?'Offline':'Connected')})return false;if(${offline})return true;const card=document.querySelector('.skill-card:not(.proposal)'),section=document.querySelector('.proposal [data-skill-field=references] .skill-references:last-child');const documents=element=>Array.from(element.querySelectorAll('.card')).map(c=>({name:c.querySelector('h4').textContent,text:c.querySelector('.message-body').textContent}));return card?.querySelector('summary .status').textContent===${JSON.stringify(`Revision ${skill.revision}`)}&&JSON.stringify(documents(card.querySelector(':scope > .skill-references')))===${JSON.stringify(JSON.stringify(skill.body.references))}&&(${malformed}?section?.textContent.includes('Invalid stored reference data'):JSON.stringify(documents(section))===${JSON.stringify(JSON.stringify(proposed))});})()`);
 };
-const close=()=>browser('press','Escape');
-const submit=()=>browser('eval','document.querySelector("#editor-form button[type=submit]").click()');
+// agent-browser's `press Escape` wedges its daemon (Chromium relaunches) once a refresh has
+// re-rendered the editor's opener, so closes use the dialog's own button. The shared submit
+// button also stays disabled until the previous save's refresh settles.
+const close=async()=>{await browser('click','#close-editor');await browser('wait','--fn','!document.querySelector("#editor").open');};
+const submit=async()=>{await browser('wait','--fn','!document.querySelector("#editor-form button[type=submit]").disabled');await browser('eval','document.querySelector("#editor-form button[type=submit]").click()');};
 const affirm=()=>browser('eval','document.querySelector("#editor [name=affirm]").checked=true');
 const set=(selector,value)=>browser('eval',`document.querySelector(${JSON.stringify(selector)}).value=${JSON.stringify(value)}`);
 const refs='.reference-editor-row';
@@ -60,9 +64,10 @@ const server=createServer(async(req,res)=>{
   if(url.pathname===`/v1/skills/${skill.id}/revisions`){assert.equal(url.search,'?limit=10');return json({skill_id:skill.id,current_revision:4,revisions:[historical],next_cursor:null});}
   if(url.pathname.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
   if(url.pathname.startsWith('/v1/conversations/'))return json({events:[],has_more:false,pruned_through:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[url.pathname];
+  if(ambientPaths.has(url.pathname)){res.writeHead(404);return res.end();}
+  const file=portalFiles[url.pathname];
   if(!file){assert.equal(url.pathname,'/favicon.ico');res.writeHead(404);return res.end();}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch(error){failures.push(error.message);json({error:{message:'FIXTURE_REJECTED'}},400);}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));

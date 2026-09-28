@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -24,8 +25,8 @@ const server=createServer(async(req,res)=>{
   if(path==='/v1/state')return json(state);
   if(path.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
   if(path.startsWith('/v1/conversations/'))return json({events:path.includes(bot)?events:[],has_more:false,pruned_through:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  const file=portalFiles[path];if(!file){res.writeHead(404);res.end();return;}
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch{res.writeHead(500);res.end();}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
@@ -43,7 +44,9 @@ try{
  assert.equal(Number((await browser('get','count','.result-outcome')).stdout.trim()),0);
  await browser('click',`[data-persona-id="${bot}"]`);await wait();assert.deepEqual(await labels(),expected);
  await browser('set','viewport','390','844','2');await top();await browser('screenshot',decodeURIComponent(new URL('portal-results-narrow.png',artifacts).pathname));
- assert.equal((await browser('eval','document.querySelector("#timeline").getBoundingClientRect().bottom<=document.querySelector("#task-strip").getBoundingClientRect().top&&document.querySelector("#timeline").scrollHeight>document.querySelector("#timeline").clientHeight')).stdout.trim(),'true');
+ // Outcomes render as compact notices since the Messages-style redesign, so five of them no
+ // longer have to overflow a phone viewport; only the timeline/task-strip bounds are asserted.
+ assert.equal((await browser('eval','document.querySelector("#timeline").getBoundingClientRect().bottom<=document.querySelector("#task-strip").getBoundingClientRect().top')).stdout.trim(),'true');
  for(const [index,name] of [[1,'waiting'],[4,'last']]){
   // ARCHITECTURE_V2 A7: a run.result outcome is a non-bubble notice (`div.event`), not an
   // `article` — only the legacy fallback for a pre-V1 completed run without a bot.message

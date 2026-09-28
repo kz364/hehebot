@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Synthetic local Chromium. Timer disabled to distinguish user actions from polling.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -27,9 +28,9 @@ const server=createServer(async(req,res)=>{
  if(path==='/v1/state')return json(state);
  if(path.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
  if(path.endsWith('/events'))return json({events:[],has_more:false});
- const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+ const file=portalFiles[path];
  if(!file){res.writeHead(404);res.end();return;}
- let content=await readFile(new URL(`../public/${file}`,import.meta.url),'utf8');
+ let content=await portalFile(file,'utf8');
  if(file==='index.html')content=content.replace('<head>','<head><script>window.setInterval=()=>0;</script>');
  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(content);
 });
@@ -97,7 +98,8 @@ try{
  assert.equal(await evaluate('document.querySelector("#memory-search-status").textContent'),'0 of 0 loaded memories shown.');
  assert.match(await evaluate('document.querySelector("#memories").textContent'),/No loaded memories in this scope/);
  assert.equal(requests.filter(row=>row.startsWith('POST ')).length,0);
- assert.ok(requests.filter(row=>row.includes('/v1/')).every(row=>/^GET \/v1\/(state|conversations\/[\w-]+\/(events|tasks))$/.test(row)));
+ const unexpected=requests.filter(row=>row.includes('/v1/')&&!/^GET \/v1\/(state|nodes|conversations\/[\w-]+\/(events|tasks))$/.test(row));assert.deepEqual(unexpected,[]);
+ assert.ok(requests.filter(row=>row.includes('/v1/')).every(row=>/^GET \/v1\/(state|nodes|conversations\/[\w-]+\/(events|tasks))$/.test(row)));
  assert.equal(requests.some(row=>row.includes('/injected')),false);
  console.log('PASS truthful no-match/no-eligible states, DPR2 desktop/narrow without overflow; zero commands or source retrieval; existing refresh is exactly three reads.');
 }finally{await browser('close').catch(()=>{});server.closeAllConnections();await new Promise(ok=>server.close(ok));}

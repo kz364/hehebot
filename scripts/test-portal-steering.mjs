@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Real rendered portal, synthetic owner commands only; no native/account activity.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -27,10 +28,11 @@ const server=createServer(async(req,res)=>{
   }
   assert.equal(req.method,'GET');
   if(path==='/v1/state')return json(state);
+  if(path.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
   if(path.startsWith('/v1/conversations/'))return json({events:[],has_more:false,pruned_through:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+  const file=portalFiles[path];
   if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch(error){res.writeHead(400);res.end(String(error));}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
@@ -41,7 +43,10 @@ const refresh=async text=>{await browser('click','#refresh');await waitText(text
 try{
  await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');
  await browser('wait','--fn','document.querySelector("#connection").textContent==="Connected"');
- await browser('click',`${card(a)} summary`);await browser('click',`${card(b)} summary`);
+ // Expanding a card smooth-scrolls the timeline; settle each target before clicking it.
+ const expand=async selector=>{await browser('eval',`document.querySelector('${selector} summary').scrollIntoView({behavior:'instant',block:'center'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);await browser('click',`${selector} summary`);};
+ await expand(card(a));await expand(card(b));
+ assert.equal((await browser('eval',`document.querySelector('${card(b)}').open`)).stdout.trim(),'true');
  await browser('click',`${card(a)} [data-action="steer"]`);
  assert.match((await browser('get','text','#editor')).stdout,/does not undo effects/);
  await browser('fill','[name="text"]','Use tomorrow for form A only');

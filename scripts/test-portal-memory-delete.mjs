@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Synthetic Chromium contract, not proof of backend purge or native cancellation.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -37,9 +38,9 @@ const server=createServer(async(req,res)=>{
   if(path==='/v1/state')return offline?json({error:{message:'Synthetic offline'}},503):json(state);
   if(path.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
   if(path.startsWith('/v1/conversations/'))return json({events:[],has_more:false});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+  const file=portalFiles[path];
   if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch{json({error:{message:'FIXTURE_REJECTED'}},400);}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
@@ -47,7 +48,10 @@ const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(art
 const open=async(index=0)=>{await browser('click',`#memories .card:nth-child(${index+1}) [data-action="delete-memory"]`);await wait('document.querySelector("#editor").open');};
 const submit=()=>browser('click','#editor-form button[type="submit"]');
 const consent=()=>browser('check','#editor [name=confirm]');
-const close=()=>browser('press','Escape');
+// Fence loops close with the dialog's own button: after a refresh re-renders the memory
+// card that opened the editor, agent-browser's `press Escape` loses the tab (about:blank,
+// browser relaunch ~70s later) while dialog.requestClose() and the Cancel/close buttons work.
+const close=()=>browser('click','#close-editor');
 const reject=async()=>{const count=commands.length;await submit();await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,count);assert.match((await browser('get','text','#editor-error')).stdout,/stale|changed|offline/);};
 const capture=async name=>{assert.equal(await evaluate('devicePixelRatio'),2);await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');await browser('screenshot',decodeURIComponent(new URL(name,artifacts).pathname));};
 try{
@@ -59,7 +63,7 @@ try{
  const copy=(await browser('get','text','#editor')).stdout;
  for(const text of [memory.body.text,memory.id,'revision 7','current and prior canonical','Queued contexts','cancellation is requested','not confirmed','backups and third-party copies are not proven removed'])assert.ok(copy.includes(text),text);
  assert.ok(copy.includes('Past conversations and completed task copies may remain.'));
- assert.ok(!copy.includes(sibling.body.text));await capture('portal-forget-desktop.png');await close();assert.equal(commands.length,0);
+ assert.ok(!copy.includes(sibling.body.text));await capture('portal-forget-desktop.png');await browser('press','Escape');await wait('!document.querySelector("#editor").open');assert.equal(commands.length,0);
  await open();await consent();await browser('focus','#editor-form button[type=submit]');await browser('press','Enter');await wait('!document.querySelector("#editor").open');
  assert.deepEqual(commands[0].command,{schema_version:1,type:'memory.delete',payload:{id:memory.id,expected_revision:7,purge_transcripts:false}});assert.ok(commands[0].key);
  await open(1);await consent();await submit();await wait('!document.querySelector("#editor").open');

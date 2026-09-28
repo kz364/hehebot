@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Chromium UI contracts with synthetic HTTP only; no accounts or real memory writes.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -38,16 +39,19 @@ const server=createServer(async(req,res)=>{
   if(path==='/v1/state')return offline?json({error:{message:'Synthetic offline'}},503):json(state);
   if(path.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
   if(path.startsWith('/v1/conversations/'))return json({events:[...(!foreignOnly?[{id:source,sequence:1,conversation_id:bot,type:'message.user',payload:{text:'Synthetic source'}}]:[]),{id:foreign,sequence:2,conversation_id:other,type:'message.user',payload:{text:'Foreign source'}}],has_more:false,pruned_through:foreignOnly?1:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+  const file=portalFiles[path];
   if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch{json({error:{message:'FIXTURE_REJECTED'}},400);}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
 const open=async()=>{await browser('click','#memories .card button');await wait('document.querySelector("#editor").open');};
 const submit=()=>browser('click','#editor-form button[type="submit"]');
-const close=()=>browser('press','Escape');
+// Fence loops close with the dialog's own button: after a refresh re-renders the memory
+// card that opened the editor, agent-browser's `press Escape` loses the tab (about:blank,
+// browser relaunch ~70s later) while dialog.requestClose() and the Cancel/close buttons work.
+const close=()=>browser('click','#close-editor');
 const reject=async(message=/stale|changed|offline/)=>{const count=commands.length;await submit();await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,count);assert.match((await browser('get','text','#editor-error')).stdout,message);assert.equal(await evaluate('document.querySelector("#editor-error").getAttribute("role")'),'alert');};
 try{
  await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await refresh();

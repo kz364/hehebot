@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Real Chromium, synthetic read-only API. No accounts, inference, commands or mutations.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -25,7 +26,7 @@ const server=createServer(async(req,res)=>{const path=new URL(req.url,'http://fi
  if(path===`/v1/conversations/${persona}/tasks`)return json(page(taskUsage));
  if(path===`/v1/conversations/${persona}/recovery`)return json({...page([]),runs:[{...run,status:'recovery_required'}]});
  if(path===`/v1/routines/${routineId}/runs`)return json(page(routineUsage));
- const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];if(!file){res.writeHead(404);return res.end();}res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+ const file=portalFiles[path];if(!file){res.writeHead(404);return res.end();}res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
@@ -50,6 +51,6 @@ try{
  await browser('eval','document.querySelector(".routine-history .token-usage").scrollIntoView({block:"center"})');assert.equal(await evalJson('devicePixelRatio'),2);assert.equal(await evalJson('document.querySelector(".routine-history .token-usage").scrollWidth<=document.querySelector(".routine-history .token-usage").clientWidth'),true);await browser('screenshot','.routine-history .token-usage',decodeURIComponent(new URL('token-usage-desktop.png',artifacts).pathname));
  await browser('set','viewport','390','844','2');await browser('click','#show-details');await browser('eval','document.querySelector(".routine-history .token-usage").scrollIntoView({block:"center"});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evalJson('document.documentElement.scrollWidth<=innerWidth&&document.querySelector(".routine-history .token-usage").scrollWidth<=document.querySelector(".routine-history .token-usage").clientWidth'),true);await browser('screenshot','.routine-history .token-usage',decodeURIComponent(new URL('token-usage-narrow.png',artifacts).pathname));
  assert.equal(commands,0);assert.ok(requests.every(value=>value.startsWith('GET ')));
- assert.ok(requests.every(value=>['/','/app.js','/style.css','/import-setup.js','/favicon.ico','/v1/state',`/v1/conversations/${persona}/events`,`/v1/conversations/${persona}/tasks`,`/v1/conversations/${persona}/recovery`,`/v1/routines/${routineId}/runs`].includes(new URL(value.slice(4),'http://fixture').pathname)));
+ assert.ok(requests.every(value=>['/','/app.js','/style.css','/import-setup.js','/takeover.js','/favicon.ico','/v1/state',`/v1/conversations/${persona}/events`,`/v1/conversations/${persona}/tasks`,`/v1/conversations/${persona}/recovery`,`/v1/routines/${routineId}/runs`,'/v1/stream','/v1/nodes'].includes(new URL(value.slice(4),'http://fixture').pathname)));
  console.log(`PASS: token usage validation, rerender, isolation, recovery fence, zero commands; ${requests.length} existing read requests.`);
 }finally{await browser('close').catch(()=>{});server.closeAllConnections();await new Promise(ok=>server.close(ok));}

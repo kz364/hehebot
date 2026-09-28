@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import { createServer } from 'node:http';
 import { readFile, mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -27,9 +28,9 @@ const server=createServer(async(req,res)=>{
    if(typeof mode==='number'){res.writeHead(mode,{'content-type':'application/json'});res.end('{"error":{"message":"PRIVATE_ERROR_CANARY_937"}}');return;}
    res.writeHead(200,{'content-type':'application/json'});res.end(wire);return;
   }
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+  const file=portalFiles[path];
   if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch{res.writeHead(500);res.end();}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));

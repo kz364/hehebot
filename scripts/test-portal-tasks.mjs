@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -8,6 +9,8 @@ import {randomUUID} from 'node:crypto';
 const session=`tasks-${randomUUID().slice(0,8)}`,bot='11111111-1111-4111-8111-111111111111',other='99999999-9999-4999-8999-999999999999';
 const browser=(...args)=>promisify(execFile)('agent-browser',['--session',session,...args],{timeout:30000});
 const click=name=>browser('find','role','button','click','--name',name,'--exact');
+// Roster rows carry an avatar initial in their accessible name ("B Beta"); select bots by id.
+const choose=persona=>browser('click',`[data-persona-id="${persona}"]`);
 const id=n=>`22222222-2222-4222-8222-${String(n).padStart(12,'0')}`;
 const tasks=Array.from({length:13},(_,n)=>({id:id(n+1),persona_id:bot,title:n===0?'Task A — arrival form':n===1?'Task B — mail check':`Queued task ${n+1}`,role:'coordinator',status:n===0?'running':'waiting',current_attempt:n===0?1:0,error_code:n===0?null:'CAPABILITY_UNAVAILABLE',request_status:'applied'}));
 const state={objects:[{id:bot,kind:'persona',body:{name:'Alpha'}},{id:other,kind:'persona',body:{name:'Beta'}}],runs:[],timeline:[],summary:{phase:'READY',execution_enabled:true,queued_runs:0,blocked_runs:12}};
@@ -29,9 +32,9 @@ const server=createServer(async(req,res)=>{
    return json(result);
   }
   if(path.startsWith('/v1/conversations/'))return json({events:[],has_more:false,pruned_through:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+  const file=portalFiles[path];
   if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch{res.writeHead(500);res.end();}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
@@ -64,10 +67,10 @@ try{
  failTasks=true;await browser('click','#refresh');await browser('wait','--fn','document.querySelector("#task-strip-summary").textContent.includes("stale")');
  assert.equal(Number((await browser('get','count','.task-strip-row')).stdout.trim()),0);
  await browser('screenshot',decodeURIComponent(new URL('portal-tasks-stale.png',artifacts).pathname));
- failTasks=false;await click('Beta');await browser('wait','--fn','document.querySelector("#task-strip-summary").textContent.includes("Tasks 0")');
+ failTasks=false;await choose(other);await browser('wait','--fn','document.querySelector("#task-strip-summary").textContent.includes("Tasks 0")');
  assert.doesNotMatch((await browser('get','text','#task-strip')).stdout,/Task A|Task B/);
  await browser('screenshot',decodeURIComponent(new URL('portal-tasks-empty.png',artifacts).pathname));
- await click('Alpha');await browser('wait','--fn','document.querySelector("#task-strip-summary").textContent.includes("Tasks 13")');
+ await choose(bot);await browser('wait','--fn','document.querySelector("#task-strip-summary").textContent.includes("Tasks 13")');
  const held={};const arrived=new Promise(ok=>held.arrived=ok);delay=held;
  let timer;
  try{
@@ -77,7 +80,7 @@ try{
   // would independently hit the tasks endpoint well inside that window; ARCHITECTURE_V2
   // A6 replaced that with a 15s fallback poll, so the safety margin must grow to match.
   await browser('click','#refresh');await Promise.race([arrived,new Promise((_,reject)=>timer=setTimeout(()=>reject(new Error('Delayed task request did not arrive')),20000))]);
-  await click('Beta');assert.doesNotMatch((await browser('get','text','#task-strip')).stdout,/Task A|Task B/);
+  await choose(other);assert.doesNotMatch((await browser('get','text','#task-strip')).stdout,/Task A|Task B/);
  }finally{clearTimeout(timer);held.resolve?.();}
  await browser('wait','--fn','document.querySelector("#task-strip-summary").textContent.includes("Tasks 0")');
  assert.doesNotMatch((await browser('get','text','#task-strip')).stdout,/Task A|Task B/);

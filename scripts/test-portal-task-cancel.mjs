@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Synthetic browser contract only; no native termination or effect settlement proof.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -42,9 +43,9 @@ const server=createServer(async(req,res)=>{
    return json({counts:{total:page.length,waiting:1,recovery:0},runs:page,next_cursor:url.searchParams.has('after')?null:'next'});
   }
   if(path.endsWith('/events'))return json({events:path.includes(other)?[]:[a,b].map((run,index)=>({id:randomUUID(),sequence:index+1,conversation_id:bot,type:'run.accepted',created_at:'2026-09-16T01:00:00Z',payload:{run_id:run.id}})),has_more:false});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+  const file=portalFiles[path];
   if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch{json({error:{message:'FIXTURE_REJECTED'}},400);}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
@@ -56,8 +57,12 @@ const open=async(entry=source==='page'?'card':'timeline',run=a)=>{
  await wait('document.querySelector("#editor").open');
 };
 const consent=()=>browser('check','#editor [name=confirm]');
-const submit=()=>browser('click','#editor-form button[type=submit]');
-const close=()=>browser('press','Escape');
+// The shared submit button stays disabled until the previous save's refresh settles,
+// even after that editor closed; wait for it before clicking in a freshly opened one.
+const submit=async()=>{await wait('!document.querySelector("#editor-form button[type=submit]").disabled');await browser('click','#editor-form button[type=submit]');};
+// See test-portal-memory-edit.mjs: agent-browser's `press Escape` can lose the tab after a
+// refresh re-renders the editor's opener, so routine closes use the dialog's own button.
+const close=()=>browser('click','#close-editor');
 const blocked=async(pattern=/changed|stale|offline/)=>{
  const count=commands.length;await submit();await wait('!document.querySelector("#editor-error").hidden');
  assert.equal(commands.length,count);assert.match((await browser('get','text','#editor-error')).stdout,pattern);
@@ -91,7 +96,7 @@ try{
  const copy=(await browser('get','text','#editor')).stdout;
  for(const text of [a.title,a.id,'attempt 3','Working','not confirmed executor termination','does not undo or roll back effects','server has no attempt precondition','Reconnecting never retries'])assert.ok(copy.includes(text),text);
  assert.ok(!copy.includes(b.id));assert.ok(!copy.includes(b.title));
- await close();await open();
+ await browser('press','Escape');await wait('!document.querySelector("#editor").open');await open();
  await capture('portal-task-cancel-desktop.png');await close();assert.equal(commands.length,0);
  await open();await consent();await browser('focus','#editor-form button[type=submit]');await browser('press','Enter');await wait('!document.querySelector("#editor").open');
  envelope(commands.at(-1),a,'Owner requested cancellation.');assert.equal(rows[1].status,'waiting');

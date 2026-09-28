@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Rendered UI contract only: synthetic HTTP receipts, no accounts or native work.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -43,9 +44,9 @@ const server=createServer(async(req,res)=>{
    if(holdRecovery){heldRecovery=()=>json(page);return;}return json(page);
   }
   if(path.startsWith('/v1/conversations/'))return json({events,has_more:false,pruned_through:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];
+  const file=portalFiles[path];
   if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch{res.writeHead(400);res.end('FIXTURE_REJECTED');}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
@@ -75,7 +76,8 @@ try{
  pageRecoverable=true;await refresh();await click(`${card(oldA.id)} [data-action="run-recover"]`);
  await browser('check','#editor input[type="checkbox"]');
  pageRecoverable=false;await refresh();await rejected(0,/no longer eligible/);
- await browser('press','Escape');
+ // agent-browser's `press Escape` wedges its daemon after a refresh re-renders the opener.
+ await click('#close-editor');await browser('wait','--fn','!document.querySelector("#editor").open');
  await browser('find','role','button','click','--name','Next recovery page','--exact');
  await browser('wait','--fn',`document.querySelector('${card(oldB.id)}')!==null`);
  assert.equal((await browser('eval',`document.querySelector('${card(oldA.id)}')===null`)).stdout.trim(),'true');

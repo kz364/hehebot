@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -22,8 +23,8 @@ const server=createServer(async(req,res)=>{
   if(path==='/v1/state'){if(fail){res.writeHead(503);res.end('{}');return;}state.roster_activity.observed_at=new Date().toISOString();return json(state);}
   if(path.endsWith('/tasks'))return json({counts:{total:0,waiting:0,recovery:0},runs:[],next_cursor:null});
   if(path.startsWith('/v1/conversations/'))return json({events:[],has_more:false,pruned_through:0});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[path];if(!file){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  const file=portalFiles[path];if(!file){res.writeHead(404);res.end();return;}
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch{res.writeHead(500);res.end();}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
@@ -46,10 +47,12 @@ try{
  await browser('click','.roster-section-toggle');await wait('document.querySelector(".roster-section-toggle").getAttribute("aria-expanded")==="false"');
  await browser('reload');await wait('document.querySelector(".roster-section-toggle")?.getAttribute("aria-expanded")==="false"');assert.equal(state.roster.sections[0].collapsed,true);
  const count=commands.length;await browser('fill','#roster-search','alpha');assert.equal(await evaluate('document.querySelectorAll("#bots .nav-item").length'),1);assert.equal(commands.length,count);await browser('fill','#roster-search','');
- await browser('set','viewport','390','844','2');await browser('click','#hidden-bots-summary');await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
- assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);await browser('screenshot',decodeURIComponent(new URL('portal-roster-narrow.png',artifacts).pathname));
- await clickSelector(`#hidden-bots-list [data-persona-id="${b}"]`);await wait('document.querySelector("#conversation-name").textContent==="Beta"');
- await browser('screenshot',decodeURIComponent(new URL('portal-roster-hidden-narrow.png',artifacts).pathname));
+ // The Messages-style narrow layout (docs/PORTAL_UX.md) hides roster controls and hidden bots
+ // below 700px, so hidden bots are chosen at desktop width and the narrow pass checks bounds only.
+ await browser('click','#hidden-bots-summary');await clickSelector(`#hidden-bots-list [data-persona-id="${b}"]`);await wait('document.querySelector("#conversation-name").textContent==="Beta"');
+ await browser('set','viewport','390','844','2');await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
+ assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);assert.equal(await evaluate('getComputedStyle(document.querySelector("#hidden-bots")).display'),'none');
+ await browser('screenshot',decodeURIComponent(new URL('portal-roster-narrow.png',artifacts).pathname));
  await browser('set','viewport','1280','900','2');await click('Organize');state.roster.revision++;await clickSelector('#editor-form button[type=submit]');await wait('!document.querySelector("#editor-error").hidden');assert.equal(await evaluate('document.querySelector("#editor").open'),true);
  assert.equal(await evaluate('document.querySelector(".dialog-footer").getBoundingClientRect().bottom<=document.querySelector("#editor").getBoundingClientRect().bottom'),true);
  await browser('screenshot',decodeURIComponent(new URL('portal-roster-conflict.png',artifacts).pathname));await clickSelector('#cancel-editor');await wait('!document.querySelector("#editor").open');await click('Refresh');await wait('document.querySelector("#connection").textContent==="Connected"');await click('Organize');await click('Delete section');await save();

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Real Chromium, synthetic HTTP only. No connector probes or live services.
 import assert from 'node:assert/strict';
+import {portalFiles,portalFile,ambientPaths} from './portal-fixture.mjs';
 import {createServer} from 'node:http';
 import {readFile,mkdir} from 'node:fs/promises';
 import {execFile} from 'node:child_process';
@@ -32,9 +33,10 @@ const server=createServer(async(req,res)=>{
   }
   if(req.url===`/v1/conversations/${id}/events`)return json({events:[],has_more:false,pruned_through:0});
   if(req.url===`/v1/conversations/${id}/tasks`)return json({counts:{total:0,waiting:0,recovery:0},runs:[],output_previews:[],steering:[],recovery:[],next_cursor:null});
-  const file={'/':'index.html','/app.js':'app.js','/style.css':'style.css','/import-setup.js':'import-setup.js'}[req.url];
+  if(ambientPaths.has(req.url)){res.writeHead(404);return res.end();}
+  const file=portalFiles[new URL(req.url,'http://fixture').pathname];
   if(!file){assert.equal(req.url,'/favicon.ico');res.writeHead(404);return res.end();}
-  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await readFile(new URL(`../public/${file}`,import.meta.url)));
+  res.writeHead(200,{'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'});res.end(await portalFile(file));
  }catch(e){failures.push(e.message);json({error:{message:'FIXTURE_REJECTED'}},400);}
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
