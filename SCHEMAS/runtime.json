@@ -822,6 +822,12 @@
             "reply_to_event_id": {
               "type": "string",
               "format": "uuid"
+            },
+            "audience": {
+              "enum": [
+                "everyone",
+                "bots"
+              ]
             }
           },
           "required": [

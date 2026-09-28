@@ -84,9 +84,10 @@ export function buildToolDefinitions(contracts) {
         offset: { type: 'integer', minimum: 0, maximum: 16000 }, limit: { type: 'integer', minimum: 1, maximum: 2000 },
       }, required: ['memory_id', 'revision', 'offset', 'limit'],
     } },
-    { name: AGENT_TOOL_NAMES[8], description: 'This is the only way to say something to the owner. Call it for every reply, question or progress update; plain assistant text is not shown. Optionally set reply_to_event_id to reference an earlier timeline event.', inputSchema: {
+    { name: AGENT_TOOL_NAMES[8], description: 'This is the only way to say something to the owner. Call it for every reply, question or progress update; plain assistant text is not shown. Optionally set reply_to_event_id to reference an earlier timeline event. In a group room, set audience to "bots" for a message that only coordinates with or hands off to another bot and that the owner does not need to read; it is collapsed for the owner and never notifies them. Leave the default when the owner is part of the discussion.', inputSchema: {
       type: 'object', additionalProperties: false, properties: {
         text: { type: 'string', minLength: 1, maxLength: 32768 }, reply_to_event_id: resolveRefs(contracts.$defs.uuid, contracts),
+        audience: { enum: ['everyone', 'bots'] },
       }, required: ['text'],
     } },
     { name: AGENT_TOOL_NAMES[9], description: 'Start an independent background task with its own native turn. Returns immediately; it never waits for the task. Use this for work that would otherwise block the conversation. capabilities must be a subset of this bot\'s own authorized tool policies; omit for none.', inputSchema: wrap(commandSchema(contracts, 'task.start')) },
@@ -197,6 +198,7 @@ export function createAgentToolsHandler({ controlClient, config, contracts, memo
           const result = await controlClient.request('bot-message', {
             identity: clone(config.identity), run_id: config.runId, attempt: config.attempt, message_key: messageKey,
             text: args.text, ...(args.reply_to_event_id !== undefined ? { reply_to_event_id: args.reply_to_event_id } : {}),
+            ...(args.audience !== undefined ? { audience: args.audience } : {}),
           });
           if (!result || typeof result.event_id !== 'string' || !Number.isSafeInteger(result.sequence)) throw new Error('INVALID_MESSAGE_RECEIPT');
           return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify({ delivered: true, event_id: result.event_id, sequence: result.sequence }) }] } };

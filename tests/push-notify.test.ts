@@ -139,3 +139,13 @@ it('a send failure that is not 404/410 never removes the subscription', async ()
   await runPushDispatch(store, jobs as PushJob[], async () => ({ ok: false, status: 500, shouldRemoveSubscription: false }));
   expect(subs.list()).toHaveLength(1);
 });
+
+it('notifies for a bot talking to the owner in a room, titled by the room, but never for bot-to-bot messages', () => {
+  const room = randomUUID();
+  store.put(room, 'room', { name: 'Trip planning', member_ids: [bot, otherBot], default_responder_id: bot }, 0, 'owner', now);
+  const base = { run_id: randomUUID(), attempt: 1, task_run_id: null, origin: 'tool', reply_to_event_id: null };
+  store.event(randomUUID(), room, 'bot.message', bot, null, { ...base, text: 'Inbox Triage, check the confirmation email.', audience: 'bots' }, now);
+  store.event(randomUUID(), room, 'bot.message', otherBot, null, { ...base, text: 'Your flight is confirmed.' }, now);
+  const { notifications } = selectPushNotifications(store, 0, now);
+  expect(notifications.map(n => [n.title, n.body])).toEqual([['Trip planning', 'Inbox Triage: Your flight is confirmed.']]);
+});

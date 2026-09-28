@@ -92,6 +92,16 @@ describe('V9 room turn scheduler (ARCHITECTURE_V2 A8)', () => {
     expect(turnEvents(r.id).find(e => e.phase === 'settled')).toMatchObject({ member_id: bot, outcome: 'SENT' });
   });
 
+  it('keeps audience "bots" on room hand-offs only; outside a room the owner is always the audience', () => {
+    const r = room();
+    sendToRoom(r.id, 'Owner request'); const run = runOf(bot); admitRunning(run.id);
+    new BotMessages(f.store, () => f.core.now(), randomUUID).post(identity, { run_id: run.id, attempt: 1, message_key: `${run.id}:1:a`, text: 'otherBot, take this one.', audience: 'bots' }, life);
+    expect(JSON.parse(f.db.all<{ payload_json: string }>("SELECT payload_json FROM events WHERE type='bot.message' ORDER BY sequence DESC LIMIT 1")[0].payload_json).audience).toBe('bots');
+    const direct = f.core.enqueue(otherBot, 'Direct', null, null, null, null); admitRunning(direct);
+    new BotMessages(f.store, () => f.core.now(), randomUUID).post(identity, { run_id: direct, attempt: 1, message_key: `${direct}:1:a`, text: 'For the owner.', audience: 'bots' }, life);
+    expect(JSON.parse(f.db.all<{ payload_json: string }>("SELECT payload_json FROM events WHERE type='bot.message' ORDER BY sequence DESC LIMIT 1")[0].payload_json)).not.toHaveProperty('audience');
+  });
+
   it('a turn whose run ended without settling does not wedge the room (trap 4)', () => {
     const r = room();
     sendToRoom(r.id, 'First'); const first = runOf(bot);

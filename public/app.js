@@ -526,6 +526,7 @@ async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=nul
 // Replies (docs/PORTAL_UX.md): swipe a bubble right on touch, or use the
 // hover/focus ↩ button. The target must be a committed message.
 let replyTarget=null;
+const openChatter=new Set();
 function startReply(target){if(!target.event_id)return;replyTarget={...target,conversation_id:selected};renderReplyBar();$('message').focus();}
 function renderReplyBar(){
  const active=Boolean(replyTarget&&replyTarget.conversation_id===selected);$('reply-bar').hidden=!active;
@@ -638,15 +639,34 @@ function render(){
   const personaName=id=>items('persona').find(p=>p.id===id)?.body.name;
   // A turn is live for its 120s deadline plus slack; an older unsettled row is a dead record, not typing.
   const turnOpen=e=>e.type==='room.turn'&&e.payload.phase==='started'&&Date.now()-Date.parse(e.created_at)<5*60000&&!conversation.some(x=>x.type==='room.turn'&&x.payload?.log_id===e.payload.log_id&&x.payload.phase==='settled');
-  let lastBubble=null;
+  let lastBubble=null,chatter=null;
+  // Bot-to-bot room messages (sent with audience "bots") fold into one small
+  // inline toggle per run of consecutive messages. It is flagged when a bot
+  // they handed to then failed or timed out, which is when the owner looks.
+  const failedTurns=conversation.filter(e=>e.type==='room.turn'&&['TIMEOUT','ERROR'].includes(e.payload.outcome));
+  function chatterGroup(event){
+   if(!chatter){
+    const key=event.id,box=node('details',undefined,'bot-chatter');box.dataset.key=key;box.open=openChatter.has(key)||!simpleView();
+    box.ontoggle=()=>{if(box.open)openChatter.add(key);else openChatter.delete(key);};
+    const summary=node('summary');box.append(summary);timeline.append(box);
+    chatter={box,summary,senders:new Set(),count:0,first:event.sequence,last:event.sequence};
+   }
+   chatter.senders.add(personaName(event.actor_id)??'A bot');chatter.count++;chatter.last=event.sequence;
+   const next=conversation.find(e=>e.sequence>chatter.last&&(e.type==='message.user'||e.type==='bot.message'&&e.payload.audience!=='bots'));
+   const failed=failedTurns.filter(e=>e.sequence>chatter.first&&(!next||e.sequence<next.sequence)).map(e=>personaName(e.payload.member_id)??'A bot');
+   chatter.box.classList.toggle('warn',failed.length>0);
+   chatter.summary.textContent=`${[...chatter.senders].join(', ')} · ${chatter.count} bot message${chatter.count===1?'':'s'}${failed.length?` · ${failed[0]} didn’t reply`:''}`;
+   return chatter.box;
+  }
   for(const event of conversation){
    if(event.type==='message.user'||event.type==='bot.message'){
     if(!matches.has(event))continue;
+    const botsOnly=event.type==='bot.message'&&event.payload.audience==='bots';if(!botsOnly)chatter=null;
     // Messages-style grouping: same sender within 5 minutes stacks tightly;
     // a gap of 15+ minutes gets a centered time separator.
     const who=event.type==='message.user'?'owner':event.actor_id,gap=lastBubble?Date.parse(event.created_at)-Date.parse(lastBubble.created_at):Infinity;
-    if(gap>15*60000)timeline.append(node('div',separatorTime(event.created_at),'time-separator'));
-    const grouped=Boolean(lastBubble&&lastBubble.who===who&&gap<5*60000&&!event.payload.task_run_id);lastBubble={who,created_at:event.created_at};
+    if(gap>15*60000&&!botsOnly)timeline.append(node('div',separatorTime(event.created_at),'time-separator'));
+    const grouped=!botsOnly&&Boolean(lastBubble&&lastBubble.who===who&&gap<5*60000&&!event.payload.task_run_id);lastBubble=botsOnly?null:{who,created_at:event.created_at};
     const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot')+(grouped?' grouped':''));m.dataset.eventId=event.id;const h=node('div',undefined,'message-head');
     // V9 (ARCHITECTURE_V2 A8): in a room, a bot.message is attributed to
     // whichever member actually sent it (event.actor_id), not the room's own
@@ -666,7 +686,7 @@ function render(){
     const body=node('div',event.payload.text??'','message-body');body.title=time(event.created_at);m.append(body);
     if(event.type==='bot.message')m.prepend(avatarFor(event.actor_id,attribution));
     enableReply(m,{event_id:event.id,sender:attribution,text:event.payload.text??''});
-    timeline.append(m);
+    (botsOnly?chatterGroup(event):timeline).append(m);
    }else if(event.type==='run.result'){
     // Recorded outcomes are notices, not search-filtered bubbles: always shown.
     const outcome=['completed','failed','cancelled','waiting'].includes(event.payload.status)?statuses[event.payload.status]:'Unavailable';

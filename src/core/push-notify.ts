@@ -12,6 +12,7 @@ export const PUSH_THROTTLE_WINDOW_MS = 10000;
  * these two event types. */
 function bodyFor(type: string, payload: Record<string, unknown>): string | null {
   if (type === 'bot.message') {
+    if (payload.audience === 'bots') return null; // bot-to-bot room coordination never notifies
     const text = typeof payload.text === 'string' ? payload.text : '';
     return text ? [...text].slice(0, 140).join('') : null;
   }
@@ -39,13 +40,18 @@ export function selectPushNotifications(store: Store, since: number, now: string
     if (!event.conversation_id) continue;
     const body = bodyFor(event.type, event.payload);
     if (body === null) continue;
-    if (!names.has(event.conversation_id)) {
-      const row = store.db.all<{ body_json: string; kind: string }>('SELECT body_json,kind FROM objects WHERE id=? AND deleted_at IS NULL', event.conversation_id)[0];
-      names.set(event.conversation_id, row && row.kind === 'persona' ? (JSON.parse(row.body_json) as { name: string }).name : null);
-    }
-    const name = names.get(event.conversation_id);
-    if (!name) continue; // a room conversation, or a persona that no longer resolves: never guess a title
-    notifications.push({ persona_id: event.conversation_id, title: name, body, tag: event.conversation_id, url: `/?bot=${event.conversation_id}`, event_sequence: event.sequence });
+    const lookup = (id: string) => {
+      if (!names.has(id)) {
+        const row = store.db.all<{ body_json: string; kind: string }>('SELECT body_json,kind FROM objects WHERE id=? AND deleted_at IS NULL', id)[0];
+        names.set(id, row && (row.kind === 'persona' || row.kind === 'room') ? (JSON.parse(row.body_json) as { name: string }).name : null);
+      }
+      return names.get(id);
+    };
+    const name = lookup(event.conversation_id);
+    if (!name) continue; // a conversation that no longer resolves: never guess a title
+    // In a room the title is the room and the body says which bot spoke.
+    const speaker = event.type === 'bot.message' && event.actor_id !== event.conversation_id ? lookup(event.actor_id) : null;
+    notifications.push({ persona_id: event.conversation_id, title: name, body: speaker ? `${speaker}: ${body}` : body, tag: event.conversation_id, url: `/?bot=${event.conversation_id}`, event_sequence: event.sequence });
   }
   return { notifications, nextCursor: events.at(-1)?.sequence ?? since };
 }

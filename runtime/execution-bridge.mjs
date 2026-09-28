@@ -41,6 +41,7 @@ function roomTurnGuidance(roomTurn) {
   return [
     `This is one turn in a group room. Other members: ${peers}. Only you were asked for this turn; wait to be asked again before speaking further.`,
     'Reply into the room only through hehebot_send_message. To bring in a specific other member, name them (or @mention them) in your message; the Worker schedules their turn next, not you.',
+    'When a message only hands work to another member or coordinates with them (the owner need not read it), send it with audience "bots"; the owner sees it collapsed and is not notified. Anything meant for the owner, or a discussion the owner is part of, uses the default audience.',
     'If you have nothing useful to add, call hehebot_pass_turn instead of sending a message; never send a bare acknowledgement.',
     roomTurn.is_winding_down ? 'This is the last turn the scheduler will grant for this exchange (hop or contribution limit reached); say what matters now or pass.' : null,
     'Never loop: do not re-address a member who already replied without new information, and do not repeat what was already said in this room.',

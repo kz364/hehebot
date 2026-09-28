@@ -258,3 +258,17 @@ label.field input,label.field textarea,label.field select{border-radius:10px;bor
  .sidebar .nav-item[aria-current=true]{background:var(--accent)}
  .header-actions .quiet{padding:6px 10px}
 }
+/* Bot-to-bot room messages: a small inline toggle, closed unless opened (or Details is on). */
+.timeline>.bot-chatter{max-width:780px;margin:6px auto;padding:0 36px}
+.bot-chatter>summary{display:inline-flex;align-items:center;gap:6px;list-style:none;cursor:pointer;font-size:11.5px;color:var(--muted);padding:2px 10px;border-radius:999px;background:#f2f2f7;user-select:none}
+.bot-chatter>summary::-webkit-details-marker{display:none}
+.bot-chatter>summary::before{content:"";width:0;height:0;border-left:4px solid currentColor;border-top:3.5px solid transparent;border-bottom:3.5px solid transparent;transition:transform .15s}
+.bot-chatter[open]>summary::before{transform:rotate(90deg)}
+.bot-chatter>summary:hover{background:#e8e8ed}
+.bot-chatter.warn>summary{background:#fff4e5;color:#b25e00}
+.bot-chatter[open]{padding-bottom:4px}
+.bot-chatter .message{padding:0;margin-top:6px;opacity:.85}
+.bot-chatter .message-head{display:flex!important}
+.bot-chatter .message-body{font-size:13.5px;padding:6px 11px}
+.bot-chatter .bubble-avatar{display:none}
+.bot-chatter .reply-button{right:-32px}
