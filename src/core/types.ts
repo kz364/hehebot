@@ -8,7 +8,7 @@ import type { TestCampaignGrant } from './test-campaign';
 import type { MemoryContextEntry } from './memory-context';
 export type Scope = { kind: 'global' | 'persona' | 'routine' | 'skill'; id: string | null };
 export type BasePut = { id: string; expected_revision: number };
-export type PersonaPut = BasePut & { name: string; role?: string; instructions: string; tool_policy_ids: string[]; archived: boolean };
+export type PersonaPut = BasePut & { name: string; role?: string; instructions: string; tool_policy_ids: string[]; can_ask?: string[]; archived: boolean };
 export type RoomPut = BasePut & { name: string; member_ids: string[]; default_responder_id: string };
 export type RoutinePut = BasePut & {
   persona_id: string; name: string; instructions: string; schedule: { cron: string; timezone: string } | null;
@@ -32,6 +32,13 @@ export type RoomTurnEnvelope = {
   room_id: string; member_id: string; new_messages: RoomTurnMessage[]; peers: { id: string; name: string }[];
   deadline_ms: number; is_winding_down: boolean; root_cause_id: string; hop: number;
 };
+/** A8 consult (hehebot_ask_bot): who asked, where the exchange is shown, and
+ * the bounds that stop consult chains (depth, chain membership, root budget). */
+export type ConsultEnvelope = {
+  from_persona_id: string; from_run_id: string; conversation_id: string; question: string;
+  depth: number; root: string; chain: string[]; continuation?: true;
+  room?: { room_id: string; root_cause_id: string; hop: number };
+};
 export type RoomTurnOutcome = 'SENT' | 'PASS' | 'SKIPPED' | 'TIMEOUT' | 'ERROR';
 export type PayloadMap = {
  'owner-alpha.activate':{transition_id:string;envelope_sha256:string};
@@ -45,6 +52,7 @@ export type PayloadMap = {
  'run.steer':{run_id:string;expected_attempt:number;text:string};
  'run.followup':{run_id:string;text:string};
  'task.start':{title:string;brief:string;capabilities?:string[]};
+ 'bot.ask':{bot_id:string;question:string};
  'setup.adopt':{commands:Array<{schema_version:1;type:'persona.put';payload:PersonaPut}|{schema_version:1;type:'routine.put';payload:RoutinePut}>;monitoring_timezone:'Asia/Singapore'|'Asia/Jakarta';reviewed_hash:string};
  'message.send': { conversation_id: string; text: string; reply_to_event_id?: string };
  'persona.put': PersonaPut; 'room.put': RoomPut; 'routine.put': RoutinePut; 'memory.put': MemoryPut;
@@ -85,6 +93,12 @@ export type ContextSnapshot = {memory_budget?:import('./memory-context').MemoryB
  // BotMessages/RoomTurns for room-targeted delivery and outcome recording.
  // Never accepted from the model; only RoomTurns writes it via enqueue().
  room_turn?:RoomTurnEnvelope;
+ // A8 consult: present only on a run that answers another bot's
+ // hehebot_ask_bot question. Worker-written; never model-supplied.
+ consult?:ConsultEnvelope;
+ // A8 consult: the owner message a chain of consults and wakes started from,
+ // carried on wake runs so the per-message ask budget survives the wake.
+ consult_root?:string;
  schema_version: 1; persona: StoredObject<PersonaPut>; routine: StoredObject<RoutinePut> | null; memories: MemoryContextEntry[]; skills:StoredObject<SkillBody>[]; scope_key: string; instruction: string; room_id: string | null; context_events: TimelineEvent[]; authorization_policy_ids: string[] };
 export type TimelineEvent = { sequence: number; id: string; conversation_id: string | null; type: string; actor_id: string; cause_id: string | null; payload: Record<string, unknown>; created_at: string };
 export type Options = { testCampaignGrant?:TestCampaignGrant;ownerAlphaBootstrap?:OwnerAlphaBootstrapConfig;ownerAlphaWarm?:import('./owner-alpha-warm').WarmGenerationConfig;ownerAlphaBackground?:import('./owner-alpha-background').BackgroundGenerationConfig;ownerAlpha?:OwnerAlphaPolicy;ownerAlphaSuccessor?:OwnerAlphaSuccessor;ownerBindingSha256?:string;whatsappReadPolicies?:WhatsAppReadPolicies;delegations?:Record<string,string[]>;executionEnabled: boolean; actionPolicyIds: string[]; toolPolicyIds: string[]; now: () => Date; uuid: () => string;

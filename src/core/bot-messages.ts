@@ -3,21 +3,25 @@ import type { Store } from './store';
 import type { Run } from './types';
 import { requireThat } from './errors';
 
-export type BotMessageInput = { run_id: string; attempt: number; message_key: string; text: string; reply_to_event_id?: string | null; audience?: 'everyone' | 'bots' };
+export type BotMessageInput = { run_id: string; attempt: number; message_key: string; text: string; reply_to_event_id?: string | null };
 export type BotMessagePayload = { text: string; run_id: string; attempt: number; task_run_id: string | null; origin: 'tool' | 'final_text'; reply_to_event_id: string | null; audience?: 'bots' };
 
 const MAX_TEXT_BYTES = 32768;
 const MAX_PER_ATTEMPT = 20;
 const ACTIVE_STATUSES = ['claimed', 'running', 'finishing', 'cancelling'];
 
-/** V9 (ARCHITECTURE_V2 A8): the conversation a run's hehebot_send_message/
- * final_text lands in. Read only from the run's own admitted context_json --
- * never from a model-supplied argument -- so room targeting cannot be spoofed.
- * A run with no room_id (the overwhelming majority) keeps posting to the
- * bot's own persona conversation, unchanged. */
-export function botMessageConversation(store: Store, runId: string, personaId: string): string {
- const row = store.db.all<{ room_id: string | null }>("SELECT json_extract(context_json,'$.room_id') AS room_id FROM runs WHERE id=?", runId)[0];
- return row?.room_id ?? personaId;
+/** V9 (ARCHITECTURE_V2 A8): where a run's hehebot_send_message/final_text
+ * lands. Read only from the run's own admitted context_json -- never from a
+ * model-supplied argument -- so targeting cannot be spoofed. A room turn posts
+ * into the room (always visible: the owner is part of a room). A consult run
+ * posts into the asking bot's conversation, marked bots-only so the owner sees
+ * it collapsed and is never notified. Everything else posts to the bot's own
+ * persona conversation, unchanged. */
+export function botMessageRoute(store: Store, runId: string, personaId: string): { conversation_id: string; bots_only: boolean } {
+ const row = store.db.all<{ room_id: string | null; consult_conversation: string | null }>(
+  "SELECT json_extract(context_json,'$.room_id') AS room_id,json_extract(context_json,'$.consult.conversation_id') AS consult_conversation FROM runs WHERE id=?", runId)[0];
+ if (row?.consult_conversation) return { conversation_id: row.consult_conversation, bots_only: true };
+ return { conversation_id: row?.room_id ?? personaId, bots_only: false };
 }
 /** Shared append used by the `hehebot_send_message` tool path and the
  * lifecycle.complete() final_text fallback. A committed bot.message is final:
@@ -25,14 +29,12 @@ export function botMessageConversation(store: Store, runId: string, personaId: s
 export function appendBotMessageEvent(
  store: Store, uuid: () => string, now: string,
  run: Pick<Run, 'id' | 'persona_id' | 'role'>, attempt: number, text: string,
- origin: 'tool' | 'final_text', replyToEventId: string | null, messageKey: string, audience: 'everyone' | 'bots' = 'everyone',
+ origin: 'tool' | 'final_text', replyToEventId: string | null, messageKey: string,
 ): { event_id: string; sequence: number } {
  const eventId = uuid();
- const conversationId = botMessageConversation(store, run.id, run.persona_id);
- // Bot-to-bot coordination exists only in rooms; anywhere else the owner is the audience.
- const botsOnly = audience === 'bots' && conversationId !== run.persona_id;
- const payload: BotMessagePayload = { text, run_id: run.id, attempt, task_run_id: run.role === 'background' ? run.id : null, origin, reply_to_event_id: replyToEventId, ...(botsOnly ? { audience: 'bots' as const } : {}) };
- const sequence = store.event(eventId, conversationId, 'bot.message', run.persona_id, run.id, payload, now);
+ const route = botMessageRoute(store, run.id, run.persona_id);
+ const payload: BotMessagePayload = { text, run_id: run.id, attempt, task_run_id: run.role === 'background' ? run.id : null, origin, reply_to_event_id: replyToEventId, ...(route.bots_only ? { audience: 'bots' as const } : {}) };
+ const sequence = store.event(eventId, route.conversation_id, 'bot.message', run.persona_id, run.id, payload, now);
  store.db.exec('INSERT INTO bot_messages(message_key,run_id,attempt,event_sequence,origin,created_at) VALUES(?,?,?,?,?,?)', messageKey, run.id, attempt, sequence, origin, now);
  return { event_id: eventId, sequence };
 }
@@ -47,7 +49,6 @@ export class BotMessages {
   requireThat(typeof input.text === 'string' && input.text.length > 0, 'INVALID_INPUT', 'Message text must not be empty.', 422);
   requireThat(new TextEncoder().encode(input.text).length <= MAX_TEXT_BYTES, 'PAYLOAD_TOO_LARGE', 'Message exceeds 32768 bytes.', 413);
   requireThat(input.reply_to_event_id === undefined || input.reply_to_event_id === null || typeof input.reply_to_event_id === 'string', 'INVALID_INPUT', 'Invalid reply target.', 422);
-  requireThat(input.audience === undefined || input.audience === 'everyone' || input.audience === 'bots', 'INVALID_INPUT', 'Invalid audience.', 422);
   return this.store.db.transaction(() => {
    lifecycle.authorizeAttempt(identity, input.run_id, input.attempt);
    const run = this.store.db.all<Pick<Run, 'id' | 'current_attempt' | 'status' | 'persona_id' | 'role'>>('SELECT id,current_attempt,status,persona_id,role FROM runs WHERE id=?', input.run_id)[0];
@@ -63,7 +64,7 @@ export class BotMessages {
    }
    const count = this.store.db.all<{ count: number }>('SELECT COUNT(*) AS count FROM bot_messages WHERE run_id=? AND attempt=?', run.id, input.attempt)[0].count;
    requireThat(count < MAX_PER_ATTEMPT, 'RATE_LIMITED', 'Message limit for this run attempt has been reached.', 429);
-   return appendBotMessageEvent(this.store, this.uuid, this.now(), run, input.attempt, input.text, 'tool', input.reply_to_event_id ?? null, input.message_key, input.audience);
+   return appendBotMessageEvent(this.store, this.uuid, this.now(), run, input.attempt, input.text, 'tool', input.reply_to_event_id ?? null, input.message_key);
   });
  }
 }

@@ -41,6 +41,14 @@ bots-as-contacts product.
 - **Backend:** `message.send.reply_to_event_id` must name a message in the same conversation. The bot
   receives the quote as a prefix to the owner's text.
 
+## Bot-to-bot messages
+
+- Room messages between members are always visible, because the owner is part of the room.
+- When a bot consults a bot outside the conversation (`hehebot_ask_bot`), the question and answer
+  fold into one small inline pill: "Chief of Staff → Travel · 2 bot messages". It is amber when the
+  other bot failed, opens on tap, and is expanded by default in Details view.
+- Pill messages never notify. The asking bot tells the owner the outcome in its own bubble.
+
 ## Composer (iMessage)
 
 - A rounded pill input with a circular ↑ send button inside it. The button stays disabled until

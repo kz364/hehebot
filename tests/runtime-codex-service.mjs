@@ -1279,3 +1279,16 @@ test('browser grant: debug logging is threaded to the gateway (as its own proces
   assert.equal(grant.debug, true);
   assert.equal(grant.stateDirectory, f.directory);
 });
+
+test('the v2 runtime launches restricted Codex with live web search; everything else stays restricted', async t => {
+  const f = await fixture(t);
+  const v2 = { ...f.config, disposableTest: undefined, executionMode: 'v2', ownerBindingSha256: 'a'.repeat(64), restrictedPermissions: true };
+  let overrides;
+  const service = createCodexService(v2, { ...f.dependencies,
+    control: { request: async (type, payload) => type === 'status' ? { epoch: 1, phase: 'BOOTING', execution_enabled: true, execution_mode: 'v2', owner_binding_sha256: 'a'.repeat(64) } : f.dependencies.control.request(type, payload) },
+    launch: options => { overrides = options.configOverrides; throw Object.assign(new Error('STOP_AFTER_LAUNCH'), { code: 'STOP_AFTER_LAUNCH' }); } });
+  t.after(() => service.stop().catch(() => {}));
+  await service.start().catch(() => {});
+  assert.equal(overrides.web_search, 'live');
+  for (const key of Object.keys(restrictedReadback.features)) assert.equal(overrides[`features.${key}`], false);
+});

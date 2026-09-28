@@ -36,7 +36,7 @@ const COORDINATOR_ONLY_TASK_TOOLS = Object.freeze(['hehebot_start_task', 'hehebo
 // V8: v2 execution mode may grant the coordinator task tools under the
 // restricted native profile; owner-alpha keeps its narrower read-only set.
 const RESTRICTED_TOOLS = Object.freeze(['hehebot_list_routines', 'hehebot_read_skill', 'hehebot_send_message', 'hehebot_pass_turn']);
-const V2_RESTRICTED_TOOLS = Object.freeze([...RESTRICTED_TOOLS, ...COORDINATOR_ONLY_TASK_TOOLS]);
+const V2_RESTRICTED_TOOLS = Object.freeze([...RESTRICTED_TOOLS, ...COORDINATOR_ONLY_TASK_TOOLS, 'hehebot_ask_bot']);
 // Idle grace before the runtime asks to sleep. The Worker's own prepare-sleep
 // grace is 60s from its last activity touch; the margin absorbs clock skew so
 // a denied prepare-sleep (which fences this executor) stays unlikely.
@@ -482,7 +482,9 @@ export function createCodexService(config, dependencies) {
         if (hosted) await starting(() => activity.ensure());
         await starting(() => prepareNative(home));
         const configOverrides = { ...(config.restrictedPermissions ? {
-          web_search: 'disabled',
+          // Owner-approved 2026-09-28: bots may search the web (read-only, provider-side).
+          // Alpha/text-only profiles stay disabled.
+          web_search: v2Mode && !alpha ? 'live' : 'disabled',
           ...Object.fromEntries(Object.entries(RESTRICTED_CODEX_FEATURES).map(([key, value]) => [`features.${key}`, value])),
           ...(alpha || v2Mode ? { 'agents.enabled': false, 'features.multi_agent': false, 'features.multi_agent_v2': false } : {}),
         } : {}), ...(textOnlyProfile?.startupConfig ?? {}) };
@@ -717,7 +719,10 @@ export function createCodexService(config, dependencies) {
             // background run (see tests/task-tools.test.ts "no recursive fan-out").
             const taskContext = JSON.parse(run.context_json);
             const configuredTools = taskContext.coordinator_task === true
-              ? persona.allowedTools.filter(name => !COORDINATOR_ONLY_TASK_TOOLS.includes(name))
+              // A consult run may ask one bot further down the chain (the
+              // Worker bounds depth); an ordinary task may not ask at all.
+              ? persona.allowedTools.filter(name => !COORDINATOR_ONLY_TASK_TOOLS.includes(name) &&
+                (name !== 'hehebot_ask_bot' || !!taskContext.consult))
               : persona.allowedTools;
             // ARCHITECTURE_V2 A9: the Mac Messages tool follows the Worker-side
             // grant (persona tool policy or the task's admitted capabilities),

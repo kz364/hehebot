@@ -352,6 +352,15 @@
               "maxItems": 32,
               "uniqueItems": true
             },
+            "can_ask": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 32,
+              "uniqueItems": true
+            },
             "archived": {
               "type": "boolean"
             }
@@ -1043,6 +1052,21 @@
       "required": ["schema_version", "type", "payload"]
     },
     {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "schema_version": { "const": 1 }, "type": { "const": "bot.ask" },
+        "payload": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "bot_id": { "$ref": "#/$defs/uuid" },
+            "question": { "type": "string", "minLength": 1, "maxLength": 4000 }
+          },
+          "required": ["bot_id", "question"]
+        }
+      },
+      "required": ["schema_version", "type", "payload"]
+    },
+    {
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -1096,6 +1120,15 @@
                             "maxLength": 16000
                           },
                           "tool_policy_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "maxItems": 32,
+                            "uniqueItems": true
+                          },
+                          "can_ask": {
                             "type": "array",
                             "items": {
                               "type": "string",

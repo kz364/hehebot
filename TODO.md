@@ -62,7 +62,9 @@ Acceptance IDs refer to ARCHITECTURE_V2 §4. Schema version is 20 today (v19 = V
 
 - [x] Simple view by default, with a **Details** switch in the sidebar footer (per device; `?view=detailed` overrides).
 - [x] Messages-style redesign ([docs/PORTAL_UX.md](docs/PORTAL_UX.md)): grouped bubbles, time separators, typing dots, pill composer (Enter sends), phone chip row, and reply by swipe or ↩ (`message.send.reply_to_event_id`).
-- [x] Bot-to-bot room messages: `hehebot_send_message` `audience:"bots"` (model-chosen) folds them into a small inline pill ("A → B · N bot messages", amber when the handed-to bot failed) and never notifies. Bot-to-owner room messages now push (titled by room). Live-verified 2026-09-28.
+- [x] Room messages between members are always visible; bot-to-owner room messages push (titled by room).
+- [x] Consult protocol (ARCHITECTURE_V2 A8 "Consult"): `hehebot_ask_bot` / `bot.ask` asks a bot outside the conversation, gated by the per-bot **Can ask** list (bot editor). Budgets: depth 2, 2 asks per turn, 3 per owner request. The exchange shows as a collapsed pill ("A → B · N bot messages") and never notifies; the asker is woken with the answer. Local tests pass; live verification pending.
+- [x] Web search (`web_search: live`) on for every v2 bot (read-only, provider-side). Live verification pending.
 - [ ] Browser fixture scripts (`scripts/test-portal-*.mjs`) time out on the base commit as well; their fixtures predate the current `/v1/state` shape.
 - [ ] Later: reactions/tapbacks, read receipts, dark mode, a Details switch on phones.
 

@@ -223,6 +223,31 @@ tool argument. This mechanism is additive: the pre-existing model-initiated
 `room.publish action_request` fan-out (its own `causalCount<=3` cap) is
 untouched and runs independently when a bot chooses to use it instead.
 
+**Consult (2026-09-28, owner decision).** Messages between room members are
+always visible: the owner is part of a room. Hidden bot-to-bot traffic exists
+only when a bot asks a bot *outside* its conversation, through
+`hehebot_ask_bot` → command `bot.ask` (actor `runtime-ask:<runId>`, the
+`task.start` pattern). Rules, checked by the Worker against durable state:
+the target is in the asker's `persona.can_ask` allowlist (owner-set; Chief of
+Staff seeded with the other default bots), is not the asker, and is not a
+member of the asker's room. Budgets, not a loop ban: consult depth ≤ 2 (CoS →
+Inbox Triage → WhatsApp), ≤ 2 asks per turn, ≤ 3 asks per originating owner
+request (`consult.root`, carried as `consult_root` on wake runs). Asking back up
+the chain (a clarifying question) is allowed. The consult is a background-lane
+run of the target (`coordinator_task` + `consult` envelope) with the target's
+own grant and memories. The question, and the consulted bot's messages or final
+text, land in the asker's conversation as `bot.message` with
+`audience:"bots"` (collapsed pill, no push). On settlement the asker is woken
+with the answer: a consulted asker continues its own answer (a `continuation`
+consult run, not counted as an ask), a room member gets the next room turn
+under the hop/contribution caps, and otherwise the asker's coordinator is
+woken (causal depth ≤ 3, as for tasks). An answer never auto-triggers a reply
+to the answering bot, so there are no acknowledgement ping-pongs. Divergence:
+prior art (Grok-style no-op acks) is covered by `hehebot_pass_turn` in rooms
+and by the answer→owner relay here. The earlier model-chosen
+`audience:"bots"` on `hehebot_send_message` is withdrawn; the runtime RPC
+schema still tolerates the field from an old runtime and the Worker ignores it.
+
 ### A9. The Mac node pulls
 
 The paired Mac keeps an outbound WebSocket to the Durable Object. The Worker queues

@@ -120,6 +120,23 @@ private logSkipped(roomId: string, memberId: string, rootCauseId: string, hop: n
   }
   return this.start(room, room.body.default_responder_id, ownerEventId, 0, commandId, text, now);
  }
+ /** A8 consult: a room member that asked a bot outside the room gets one
+  * further turn carrying the answer, as the next hop of the same exchange and
+  * under the same hop/contribution limits. If the room is mid-turn the answer
+  * waits as the room's pending continuation, unless a fresh owner message is
+  * already waiting (the owner goes first; the answer stays visible collapsed). */
+ scheduleConsultReply(turn: { room_id: string; root_cause_id: string; hop: number }, memberId: string, text: string): void {
+  const room = this.store.get<RoomPut>(turn.room_id, 'room');
+  if (!room.body.member_ids.includes(memberId)) return;
+  const now = this.core.now(), hop = turn.hop + 1;
+  if (hop > MAX_HOP || this.contributions(turn.root_cause_id) >= MAX_CONTRIBUTIONS) { this.logSkipped(room.id, memberId, turn.root_cause_id, hop, now); return; }
+  if (!this.busy(room.id)) { this.start(room, memberId, turn.root_cause_id, hop, null, text, now); return; }
+  const queued = this.store.db.all<{ kind: string }>('SELECT kind FROM room_turn_pending WHERE room_id=?', room.id)[0];
+  if (queued?.kind === 'owner') { this.logSkipped(room.id, memberId, turn.root_cause_id, hop, now); return; }
+  this.store.db.exec(`INSERT INTO room_turn_pending(room_id,kind,member_id,text,root_cause_id,hop,created_at) VALUES(?,'candidate',?,?,?,?,?)
+   ON CONFLICT(room_id) DO UPDATE SET kind='candidate',member_id=excluded.member_id,text=excluded.text,root_cause_id=excluded.root_cause_id,hop=excluded.hop,created_at=excluded.created_at`,
+   room.id, memberId, text, turn.root_cause_id, hop, now);
+ }
  /** hehebot_pass_turn (runtime RPC 'pass-turn'). Explicit PASS marker, the
   * room-turn sibling of BotMessages.post's message_key row. */
  pass(identity: Identity, input: { run_id: string; attempt: number }, lifecycle: LifecycleCore): { accepted: true } {
@@ -169,13 +186,14 @@ private logSkipped(roomId: string, memberId: string, rootCauseId: string, hop: n
    const pendingCandidate = this.takePending(roomId, 'candidate');
    if (pendingCandidate) {
     if (pendingCandidate.hop <= MAX_HOP && this.contributions(pendingCandidate.root_cause_id) < MAX_CONTRIBUTIONS) {
-     this.start(this.store.get<RoomPut>(roomId, 'room'), pendingCandidate.member_id!, pendingCandidate.root_cause_id, pendingCandidate.hop, null, '(room turn)', now);
+     this.start(this.store.get<RoomPut>(roomId, 'room'), pendingCandidate.member_id!, pendingCandidate.root_cause_id, pendingCandidate.hop, null, pendingCandidate.text ?? '(room turn)', now);
     } else this.logSkipped(roomId, pendingCandidate.member_id!, pendingCandidate.root_cause_id, pendingCandidate.hop, now);
     return;
    }
    if (outcome !== 'SENT') return;
    const lastText = this.store.db.all<{ text: string }>(
-    "SELECT json_extract(payload_json,'$.text') AS text FROM events WHERE conversation_id=? AND type='bot.message' AND actor_id=? ORDER BY sequence DESC LIMIT 1",
+    // Collapsed consult chatter (hehebot_ask_bot) is never a room hand-off.
+    "SELECT json_extract(payload_json,'$.text') AS text FROM events WHERE conversation_id=? AND type='bot.message' AND actor_id=? AND json_extract(payload_json,'$.audience') IS NULL ORDER BY sequence DESC LIMIT 1",
     roomId, run.persona_id)[0]?.text ?? '';
    const room = this.store.get<RoomPut>(roomId, 'room');
    const names = new Map(room.body.member_ids.map(id => {

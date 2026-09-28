@@ -33,7 +33,7 @@ export {MEMORY_READ_POLICY} from './memory-context';
  * before), plus hehebot_start_task tasks started by any coordinator run of the
  * same persona. Binds: (run.id, run.persona_id). */
 const VISIBLE_TASK_SQL=`t.role='background' AND (t.parent_run_id=? OR (json_extract(t.context_json,'$.coordinator_task')=1 AND t.persona_id=? AND EXISTS(SELECT 1 FROM runs p WHERE p.id=t.parent_run_id AND p.role='coordinator' AND p.persona_id=t.persona_id)))`;
-export type AgentCommand=Extract<Command,{type:'skill.propose'|'routine.put'|'routine.run'|'routine.delete'|'task.start'|'run.steer'|'run.followup'|'run.cancel'}>;
+export type AgentCommand=Extract<Command,{type:'skill.propose'|'routine.put'|'routine.run'|'routine.delete'|'task.start'|'bot.ask'|'run.steer'|'run.followup'|'run.cancel'}>;
 export type AgentScope={identity:Identity;run_id:string;attempt:number};
 export type AgentCommandRequest=AgentScope & {idempotency_key:string;command:AgentCommand};
 export type AgentRoutineQuery=AgentScope & {id?:string;after?:string};
@@ -189,7 +189,7 @@ export class AgentCommandBoundary {
   // through the runtime envelope.
   const supplied=parseCommand(request.command);
   requireThat(supplied.type==='skill.propose'||supplied.type==='routine.put'||supplied.type==='routine.run'||supplied.type==='routine.delete'||
-   supplied.type==='task.start'||supplied.type==='run.steer'||supplied.type==='run.followup'||supplied.type==='run.cancel','FORBIDDEN','This command is not available to a model.',403);
+   supplied.type==='task.start'||supplied.type==='bot.ask'||supplied.type==='run.steer'||supplied.type==='run.followup'||supplied.type==='run.cancel','FORBIDDEN','This command is not available to a model.',403);
   const policies=snapshot.persona.body.tool_policy_ids;
   let command:AgentCommand,actor=`runtime:${run.persona_id}`;
   if(supplied.type==='skill.propose'){
@@ -206,6 +206,13 @@ export class AgentCommandBoundary {
    // Carries the parent coordinator run identity to control.ts's task.start
    // handler without adding a model-writable field to the public command schema.
    actor=`runtime-task:${run.id}`;
+  }else if(supplied.type==='bot.ask'){
+   // A8 consult: a coordinator turn, a room turn or a consult run may ask;
+   // an ordinary background task may not. control.ts checks the allowlist,
+   // room membership and the depth/budget bounds against durable state.
+   requireThat(run.role!=='background'||!!(JSON.parse(run.context_json) as ContextSnapshot).consult,'FORBIDDEN','A background task may not ask other bots.',403);
+   command=supplied;
+   actor=`runtime-ask:${run.id}`;
   }else if(supplied.type==='run.steer'||supplied.type==='run.followup'||supplied.type==='run.cancel'){
    requireThat(run.role!=='background','FORBIDDEN','A background task may not manage tasks.',403);
    const target=this.core.store.db.all<{id:string;role:string;parent_run_id:string|null;current_attempt:number;context_json:string}>(

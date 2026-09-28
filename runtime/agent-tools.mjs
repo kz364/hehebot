@@ -10,7 +10,7 @@ import addFormats from 'ajv-formats';
 import { ControlClient, ControlClientError } from './control-client.mjs';
 import { prepareMemoryDelivery, deferMemoryResponse, materializeMemoryResponse } from './memory-read.mjs';
 
-export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills', 'hehebot_read_memory', 'hehebot_send_message', 'hehebot_start_task', 'hehebot_list_tasks', 'hehebot_task_detail', 'hehebot_steer_task', 'hehebot_queue_followup', 'hehebot_cancel_task', 'hehebot_messages_search', 'hehebot_pass_turn']);
+export const AGENT_TOOL_NAMES = Object.freeze(['hehebot_propose_skill', 'hehebot_save_routine', 'hehebot_run_routine', 'hehebot_delete_routine', 'hehebot_list_routines', 'hehebot_read_skill', 'hehebot_search_skills', 'hehebot_read_memory', 'hehebot_send_message', 'hehebot_start_task', 'hehebot_list_tasks', 'hehebot_task_detail', 'hehebot_steer_task', 'hehebot_queue_followup', 'hehebot_cancel_task', 'hehebot_messages_search', 'hehebot_pass_turn', 'hehebot_ask_bot']);
 // ARCHITECTURE_V2 A9: granted only when the run's persona snapshot holds this
 // tool policy (same value as MAC_MESSAGES_POLICY in src/core/node-bridge.ts).
 export const MAC_MESSAGES_POLICY = 'f1503d17-e75d-4c90-9c9c-2012628b3aea';
@@ -18,7 +18,7 @@ const NODE_WAIT = Object.freeze({ timeoutMs: 20000, intervalMs: 1000 });
 // Minted once per agent-tools process; part of the deterministic message_key so
 // retries of the same JSON-RPC call within one process dedupe at the Worker.
 const SERVER_INSTANCE_ID = randomUUID();
-const COMMAND_TYPES = Object.freeze({ hehebot_propose_skill: 'skill.propose', hehebot_save_routine: 'routine.put', hehebot_run_routine: 'routine.run', hehebot_delete_routine: 'routine.delete', hehebot_start_task: 'task.start' });
+const COMMAND_TYPES = Object.freeze({ hehebot_propose_skill: 'skill.propose', hehebot_save_routine: 'routine.put', hehebot_run_routine: 'routine.run', hehebot_delete_routine: 'routine.delete', hehebot_start_task: 'task.start', hehebot_ask_bot: 'bot.ask' });
 // V4 (ARCHITECTURE_V2 A4): task_run_id/text-only tool shapes that must be
 // remapped to their underlying run.steer/run.followup/run.cancel command
 // payloads. The Worker binds run.steer's live attempt itself; the model
@@ -84,10 +84,9 @@ export function buildToolDefinitions(contracts) {
         offset: { type: 'integer', minimum: 0, maximum: 16000 }, limit: { type: 'integer', minimum: 1, maximum: 2000 },
       }, required: ['memory_id', 'revision', 'offset', 'limit'],
     } },
-    { name: AGENT_TOOL_NAMES[8], description: 'This is the only way to say something to the owner. Call it for every reply, question or progress update; plain assistant text is not shown. Optionally set reply_to_event_id to reference an earlier timeline event. In a group room, set audience to "bots" for a message that only coordinates with or hands off to another bot and that the owner does not need to read; it is collapsed for the owner and never notifies them. Leave the default when the owner is part of the discussion.', inputSchema: {
+    { name: AGENT_TOOL_NAMES[8], description: 'This is the only way to say something to the owner. Call it for every reply, question or progress update; plain assistant text is not shown. Optionally set reply_to_event_id to reference an earlier timeline event.', inputSchema: {
       type: 'object', additionalProperties: false, properties: {
         text: { type: 'string', minLength: 1, maxLength: 32768 }, reply_to_event_id: resolveRefs(contracts.$defs.uuid, contracts),
-        audience: { enum: ['everyone', 'bots'] },
       }, required: ['text'],
     } },
     { name: AGENT_TOOL_NAMES[9], description: 'Start an independent background task with its own native turn. Returns immediately; it never waits for the task. Use this for work that would otherwise block the conversation. capabilities must be a subset of this bot\'s own authorized tool policies; omit for none.', inputSchema: wrap(commandSchema(contracts, 'task.start')) },
@@ -129,6 +128,8 @@ export function buildToolDefinitions(contracts) {
     { name: AGENT_TOOL_NAMES[16], description: 'Only available on a scheduled room turn (ARCHITECTURE_V2 A8). Explicitly pass this turn without sending a message, when there is nothing useful to add. Prefer this over sending a bare acknowledgement.', inputSchema: {
       type: 'object', additionalProperties: false, properties: { reason: { type: 'string', maxLength: 2000 } },
     } },
+    { name: AGENT_TOOL_NAMES[17], description: 'Ask another bot that is not in this conversation a question (ARCHITECTURE_V2 A8 consult). Returns immediately; the other bot answers in the background and you are woken with its answer. ' +
+      'Only bots this bot is allowed to ask are accepted. Never use it for a member of the current group room: name them in the room instead. The exchange is shown to the owner collapsed and never notifies them, so tell the owner the outcome yourself.', inputSchema: wrap(commandSchema(contracts, 'bot.ask')) },
   ]);
 }
 
@@ -198,7 +199,6 @@ export function createAgentToolsHandler({ controlClient, config, contracts, memo
           const result = await controlClient.request('bot-message', {
             identity: clone(config.identity), run_id: config.runId, attempt: config.attempt, message_key: messageKey,
             text: args.text, ...(args.reply_to_event_id !== undefined ? { reply_to_event_id: args.reply_to_event_id } : {}),
-            ...(args.audience !== undefined ? { audience: args.audience } : {}),
           });
           if (!result || typeof result.event_id !== 'string' || !Number.isSafeInteger(result.sequence)) throw new Error('INVALID_MESSAGE_RECEIPT');
           return { jsonrpc: '2.0', id: message.id, result: { content: [{ type: 'text', text: JSON.stringify({ delivered: true, event_id: result.event_id, sequence: result.sequence }) }] } };

@@ -312,14 +312,13 @@ test('real CLI accepts private grants but rejects symlinks and oversized frames 
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test('hehebot_send_message forwards audience "bots" and rejects any other audience locally', async () => {
-  const requests = [];
-  const { handle } = fixture({ request: async (...args) => { requests.push(args); return { event_id: uuid(5), sequence: 9 }; } });
-  const message = { jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'hehebot_send_message', arguments: { text: 'Travel, take this one.', audience: 'bots' } } };
-  assert.equal(JSON.parse((await handle(message)).result.content[0].text).delivered, true);
-  assert.equal(requests[0][0], 'bot-message');
-  assert.equal(requests[0][1].audience, 'bots');
-  message.params.arguments = { text: 'x', audience: 'owner-only' };
-  assert.equal((await handle(message)).error.code, -32602);
-  assert.equal(requests.length, 1);
+test('hehebot_send_message no longer takes an audience; hehebot_ask_bot forwards a bot.ask command', async () => {
+  const { calls, handle } = fixture();
+  const send = { jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'hehebot_send_message', arguments: { text: 'Travel, take this one.', audience: 'bots' } } };
+  assert.equal((await handle(send)).error.code, -32602);
+  assert.equal(calls.length, 0);
+  const asked = await handle(call(6, 'hehebot_ask_bot', { bot_id: uuid(5), question: 'Which airline?' }));
+  assert.equal(asked.result.isError, false);
+  assert.equal(calls[0][0], 'agent-command');
+  assert.deepEqual(calls[0][1].command, { schema_version: 1, type: 'bot.ask', payload: { bot_id: uuid(5), question: 'Which airline?' } });
 });

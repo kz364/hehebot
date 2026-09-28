@@ -28,13 +28,18 @@ import {timelineExpirySql} from './timeline-retention';
 import {memorySourceDigest,memorySnapshot as readMemorySnapshot} from './memory-context';
 import {KEEP_BACKUPS,readBackupLast} from './scheduled-backup';
 import {RoomTurns} from './room-turns';
-import type { Command, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoomTurnEnvelope, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
+import {appendBotMessageEvent,botMessageRoute} from './bot-messages';
+import type { Command, ConsultEnvelope, ContextSnapshot, MemoryPut, Options, PersonaPut, Receipt, RoomPut, RoomPublish, RoomTurnEnvelope, RoutinePut, Run, SkillBody, StoredObject, TimelineEvent } from './types';
 // Copied followups retain their original command age, not their later queue time.
+// A8 consult bounds: a consult may itself ask one level further (CoS -> Inbox
+// Triage -> WhatsApp), each turn asks at most twice, and one owner request
+// buys at most three asks in total, however the chain branches.
+const MAX_CONSULT_DEPTH=2,MAX_ASKS_PER_RUN=2,MAX_ASKS_PER_ROOT=3;
 const queuedContextDueSql = `CASE WHEN json_type(r.context_json,'$.persona') IS NOT NULL
  THEN MIN(strftime('%Y-%m-%dT%H:%M:%fZ',r.created_at,'+30 days'),strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(c.accepted_at,r.created_at),'+90 days'))
  ELSE strftime('%Y-%m-%dT%H:%M:%fZ',COALESCE(c.accepted_at,r.created_at),'+90 days') END`;
 export const DEFAULT_BOTS = [
- {id:'11111111-1111-4111-8111-111111111111',name:'Chief of Staff',instructions:'Coordinate the owner’s requests. Keep actions within explicit authorization.'},
+ {id:'11111111-1111-4111-8111-111111111111',name:'Chief of Staff',instructions:'Coordinate the owner’s requests. Keep actions within explicit authorization.',can_ask:['22222222-2222-4222-8222-222222222222','33333333-3333-4333-8333-333333333333']},
  {id:'22222222-2222-4222-8222-222222222222',name:'Inbox Triage',instructions:'Review and organize information. Draft outgoing messages unless sending is explicitly authorized.'},
  {id:'33333333-3333-4333-8333-333333333333',name:'Travel',instructions:'Research and plan travel. Do not book or spend without explicit authorization.'}
 ];
@@ -221,7 +226,7 @@ export class ControlCore {
     requireThat(createHash('sha256').update(JSON.stringify(p.commands)).digest('hex')===p.reviewed_hash,'REVISION_CONFLICT','The reviewed import changed.');
     requireThat(new Set(p.commands.map(x=>x.payload.id)).size===p.commands.length,'INVALID_INPUT','Import contains repeated object IDs.',422);
     for(const item of p.commands){
-     if(item.type==='persona.put')requireThat(!item.payload.tool_policy_ids.length&&!item.payload.archived,'FORBIDDEN','Import cannot grant tools or archive a bot.',403);
+     if(item.type==='persona.put')requireThat(!item.payload.tool_policy_ids.length&&!item.payload.can_ask?.length&&!item.payload.archived,'FORBIDDEN','Import cannot grant tools or archive a bot.',403);
      else requireThat(!item.payload.enabled&&!item.payload.action_policy_ids.length&&item.payload.schedule?.timezone===p.monitoring_timezone,'FORBIDDEN','Adopt only disabled routines with the reviewed timezone and no action grants.',403);
      this.apply(owner,commandId,item,idempotencyKey);
     }
@@ -250,6 +255,13 @@ export class ControlCore {
     const match=/^runtime-task:([0-9a-f-]{36})$/i.exec(owner);
     requireThat(match,'FORBIDDEN','Only a coordinator turn may start a task.',403);
     return this.taskStart(match![1],command.payload.title,command.payload.brief,command.payload.capabilities);
+   }
+   case 'bot.ask': {
+    // Only reachable through AgentCommandBoundary.accept(), which stamps the
+    // asking run's own id into the actor (same pattern as task.start).
+    const match=/^runtime-ask:([0-9a-f-]{36})$/i.exec(owner);
+    requireThat(match,'FORBIDDEN','Only a bot turn may ask another bot.',403);
+    return this.botAsk(match![1],command.payload.bot_id,command.payload.question);
    }
    case 'message.send': {
     const target=this.store.get<PersonaPut|RoomPut>(command.payload.conversation_id);
@@ -288,6 +300,7 @@ export class ControlCore {
    case 'persona.put': {
     const p=command.payload;
     requireThat(p.tool_policy_ids.every(x=>this.options.toolPolicyIds.includes(x)),'FORBIDDEN','A requested tool policy is not authorized.',403);
+    requireThat(!(p.can_ask??[]).includes(p.id),'INVALID_INPUT','A bot cannot be allowed to ask itself.',422);
     const revision=this.store.put(p.id,'persona',p,p.expected_revision,owner,now,commandId);
     this.store.event(this.options.uuid(),p.id,'persona.updated',owner,commandId,{id:p.id,revision},now);return p.id;
    }
@@ -645,12 +658,19 @@ export class ControlCore {
   const parent=this.store.db.all<Pick<Run,'id'|'persona_id'|'role'|'status'>>('SELECT id,persona_id,role,status FROM runs WHERE id=?',parentRunId)[0];
   requireThat(parent&&parent.role!=='background',"NOT_FOUND",'Coordinator run unavailable.',404);
   const persona=this.activePersona(parent.persona_id);
-  const id=this.options.uuid(),now=this.now(),grant=capabilities??[];
+  const id=this.options.uuid(),grant=capabilities??[];
   const context:ContextSnapshot={schema_version:1,persona:{...persona,body:{...persona.body,tool_policy_ids:grant}},routine:null,memories:[],skills:[],
    scope_key:`${parent.persona_id}/task/${id}`,instruction:brief,room_id:null,context_events:[],authorization_policy_ids:[],coordinator_task:true};
+  return this.insertBackgroundRun(id,parent.persona_id,parentRunId,title,context);
+ }
+ /** Shared by task.start and bot.ask: a role='background' run on the
+  * background lane, with the same budget and run-accepted/wake plumbing as
+  * enqueue(). */
+ private insertBackgroundRun(id:string,personaId:string,parentRunId:string,title:string,context:ContextSnapshot):string {
+  const now=this.now();
   const status=this.options.executionEnabled?'queued':'waiting',reason=this.options.executionEnabled?null:'CAPABILITY_UNAVAILABLE';
   this.store.db.exec('INSERT INTO runs(id,command_id,occurrence_id,persona_id,routine_id,context_json,role,parent_run_id,title,status,error_code,created_at,updated_at) VALUES(?,NULL,NULL,?,NULL,?,\'background\',?,?,?,?,?,?)',
-   id,parent.persona_id,JSON.stringify(context),parentRunId,title,status,reason,now,now);
+   id,personaId,JSON.stringify(context),parentRunId,title,status,reason,now,now);
   const run=this.store.db.all<Pick<Run,'id'|'role'|'parent_run_id'|'current_attempt'|'status'|'occurrence_id'|'routine_id'>>(
    'SELECT id,role,parent_run_id,current_attempt,status,occurrence_id,routine_id FROM runs WHERE id=?',id)[0];
   let finalStatus=status,finalReason=reason;
@@ -658,9 +678,85 @@ export class ControlCore {
    finalStatus='waiting';finalReason=this.budget.summary().status;
    this.store.db.exec('UPDATE runs SET status=?,error_code=? WHERE id=?',finalStatus,finalReason,id);
   }
-  this.store.event(this.options.uuid(),parent.persona_id,'run.accepted','system',null,{run_id:id,status:finalStatus,reason:finalReason==='CAPABILITY_UNAVAILABLE'?'Runtime execution is not configured and verified yet.':finalReason},now);
+  this.store.event(this.options.uuid(),personaId,'run.accepted','system',null,{run_id:id,status:finalStatus,reason:finalReason==='CAPABILITY_UNAVAILABLE'?'Runtime execution is not configured and verified yet.':finalReason},now);
   if(finalStatus==='queued')this.noteRunnable();
   return id;
+ }
+ /** A8 consult (hehebot_ask_bot): one bot asks another bot that is not part of
+  * the current conversation. Admission is checked here against durable state:
+  * the asker's can_ask allowlist, no room members (they are addressed by name
+  * in the room), depth <= 2, <= 2 asks per turn and <= 3 asks per originating
+  * owner request. Asking back up the chain (a clarifying question) is allowed:
+  * the budgets, not a loop ban, guarantee the exchange ends. The question and the answer
+  * are shown to the owner collapsed in the asker's conversation and never
+  * notify; the asker is woken with the answer and tells the owner itself. */
+ private botAsk(callerRunId:string,targetId:string,question:string):string {
+  const caller=this.store.db.all<Pick<Run,'id'|'persona_id'|'role'|'command_id'|'current_attempt'|'context_json'>>('SELECT id,persona_id,role,command_id,current_attempt,context_json FROM runs WHERE id=?',callerRunId)[0];
+  requireThat(caller,'NOT_FOUND','Run unavailable.',404);
+  const context=JSON.parse(caller.context_json) as ContextSnapshot;
+  requireThat(caller.role!=='background'||!!context.consult,'FORBIDDEN','A background task may not ask other bots.',403);
+  const asker=this.activePersona(caller.persona_id);
+  requireThat(targetId!==asker.id,'INVALID_INPUT','A bot cannot ask itself.',422);
+  requireThat((asker.body.can_ask??[]).includes(targetId),'FORBIDDEN','This bot is not allowed to ask that bot.',403);
+  const target=this.activePersona(targetId);
+  const roomId=context.room_turn?.room_id??context.room_id;
+  if(roomId)requireThat(!this.store.get<RoomPut>(roomId,'room').body.member_ids.includes(targetId),'INVALID_INPUT','That bot is in this room; name them in the room instead.',422);
+  const chain=context.consult?.chain??[asker.id];
+  const depth=(context.consult?.depth??0)+1;
+  requireThat(depth<=MAX_CONSULT_DEPTH,'DEADLINE_EXCEEDED','Consult depth limit reached; answer with what you have.');
+  const root=context.consult?.root??context.consult_root??context.room_turn?.root_cause_id??caller.command_id??caller.id;
+  const asks=(where:string,value:string)=>this.store.db.all<{n:number}>(`SELECT COUNT(*) AS n FROM runs WHERE ${where}=? AND json_extract(context_json,'$.consult') IS NOT NULL AND json_extract(context_json,'$.consult.continuation') IS NULL`,value)[0].n;
+  requireThat(asks('parent_run_id',caller.id)<MAX_ASKS_PER_RUN,'DEADLINE_EXCEEDED','This turn already asked twice; answer with what you have.');
+  requireThat(asks("json_extract(context_json,'$.consult.root')",root)<MAX_ASKS_PER_ROOT,'DEADLINE_EXCEEDED','The bot-to-bot budget for this request is used up; answer with what you have.');
+  const conversationId=context.consult?.conversation_id??botMessageRoute(this.store,caller.id,caller.persona_id).conversation_id;
+  const envelope:ConsultEnvelope={from_persona_id:asker.id,from_run_id:caller.id,conversation_id:conversationId,question,depth,root,chain:[...chain,targetId],
+   ...(context.room_turn?{room:{room_id:context.room_turn.room_id,root_cause_id:context.room_turn.root_cause_id,hop:context.room_turn.hop}}:{})};
+  // The question is part of the collapsed exchange, not a bot_messages row:
+  // it must not count as the asker's own reply (A1 fallback, room SENT).
+  this.store.event(this.options.uuid(),conversationId,'bot.message',asker.id,caller.id,
+   {text:`@${target.body.name} ${question}`,run_id:caller.id,attempt:caller.current_attempt,task_run_id:null,origin:'tool',reply_to_event_id:null,audience:'bots',consult_to:targetId},this.now());
+  return this.startConsult(caller.id,target,`${asker.body.name} asks: ${question}`,envelope,`Question from ${asker.body.name}`);
+ }
+ private startConsult(parentRunId:string,target:StoredObject<PersonaPut>,instruction:string,envelope:ConsultEnvelope,title:string):string {
+  const id=this.options.uuid();
+  let base:ContextSnapshot;
+  try{base=this.context(target.id,instruction,null,null,null);}
+  catch(error){if(!(error instanceof ControlError)||error.code!=='MEMORY_PREPARATION_LIMIT')throw error;base=this.context(target.id,instruction,null,null,null,[]);}
+  // The consulted bot answers with its own grant and memories, in an isolated
+  // scope; claim() keeps this snapshot as-is (the coordinator_task lane).
+  const context:ContextSnapshot={...base,scope_key:`${target.id}/consult/${id}`,room_id:null,context_events:[],task_summaries:[],authorization_policy_ids:[],coordinator_task:true,consult:envelope};
+  return this.insertBackgroundRun(id,target.id,parentRunId,title,context);
+ }
+ /** A8 consult settlement (from enqueueTaskEvent): show the answer in the
+  * asker's conversation (collapsed) and wake the asker with it. A consulted
+  * bot that was itself asking continues answering its own asker; a room
+  * member gets a further room turn under the room's own limits; otherwise the
+  * asker's persona coordinator is woken, depth-bounded like a task wake. */
+ private consultSettled(task:Pick<Run,'id'|'persona_id'>,status:string,summary:string,consult:ConsultEnvelope):void {
+  const now=this.now();
+  const run=this.store.db.all<{current_attempt:number}>('SELECT current_attempt FROM runs WHERE id=?',task.id)[0];
+  const said=this.store.db.all<{text:string}>("SELECT json_extract(payload_json,'$.text') AS text FROM events WHERE cause_id=? AND type='bot.message' AND actor_id=? ORDER BY sequence",task.id,task.persona_id).map(row=>row.text);
+  if(status==='completed'&&summary&&!said.length&&run){
+   appendBotMessageEvent(this.store,this.options.uuid,now,{id:task.id,persona_id:task.persona_id,role:'background'},run.current_attempt,summary,'final_text',null,`${task.id}:${run.current_attempt}:final_text`);
+   said.push(summary);
+  }
+  let name='The other bot';try{name=this.store.get<PersonaPut>(task.persona_id,'persona').body.name;}catch{/* deleted: keep the generic name */}
+  const answer=status==='completed'?(said.join('\n\n')||'(no answer)'):`${name} could not answer (${status}). ${summary}`;
+  const line=`${name} answered your question "${consult.question.slice(0,300)}":\n\n${answer}`.slice(0,4000);
+  let asker:StoredObject<PersonaPut>;
+  try{asker=this.activePersona(consult.from_persona_id);}catch{return;}
+  const from=this.store.db.all<{context_json:string}>('SELECT context_json FROM runs WHERE id=?',consult.from_run_id)[0];
+  const fromContext=from?JSON.parse(from.context_json) as ContextSnapshot:undefined;
+  if(fromContext?.consult){
+   const outer=fromContext.consult;
+   this.startConsult(outer.from_run_id,asker,`${fromContext.instruction}\n\n${line}\n\nNow answer the original question.`,{...outer,continuation:true},`Question from ${(()=>{try{return this.store.get<PersonaPut>(outer.from_persona_id,'persona').body.name;}catch{return 'another bot';}})()}`);
+   return;
+  }
+  if(consult.room&&this.options.roomTurns){this.roomTurns.scheduleConsultReply(consult.room,asker.id,line);return;}
+  const depth=(fromContext?.causal_depth??0)+1;
+  if(depth>3)return; // Same loop bound as task wakes (ARCHITECTURE_V2 A4).
+  const runId=this.enqueue(asker.id,line,null,null,null,null);
+  this.store.db.exec("UPDATE runs SET context_json=json_set(context_json,'$.causal_depth',?,'$.consult_root',?) WHERE id=?",depth,consult.root,runId);
  }
  /** V4: per-persona coordinator inbox. A live (running) coordinator turn —
   * direct DM only, not room, not routine — gets this message delivered as a
@@ -726,6 +822,8 @@ export class ControlCore {
   * relayed even when message.send itself still uses the legacy routing. */
  enqueueTaskEvent(task:Pick<Run,'id'|'persona_id'|'parent_run_id'|'title'>,status:string,summary:string):void {
   const now=this.now();
+  const consult=this.store.db.all<{consult:string|null}>("SELECT json_extract(context_json,'$.consult') AS consult FROM runs WHERE id=?",task.id)[0]?.consult;
+  if(consult){this.consultSettled(task,status,summary,JSON.parse(consult) as ConsultEnvelope);return;}
   this.store.event(this.options.uuid(),task.persona_id,'task.event','system',null,{task_run_id:task.id,status,title:task.title,summary},now);
   if(!task.parent_run_id)return;
   const parent=this.store.db.all<{context_json:string}>('SELECT context_json FROM runs WHERE id=?',task.parent_run_id)[0];
