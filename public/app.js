@@ -649,13 +649,16 @@ function render(){
     const key=event.id,box=node('details',undefined,'bot-chatter');box.dataset.key=key;box.open=openChatter.has(key)||!simpleView();
     box.ontoggle=()=>{if(box.open)openChatter.add(key);else openChatter.delete(key);};
     const summary=node('summary');box.append(summary);timeline.append(box);
-    chatter={box,summary,senders:new Set(),count:0,first:event.sequence,last:event.sequence};
+    chatter={box,summary,names:[],count:0,first:event.sequence,last:event.sequence};
    }
-   chatter.senders.add(personaName(event.actor_id)??'A bot');chatter.count++;chatter.last=event.sequence;
+   // Names in order of appearance: the sender, then members it named (the scheduler's hand-off signal).
+   const add=n=>{if(n&&!chatter.names.includes(n))chatter.names.push(n);};add(personaName(event.actor_id)??'A bot');
+   const text=String(event.payload.text??'').toLowerCase();for(const id of object?.body.member_ids??[]){const n=personaName(id);if(n&&id!==event.actor_id&&text.includes(n.toLowerCase()))add(n);}
+   chatter.count++;chatter.last=event.sequence;
    const next=conversation.find(e=>e.sequence>chatter.last&&(e.type==='message.user'||e.type==='bot.message'&&e.payload.audience!=='bots'));
    const failed=failedTurns.filter(e=>e.sequence>chatter.first&&(!next||e.sequence<next.sequence)).map(e=>personaName(e.payload.member_id)??'A bot');
    chatter.box.classList.toggle('warn',failed.length>0);
-   chatter.summary.textContent=`${[...chatter.senders].join(', ')} · ${chatter.count} bot message${chatter.count===1?'':'s'}${failed.length?` · ${failed[0]} didn’t reply`:''}`;
+   chatter.summary.textContent=`${chatter.names.join(' → ')} · ${chatter.count} bot message${chatter.count===1?'':'s'}${failed.length?` · ${failed[0]} didn’t reply`:''}`;
    return chatter.box;
   }
   for(const event of conversation){
@@ -666,7 +669,7 @@ function render(){
     // a gap of 15+ minutes gets a centered time separator.
     const who=event.type==='message.user'?'owner':event.actor_id,gap=lastBubble?Date.parse(event.created_at)-Date.parse(lastBubble.created_at):Infinity;
     if(gap>15*60000&&!botsOnly)timeline.append(node('div',separatorTime(event.created_at),'time-separator'));
-    const grouped=!botsOnly&&Boolean(lastBubble&&lastBubble.who===who&&gap<5*60000&&!event.payload.task_run_id);lastBubble=botsOnly?null:{who,created_at:event.created_at};
+    const grouped=!botsOnly&&Boolean(lastBubble&&lastBubble.who===who&&gap<5*60000&&!event.payload.task_run_id);lastBubble={who:botsOnly?'bot-chatter':who,created_at:event.created_at};
     const m=node('article',undefined,'message '+(event.type==='message.user'?'user':'bot')+(grouped?' grouped':''));m.dataset.eventId=event.id;const h=node('div',undefined,'message-head');
     // V9 (ARCHITECTURE_V2 A8): in a room, a bot.message is attributed to
     // whichever member actually sent it (event.actor_id), not the room's own
