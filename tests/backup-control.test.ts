@@ -63,7 +63,7 @@ it('includes committed WAL rows, excludes an uncommitted writer, preserves exact
   const before = await Promise.all(['', '-wal'].map(s => readFile(source + s)));
   db.exec("BEGIN IMMEDIATE; UPDATE objects SET revision=99 WHERE id='persona-a'");
   const manifest = await snapshotControl(source, destination);
-  expect(manifest.schemaVersions).toEqual([19]);
+  expect(manifest.schemaVersions).toEqual([20]);
   expect(manifest.counts).toMatchObject({ objects: 2, object_revisions: 2, runs: 2, attempts: 2, effects: 1, resource_locks: 1, webhook_receipts: 1 });
   // SQLite's shared-memory reader marks are coordination state, not immutable database pages.
   expect(await Promise.all(['', '-wal'].map(async s => digest(await readFile(source + s))))).toEqual(before.map(digest));
@@ -93,7 +93,7 @@ it('verifies legacy schema8 without migrating the source or snapshot', async () 
   legacyRuns(db);
   legacyOccurrences(db);
   legacyLinks();
-  db.exec('DROP INDEX operations_run_status; DROP INDEX effects_run_status; DROP INDEX resource_locks_run; DROP INDEX runs_parent; DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=19');
+  db.exec('DROP INDEX operations_run_status; DROP INDEX effects_run_status; DROP INDEX resource_locks_run; DROP INDEX runs_parent; DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; DROP TABLE flight_restore_deadlines; DROP TABLE push_subscriptions; DROP TABLE push_throttle; UPDATE schema_versions SET version=8 WHERE version=20');
   const before = digest(await readFile(source));
   const manifest = await snapshotControl(source, destination);
   expect(manifest.schemaVersions).toEqual([8]);
@@ -111,7 +111,8 @@ it.each([9,10,11,12,13,14,15])('preserves schema%s flight obligations and origin
   if (version < 12) db.exec('ALTER TABLE attempts DROP COLUMN captured_routine_revision');
   if (version < 11) legacyLinks();
   if (version === 9) db.exec('ALTER TABLE attempts DROP COLUMN coordinator_release_json');
-  db.prepare('UPDATE schema_versions SET version=? WHERE version=19').run(version);
+  db.exec('DROP TABLE push_subscriptions; DROP TABLE push_throttle');
+  db.prepare('UPDATE schema_versions SET version=? WHERE version=20').run(version);
   db.exec("INSERT INTO schema_versions VALUES(8,'2026-08-17T01:23:45.678Z'); INSERT INTO flight_restore_deadlines VALUES('leg-83',2,'2026-09-20T21:00:00.000Z','Asia/Jakarta','2026-09-19T21:00:00.000Z','routine-29','source-43','outcome_unknown','child-z','{\"receipt\":73}')");
   const manifest = await snapshotControl(source, destination);
   expect(manifest.schemaVersions).toEqual([8, version]);
@@ -129,7 +130,7 @@ it('backs up migrated v9 with the canonical pin and retains an exact release ind
   legacyRuns(db);
   legacyOccurrences(db);
   legacyLinks();
-  db.exec('DROP INDEX operations_run_status; DROP INDEX effects_run_status; DROP INDEX resource_locks_run; DROP INDEX runs_parent; DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; UPDATE schema_versions SET version=9 WHERE version=19');
+  db.exec('DROP INDEX operations_run_status; DROP INDEX effects_run_status; DROP INDEX resource_locks_run; DROP INDEX runs_parent; DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; UPDATE schema_versions SET version=9 WHERE version=20');
   migrateApplication({
     all: <T>(sql: string, ...values: SqlValue[]) => db.prepare(sql).all(...values) as T[],
     exec: (sql, ...values) => { db.prepare(sql).run(...values); },
@@ -141,8 +142,8 @@ it('backs up migrated v9 with the canonical pin and retains an exact release ind
   const receipt = JSON.stringify({ native_ref: 'native-root-73', outcome: 'interrupted' });
   db.prepare("UPDATE attempts SET coordinator_release_json=? WHERE run_id='root-r'").run(receipt);
   const manifest = await snapshotControl(source, destination);
-  expect(manifest.schemaVersions).toEqual([9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
-  expect(manifest.schemaSha256).toBe('6cd52fd465a1785c90154eb461f91fc375e9ad31bbcc7529e0d8c2b636b1d524');
+  expect(manifest.schemaVersions).toEqual([9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+  expect(manifest.schemaSha256).toBe('d1c4dce985c7aae87907b5ed30ac6995aafd3829a58398ddf9f5074fcf8560ab');
   expect(await verifyControl(destination)).toEqual(manifest);
   const copy = new DatabaseSync(join(destination, 'control.sqlite'), { readOnly: true });
   try {

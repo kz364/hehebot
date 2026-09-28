@@ -264,5 +264,25 @@ export function migrateApplication(db:Database,now:string):void {
   db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(19,?)',now);
  });
  if(version===18)version=19;
- requireThat([16,17,18,19].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
+ if(version===19)db.transaction(()=>{
+  // Push notifications (TODO.md "Push notifications"): one row per browser
+  // subscription (endpoint hashed for the primary key so an oversized endpoint
+  // string is never indexed), plus a per-persona send-collapse timestamp.
+  // ARCHITECTURE_V2 A6 broadcasts committed events to /v1/stream sockets on
+  // commit; this is that hook's push sibling (see control-object.ts).
+  const subsSql=`CREATE TABLE push_subscriptions (
+ endpoint_sha256 TEXT PRIMARY KEY, endpoint TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL,
+ owner_id TEXT NOT NULL, created_at TEXT NOT NULL
+)`;
+  db.exec(subsSql.replace('CREATE TABLE','CREATE TABLE IF NOT EXISTS'));
+  requireThat(db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='push_subscriptions'")[0]?.sql===subsSql,
+   'SCHEMA_MISMATCH','Push subscription schema needs explicit reconciliation.',503);
+  const throttleSql='CREATE TABLE push_throttle (persona_id TEXT PRIMARY KEY, sent_at TEXT NOT NULL)';
+  db.exec(throttleSql.replace('CREATE TABLE','CREATE TABLE IF NOT EXISTS'));
+  requireThat(db.all<{sql:string}>("SELECT sql FROM sqlite_schema WHERE name='push_throttle'")[0]?.sql===throttleSql,
+   'SCHEMA_MISMATCH','Push throttle schema needs explicit reconciliation.',503);
+  db.exec('INSERT INTO schema_versions(version,applied_at) VALUES(20,?)',now);
+ });
+ if(version===19)version=20;
+ requireThat([16,17,18,19,20].includes(version),'SCHEMA_MISMATCH','Storage schema needs a supported migration.',503);
 }

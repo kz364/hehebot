@@ -59,7 +59,7 @@ it('produces one age ciphertext + manifest that decrypt to the exact exportContr
   const ciphertext = bucket.objects.get(outcome.key)!.value as Uint8Array;
   const manifest = JSON.parse(bucket.objects.get(outcome.manifest_key)!.value as string) as BackupManifest;
   expect(manifest.format).toBe('hehebot-control-backup-manifest');
-  expect(manifest.schema_version).toBe(19);
+  expect(manifest.schema_version).toBe(20);
   expect(manifest.bytes.ciphertext).toBe(ciphertext.byteLength);
   const decrypter = new age.Decrypter(); decrypter.addIdentity(identity);
   const plaintext = await decrypter.decrypt(ciphertext, 'text');

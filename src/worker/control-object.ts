@@ -23,6 +23,8 @@ import { TaskSteering } from '../core/task-steering';
 import { OutputPreviews } from '../core/output-preview';
 import { BotMessages } from '../core/bot-messages';
 import { BrowserTakeovers, validateTakeoverInput } from '../core/browser-takeover';
+import { preparePushDispatch, runPushDispatch } from '../core/push-dispatch';
+import { sendWebPush, type VapidKeys } from '../core/webpush';
 import { TokenUsageSnapshots } from '../core/token-usage';
 import { MeteringLedger, meteringSummary, parseMeteringRates } from '../core/metering';
 import { MemoryReadRetention } from '../core/memory-read-retention';
@@ -78,6 +80,7 @@ export class PersonalControl extends DurableObject<Env> {
  private hostedOwnerAlpha:boolean;
  private hostedWake:HostedOwnerWake|undefined;
  private executionMode:ExecutionMode|undefined;
+ private pushKeys:VapidKeys|undefined;
  constructor(ctx:DurableObjectState,env:Env){
   super(ctx,env);
   const db:Database={
@@ -112,7 +115,11 @@ export class PersonalControl extends DurableObject<Env> {
   this.executionMode=executionMode;
   this.hostedWake=parseHostedOwnerWake(env.HEHEBOT_OWNER_ALPHA_WAKE,!!hosted,env.PROVIDER_TOKEN,env.HEHEBOT_OWNER_ALPHA_WAKE_TOKEN,!!bootstrap||!!warm||!!background);
   requireThat(!(bootstrap||warm||background)||!!this.hostedWake,'INVALID_CONFIGURATION','Automatic owner alpha requires its private wake destination.',503);
-  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:warm||background?hosted?.policy:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaWarm:warm,ownerAlphaBackground:background,ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true'||executionMode==='v2',coordinatorInbox:executionMode==='v2',backupsConfigured:!!env.BACKUPS&&!!env.HEHEBOT_BACKUP_AGE_RECIPIENT,meteringRates:parseMeteringRates(env.HEHEBOT_METERING_RATES),whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),now:()=>new Date(),uuid:()=>crypto.randomUUID()});
+  // Push notifications (TODO.md "Push notifications"): disabled -- and hidden
+  // from the portal via state().settings.push -- unless all three are set.
+  this.pushKeys=env.HEHEBOT_VAPID_PUBLIC_KEY&&env.HEHEBOT_VAPID_PRIVATE_KEY&&env.HEHEBOT_VAPID_SUBJECT
+   ?{publicKey:env.HEHEBOT_VAPID_PUBLIC_KEY,privateKeyPkcs8:env.HEHEBOT_VAPID_PRIVATE_KEY,subject:env.HEHEBOT_VAPID_SUBJECT}:undefined;
+  this.core=new ControlCore(this.store,{testCampaignGrant:testGrant,ownerAlphaBootstrap:bootstrap,ownerAlpha:warm||background?hosted?.policy:hosted?.policy??parseOwnerAlpha(env.HEHEBOT_OWNER_ALPHA,env),ownerAlphaWarm:warm,ownerAlphaBackground:background,ownerAlphaSuccessor:successor,executionEnabled:env.EXECUTION_ENABLED==='true'&&env.NATIVE_VERIFIED==='true'||executionMode==='v2',coordinatorInbox:executionMode==='v2',backupsConfigured:!!env.BACKUPS&&!!env.HEHEBOT_BACKUP_AGE_RECIPIENT,meteringRates:parseMeteringRates(env.HEHEBOT_METERING_RATES),whatsappReadPolicies:parseWhatsAppReadPolicies(JSON.parse(env.HEHEBOT_WHATSAPP_READ_POLICIES??'{}')),delegations:delegationMap(env.NATIVE_DELEGATIONS??'{}'),actionPolicyIds:stringList(env.ACTION_POLICY_IDS),toolPolicyIds:stringList(env.TOOL_POLICY_IDS),vapidPublicKey:this.pushKeys?.publicKey,now:()=>new Date(),uuid:()=>crypto.randomUUID()});
   this.retention=new TimelineRetention(this.store,()=>this.core.now());
   this.resultRetention=new ResultRetention(this.store,()=>this.core.now());
   let idleMode=false;
@@ -165,7 +172,7 @@ export class PersonalControl extends DurableObject<Env> {
   // through here, so this is the single place that notices anything a
   // request may have committed — new events or a runtime-phase change — and
   // pushes it to open stream sockets. It never affects the RPC's own result.
-  return rpcResult(fn).then(result=>{this.broadcastStreamCommit();return result;});
+  return rpcResult(fn).then(result=>{this.broadcastStreamCommit();this.dispatchPushNotifications();return result;});
  }
  /** GET /v1/stream (Access + same-origin already verified by the Worker):
   * upgrade to a hibernatable WebSocket. Idle/hibernated sockets cost nothing
@@ -370,6 +377,24 @@ export class PersonalControl extends DurableObject<Env> {
     if(changed)ws.serializeAttachment(attachment);
    }catch{try{ws.close(1011,'Stream delivery failed.');}catch{}}
   }
+ }
+ /** Push notifications (TODO.md "Push notifications"): the same broadcast-on-
+  * commit hook as broadcastStreamCommit() above, called from the same two
+  * places (every rpc() and every alarm()). The DB read/cursor-advance/collapse
+  * decision is synchronous (ordinary Store access); only the actual network
+  * sends run in ctx.waitUntil, after this method has already returned, so a
+  * push failure or a slow push endpoint can never delay or fail the commit,
+  * event or alarm that triggered it. */
+ private dispatchPushNotifications():void{
+  if(!this.pushKeys)return;
+  const keys=this.pushKeys;
+  try{
+   const {jobs}=preparePushDispatch(this.store,this.core.now());
+   if(!jobs.length)return;
+   this.ctx.waitUntil(runPushDispatch(this.store,jobs,(subscription,notification)=>
+    sendWebPush(subscription,{title:notification.title,body:notification.body,tag:notification.tag,url:notification.url},keys,{timeoutMs:5000}))
+    .catch(error=>console.error(JSON.stringify({event:'control.push_dispatch_failed',code:safeError(error).code}))));
+  }catch(error){console.error(JSON.stringify({event:'control.push_prepare_failed',code:safeError(error).code}));}
  }
  private rate(subject:string,limit:number){
   const window=Math.floor(Date.now()/60000);
@@ -1070,6 +1095,6 @@ export class PersonalControl extends DurableObject<Env> {
    if(this.core.options.executionEnabled){const config=JSON.parse(this.env.PROVIDER_CONFIG) as ProviderConfig;const provider=createProvider({...config,token:this.env.PROVIDER_TOKEN,wakeToken:this.env.SPRITE_WAKE_TOKEN} as ProviderConfig);await this.lifecycle.drive(provider);}
   }catch(error){failed=true;console.error(JSON.stringify({event:'control.alarm_failed',code:safeError(error).code,message:safeError(error).message,
    ...(error instanceof ProviderError?{provider_code:error.code,provider_status:error.status??null}:{error_name:error instanceof Error?error.name:typeof error})}));}
-  finally{this.broadcastStreamCommit();await this.arm(failed?300000:0,true);}
+  finally{this.broadcastStreamCommit();this.dispatchPushNotifications();await this.arm(failed?300000:0,true);}
  }
 }

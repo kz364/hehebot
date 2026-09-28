@@ -92,7 +92,7 @@ it('keeps exact schema8 history inspectable without flight tables', async () => 
   const links = db.prepare('SELECT * FROM native_task_links').all();
   db.exec('DROP TABLE native_task_links; CREATE TABLE native_task_links (run_id TEXT PRIMARY KEY REFERENCES runs(id),parent_run_id TEXT NOT NULL REFERENCES runs(id),parent_attempt INTEGER NOT NULL,native_run_ref TEXT NOT NULL UNIQUE,native_session_key TEXT NOT NULL UNIQUE)');
   for (const link of links) db.prepare('INSERT INTO native_task_links VALUES(?,?,?,?,?)').run(...Object.values(link));
-  db.exec('DROP INDEX operations_run_status; DROP INDEX effects_run_status; DROP INDEX resource_locks_run; DROP INDEX runs_parent; DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; DROP TABLE flight_restore_deadlines; UPDATE schema_versions SET version=8 WHERE version=19');
+  db.exec('DROP INDEX operations_run_status; DROP INDEX effects_run_status; DROP INDEX resource_locks_run; DROP INDEX runs_parent; DROP INDEX objects_memory_scope; ALTER TABLE attempts DROP COLUMN captured_routine_revision; ALTER TABLE attempts DROP COLUMN coordinator_release_json; DROP TABLE flight_restore_deadlines; DROP TABLE push_subscriptions; DROP TABLE push_throttle; UPDATE schema_versions SET version=8 WHERE version=20');
   const report = await inspect();
   expect(report.schema_version).toBe(8);
   expect(report.blockers).toEqual({});
@@ -105,7 +105,7 @@ it('counts pending and unknown flight restoration independently of terminal runs
     insert.run(canary, index + 1, '2026-09-20T21:00:00.000Z', 'Asia/Jakarta', '2026-09-19T21:00:00.000Z', 'routine', 'source', status, 'root-19', '{}');
   }
   const report = await inspect();
-  expect(report.schema_version).toBe(19);
+  expect(report.schema_version).toBe(20);
   expect(report.inconsistencies).toEqual({});
   expect(report.blockers).toEqual({ UNRESOLVED_FLIGHT_RESTORE: 3 });
   expect(JSON.stringify(report)).not.toContain(canary);

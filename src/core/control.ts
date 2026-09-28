@@ -6,6 +6,7 @@ import { dueOccurrences, nextDue, preview, validateSchedule } from './schedule';
 import {SkillCatalog} from './skills';
 import {BudgetLedger} from './budget';
 import {RosterLedger} from './roster';
+import {PushSubscriptions} from './push-subscriptions';
 import {NativeQuestionLedger} from './native-questions';
 import {LifecycleCore} from './lifecycle';
 import {controlMonitoring} from './monitoring';
@@ -195,6 +196,13 @@ export class ControlCore {
    case 'skill.enable':return skills.enable(owner,commandId,command.payload);
    case 'skill.delete':return skills.remove(owner,commandId,command.payload);
    case 'skill.restore':return skills.restore(owner,commandId,command.payload);
+   case 'push.subscribe': {
+    requireThat(!!this.options.vapidPublicKey,'CAPABILITY_UNAVAILABLE','Push notifications are not configured.');
+    return new PushSubscriptions(this.store,()=>this.now()).subscribe(owner,command.payload);
+   }
+   // Allowed even when push is unconfigured: removing a subscription is
+   // always safe, and a previously configured installation may still hold rows.
+   case 'push.unsubscribe':return new PushSubscriptions(this.store,()=>this.now()).unsubscribe(command.payload);
    case 'skill.run': {
     requireThat(!this.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Run skill once is unavailable in owner-alpha sessions.');
     requireThat(!/^(runtime|trigger):/.test(owner),'FORBIDDEN','Only the owner may explicitly run a skill.',403);
@@ -815,7 +823,8 @@ export class ControlCore {
   }
   return {next_cursor:String(after===undefined?this.store.sequence():page.at(-1)?.sequence??after),snapshot_required:false,events:page,
    settings:{timezone:'Asia/Jakarta',grantable_tools:GRANTABLE_TOOL_POLICIES.filter(x=>this.options.toolPolicyIds.includes(x.id)),
-    backup:this.options.backupsConfigured?{enabled:true,kept:KEEP_BACKUPS,...readBackupLast(this.store)}:{enabled:false}},
+    backup:this.options.backupsConfigured?{enabled:true,kept:KEEP_BACKUPS,...readBackupLast(this.store)}:{enabled:false},
+...(this.options.vapidPublicKey?{push:{public_key:this.options.vapidPublicKey,subscribed_endpoints_count:new PushSubscriptions(this.store,()=>now).count()}}:{})},
    budget:this.budget.summary(),
    questions,
    roster:new RosterLedger(this.store,()=>now).summary(),

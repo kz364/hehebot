@@ -60,6 +60,10 @@ export type PayloadMap = {
  'skill.run':{skill_id:string;expected_skill_revision:number;persona_id:string;expected_persona_revision:number;text:string};
  'skill.delete':BasePut;
  'skill.restore':{proposal_id:string;skill_id:string;expected_skill_revision:number;source_revision:number};
+ // Web Push (TODO.md "Push notifications"). The endpoint/keys shape is exactly
+ // the browser PushSubscription.toJSON() output (RFC 8030/8291 subscription).
+ 'push.subscribe':{endpoint:string;keys:{p256dh:string;auth:string}};
+ 'push.unsubscribe':{endpoint:string};
 };
 export type Command = { [K in keyof PayloadMap]: { schema_version: 1; type: K; payload: PayloadMap[K] } }[keyof PayloadMap];
 export type ObjectKind = 'persona' | 'room' | 'routine' | 'memory' | 'skill' | 'trigger' | 'approval' | 'policy';
@@ -95,4 +99,9 @@ export type Options = { testCampaignGrant?:TestCampaignGrant;ownerAlphaBootstrap
  // V9 (ARCHITECTURE_V2 A8): gates the bounded room turn scheduler. Off by
  // default so every pre-existing room (message.send to a room, room.publish
  // action_request) test keeps its prior one-shot-enqueue behavior.
- roomTurns?: boolean };
+ roomTurns?: boolean;
+ // Push notifications (TODO.md "Push notifications"): the VAPID public key,
+ // present only when HEHEBOT_VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT are all
+ // configured. Its presence (not the key's content) gates push.subscribe and
+ // is echoed in state().settings.push so the portal can hide the toggle.
+ vapidPublicKey?: string };

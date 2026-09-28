@@ -3,7 +3,7 @@
 -- inside one DO transaction before writes. SQLite is the logical storage model.
 PRAGMA foreign_keys = ON;
 CREATE TABLE schema_versions (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-INSERT INTO schema_versions VALUES (19, '2026-09-28T00:00:00.000Z');
+INSERT INTO schema_versions VALUES (20, '2026-09-28T00:00:00.000Z');
 CREATE TABLE objects (
  id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('persona','room','routine','memory','skill','trigger','approval','policy')),
  revision INTEGER NOT NULL CHECK(revision > 0), body_json TEXT NOT NULL CHECK(json_valid(body_json)),
@@ -190,3 +190,10 @@ CREATE TABLE room_turn_pending (
  room_id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('owner','candidate')),
  member_id TEXT, text TEXT, root_cause_id TEXT NOT NULL, hop INTEGER NOT NULL, created_at TEXT NOT NULL
 );
+-- Push notifications (TODO.md "Push notifications"). See migrations.ts v20 for
+-- the exact rationale of each table.
+CREATE TABLE push_subscriptions (
+ endpoint_sha256 TEXT PRIMARY KEY, endpoint TEXT NOT NULL, p256dh TEXT NOT NULL, auth TEXT NOT NULL,
+ owner_id TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE push_throttle (persona_id TEXT PRIMARY KEY, sent_at TEXT NOT NULL);

@@ -535,7 +535,7 @@ function render(){
  const searchSelection=JSON.stringify([selected,selectionVersion,recoveryView?.kind]);
  if(conversationSearchSelection!==searchSelection){$('conversation-search').value='';conversationSearchSelection=searchSelection;}
  $('conversation-search-panel').hidden=managedSelected()||Boolean(recoveryView);
- renderBudget();renderMetering();renderMonitoring();renderBackupStatus();renderTaskStrip();renderRoster();
+ renderBudget();renderPush();renderMetering();renderMonitoring();renderBackupStatus();renderTaskStrip();renderRoster();
  for(const [kind,target] of [['room','rooms']]){
   $(target).replaceChildren();
   for(const object of items(kind).filter(x=>!x.body.archived)){
@@ -1291,6 +1291,64 @@ function renderMetering(){
  $('metering-summary').replaceChildren(line('Today',metering.today),line('Last 7 days',metering.last_7_days),line('Month to date',metering.month_to_date),
   node('p',`${metering.tokens.total_tokens_in_retained_snapshots.toLocaleString()} tokens in retained run snapshots (not a daily total)`,'hint'));
 }
+// --- Web Push (TODO.md "Push notifications") --------------------------------
+// Notifies the owner when a bot posts or needs attention, without the portal
+// open. Support is entirely optional: the panel stays hidden whenever the
+// Worker has no VAPID keys configured (settings.push absent), and this code
+// degrades quietly on browsers without the Push API (notably iOS Safari
+// unless the portal has been added to the home screen).
+function pushSupported(){return 'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;}
+function base64UrlToBytes(value){const padded=value.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-value.length%4)%4);const binary=atob(padded);const bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);return bytes;}
+let swRegistration=null,swRegistrationAttempted=false;
+async function ensureServiceWorker(){
+ if(swRegistrationAttempted)return swRegistration;
+ swRegistrationAttempted=true;
+ if(!pushSupported())return null;
+ try{swRegistration=await navigator.serviceWorker.register('/sw.js');}catch{swRegistration=null;}
+ return swRegistration;
+}
+async function currentPushSubscription(){
+ const registration=await ensureServiceWorker();if(!registration)return null;
+ try{return await registration.pushManager.getSubscription();}catch{return null;}
+}
+let pushSubscriptionCache=undefined,pushBusy=false;
+async function renderPush(){
+ const push=snapshot.settings?.push;$('push-panel').hidden=!push;if(!push)return;
+ if(!pushSupported()){
+  const isIosSafari=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!navigator.standalone;
+  $('push-status').textContent=isIosSafari?'On iPhone/iPad, add this page to your Home Screen first (Share → Add to Home Screen), then reopen it from there to enable notifications.':'Notifications are not supported in this browser.';
+  $('push-toggle').hidden=true;return;
+ }
+ $('push-toggle').hidden=false;
+ if(Notification.permission==='denied'){$('push-status').textContent='Notifications are blocked for this site. Allow them in your browser/site settings to enable.';$('push-toggle').hidden=true;return;}
+ if(pushSubscriptionCache===undefined){pushSubscriptionCache=await currentPushSubscription();render();return;}
+ if(pushBusy){$('push-status').textContent='Working…';$('push-toggle').disabled=true;return;}
+ $('push-toggle').disabled=false;
+ if(pushSubscriptionCache){$('push-status').textContent=`Enabled on this device · ${push.subscribed_endpoints_count} device(s) registered.`;$('push-toggle').textContent='Disable notifications on this device';}
+ else{$('push-status').textContent=`Get a notification when a bot posts or needs you, even with the portal closed. ${push.subscribed_endpoints_count} device(s) currently registered.`;$('push-toggle').textContent='Enable notifications';}
+}
+$('push-toggle').onclick=async()=>{
+ if(pushBusy)return;pushBusy=true;renderPush();
+ try{
+  if(pushSubscriptionCache){
+   const endpoint=pushSubscriptionCache.endpoint;
+   try{await pushSubscriptionCache.unsubscribe();}catch{}
+   pushSubscriptionCache=null;
+   await command('push.unsubscribe',{endpoint});
+  }else{
+   const registration=await ensureServiceWorker();if(!registration)throw new Error('Notifications are not supported in this browser.');
+   const permission=await Notification.requestPermission();
+   if(permission!=='granted')throw new Error('Notifications were not allowed.');
+   const applicationServerKey=base64UrlToBytes(snapshot.settings.push.public_key);
+   const subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey});
+   const json=subscription.toJSON();
+   await command('push.subscribe',{endpoint:json.endpoint,keys:{p256dh:json.keys.p256dh,auth:json.keys.auth}});
+   pushSubscriptionCache=subscription;
+  }
+  await refresh(true);
+ }catch(error){report(error.message??'This change could not be saved.');}
+ finally{pushBusy=false;renderPush();}
+};
 $('edit-budget').onclick=()=>{
  const budget=snapshot.budget;if(!budget)return;const key=crypto.randomUUID();
  const fields=[selectField('Budget suspension','enabled',[['false','Off'],['true','On for selected optional routines']],String(budget.policy.enabled)),field('Monthly infrastructure cap (USD)','cap',(budget.policy.monthly_cap_cents/100).toFixed(2)),node('p','Select up to 20 optional routines. Missing or 24-hour-old projections pause their new scheduled runs; active work and owner messages are unaffected.','hint')];

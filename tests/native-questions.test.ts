@@ -40,7 +40,7 @@ const otherTables = () => db.all<{ name: string }>("SELECT name FROM sqlite_sche
   .map(({ name }) => [name, db.all(`SELECT * FROM "${name}" ORDER BY rowid`)]);
 beforeEach(() => {
   clock = '2026-09-14T12:00:00.000Z'; serial = 10000; db = new DB(); store = new Store(db);
-  expect(db.all('SELECT version FROM schema_versions')).toEqual([{ version: 19 }]);
+  expect(db.all('SELECT version FROM schema_versions')).toEqual([{ version: 20 }]);
   const core = new ControlCore(store, { executionEnabled: false, actionPolicyIds: [], toolPolicyIds: [], now: () => new Date(clock), uuid: () => id(serial++) });
   lifecycle = new LifecycleCore(store, core); ledger = new NativeQuestionLedger(store, lifecycle, () => clock);
   db.exec("INSERT INTO lifecycle(singleton,provider_ref_json,epoch,boot_id,phase,desired_state,lease_until) VALUES(1,'{}',7,?,'READY','RUN','2026-09-14T13:00:00.000Z')", identity.boot_id);
