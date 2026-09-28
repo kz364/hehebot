@@ -50,7 +50,7 @@
     "FLIGHT_RESTORE_POLICY_ID": "",
     "NATIVE_DELEGATIONS": "{}",
     "HEHEBOT_EXECUTION_MODE": "",
-    "HEHEBOT_VAPID_SUBJECT": "https://hehebot.kaspar-zhou.workers.dev"
+    "HEHEBOT_VAPID_SUBJECT": ""
   },
   "env": {
     "local": {
@@ -74,7 +74,7 @@
         "FLIGHT_RESTORE_POLICY_ID": "",
         "NATIVE_DELEGATIONS": "{}",
         "HEHEBOT_EXECUTION_MODE": "",
-        "HEHEBOT_VAPID_SUBJECT": "https://hehebot.kaspar-zhou.workers.dev"
+        "HEHEBOT_VAPID_SUBJECT": ""
       },
       "durable_objects": {
         "bindings": [
@@ -110,7 +110,8 @@
         "HEHEBOT_STUCK_POLICY": "{\"no_progress_ms\":300000,\"nudge_grace_ms\":120000}",
         "HEHEBOT_SUCCESSOR_BACKOFF": "{\"base_ms\":5000,\"max_ms\":300000,\"notify_after\":3}",
         "HEHEBOT_BACKUP_AGE_RECIPIENT": "age1mtf532qyqt3st32ug8892tsd8cg7c5pmelp74058laramnrdyylqnemlc8",
-        "HEHEBOT_VAPID_SUBJECT": "https://hehebot.kaspar-zhou.workers.dev"
+        "HEHEBOT_VAPID_SUBJECT": "https://hehebot.kaspar-zhou.workers.dev",
+        "HEHEBOT_ROOM_TURNS": "true"
       },
       "durable_objects": {
         "bindings": [

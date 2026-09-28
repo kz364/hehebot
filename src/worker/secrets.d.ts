@@ -18,7 +18,7 @@ declare namespace Cloudflare {
  // Web Push (TODO.md "Push notifications"). Push stays disabled -- and the
  // portal hides its toggle -- unless all three are set. See docs/PUSH.md for
  // key formats and the exact `wrangler secret put` commands.
- interface Env { HEHEBOT_VAPID_PUBLIC_KEY?:string; HEHEBOT_VAPID_PRIVATE_KEY?:string; HEHEBOT_VAPID_SUBJECT?:string; }
+ interface Env { HEHEBOT_VAPID_PUBLIC_KEY?:string; HEHEBOT_VAPID_PRIVATE_KEY?:string; HEHEBOT_VAPID_SUBJECT?:string; HEHEBOT_ROOM_TURNS?:string; }
 }
 
 interface Env { HEHEBOT_TEST_REVOKED?:string; }
@@ -29,4 +29,4 @@ interface Env { HEHEBOT_OWNER_ALPHA_WAKE?:string; HEHEBOT_OWNER_ALPHA_WAKE_TOKEN
 interface Env { HEHEBOT_OWNER_ALPHA_WARM_GENERATION?:string; HEHEBOT_OWNER_ALPHA_HOST_SIGNING_KEY?:string; }
 interface Env { HEHEBOT_OWNER_ALPHA_BACKGROUND_GENERATION?:string; HEHEBOT_OWNER_ALPHA_BACKGROUND_HOST_SIGNING_KEY?:string; HEHEBOT_OWNER_ALPHA_BACKGROUND_TASK_SIGNING_KEY?:string; }
 interface Env { HEHEBOT_STUCK_POLICY?:string; HEHEBOT_BOOT_DEADLINE_MS?:string; HEHEBOT_SUCCESSOR_BACKOFF?:string; HEHEBOT_RUNTIME_GENERATION?:string; HEHEBOT_OWNER_ALPHA_SUCCESSOR?:string; HEHEBOT_HOSTED_OWNER_ALPHA?:string; HEHEBOT_OWNER_ALPHA?:string; NATIVE_DELEGATIONS?:string; FLIGHT_RESTORE_VERIFIED?:string; FLIGHT_RESTORE_POLICY_ID?:string; PROVIDER_TOKEN?: string; SPRITE_WAKE_TOKEN?: string; RUNTIME_TOKEN?: string; TRIGGER_SECRETS?: string; HEHEBOT_METERING_RATES?: string; HEHEBOT_DEBUG?: string; }
-interface Env { HEHEBOT_VAPID_PUBLIC_KEY?:string; HEHEBOT_VAPID_PRIVATE_KEY?:string; HEHEBOT_VAPID_SUBJECT?:string; }
+interface Env { HEHEBOT_VAPID_PUBLIC_KEY?:string; HEHEBOT_VAPID_PRIVATE_KEY?:string; HEHEBOT_VAPID_SUBJECT?:string; HEHEBOT_ROOM_TURNS?:string; }
