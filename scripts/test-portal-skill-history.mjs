@@ -49,7 +49,7 @@ const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(art
 const capture=async name=>{await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',decodeURIComponent(new URL(`skill-history-${name}.png`,artifacts).pathname));};
 const historyReads=()=>requests.filter(value=>value.includes(`/v1/skills/${skillId}/revisions`));
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');await click('#show-skills');await refresh();
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');await click('#show-skills');await refresh();
  assert.equal(historyReads().length,0);assert.equal(commands.length,0,'catalog refresh must not read history or mutate');
  await click('.skill-card > summary');await browser('eval','document.querySelector("[data-action=skill-history]").scrollIntoView({block:"center"})');await capture('desktop');await click('[data-action="skill-history"]');await wait("document.querySelector('[data-source-revision=\"8\"]')");
  assert.deepEqual(historyReads(),[`GET /v1/skills/${skillId}/revisions?limit=10`]);assert.match((await browser('get','text','[data-skill-history]')).stdout,/gaps.*proposal.*never approves/s);

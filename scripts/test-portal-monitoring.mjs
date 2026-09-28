@@ -24,7 +24,7 @@ const server=createServer(async(req,res)=>{
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','1000','2');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','1000','2');
  await browser('wait','--fn','document.querySelector("#connection").textContent==="Connected"');
  assert.match((await browser('get','text','#monitoring-panel')).stdout,/Zero recorded activity does not prove native settlement or safe sleep/);
  assert.match((await browser('get','text','#monitoring-stats')).stdout,/Not verified/);

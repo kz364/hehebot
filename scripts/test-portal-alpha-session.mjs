@@ -54,7 +54,7 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
-const open=async()=>{await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');};
+const open=async()=>{await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');};
 const refresh=async()=>{const before=reads;state.summary.queued_runs++;await evaluate('document.querySelector("#refresh").click()');await wait(`document.querySelector('#runtime-queued').textContent===${JSON.stringify(String(state.summary.queued_runs))}`);assert.ok(reads>before);};
 const capture=async name=>{
  // Taller review capture includes the expanded preview; interactions still run at 900px.

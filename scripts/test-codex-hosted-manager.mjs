@@ -106,7 +106,7 @@ try {
     // Open the actual portal in a real browser against the authenticated
     // Worker origin. The synthetic signed identity is fixture-only.
     await browser('set', 'headers', JSON.stringify(ownerHeaders));
-    await browser('open', fixture.origin + '/');
+    await browser('open', fixture.origin + '/?view=detailed');
     await browser('set', 'viewport', '1280', '900', '2');
     // Wait for the exact connected state: an initial Connecting is also truthy.
     assert.ok(await waitFor(() => browserJson('document.querySelector("#connection")?.textContent === "Connected"'), 30000),

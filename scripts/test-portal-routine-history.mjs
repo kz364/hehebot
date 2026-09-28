@@ -70,7 +70,7 @@ const late=async action=>{
  await refresh();assert.equal(await evaluate(`document.querySelector('${panel} [data-run-id]')===null`),true);
 };
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');
  assert.equal(requests.length,0);await open();
  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('${panel} [data-run-id]'),n=>n.dataset.runId)`),Array.from({length:10},(_,n)=>id(n+1)));
  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('${panel} .task-card>summary'),n=>n.textContent)`),['Review 1 · Working','Review 2 · Completed','Review 3 · Failed','Review 4 · Cancelled','Review 5 · Waiting','Review 6 · Saving result','Review 7 · Cancelling','Review 8 · Needs recovery','Review 9 · Queued','Review 10 · Starting']);

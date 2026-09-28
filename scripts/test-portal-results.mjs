@@ -34,7 +34,7 @@ const wait=()=>browser('wait','--fn','document.querySelectorAll(".result-outcome
 const labels=async()=>JSON.parse((await browser('eval','[...document.querySelectorAll(".result-outcome")].map(x=>x.textContent)')).stdout);
 const top=()=>browser('eval','document.querySelector("#timeline").scrollTo({top:0,behavior:"instant"});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','1050','2');await wait();
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','1050','2');await wait();
  const expected=['Recorded outcome: Failed · TEMPORARY_UNAVAILABLE · Arrival check','Recorded outcome: Waiting · Draft review','Recorded outcome: Cancelled · OWNER_CANCELLED · Background task','Recorded outcome: Completed · Mail check','Recorded outcome: Unavailable'];
  assert.deepEqual(await labels(),expected);await top();await browser('screenshot',decodeURIComponent(new URL('portal-results-desktop.png',artifacts).pathname));
  await browser('click','#refresh');await wait();assert.deepEqual(await labels(),expected);

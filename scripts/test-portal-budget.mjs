@@ -38,7 +38,7 @@ await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
 const refresh=async text=>{await browser('click','#refresh');await browser('wait','--fn',`document.querySelector('#budget-summary').textContent.includes(${JSON.stringify(text)})`);};
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');
  await browser('wait','--fn','document.querySelector("#connection").textContent==="Connected"');
  assert.match((await browser('get','text','#budget-summary')).stdout,/Budget suspension is off/);
  await browser('click','#edit-budget');await browser('select','[name="enabled"]','true');await browser('fill','[name="cap"]','7.19');await browser('check','[name="optional"]');

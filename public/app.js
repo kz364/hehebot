@@ -523,6 +523,10 @@ async function loadRecovery(cursor=null,previous=[],kind='recovery',focusRun=nul
  try{const page=await api(recoveryUrl(view));if(recoveryView===view&&selected===view.conversationId&&view.request===1){view.page=page;render();}}
  catch(e){if(recoveryView===view&&view.request===1){recoveryView=null;report(e.message);render();}}
 }
+// Simple view (default): chat plus whatever needs the owner. Detailed view
+// shows task records, room bookkeeping and runtime panels. Per-device only.
+const simpleView=()=>document.documentElement.dataset.view!=='detailed';
+function setView(detailed){document.documentElement.dataset.view=detailed?'detailed':'simple';$('view-detailed').checked=detailed;try{localStorage.setItem('personal.view',detailed?'detailed':'simple');}catch{}lastSignature='';$('task-strip').dataset.signature='';render();}
 function render(){
  if(!snapshot)return;
  if(snapshot.summary.owner_alpha||'owner_alpha_warm' in snapshot.summary||'owner_alpha_background' in snapshot.summary)alphaBlock();
@@ -564,7 +568,7 @@ function render(){
  const recovery=(view?(view.page?.recovery??[]):snapshot.recovery??[]).filter(x=>runs.some(run=>run.id===x.run_id));
  const previews=(view?.kind==='tasks'?view.page?.output_previews??[]:snapshot.output_previews??[]).filter(x=>runs.some(run=>run.id===x.run_id&&run.current_attempt===x.attempt&&(snapshot.summary.owner_alpha?['running','finishing','cancelling','recovery_required']:['running','finishing','recovery_required']).includes(run.status)&&!['OWNER_CANCELLED','CONTEXT_INVALIDATED'].includes(run.error_code)));
  const questions=(snapshot.questions??[]).filter(q=>q.conversation_id===selected||q.persona_id===selected);
- const signature=JSON.stringify([selected,query,conversation,runs,steering,recovery,previews,questions,pendingOutbox,$('connection').textContent,navigator.onLine,alphaSeen,snapshot.summary.owner_alpha,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.token_usage_snapshots,snapshot.summary.execution_enabled,historyFloors.get(selected)]);
+ const signature=JSON.stringify([selected,query,conversation,runs,steering,recovery,previews,questions,pendingOutbox,$('connection').textContent,navigator.onLine,alphaSeen,snapshot.summary.owner_alpha,Boolean(view),view?.kind,view?.focusRun,view?.cursor,view?.previous,view?.page,snapshot.token_usage_snapshots,snapshot.summary.execution_enabled,historyFloors.get(selected),simpleView()]);
  if(signature!==lastSignature){lastSignature=signature;const timeline=$('timeline');const nearBottom=timeline.scrollHeight-timeline.scrollTop-timeline.clientHeight<100;const expanded=new Set([...timeline.querySelectorAll('.task-card[open]')].map(card=>card.dataset.runId));timeline.replaceChildren();
   if(view){
    const taskMode=view.kind==='tasks',label=taskMode?'task':'recovery';
@@ -573,7 +577,7 @@ function render(){
    if(view.previous.length)controls.append(button(`Previous ${label} page`,()=>loadRecovery(view.previous.at(-1),view.previous.slice(0,-1),view.kind),'quiet'));
    if(view.page?.next_cursor)controls.append(button(`Next ${label} page`,()=>loadRecovery(view.page.next_cursor,[...view.previous,view.cursor],view.kind),'quiet'));
    timeline.append(controls);if(!runs.length){const notice=node('p',view.page?`No ${taskMode?'unfinished':'recovery'} tasks on this page.`:`Loading ${taskMode?'current':'recovery'} tasks…`,'hint');notice.setAttribute('role','status');timeline.append(notice);}
-  }else if(alphaConversationAvailable(selected))timeline.append(button('Review recovery tasks',()=>loadRecovery(),'quiet'));
+  }else if(alphaConversationAvailable(selected)){if(!simpleView()||recovery.length||(taskFeed?.conversationId===selected&&taskFeed.page?.counts.recovery))timeline.append(button('Review recovery tasks',()=>loadRecovery(),'quiet'));}
   else timeline.append(node('p','History and task pages are unavailable for this conversation in the owner-alpha session. Select the authorized persona to review its history and tasks.','hint'));
   if(!view&&historyFloors.get(selected)){const notice=node('p','Earlier history has expired under the retention policy. Only retained messages and updates are shown.','hint');notice.setAttribute('role','status');timeline.append(notice);}
   if(conversation.length>=100&&alphaConversationAvailable(selected)){const conversationId=selected;timeline.append(button('Load earlier messages',async()=>{try{
@@ -613,7 +617,7 @@ function render(){
    }else if(event.type==='run.result'){
     // Recorded outcomes are notices, not search-filtered bubbles: always shown.
     const outcome=['completed','failed','cancelled','waiting'].includes(event.payload.status)?statuses[event.payload.status]:'Unavailable';
-    const e=node('div',undefined,'event');
+    const e=node('div',undefined,'event');if(simpleView()&&event.payload.status==='completed')e.hidden=true;
     const label=node('span',`Recorded outcome: ${outcome}${event.payload.error_code?` · ${event.payload.error_code}`:''}`,'result-outcome');
     label.style.overflowWrap='anywhere';
     if(event.payload.title)label.append(node('span',` · ${event.payload.title}`));
@@ -655,7 +659,7 @@ function render(){
     if(run)e.append(button('Abandon',()=>cancelTask(run,'Owner abandoned the interrupted attempt.')));
     timeline.append(e);
    }else if(['run.accepted','run.cancellation_requested'].includes(event.type)){
-    const run=runs.find(x=>x.id===event.payload.run_id);if(!run)continue;const e=node('div',undefined,'event');e.append(node('span',statuses[run.status]??run.status,'status'));
+    const run=runs.find(x=>x.id===event.payload.run_id);if(!run)continue;if(simpleView()&&['completed','cancelled'].includes(run.status))continue;const e=node('div',undefined,'event');e.append(node('span',statuses[run.status]??run.status,'status'));
     if(run.status==='waiting')e.append(node('span',run.error_code==='CAPABILITY_UNAVAILABLE'?'Runtime connection required':run.error_code??'Input required'));
     if(['queued','claimed','running','waiting'].includes(run.status))e.append(button('Cancel',()=>cancelTask(run,'Owner requested cancellation.')));
     if(['failed','cancelled','recovery_required','interrupted','waiting'].includes(run.status)&&snapshot.summary.execution_enabled)e.append(button('Retry',()=>act(()=>command('run.retry',{run_id:run.id,expected_attempt:run.current_attempt}))));timeline.append(e);
@@ -670,11 +674,12 @@ function render(){
     // V9 (ARCHITECTURE_V2 A8): turn scheduling/outcomes are collapsed, muted
     // activity lines -- never a bubble, never search-filtered (A7: only
     // owner.message/bot.message are bubbles).
+    if(simpleView()&&(event.payload.phase==='started'?conversation.some(x=>x.type==='room.turn'&&x.payload?.log_id===event.payload.log_id&&x.payload.phase==='settled'):['SENT','PASS','SKIPPED'].includes(event.payload.outcome)))continue;
     const name=items('persona').find(p=>p.id===event.payload.member_id)?.body.name??String(event.payload.member_id).slice(0,8);
     const e=node('div',undefined,'event activity');e.setAttribute('role','status');
     const label=event.payload.phase==='started'?`Waiting for ${name}…`:`${name}: ${{SENT:'replied',PASS:'passed',SKIPPED:'turn skipped (limit reached)',TIMEOUT:'turn timed out',ERROR:'turn failed'}[event.payload.outcome]??event.payload.outcome}`;
     e.append(node('span','Room turn','status'),node('span',label));timeline.append(e);
-   }else if(event.type.startsWith('room.')){const e=node('div',undefined,'event');e.append(node('span',event.type==='room.context_update'?'Context update':'Room update'),node('span',event.payload.text??''));timeline.append(e);}
+   }else if(event.type.startsWith('room.')){if(simpleView())continue;const e=node('div',undefined,'event');e.append(node('span',event.type==='room.context_update'?'Context update':'Room update'),node('span',event.payload.text??''));timeline.append(e);}
   }
   // V5 outbox (ARCHITECTURE_V2 A5): unresolved sends render as owner bubbles,
   // optimistic until echoed, never search-filtered since they aren't committed.
@@ -686,16 +691,16 @@ function render(){
    const status=node('p',outboxLabels[record.phase]??'','hint outbox-status');status.setAttribute('role','status');m.append(status);
    timeline.append(m);
   }
-  for(const run of runs.filter(x=>view?.kind==='tasks'||x.role==='background'||['running','finishing','recovery_required'].includes(x.status)||previews.some(preview=>preview.run_id===x.id)||steering.some(receipt=>receipt.run_id===x.id))){
+  for(const run of runs.filter(x=>view?.kind==='tasks'||(simpleView()?['queued','claimed','running','finishing','cancelling','waiting','recovery_required'].includes(x.status):x.role==='background')||['running','finishing','recovery_required'].includes(x.status)||previews.some(preview=>preview.run_id===x.id)||steering.some(receipt=>receipt.run_id===x.id))){
    const title=run.title??(run.role==='background'?'Background task':'Conversation task');
    const card=node('details',undefined,'task-card');card.dataset.runId=run.id;card.open=expanded.has(run.id)||view?.focusRun===run.id;card.append(node('summary',`${title} · ${statuses[run.status]??run.status}`));
-   card.append(node('p',`Task ${run.id}`,'hint'));
+   if(!simpleView())card.append(node('p',`Task ${run.id}`,'hint'));
    if(view?.kind==='tasks'){
     card.append(node('p',`Owner: ${items('persona').find(bot=>bot.id===run.persona_id)?.body.name??'Unavailable bot'} · Original request: ${run.request_status??'receipt unavailable'}. Request application is not task completion.`,'hint'));
     if(run.error_code)card.append(node('p',`Waiting or recovery reason: ${run.error_code}`,'hint'));
     if(run.status==='cancelling')card.append(node('p','Cancellation requested, not confirmed. Children, tools and effects may remain unresolved.','review-notice'));
    }
-   renderTokenUsage(card,run,view?.kind==='tasks'?view.page:view?null:snapshot);
+   if(!simpleView())renderTokenUsage(card,run,view?.kind==='tasks'?view.page:view?null:snapshot);
    const preview=previews.find(item=>item.run_id===run.id);
    if(preview){
     // V7 clean thread (A7): provisional text is an ephemeral, visually
@@ -703,7 +708,7 @@ function render(){
     // persisted look of a committed message.
     card.querySelector('summary').append(node('span',' · Working…','status'));
     const section=node('section',undefined,'output-preview provisional-typing');section.setAttribute('aria-label','Provisional task output');section.setAttribute('role','status');section.setAttribute('aria-live','polite');
-    section.append(node('p','Working — provisional, not a completed result; children, tools or effects may still be unresolved.','hint'),node('div',preview.text,'provisional-text'));
+    if(!simpleView())section.append(node('p','Working — provisional, not a completed result; children, tools or effects may still be unresolved.','hint'));section.append(node('div',preview.text,'provisional-text'));
     if(preview.truncated)section.append(node('p','Preview shortened. This is not the complete native message.','hint'));
     card.append(section);
    }
@@ -762,6 +767,7 @@ $('clear-conversation-search').onclick=()=>{$('conversation-search').value='';re
 function renderTaskStrip(){
  const strip=$('task-strip'),target=$('task-strip-content');strip.hidden=managedSelected()||!alphaConversationAvailable(selected);if(strip.hidden)return;
  const feed=taskFeed?.conversationId===selected?taskFeed:null,page=feed?.page;
+ if(simpleView()&&!feed?.error&&!page?.counts.total&&!page?.counts.waiting&&!page?.counts.recovery){strip.hidden=true;return;}
  const signature=JSON.stringify([selected,feed?.error,page?.counts,page?.runs,items('persona').map(bot=>[bot.id,bot.body.name])]);
  if(strip.dataset.signature===signature)return;strip.dataset.signature=signature;target.replaceChildren();
  $('task-strip-summary').textContent=feed?.error?'Tasks — unavailable or stale':page?`Tasks ${page.counts.total} · Waiting ${page.counts.waiting} · Recovery ${page.counts.recovery}`:'Tasks — loading';
@@ -1256,7 +1262,7 @@ function cancelTask(run,reason){
 }
 const dollars=cents=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(cents/100);
 function renderMonitoring(){
- const m=snapshot.monitoring;$('monitoring-panel').hidden=!m;if(!m)return;
+ const m=snapshot.monitoring;$('monitoring-panel').hidden=!m;if(!m)return;$('monitoring-panel').classList.toggle('detail-only',!m.alerts.length);
  const age=seconds=>seconds===null?'Unknown':`${Math.ceil(seconds)}s`;
  const rows=[['Ready requests',m.queue.count],['Oldest request',m.queue.count?age(m.queue.oldest_request_age_seconds):'None'],['Heartbeat age',m.lease.expected_running?age(m.lease.heartbeat_age_seconds):'Not expected'],['Recorded operations',m.operations.reduce((sum,row)=>sum+row.count,0)],['Resource locks',m.locks],['Uncertain effects',m.effects.find(row=>row.status==='outcome_unknown')?.count??0],['Schedule lag',age(m.schedules.lag_seconds)],['Backup verification','Not verified']];
  $('monitoring-stats').replaceChildren(...rows.map(([label,value])=>{const row=node('div');row.append(node('dt',label),node('dd',String(value)));return row;}));
@@ -1509,6 +1515,7 @@ function notifyNative(events){
  }
 }
 $('show-details').onclick=()=>{$('details').classList.add('open');loadMac();};$('close-details').onclick=()=>$('details').classList.remove('open');$('refresh').onclick=()=>refresh(true);
+{let stored=new URLSearchParams(location.search).get('view');if(!stored)try{stored=localStorage.getItem('personal.view');}catch{}document.documentElement.dataset.view=stored==='detailed'?'detailed':'simple';$('view-detailed').checked=stored==='detailed';$('view-detailed').onchange=e=>setView(e.target.checked);}
 $('show-skills').onclick=()=>choose('skills');
  $('show-connectors').onclick=()=>choose('connectors');
 $('export-control').onclick=async()=>{

@@ -83,7 +83,7 @@ const envelope=(row,run,reason)=>{
  assert.match(row.key,/^[0-9a-f-]{36}$/);assert.equal(row.contentType,'application/json');
 };
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');
  await reset('snapshot');
  await open();await submit();assert.equal(commands.length,0);
  await browser('focus','#editor-form button[type=submit]');await browser('press','Enter');assert.equal(commands.length,0);

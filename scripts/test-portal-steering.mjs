@@ -39,7 +39,7 @@ const card=id=>`.task-card[data-run-id="${id}"]`;
 const waitText=async text=>browser('wait','--fn',`document.querySelector('#timeline').textContent.includes(${JSON.stringify(text)})`);
 const refresh=async text=>{await browser('click','#refresh');await waitText(text);};
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');
  await browser('wait','--fn','document.querySelector("#connection").textContent==="Connected"');
  await browser('click',`${card(a)} summary`);await browser('click',`${card(b)} summary`);
  await browser('click',`${card(a)} [data-action="steer"]`);

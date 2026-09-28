@@ -37,7 +37,7 @@ const artifacts=new URL('../.amp/in/artifacts/',import.meta.url),directory=await
 await mkdir(artifacts,{recursive:true});
 async function capture(name){await browser('eval','document.querySelector("#export-panel").scrollIntoView();new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');await browser('screenshot',decodeURIComponent(new URL(`portal-export-${name}.png`,artifacts).pathname));}
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','1000','2');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','1000','2');
  await browser('wait','--fn','document.querySelector("#connection").textContent==="Connected"');
  await capture('collapsed');
  assert.equal(requests,0);assert.equal((await browser('eval','document.querySelector("#export-control").checkVisibility()')).stdout.trim(),'false');

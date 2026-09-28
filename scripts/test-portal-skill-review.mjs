@@ -57,7 +57,7 @@ const affirm=()=>browser('check','#editor [name="affirm"]');
 const submit=()=>click('#editor-form button[type="submit"]');
 const close=()=>browser('press','Escape');
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');
  await wait('document.querySelector("#connection").textContent==="Connected"');await click('#show-skills');await refresh();
  await click(`${card(proposal.id)} > summary`);
  assert.equal(commands.length,0);

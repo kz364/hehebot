@@ -56,7 +56,7 @@ const capture=async name=>{
  await browser('screenshot',decodeURIComponent(new URL(name,artifacts).pathname));
 };
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');
  await wait('document.querySelector("#connection").textContent==="Connected"');await refresh();
  assert.equal(await evaluate('document.querySelectorAll("#memories .card").length'),4);
  assert.equal(await evaluate('document.querySelectorAll("#memories details[open]").length'),0);

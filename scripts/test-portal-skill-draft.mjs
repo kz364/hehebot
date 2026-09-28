@@ -99,7 +99,7 @@ const expectLocalFence = async mutate => {
 };
 
 try {
-  await browser('open', `http://127.0.0.1:${server.address().port}`);
+  await browser('open', `http://127.0.0.1:${server.address().port}/?view=detailed`);
   await browser('set', 'viewport', '1280', '900', '2');
   await wait('document.querySelector("#connection").textContent==="Connected"');
   await click('#show-skills'); await refresh();

@@ -51,7 +51,7 @@ const close=()=>browser('press','Escape');
 const reject=async()=>{const count=commands.length;await submit();await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,count);assert.match((await browser('get','text','#editor-error')).stdout,/stale|changed|offline/);};
 const capture=async name=>{assert.equal(await evaluate('devicePixelRatio'),2);await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');await browser('screenshot',decodeURIComponent(new URL(name,artifacts).pathname));};
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await refresh();
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await refresh();
  assert.equal(await evaluate('document.querySelectorAll("#memories .card").length'),2);
  await open();assert.equal(commands.length,0);await submit();assert.equal(commands.length,0);
  await browser('focus','#editor-form button[type=submit]');await browser('press','Enter');assert.equal(commands.length,0);

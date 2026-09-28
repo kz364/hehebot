@@ -60,7 +60,7 @@ const artifacts = new URL('../.amp/in/artifacts/', import.meta.url); await mkdir
 const capture = name => browser('screenshot', new URL(`portal-questions-${name}.png`, artifacts).pathname);
 const refresh = async () => { await browser('eval', 'document.querySelector("#refresh").click()'); await wait('document.querySelector("#connection").textContent==="Connected"'); };
 try {
-  await browser('open', `http://127.0.0.1:${server.address().port}`); await browser('set', 'viewport', '1280', '900', '2');
+  await browser('open', `http://127.0.0.1:${server.address().port}/?view=detailed`); await browser('set', 'viewport', '1280', '900', '2');
   await wait('document.querySelector("#connection").textContent==="Connected"');
   assert.equal(await evaluate('document.querySelectorAll(".question-card").length'), 1);
   assert.equal(await evaluate('document.querySelectorAll(".question-card b").length'), 0);

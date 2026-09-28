@@ -202,7 +202,7 @@ try {
       assert.equal((await fixture.fetchImpl(route, { headers: ownerHeaders })).status, 200);
     }
     await browser('set', 'headers', JSON.stringify(ownerHeaders));
-    await browser('open', fixture.origin + '/');
+    await browser('open', fixture.origin + '/?view=detailed');
     await browser('set', 'viewport', '1280', '1000', '2');
     assert.ok(await waitFor(() => browserJson('document.querySelector("#connection")?.textContent === "Connected"')));
     await browser('click', `[data-persona-id="${persona}"]`);

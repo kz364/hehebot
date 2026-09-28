@@ -34,7 +34,7 @@ const usageText=()=>evalJson('document.querySelector("#timeline .token-usage")?.
 const refresh=async()=>{await browser('eval','document.querySelector("#refresh").onclick()');await wait('document.querySelector("#connection").textContent==="Connected"');};
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await wait('document.querySelector(".task-card")');await browser('click','.task-card summary');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await wait('document.querySelector(".task-card")');await browser('click','.task-card summary');
  let text=await usageText();assert.match(text,/Native cumulative snapshotInput tokens: 120.*Cached input tokens: 30.*Native last snapshotInput tokens: 9.*Cached input tokens: 0/s);assert.match(text,/attempt 2 · observation version 1/);assert.match(text,/Model context window: unavailable/);assert.match(text,/partial or stale.*not live.*not additive across tasks or children.*billing or settlement/s);assert.doesNotMatch(text,/\$|%/);
  // Usage-only state updates must rerender. Decreasing and all-zero observations remain exact observations.
  state.token_usage_snapshots=[{...valid,version:2,usage:{total:counters(8,1,0,2,0,10),last:counters(0,0,0,0,0,0),modelContextWindow:32768}}];await refresh();text=await usageText();assert.match(text,/Native cumulative snapshotInput tokens: 8.*Native last snapshotInput tokens: 0.*Total tokens: 0.*Model context window: 32,768/s);

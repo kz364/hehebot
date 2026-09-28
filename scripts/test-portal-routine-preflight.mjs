@@ -58,7 +58,7 @@ const late=async action=>{
  await refresh();assert.doesNotMatch(await text(),/Observed|Command checks passed|Command blocked/);
 };
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');
  assert.equal(reads.length,0);const originalRunState=await runDisabled();await open();
  assert.equal(reads[0],`/v1/routines/${routine.id}/preflight`);
  for(const b of blockers)assert.ok((await text()).includes(`${b.code}: ${b.message}`));

@@ -42,7 +42,7 @@ const capture=name=>browser('screenshot',decodeURIComponent(new URL(`portal-sche
 const preview=async()=>{await clickSelector('.schedule-picker button');await wait('document.querySelectorAll("#schedule-preview li").length===3');};
 const save=async()=>{await clickSelector('#editor-form button[type=submit]');await wait('!document.querySelector("#editor").open');};
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');await clickSelector('#add-routine');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');await clickSelector('#add-routine');
  assert.equal(await evaluate('document.querySelector("[name=frequency]").value'),'weekdays');assert.equal(await evaluate('document.querySelector("[name=timezone]").value'),'Asia/Jakarta');
  assert.equal(await evaluate('document.querySelector("[name=cron]").disabled'),true);await fill('name','Weekly review');await fill('instructions','Synthetic owner instructions');await select('enabled','false');
  await clickSelector('#editor-form button[type=submit]');await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,0);

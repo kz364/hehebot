@@ -62,7 +62,7 @@ const rejected=async(count,message)=>{
  assert.equal((await browser('eval','document.querySelector("#editor-error").getAttribute("role")')).stdout.trim(),'"alert"');
 };
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');
  await browser('wait','--fn','document.querySelector("#connection").textContent==="Connected"');
  await browser('find','role','button','click','--name','Review recovery tasks','--exact');
  await browser('wait','--fn',`document.querySelector('${card(oldA.id)}')!==null`);

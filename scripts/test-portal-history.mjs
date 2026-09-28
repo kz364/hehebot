@@ -50,7 +50,7 @@ const server = createServer(async (req, res) => {
 });
 try {
   await new Promise(ok => server.listen(0, '127.0.0.1', ok));
-  await browser('open', `http://127.0.0.1:${server.address().port}`);
+  await browser('open', `http://127.0.0.1:${server.address().port}/?view=detailed`);
   await browser('set', 'viewport', '1280', '720', '2');
   await browser('wait', '--fn', 'document.querySelectorAll(".message-body").length === 100');
   await browser('eval', 'Array.from(document.querySelectorAll("button")).find(b => b.textContent === "Load earlier messages").click()');

@@ -32,7 +32,7 @@ const wait=expression=>browser('wait','--fn',expression),evaluate=async expressi
 const clickSelector=async selector=>{await browser('eval',`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({behavior:'instant',block:'center'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);await browser('click',selector);};
 const save=async()=>{await clickSelector('#editor-form button[type=submit]');await wait('!document.querySelector("#editor").open');};
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');
  await browser('fill','#roster-search','beTA');assert.equal(await evaluate('document.querySelectorAll("#bots .nav-item").length'),1);assert.equal(commands.length,0);await browser('fill','#roster-search','');
  await click('Organize');await click('Add section');await browser('fill','[name^="section-"]','Trips <safe>');
  const section=await evaluate('document.querySelector("[name^=section-]").name.slice(8)');

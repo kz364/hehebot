@@ -31,7 +31,7 @@ await new Promise(ok=>server.listen(0,'127.0.0.1',ok));const artifacts=new URL('
 const clickSelector=async selector=>{await browser('eval',`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({behavior:'instant',block:'center'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);await browser('click',selector);};
 const save=async()=>{await clickSelector('#editor-form button[type=submit]');await wait('!document.querySelector("#editor").open');};
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');await click('Add bot');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');await click('Add bot');
  assert.equal(await value('role'),'');assert.equal(await value('instructions'),'');await browser('fill','[name=name]','Minimal');await browser('fill','[name=instructions]','Use only public information.');
  await browser('screenshot',decodeURIComponent(new URL('portal-profile-minimal.png',artifacts).pathname));await save();assert.deepEqual(commands[0].command.payload.tool_policy_ids,[]);assert.notEqual(commands[0].command.payload.id,bot);assert.equal(commands[0].command.payload.role,'');
  await click('Instructions');await click('Duplicate as new bot');await wait('document.querySelector("#editor-title").textContent==="Duplicate bot"');assert.equal(await value('role'),'');assert.equal(await value('instructions'),'');assert.equal(commands.length,1);

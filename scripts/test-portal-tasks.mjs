@@ -37,7 +37,7 @@ const server=createServer(async(req,res)=>{
 await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');
  await browser('wait','--fn','document.querySelector("#task-strip-summary").textContent.includes("Tasks 13")');
  await browser('click','#task-strip-summary');
  assert.equal(Number((await browser('get','count','.task-strip-row')).stdout.trim()),10);

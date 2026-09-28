@@ -60,7 +60,7 @@ const capture=async name=>{
 };
 try{
  await mkdir(artifacts,{recursive:true});await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','1000','2');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','1000','2');
  await wait('document.querySelector("#connection").textContent==="Connected"');
  await browser('click','#conversation-search-panel > summary');
  assert.equal(await evaluate('document.querySelector("#conversation-search").labels[0].textContent'),'Search message text');

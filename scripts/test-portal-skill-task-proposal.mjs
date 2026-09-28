@@ -55,7 +55,7 @@ await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
 const capture=async(name,selector='#editor-fields')=>{await browser('eval',`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({behavior:'instant',block:'start'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);assert.equal(await evaluate('devicePixelRatio'),2);await browser('screenshot',decodeURIComponent(new URL(`skill-task-proposal-${name}.png`,artifacts).pathname));};
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');
  assert.equal(await evaluate('document.querySelectorAll("#timeline [data-action=skill-from-task]").length'),1);assert.equal(await evaluate(`!!document.querySelector('[data-run-id="${unclaimed.id}"] [data-action=skill-from-task]')`),false);
  // Read-only routine history remains action-free.
  await click('[data-action=routine-history]');await wait('!!document.querySelector(".routine-history .task-card")');assert.equal(await evaluate('document.querySelectorAll(".routine-history [data-action=skill-from-task]").length'),0);await click('[data-action=routine-history]');

@@ -46,7 +46,7 @@ const confirm=()=>browser('check','#editor [name="confirm"]');
 const submit=()=>click('#editor-form button[type="submit"]');
 const reject=async()=>{await submit();await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,0);assert.match((await browser('get','text','#editor-error')).stdout,/stale or changed/);};
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');
  await wait('document.querySelector("#connection").textContent==="Connected"');
  await browser('eval','window.confirm=()=>{throw Error("Native confirmation must not be used")};');
  await open();assert.match((await browser('get','text','#editor')).stdout,new RegExp(`${routine.id}.*revision 7`));

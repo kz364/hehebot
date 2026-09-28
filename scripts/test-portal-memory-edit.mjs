@@ -50,7 +50,7 @@ const submit=()=>browser('click','#editor-form button[type="submit"]');
 const close=()=>browser('press','Escape');
 const reject=async(message=/stale|changed|offline/)=>{const count=commands.length;await submit();await wait('!document.querySelector("#editor-error").hidden');assert.equal(commands.length,count);assert.match((await browser('get','text','#editor-error')).stdout,message);assert.equal(await evaluate('document.querySelector("#editor-error").getAttribute("role")'),'alert');};
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await refresh();
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await refresh();
  await open();await browser('fill','#editor [name="text"]','Changed text, retained metadata');
  await browser('focus','#editor-form button[type="submit"]');await browser('press','Enter');await wait('!document.querySelector("#editor").open');
  assert.deepEqual(commands[0].command.payload,{id:memory.id,expected_revision:7,...memory.body,text:'Changed text, retained metadata'},'text-only edit must preserve sensitive expiring metadata and original provenance');

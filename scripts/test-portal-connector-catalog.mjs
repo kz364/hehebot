@@ -41,7 +41,7 @@ await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
 const artifacts=new URL('../.amp/in/artifacts/',import.meta.url);await mkdir(artifacts,{recursive:true});
 const capture=async name=>{await browser('eval','new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))');assert.equal(await evaluate('devicePixelRatio'),2);assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth'),true);await browser('screenshot',decodeURIComponent(new URL(`connector-catalog-${name}.png`,artifacts).pathname));};
 try{
- await browser('open',`http://127.0.0.1:${server.address().port}`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');assert.equal(catalogCount(),0);
+ await browser('open',`http://127.0.0.1:${server.address().port}/?view=detailed`);await browser('set','viewport','1280','900','2');await wait('document.querySelector("#connection").textContent==="Connected"');assert.equal(catalogCount(),0);
  await click('#show-connectors');await loaded();assert.equal(catalogCount(),1);assert.match(await text(),/Scoped search — synthetic-verified/);assert.match(await text(),/Scoped search is not recent-history coverage/);assert.match(await text(),/Runtime inventory is unobserved/);
  assert.equal(await evaluate('["composer","details","task-strip","conversation-search-panel","edit-bot","show-details"].every(id=>document.getElementById(id).hidden)'),true);assert.equal(await evaluate('document.querySelector("#timeline").scrollTop'),0);await capture('desktop');
  await browser('set','viewport','390','844','2');await capture('narrow');await browser('set','viewport','1280','900','2');
