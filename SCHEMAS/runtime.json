@@ -1588,6 +1588,7 @@
                     "routine.run",
                     "routine.delete",
                     "task.start",
+                    "bot.ask",
                     "run.steer",
                     "run.followup",
                     "run.cancel"

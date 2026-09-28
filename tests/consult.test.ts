@@ -4,6 +4,7 @@ import { AgentCommandBoundary } from '../src/core/agent-commands';
 import { LifecycleCore, type Identity } from '../src/core/lifecycle';
 import type { ContextSnapshot, PersonaPut, RoomPut } from '../src/core/types';
 import { bot, fixture, otherBot } from './helpers';
+import validateRuntime from '../src/generated/validate-runtime.js';
 
 // A8 consult (hehebot_ask_bot / bot.ask): a bot asks a bot outside the
 // conversation. bot = Chief of Staff (seeded can_ask: Inbox Triage, Travel),
@@ -46,6 +47,10 @@ beforeEach(() => {
 afterEach(() => f.close());
 
 describe('bot.ask consult', () => {
+  it('passes the Worker runtime RPC schema (the agent-command envelope lists bot.ask)', () => {
+    expect(validateRuntime({ type: 'agent-command', payload: { identity, run_id: randomUUID(), attempt: 1, idempotency_key: randomUUID(),
+      command: { schema_version: 1, type: 'bot.ask', payload: { bot_id: travel, question: 'Q?' } } } })).toBe(true);
+  });
   it('runs the target bot in the background and wakes the asker with the answer, all collapsed for the owner', () => {
     const cos = coordinator(bot);
     const receipt = ask(cos, travel, 'Which airline does the owner prefer?');
