@@ -92,6 +92,15 @@ describe('provider-managed Sprite idle lifecycle', () => {
     const next = life.registerBoot(randomUUID()); life.ready(next);
     expect(life.claim(next)?.run.id).toBe(nextRun);
   });
+  it('the owner can close an interrupted run whose operation rows never settled (trap 4)', async () => {
+    const { run } = await completeAndPermitIdle();
+    f.db.exec("UPDATE runs SET status='interrupted',error_code='CANCEL_UNCONFIRMED' WHERE id=?", run);
+    f.db.exec("INSERT INTO operations(id,run_id,attempt,kind,status,started_at,deadline_at,last_progress_at) VALUES(?,?,1,'tool','active',?,?,?)",
+      randomUUID(), run, '2026-09-10T00:00:30.000Z', '2026-09-10T00:02:30.000Z', '2026-09-10T00:00:30.000Z');
+    f.accept({ schema_version: 1, type: 'run.recover', payload: { run_id: run, expected_attempt: 1, release_resources: true } });
+    expect(f.store.run(run).status).toBe('failed');
+    expect(f.db.all("SELECT status FROM operations WHERE run_id=?", run)).toEqual([{ status: 'settled' }]);
+  });
   it('idle permission and paused observation never authorize observeStopped cleanup', async () => {
     await completeAndPermitIdle();
     const paused: RuntimeObservation = { phase: 'unknown', executionStopped: false, executionPaused: true, persistentState: 'retained', observedAt: 0 };

@@ -151,8 +151,12 @@ export class ControlCore {
     const attempt=this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,p.expected_attempt)[0];
     requireThat(run.status==='interrupted'||attempt?.status==='terminated','CANCEL_UNCONFIRMED','Confirmed executor termination is required before closing recovery.');
     requireThat(!this.questions.list().some(question=>question.run_id===run.id),'CANCEL_UNCONFIRMED','Close unresolved stopped-executor questions before closing recovery.');
-    requireThat(!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length,'CANCEL_UNCONFIRMED','The old execution has not settled.');
+    // Trap 4: an interrupted attempt is epoch-fenced, so its unsettled
+    // operation rows are dead-generation bookkeeping, not live work. Live
+    // 2026-09-28 they made an interrupted run impossible to close.
+    requireThat(run.status==='interrupted'||!this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length,'CANCEL_UNCONFIRMED','The old execution has not settled.');
     requireThat(!this.store.db.all("SELECT id FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown') LIMIT 1",run.id).length,'OUTCOME_UNKNOWN','Reconcile every external effect before closing recovery.');
+    if(run.status==='interrupted')this.store.db.exec("UPDATE operations SET status='settled' WHERE run_id=? AND status!='settled'",run.id);
     requireThat(!this.store.db.all(`SELECT r.id FROM runs r WHERE r.id=? AND NOT (${nativeDescendantsSettledSql})`,run.id).length,'CANCEL_UNCONFIRMED','Recover descendants before their parent.');
     const resources=this.store.db.all<{resource_id:string}>('SELECT resource_id FROM resource_locks WHERE run_id=?',run.id).map(row=>row.resource_id);
     new ResourceLedger(this.store,()=>this.now()).release(run.id,p.expected_attempt,resources);
@@ -895,7 +899,7 @@ export class ControlCore {
   // advance itself, not by a confirmed provider stop. Treat it the same as a
   // provider-confirmed 'terminated' attempt for reconciliation purposes.
   const terminated=run.status==='interrupted'||this.store.db.all<{status:string}>('SELECT status FROM attempts WHERE run_id=? AND attempt=?',run.id,run.current_attempt)[0]?.status==='terminated';
-  const operations=this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length>0;
+  const operations=run.status!=='interrupted'&&this.store.db.all("SELECT id FROM operations WHERE run_id=? AND status!='settled' LIMIT 1",run.id).length>0;
   const effects=this.store.db.all<{id:string;status:string;classification:string;action_key:string;request_digest:string}>("SELECT id,status,classification,action_key,request_digest FROM effects WHERE run_id=? AND status IN ('intent','dispatched','outcome_unknown') ORDER BY id LIMIT 21",run.id);
   const descendants=this.store.db.all(`SELECT r.id FROM runs r WHERE r.id=? AND NOT (${nativeDescendantsSettledSql})`,run.id).length>0;
   const locks=this.store.db.all<{n:number;stale:number}>('SELECT count(*) AS n,COALESCE(SUM(attempt!=?),0) AS stale FROM resource_locks WHERE run_id=?',run.current_attempt,run.id)[0];
