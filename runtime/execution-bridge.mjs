@@ -144,7 +144,7 @@ export class ExecutionBridge {
         // until a claim can actually be sent, and never fall back on count failure.
         preparation = structuredClone(await this.control.request('memory-prepare', { identity: this.identity, persona_models, memory_read_personas }));
         if (preparation === null || preparation?.blocked === true &&
-            ['MEMORY_PREPARATION_LIMIT', 'CONTEXT_PREPARATION_LIMIT'].includes(preparation.reason) && typeof preparation.run_id === 'string') {
+            ['MEMORY_PREPARATION_LIMIT', 'CONTEXT_PREPARATION_LIMIT', 'NATIVE_PERSONA_UNMAPPED'].includes(preparation.reason) && typeof preparation.run_id === 'string') {
           const empty = { phase: 'complete', claim: null, attemptId: null, nativeRunId: null, result: null };
           if (!prior) await this.journal.putIfAbsent(this.cursor, { ...empty, identity: this.identity });
           else await this.journal.update(this.cursor, empty);

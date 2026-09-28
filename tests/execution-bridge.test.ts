@@ -132,7 +132,7 @@ it('preserves asymmetric bucket framing, metadata and explicit constraints witho
   expect(JSON.stringify(nativeMessages[0].memories.filter((m: any) => m.body.scope.kind !== 'global'))).toBe(captured.scoped);
 });
 
-it.each([null, ...['MEMORY_PREPARATION_LIMIT', 'CONTEXT_PREPARATION_LIMIT'].map(reason => ({ blocked: true as const, run_id: 'bounded-run', reason }))])('does not count or claim when preparation returns %j', async reply => {
+it.each([null, ...['MEMORY_PREPARATION_LIMIT', 'CONTEXT_PREPARATION_LIMIT', 'NATIVE_PERSONA_UNMAPPED'].map(reason => ({ blocked: true as const, run_id: 'bounded-run', reason }))])('does not count or claim when preparation returns %j', async reply => {
   const executor = bridge(); let calls = 0;
   executor.memoryCounter = async () => { throw new Error('must not count'); };
   executor.control.request = async (type: string) => { expect(type).toBe('memory-prepare'); calls++; return reply; };

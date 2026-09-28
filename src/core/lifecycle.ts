@@ -346,6 +346,12 @@ export class LifecycleCore {
     this.blockMemoryPreparation(run,'CONTEXT_PREPARATION_LIMIT');
     return {blocked:true as const,run_id:run.id,reason:'CONTEXT_PREPARATION_LIMIT'};
    }
+   // Live 2026-09-28: a bot missing from the runtime's persona config threw
+   // here, failing every boot and stranding all other queued runs behind it.
+   if(!Object.hasOwn(personaModels,run.persona_id)){
+    this.blockMemoryPreparation(run,'NATIVE_PERSONA_UNMAPPED');
+    return {blocked:true as const,run_id:run.id,reason:'NATIVE_PERSONA_UNMAPPED'};
+   }
    try {
     const model=Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
     return prepareMemory(this.store,run,model!,this.core.now(),memoryReadPersonas).preparation;
@@ -359,7 +365,9 @@ export class LifecycleCore {
  private blockMemoryPreparation(run:Pick<Run,'id'|'persona_id'|'command_id'>,reason:string):void {
   this.store.db.exec("UPDATE runs SET status='waiting',error_code=?,updated_at=? WHERE id=?",reason,this.core.now(),run.id);
   this.store.event(this.core.options.uuid(),run.persona_id,'run.waiting','system',run.command_id,
-   {run_id:run.id,reason,message:reason==='CONTEXT_PREPARATION_LIMIT'?
+   {run_id:run.id,reason,message:reason==='NATIVE_PERSONA_UNMAPPED'?
+    'This bot is not configured on the runtime yet (no model assigned), so nothing was started. Add it to the runtime config, then retry.':
+    reason==='CONTEXT_PREPARATION_LIMIT'?
     'Historical context and checkpoint exceed the combined read limit. Stored data was retained and no attempt was started.':
     'Memory preparation blocked before execution. No memory was truncated and no attempt was started.'},this.core.now());
  }
@@ -417,6 +425,7 @@ export class LifecycleCore {
     requireThat(!prior.coordinator_task,'CAPABILITY_UNAVAILABLE','Memory preparation is only available for the coordinator lane.');
     requireThat(!this.core.ownerAlpha.policy,'CAPABILITY_UNAVAILABLE','Staged alpha does not permit generic memory preparation.');
     const model=personaModels&&Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
+    if(model===undefined){this.blockMemoryPreparation(run,'NATIVE_PERSONA_UNMAPPED');return null;}
     prepared=prepareMemory(this.store,run,model!,this.core.now(),memoryReadPersonas);
     if(!validateMemoryBudget(prepared.preparation,memoryBudget)){
      this.blockMemoryPreparation(run,'MEMORY_BUDGET_EXCEEDED');return null;

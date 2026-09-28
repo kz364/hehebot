@@ -358,3 +358,14 @@ it('validates the wire preparation and receipt without accepting extra authority
   }
  }finally{f.close();}
 });
+
+it('a bot missing from the runtime persona config waits with a notice instead of failing the boot, and other bots still run',()=>{
+ // Live 2026-09-28: Inbox Triage had no runtime model; memory-prepare threw
+ // NATIVE_PERSONA_UNMAPPED on every boot and stranded Chief of Staff behind it.
+ const f=setup();
+ const stranded=f.accept({schema_version:1,type:'message.send',payload:{conversation_id:otherBot,text:'Unmapped bot'}}).resource_id!;
+ expect(f.life.prepareMemory(f.identity,f.models)).toEqual({blocked:true,run_id:stranded,reason:'NATIVE_PERSONA_UNMAPPED'});
+ expect(f.store.run(stranded)).toMatchObject({status:'waiting',error_code:'NATIVE_PERSONA_UNMAPPED'});
+ const mapped=f.enqueue('Mapped bot');
+ expect(f.prepare().run_id).toBe(mapped);
+});
