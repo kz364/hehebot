@@ -449,6 +449,9 @@ export class LifecycleCore {
     this.blockMemoryPreparation(run,error.code);return null;
    }
    if(memoryBudget)context.memory_budget={...memoryBudget};
+   // V9: the scheduler-computed room-turn envelope survives the context rebuild,
+   // or complete() cannot settle the turn and the room stays busy forever.
+   if(prior.room_turn)context.room_turn=prior.room_turn;
    if(personaModels!==undefined){
     const model=Object.hasOwn(personaModels,run.persona_id)?personaModels[run.persona_id]:undefined;
     requireThat(typeof model==='string'&&/^[a-zA-Z0-9._-]{1,128}$/.test(model),'NATIVE_PERSONA_UNMAPPED','The runtime must declare the selected persona model.');

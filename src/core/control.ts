@@ -509,9 +509,9 @@ export class ControlCore {
      if(run.occurrence_id)this.store.db.exec("UPDATE occurrences SET status='skipped' WHERE id=? AND status='queued'",run.occurrence_id);
      this.store.event(this.options.uuid(),run.persona_id,'run.input_expired','system:expiry',run.command_id,{run_id:run.id,reason:'MESSAGE_EXPIRED',requires_fresh_request:true,...(invocation?{skill_invocation:invocation}:{})},now);
     }else{
-     const {instruction,room_id}=context;
+     const {instruction,room_id,room_turn}=context;
      // Not an admitted authorization snapshot. Claim rebuilds all derived fields.
-     this.store.db.exec('UPDATE runs SET context_json=? WHERE id=?',JSON.stringify({schema_version:1,instruction,room_id}),run.id);
+     this.store.db.exec('UPDATE runs SET context_json=? WHERE id=?',JSON.stringify({schema_version:1,instruction,room_id,...(room_turn?{room_turn}:{})}),run.id);
     }
    }
    return due.length;

@@ -33,7 +33,10 @@ export class RoomTurns {
   * "one turn at a time per room; other rooms/personas independent" -- this
   * check alone is what makes the scheduler serialize a room. */
  private busy(roomId: string): boolean {
-  return this.store.db.all('SELECT id FROM room_turn_log WHERE room_id=? AND outcome IS NULL LIMIT 1', roomId).length > 0;
+  // A turn whose run already ended without settling (trap 4: a dead record)
+  // must not wedge the room.
+  return this.store.db.all(`SELECT l.id FROM room_turn_log l LEFT JOIN runs r ON r.id=l.run_id WHERE l.room_id=? AND l.outcome IS NULL
+   AND (r.id IS NULL OR r.status NOT IN ('completed','failed','cancelled','interrupted')) LIMIT 1`, roomId).length > 0;
  }
  private contributions(rootCauseId: string): number {
   return this.store.db.all<{ n: number }>("SELECT COUNT(*) AS n FROM room_turn_log WHERE root_cause_id=? AND outcome='SENT'", rootCauseId)[0].n;

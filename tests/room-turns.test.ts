@@ -82,6 +82,25 @@ describe('V9 room turn scheduler (ARCHITECTURE_V2 A8)', () => {
     expect(message.conversation_id).toBe(r.id);
   });
 
+  it('keeps the envelope through the real claim() and settles the turn on complete (live: room stuck busy)', () => {
+    const r = room();
+    sendToRoom(r.id, 'Owner request'); const run = runOf(bot);
+    const claimed = life.claim(identity); expect(claimed?.run.id).toBe(run.id);
+    expect(envelope(f.db.all<{ context_json: string }>('SELECT context_json FROM runs WHERE id=?', run.id)[0])).toMatchObject({ room_id: r.id, member_id: bot });
+    life.submitted(identity, run.id, 1, `native-${run.id}`);
+    sendMessage(run.id, 'Over to otherBot.'); finish(run.id, 'completed');
+    expect(turnEvents(r.id).find(e => e.phase === 'settled')).toMatchObject({ member_id: bot, outcome: 'SENT' });
+  });
+
+  it('a turn whose run ended without settling does not wedge the room (trap 4)', () => {
+    const r = room();
+    sendToRoom(r.id, 'First'); const first = runOf(bot);
+    f.db.exec("UPDATE runs SET status='completed' WHERE id=?", first.id);
+    const before = f.db.all('SELECT id FROM runs').length;
+    sendToRoom(r.id, 'Second');
+    expect(f.db.all('SELECT id FROM runs')).toHaveLength(before + 1);
+  });
+
   it('serializes turns within a room: a second owner message while busy queues and starts once the first settles', () => {
     const r = room();
     sendToRoom(r.id, 'First'); const first = runOf(bot);
